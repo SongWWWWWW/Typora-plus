@@ -1,0 +1,455 @@
+import { Emitter, toDisposable, type Event } from "@typora-plus/base";
+import { describe, expect, it } from "vitest";
+import type { ExtensionActivationRequest, ExtensionContext } from "./extensions";
+import {
+  createExtensionHostActivationRequestMessage,
+  createExtensionHostApiErrorMessage,
+  createExtensionHostApiResultMessage,
+  createExtensionHostCommandExecuteRequestMessage,
+  createExtensionHostExportDocumentRequestMessage,
+  createExtensionHostMarkdownRendererRenderRequestMessage,
+  extensionHostProtocolMessageTypes,
+  readExtensionHostProtocolMessage,
+  type ExtensionHostProtocolMessage
+} from "./extensionHostProtocol";
+import {
+  ExtensionHostProtocolRuntime,
+  type ExtensionHostProtocolRuntimeRequestKind
+} from "./extensionHostProtocolRuntime";
+import type { ExtensionHostProtocolTransport } from "./extensionHostProtocolSession";
+
+describe("extension host protocol runtime", () => {
+  it("activates with a proxy context and sends runtime contribution requests", async () => {
+    const transport = createMemoryTransport();
+    let activatedContext: ExtensionContext | undefined;
+    new ExtensionHostProtocolRuntime(transport, {
+      createRequestId: createSequentialRequestId(),
+      activate(request) {
+        activatedContext = request.context;
+        request.context.commands.registerCommand(
+          "notes.remote.run",
+          () => ({ ok: true }),
+          { title: "Run Remote", category: "Remote" }
+        );
+        request.context.contextKeys.setValue("notes.remote.ready", true);
+        request.context.exports.registerProvider({
+          format: "html",
+          title: "HTML",
+          exportDocument: (input) => ({
+            defaultFileName: `${input.name}.html`,
+            format: "html",
+            mimeType: "text/html",
+            value: input.value
+          })
+        });
+        request.context.markdown.registerRendererProvider({
+          id: "notes.remote.diagram",
+          render: () => ({ html: "<span>Diagram</span>" })
+        }, {
+          kind: "block",
+          label: "Diagram",
+          language: "Mermaid",
+          priority: 5
+        });
+      }
+    });
+
+    transport.receive(createActivationMessage("activate-1"));
+    await flushPromises();
+
+    expect(activatedContext?.contextKeys.getValue("notes.remote.ready")).toBe(true);
+    expect(activatedContext?.commands.getCommands()).toEqual([{
+      id: "notes.remote.run",
+      title: "Run Remote",
+      category: "Remote"
+    }]);
+    expect(activatedContext?.exports.getProviders().map((provider) => provider.format)).toEqual(["html"]);
+    expect(activatedContext?.markdown.getRenderers()).toEqual([{
+      id: "notes.remote.diagram",
+      hasProvider: true,
+      kind: "block",
+      label: "Diagram",
+      language: "mermaid",
+      priority: 5
+    }]);
+    expect(transport.sent).toEqual([
+      {
+        type: extensionHostProtocolMessageTypes.commandRegister,
+        requestId: "commandRegister-1",
+        extensionId: "notes.remote",
+        command: {
+          id: "notes.remote.run",
+          title: "Run Remote",
+          category: "Remote"
+        }
+      },
+      {
+        type: extensionHostProtocolMessageTypes.contextKeySet,
+        requestId: "contextKeySet-2",
+        extensionId: "notes.remote",
+        key: "notes.remote.ready",
+        clear: false,
+        value: true
+      },
+      {
+        type: extensionHostProtocolMessageTypes.exportProviderRegister,
+        requestId: "exportProviderRegister-3",
+        extensionId: "notes.remote",
+        provider: {
+          format: "html",
+          title: "HTML"
+        }
+      },
+      {
+        type: extensionHostProtocolMessageTypes.markdownRendererRegister,
+        requestId: "markdownRendererRegister-4",
+        extensionId: "notes.remote",
+        renderer: {
+          id: "notes.remote.diagram",
+          metadata: {
+            kind: "block",
+            label: "Diagram",
+            language: "mermaid",
+            priority: 5
+          }
+        }
+      },
+      {
+        type: extensionHostProtocolMessageTypes.activationResult,
+        requestId: "activate-1",
+        extensionId: "notes.remote"
+      }
+    ]);
+  });
+
+  it("handles main-thread command, export, and renderer callbacks", async () => {
+    const transport = createMemoryTransport();
+    new ExtensionHostProtocolRuntime(transport, {
+      activate(request) {
+        request.context.commands.registerCommand("notes.remote.run", (value) => ({
+          value
+        }), { title: "Run" });
+        request.context.exports.registerProvider({
+          format: "html",
+          title: "HTML",
+          exportDocument: (input) => ({
+            defaultFileName: "A.html",
+            format: "html",
+            mimeType: "text/html",
+            value: `<main>${input.value}</main>`
+          })
+        });
+        request.context.markdown.registerRendererProvider({
+          id: "notes.remote.diagram",
+          render: (input) => ({
+            html: `<span>${input.value}</span>`
+          })
+        }, {
+          kind: "block",
+          label: "Diagram"
+        });
+      }
+    });
+
+    transport.receive(createActivationMessage("activate-2"));
+    await flushPromises();
+    transport.sent.length = 0;
+
+    transport.receive(createExtensionHostCommandExecuteRequestMessage(
+      "main-1",
+      "notes.remote",
+      "notes.remote.run",
+      ["alpha"]
+    ));
+    transport.receive(createExtensionHostExportDocumentRequestMessage(
+      "main-2",
+      "notes.remote",
+      "html",
+      {
+        assetMode: "file",
+        name: "A",
+        uri: "file://C:/Notes/A.md",
+        value: "# A"
+      }
+    ));
+    transport.receive(createExtensionHostMarkdownRendererRenderRequestMessage(
+      "main-3",
+      "notes.remote",
+      "notes.remote.diagram",
+      {
+        uri: "file://C:/Notes/A.md",
+        value: "graph TD"
+      }
+    ));
+    await flushPromises();
+
+    expect(transport.sent).toEqual([
+      createExtensionHostApiResultMessage("main-1", "notes.remote", {
+        value: "alpha"
+      }),
+      {
+        type: extensionHostProtocolMessageTypes.exportDocumentResult,
+        requestId: "main-2",
+        extensionId: "notes.remote",
+        document: {
+          defaultFileName: "A.html",
+          format: "html",
+          mimeType: "text/html",
+          value: "<main># A</main>"
+        }
+      },
+      {
+        type: extensionHostProtocolMessageTypes.markdownRendererRenderResult,
+        requestId: "main-3",
+        extensionId: "notes.remote",
+        rendererId: "notes.remote.diagram",
+        output: {
+          html: "<span>graph TD</span>"
+        }
+      }
+    ]);
+  });
+
+  it("executes main-thread commands from the proxy context", async () => {
+    const transport = createMemoryTransport();
+    let execution: Promise<unknown> | undefined;
+    new ExtensionHostProtocolRuntime(transport, {
+      createRequestId: createSequentialRequestId(),
+      async activate(request) {
+        execution = request.context.commands.executeCommand("workbench.open", "file://notes/a.md");
+        await execution;
+      }
+    });
+
+    transport.receive(createActivationMessage("activate-3"));
+    await flushPromises();
+
+    expect(transport.sent).toEqual([createExtensionHostCommandExecuteRequestMessage(
+      "commandExecute-1",
+      "notes.remote",
+      "workbench.open",
+      ["file://notes/a.md"]
+    )]);
+
+    transport.receive(createExtensionHostApiResultMessage("commandExecute-1", "notes.remote", {
+      opened: true
+    }));
+    await flushPromises();
+
+    await expect(execution).resolves.toEqual({ opened: true });
+    expect(transport.sent[1]).toEqual({
+      type: extensionHostProtocolMessageTypes.activationResult,
+      requestId: "activate-3",
+      extensionId: "notes.remote"
+    });
+  });
+
+  it("sends unregister messages when proxy context disposables are disposed", async () => {
+    const transport = createMemoryTransport();
+    const disposables: { dispose(): void }[] = [];
+    new ExtensionHostProtocolRuntime(transport, {
+      createRequestId: createSequentialRequestId(),
+      activate(request) {
+        disposables.push(request.context.commands.registerCommand("notes.remote.run", () => undefined, {
+          title: "Run"
+        }));
+        disposables.push(request.context.exports.registerProvider({
+          format: "html",
+          title: "HTML",
+          exportDocument: () => ({
+            defaultFileName: "A.html",
+            format: "html",
+            mimeType: "text/html",
+            value: ""
+          })
+        }));
+        disposables.push(request.context.markdown.registerRendererProvider({
+          id: "notes.remote.diagram",
+          render: () => ({ html: "" })
+        }, {
+          kind: "block",
+          label: "Diagram"
+        }));
+      }
+    });
+
+    transport.receive(createActivationMessage("activate-4"));
+    await flushPromises();
+    transport.sent.length = 0;
+
+    for (const disposable of disposables) {
+      disposable.dispose();
+    }
+    await flushPromises();
+
+    expect(transport.sent).toEqual([
+      {
+        type: extensionHostProtocolMessageTypes.commandUnregister,
+        requestId: "commandUnregister-4",
+        extensionId: "notes.remote",
+        command: "notes.remote.run"
+      },
+      {
+        type: extensionHostProtocolMessageTypes.exportProviderUnregister,
+        requestId: "exportProviderUnregister-5",
+        extensionId: "notes.remote",
+        format: "html"
+      },
+      {
+        type: extensionHostProtocolMessageTypes.markdownRendererUnregister,
+        requestId: "markdownRendererUnregister-6",
+        extensionId: "notes.remote",
+        rendererId: "notes.remote.diagram"
+      }
+    ]);
+
+    transport.receive(createExtensionHostCommandExecuteRequestMessage(
+      "main-4",
+      "notes.remote",
+      "notes.remote.run",
+      []
+    ));
+    await flushPromises();
+
+    expect(transport.sent[3]).toMatchObject({
+      type: extensionHostProtocolMessageTypes.apiError,
+      requestId: "main-4",
+      extensionId: "notes.remote",
+      error: {
+        message: expect.stringContaining("No extension host runtime command registered")
+      }
+    });
+  });
+
+  it("sends activation errors and clears runtime records after activation failure", async () => {
+    const transport = createMemoryTransport();
+    new ExtensionHostProtocolRuntime(transport, {
+      createRequestId: createSequentialRequestId(),
+      activate(request) {
+        request.context.commands.registerCommand("notes.remote.run", () => undefined, {
+          title: "Run"
+        });
+        throw new Error("activation failed");
+      }
+    });
+
+    transport.receive(createActivationMessage("activate-5"));
+    await flushPromises();
+
+    expect(transport.sent).toEqual([
+      {
+        type: extensionHostProtocolMessageTypes.commandRegister,
+        requestId: "commandRegister-1",
+        extensionId: "notes.remote",
+        command: {
+          id: "notes.remote.run",
+          title: "Run"
+        }
+      },
+      {
+        type: extensionHostProtocolMessageTypes.commandUnregister,
+        requestId: "commandUnregister-2",
+        extensionId: "notes.remote",
+        command: "notes.remote.run"
+      },
+      {
+        type: extensionHostProtocolMessageTypes.activationError,
+        requestId: "activate-5",
+        extensionId: "notes.remote",
+        error: {
+          message: "activation failed",
+          name: "Error",
+          stack: transport.sent[2]?.type === extensionHostProtocolMessageTypes.activationError
+            ? transport.sent[2].error.stack
+            : undefined
+        }
+      }
+    ]);
+
+    transport.receive(createExtensionHostCommandExecuteRequestMessage(
+      "main-5",
+      "notes.remote",
+      "notes.remote.run",
+      []
+    ));
+    await flushPromises();
+
+    expect(transport.sent[3]).toMatchObject({
+      type: extensionHostProtocolMessageTypes.apiError,
+      requestId: "main-5",
+      extensionId: "notes.remote",
+      error: {
+        message: expect.stringContaining("No extension host protocol runtime activated")
+      }
+    });
+  });
+
+  it("reports protocol and fire-and-forget registration errors", async () => {
+    const transport = createMemoryTransport();
+    const errors: string[] = [];
+    new ExtensionHostProtocolRuntime(transport, {
+      createRequestId: createSequentialRequestId(),
+      onError: (error) => errors.push(error.message),
+      activate(request) {
+        request.context.commands.registerCommand("notes.remote.run", () => undefined, {
+          title: "Run"
+        });
+      }
+    });
+
+    transport.receive({ type: "bad" });
+    transport.receive(createActivationMessage("activate-6"));
+    await flushPromises();
+    transport.receive(createExtensionHostApiErrorMessage("commandRegister-1", "notes.remote", new Error("remote failed")));
+    await flushPromises();
+
+    expect(errors).toEqual([
+      "Unknown extension host protocol message type: bad",
+      "remote failed"
+    ]);
+  });
+});
+
+interface MemoryTransport extends ExtensionHostProtocolTransport {
+  readonly sent: ExtensionHostProtocolMessage[];
+  receive(message: unknown): void;
+}
+
+function createMemoryTransport(): MemoryTransport {
+  const emitter = new Emitter<unknown>();
+  const sent: ExtensionHostProtocolMessage[] = [];
+
+  return {
+    onMessage: emitter.event as Event<unknown>,
+    sent,
+    receive(message) {
+      emitter.fire(message);
+    },
+    send(message) {
+      sent.push(readExtensionHostProtocolMessage(message));
+    }
+  };
+}
+
+function createActivationMessage(requestId: string): ExtensionHostProtocolMessage {
+  return createExtensionHostActivationRequestMessage({
+    activationEvent: "onStartup",
+    context: undefined as unknown as ExtensionContext,
+    extension: {
+      activationEvents: ["onStartup"],
+      activationState: "activating",
+      displayName: "Remote Notes",
+      id: "notes.remote"
+    }
+  } satisfies ExtensionActivationRequest, requestId);
+}
+
+function createSequentialRequestId(): (kind: ExtensionHostProtocolRuntimeRequestKind) => string {
+  let count = 0;
+  return (kind) => `${kind}-${++count}`;
+}
+
+async function flushPromises(): Promise<void> {
+  await Promise.resolve();
+  await Promise.resolve();
+}

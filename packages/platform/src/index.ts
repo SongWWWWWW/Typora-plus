@@ -6,6 +6,7 @@ export * from "./extensions";
 export * from "./extensionHosts";
 export * from "./extensionHostProtocolHost";
 export * from "./extensionHostProtocol";
+export * from "./extensionHostProtocolRuntime";
 export * from "./extensionHostProtocolSession";
 export * from "./extensionHostRuntimeBroker";
 export * from "./exports";
