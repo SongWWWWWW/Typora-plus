@@ -40,6 +40,58 @@ describe("configuration", () => {
     expect(next.editor.maxWidth).toBe(720);
     expect(next.appearance.colorScheme).toBe("system");
   });
+
+  it("persists configuration updates through storage", () => {
+    const storage = createMemoryStorage();
+    const service = new ConfigurationService({
+      storageKey: "configuration",
+      storage
+    });
+
+    service.updateValue({
+      appearance: {
+        colorScheme: "dark"
+      },
+      editor: {
+        focusMode: true
+      }
+    });
+
+    const restored = new ConfigurationService({
+      storageKey: "configuration",
+      storage
+    });
+
+    expect(restored.getValue().appearance.colorScheme).toBe("dark");
+    expect(restored.getValue().editor.focusMode).toBe(true);
+    expect(restored.getValue().editor.autoSave).toBe(true);
+  });
+
+  it("ignores invalid stored configuration values", () => {
+    const storage = createMemoryStorage();
+    storage.write("configuration", JSON.stringify({
+      appearance: {
+        colorScheme: "blue"
+      },
+      editor: {
+        fontSize: -1,
+        typewriterMode: true
+      },
+      workspace: {
+        searchMaxResults: 0
+      }
+    }));
+
+    const service = new ConfigurationService({
+      storageKey: "configuration",
+      storage
+    });
+
+    expect(service.getValue().appearance.colorScheme).toBe("system");
+    expect(service.getValue().editor.fontSize).toBe(17);
+    expect(service.getValue().editor.typewriterMode).toBe(true);
+    expect(service.getValue().workspace.searchMaxResults).toBe(120);
+  });
 });
 
 describe("commands", () => {
