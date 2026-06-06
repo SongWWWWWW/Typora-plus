@@ -1960,4 +1960,33 @@ Review:
 Known limitations:
 
 - Context keys are owned by built-in Workbench services for now; extension-owned context mutation waits for `IExtensionService`.
-- Menu expressions do not yet support a user-authored string syntax; extension manifests can initially target the structured expression model or a later parser.
+- Extension manifests can now target the platform string parser for menu `when` clauses, but extension-owned context mutation still waits for `IExtensionService`.
+
+## 2026-06-07 - P2 Context Key When Parser
+
+Completed:
+
+- Added `parseContextKeyExpression()` to convert controlled manifest-style `when` strings into structured context key expressions.
+- Supported bare truthy keys, `!`, `==`, `!=`, `&&`, `||`, parentheses, quoted strings, bare string values, booleans, numbers, and `null`.
+- Kept parsing in the platform layer and avoided evaluating user-authored strings as JavaScript.
+- Added parser tests for operator precedence, quoted and bare values, numeric values, empty expressions, and invalid syntax errors.
+
+Quality gate:
+
+- `npm run test -- --run packages/platform/src/platform.test.ts`: passed, 51 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 168 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+
+Review:
+
+- The parser emits the same structured expression model already used by `IMenuService`, so menu filtering remains centralized and testable.
+- The supported syntax is intentionally narrow and deterministic, matching future extension manifest needs without introducing dynamic code execution.
+- Workbench did not change in this stage; no browser UI regression was required.
+- No new packages, UI surface, storage path, or documentation file was introduced.
+
+Known limitations:
+
+- The parser intentionally does not support arbitrary operators or custom functions; any future manifest expansion should add explicit grammar cases with tests.
+- Extension manifest loading and extension-owned context updates remain future `IExtensionService` work.
