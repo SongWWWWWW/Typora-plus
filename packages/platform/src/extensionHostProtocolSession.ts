@@ -181,10 +181,13 @@ function isRuntimeBrokerRequest(message: ExtensionHostProtocolMessage): boolean 
     case extensionHostProtocolMessageTypes.commandRegister:
     case extensionHostProtocolMessageTypes.commandExecute:
     case extensionHostProtocolMessageTypes.commandList:
+    case extensionHostProtocolMessageTypes.commandUnregister:
     case extensionHostProtocolMessageTypes.contextKeySet:
     case extensionHostProtocolMessageTypes.contextKeyGet:
     case extensionHostProtocolMessageTypes.exportProviderRegister:
+    case extensionHostProtocolMessageTypes.exportProviderUnregister:
     case extensionHostProtocolMessageTypes.markdownRendererRegister:
+    case extensionHostProtocolMessageTypes.markdownRendererUnregister:
       return true;
     default:
       return false;

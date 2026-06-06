@@ -14,12 +14,15 @@ import {
   createExtensionHostCommandExecuteRequestMessage,
   createExtensionHostCommandListRequestMessage,
   createExtensionHostCommandRegisterRequestMessage,
+  createExtensionHostCommandUnregisterRequestMessage,
   createExtensionHostContextKeyGetRequestMessage,
   createExtensionHostContextKeySetRequestMessage,
   createExtensionHostExportDocumentResultMessage,
   createExtensionHostExportProviderRegisterRequestMessage,
+  createExtensionHostExportProviderUnregisterRequestMessage,
   createExtensionHostMarkdownRendererRegisterRequestMessage,
   createExtensionHostMarkdownRendererRenderResultMessage,
+  createExtensionHostMarkdownRendererUnregisterRequestMessage,
   extensionHostProtocolMessageTypes,
   readExtensionHostProtocolMessage,
   type ExtensionHostProtocolMessage
@@ -286,6 +289,66 @@ describe("extension host runtime broker", () => {
     expect(controls.commandRegistrations).toHaveLength(0);
     expect(controls.exportProviders).toHaveLength(0);
     expect(controls.markdownProviders).toHaveLength(0);
+  });
+
+  it("unregisters individual runtime proxies", async () => {
+    const { context, controls } = createBrokerTestContext();
+    const broker = new ExtensionHostRuntimeBroker(context, {
+      request: () => createExtensionHostApiResultMessage("unused", "notes.remote")
+    });
+
+    await broker.handleMessage(createExtensionHostCommandRegisterRequestMessage("request-14", "notes.remote", {
+      id: "notes.remote.run",
+      title: "Run"
+    }));
+    await broker.handleMessage(createExtensionHostExportProviderRegisterRequestMessage("request-15", "notes.remote", {
+      format: "html",
+      title: "HTML"
+    }));
+    await broker.handleMessage(createExtensionHostMarkdownRendererRegisterRequestMessage("request-16", "notes.remote", {
+      id: "notes.remote.diagram",
+      metadata: {
+        kind: "block",
+        label: "Diagram"
+      }
+    }));
+
+    expect(controls.commandRegistrations).toHaveLength(1);
+    expect(controls.exportProviders).toHaveLength(1);
+    expect(controls.markdownProviders).toHaveLength(1);
+
+    await expect(broker.handleMessage(createExtensionHostCommandUnregisterRequestMessage(
+      "request-17",
+      "notes.remote",
+      "notes.remote.run"
+    ))).resolves.toEqual(createExtensionHostApiResultMessage("request-17", "notes.remote"));
+    await expect(broker.handleMessage(createExtensionHostExportProviderUnregisterRequestMessage(
+      "request-18",
+      "notes.remote",
+      "html"
+    ))).resolves.toEqual(createExtensionHostApiResultMessage("request-18", "notes.remote"));
+    await expect(broker.handleMessage(createExtensionHostMarkdownRendererUnregisterRequestMessage(
+      "request-19",
+      "notes.remote",
+      "notes.remote.diagram"
+    ))).resolves.toEqual(createExtensionHostApiResultMessage("request-19", "notes.remote"));
+
+    expect(controls.commandRegistrations).toHaveLength(0);
+    expect(controls.exportProviders).toHaveLength(0);
+    expect(controls.markdownProviders).toHaveLength(0);
+
+    await expect(broker.handleMessage(createExtensionHostCommandUnregisterRequestMessage(
+      "request-20",
+      "notes.remote",
+      "notes.remote.run"
+    ))).resolves.toMatchObject({
+      type: extensionHostProtocolMessageTypes.apiError,
+      requestId: "request-20",
+      extensionId: "notes.remote",
+      error: {
+        message: expect.stringContaining("No extension host command proxy registered")
+      }
+    });
   });
 });
 

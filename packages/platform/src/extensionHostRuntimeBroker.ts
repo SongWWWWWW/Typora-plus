@@ -34,6 +34,9 @@ export interface ExtensionHostRuntimeBrokerOptions {
 }
 
 export class ExtensionHostRuntimeBroker extends Disposable {
+  private readonly commandDisposables = new Map<string, IDisposable>();
+  private readonly exportProviderDisposables = new Map<string, IDisposable>();
+  private readonly markdownRendererDisposables = new Map<string, IDisposable>();
   private requestCounter = 0;
 
   constructor(
@@ -70,6 +73,9 @@ export class ExtensionHostRuntimeBroker extends Disposable {
             message.extensionId,
             this.context.commands.getCommands()
           );
+        case extensionHostProtocolMessageTypes.commandUnregister:
+          this.unregisterProxy(this.commandDisposables, message.command, "command");
+          return createExtensionHostApiResultMessage(message.requestId, message.extensionId);
         case extensionHostProtocolMessageTypes.contextKeySet:
           this.context.contextKeys.setValue(message.key, message.clear ? undefined : message.value);
           return createExtensionHostApiResultMessage(message.requestId, message.extensionId);
@@ -82,8 +88,14 @@ export class ExtensionHostRuntimeBroker extends Disposable {
         case extensionHostProtocolMessageTypes.exportProviderRegister:
           this.registerExportProviderProxy(message.provider.format, message.provider.title);
           return createExtensionHostApiResultMessage(message.requestId, message.extensionId);
+        case extensionHostProtocolMessageTypes.exportProviderUnregister:
+          this.unregisterProxy(this.exportProviderDisposables, message.format, "export provider");
+          return createExtensionHostApiResultMessage(message.requestId, message.extensionId);
         case extensionHostProtocolMessageTypes.markdownRendererRegister:
           this.registerMarkdownRendererProxy(message.renderer.id, message.renderer.metadata);
+          return createExtensionHostApiResultMessage(message.requestId, message.extensionId);
+        case extensionHostProtocolMessageTypes.markdownRendererUnregister:
+          this.unregisterProxy(this.markdownRendererDisposables, message.rendererId, "Markdown renderer");
           return createExtensionHostApiResultMessage(message.requestId, message.extensionId);
         default:
           throw new Error(`Extension host runtime broker cannot handle message type: ${message.type}`);
@@ -94,7 +106,11 @@ export class ExtensionHostRuntimeBroker extends Disposable {
   }
 
   private registerCommandProxy(command: string, title: string | undefined, category: string | undefined): void {
-    this.addRuntimeDisposable(this.context.commands.registerCommand(
+    if (this.commandDisposables.has(command)) {
+      throw new Error(`Extension host command proxy already registered: ${command}`);
+    }
+
+    const disposable = this.context.commands.registerCommand(
       command,
       async (...args) => {
         const requestId = this.nextRequestId("commandExecute");
@@ -108,11 +124,17 @@ export class ExtensionHostRuntimeBroker extends Disposable {
         ...(title ? { title } : {}),
         ...(category ? { category } : {})
       }
-    ));
+    );
+    this.commandDisposables.set(command, disposable);
+    this.addRuntimeDisposable(disposable);
   }
 
   private registerExportProviderProxy(format: string, title: string): void {
-    this.addRuntimeDisposable(this.context.exports.registerProvider({
+    if (this.exportProviderDisposables.has(format)) {
+      throw new Error(`Extension host export provider proxy already registered: ${format}`);
+    }
+
+    const disposable = this.context.exports.registerProvider({
       format,
       title,
       exportDocument: async (input) => {
@@ -134,14 +156,20 @@ export class ExtensionHostRuntimeBroker extends Disposable {
 
         return (response as ExtensionHostExportDocumentResultMessage).document;
       }
-    }));
+    });
+    this.exportProviderDisposables.set(format, disposable);
+    this.addRuntimeDisposable(disposable);
   }
 
   private registerMarkdownRendererProxy(
     rendererId: string,
     metadata: Parameters<ExtensionContext["markdown"]["registerRendererProvider"]>[1]
   ): void {
-    this.addRuntimeDisposable(this.context.markdown.registerRendererProvider({
+    if (this.markdownRendererDisposables.has(rendererId)) {
+      throw new Error(`Extension host Markdown renderer proxy already registered: ${rendererId}`);
+    }
+
+    const disposable = this.context.markdown.registerRendererProvider({
       id: rendererId,
       render: async (input) => {
         const requestId = this.nextRequestId("markdownRendererRender");
@@ -161,11 +189,24 @@ export class ExtensionHostRuntimeBroker extends Disposable {
 
         return (response as ExtensionHostMarkdownRendererRenderResultMessage).output;
       }
-    }, metadata));
+    }, metadata);
+    this.markdownRendererDisposables.set(rendererId, disposable);
+    this.addRuntimeDisposable(disposable);
   }
 
   private addRuntimeDisposable(disposable: IDisposable): void {
     this.store.add(disposable);
+  }
+
+  private unregisterProxy(disposables: Map<string, IDisposable>, key: string, label: string): void {
+    const disposable = disposables.get(key);
+
+    if (!disposable) {
+      throw new Error(`No extension host ${label} proxy registered: ${key}`);
+    }
+
+    disposables.delete(key);
+    disposable.dispose();
   }
 
   private assertExtensionId(extensionId: string): void {
@@ -179,6 +220,13 @@ export class ExtensionHostRuntimeBroker extends Disposable {
   private nextRequestId(kind: ExtensionHostRuntimeBrokerRequestKind): string {
     return this.options.createRequestId?.(kind) ?? `runtime-broker-${++this.requestCounter}`;
   }
+
+  override dispose(): void {
+    this.commandDisposables.clear();
+    this.exportProviderDisposables.clear();
+    this.markdownRendererDisposables.clear();
+    super.dispose();
+  }
 }
 
 function getRuntimeRequestInfo(
@@ -190,8 +238,11 @@ function getRuntimeRequestInfo(
     case extensionHostProtocolMessageTypes.commandList:
     case extensionHostProtocolMessageTypes.contextKeySet:
     case extensionHostProtocolMessageTypes.contextKeyGet:
+    case extensionHostProtocolMessageTypes.commandUnregister:
     case extensionHostProtocolMessageTypes.exportProviderRegister:
+    case extensionHostProtocolMessageTypes.exportProviderUnregister:
     case extensionHostProtocolMessageTypes.markdownRendererRegister:
+    case extensionHostProtocolMessageTypes.markdownRendererUnregister:
       return {
         requestId: message.requestId,
         extensionId: message.extensionId

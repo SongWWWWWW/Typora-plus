@@ -18,14 +18,17 @@ export const extensionHostProtocolMessageTypes = {
   commandExecute: "extensionHost/command/execute",
   commandList: "extensionHost/command/list",
   commandRegister: "extensionHost/command/register",
+  commandUnregister: "extensionHost/command/unregister",
   contextKeyGet: "extensionHost/contextKey/get",
   contextKeySet: "extensionHost/contextKey/set",
   exportDocument: "extensionHost/export/document",
   exportDocumentResult: "extensionHost/export/documentResult",
   exportProviderRegister: "extensionHost/export/providerRegister",
+  exportProviderUnregister: "extensionHost/export/providerUnregister",
   markdownRendererRegister: "extensionHost/markdownRenderer/register",
   markdownRendererRender: "extensionHost/markdownRenderer/render",
-  markdownRendererRenderResult: "extensionHost/markdownRenderer/renderResult"
+  markdownRendererRenderResult: "extensionHost/markdownRenderer/renderResult",
+  markdownRendererUnregister: "extensionHost/markdownRenderer/unregister"
 } as const;
 
 export const extensionHostProtocolLimits = {
@@ -74,14 +77,17 @@ export type ExtensionHostProtocolMessage =
   | ExtensionHostCommandExecuteRequestMessage
   | ExtensionHostCommandListRequestMessage
   | ExtensionHostCommandRegisterRequestMessage
+  | ExtensionHostCommandUnregisterRequestMessage
   | ExtensionHostContextKeyGetRequestMessage
   | ExtensionHostContextKeySetRequestMessage
   | ExtensionHostExportDocumentRequestMessage
   | ExtensionHostExportDocumentResultMessage
   | ExtensionHostExportProviderRegisterRequestMessage
+  | ExtensionHostExportProviderUnregisterRequestMessage
   | ExtensionHostMarkdownRendererRegisterRequestMessage
   | ExtensionHostMarkdownRendererRenderRequestMessage
-  | ExtensionHostMarkdownRendererRenderResultMessage;
+  | ExtensionHostMarkdownRendererRenderResultMessage
+  | ExtensionHostMarkdownRendererUnregisterRequestMessage;
 
 export type ExtensionHostProtocolJsonValue =
   | null
@@ -146,6 +152,13 @@ export interface ExtensionHostCommandListRequestMessage {
   readonly extensionId: string;
 }
 
+export interface ExtensionHostCommandUnregisterRequestMessage {
+  readonly type: typeof extensionHostProtocolMessageTypes.commandUnregister;
+  readonly requestId: string;
+  readonly extensionId: string;
+  readonly command: string;
+}
+
 export interface ExtensionHostContextKeySetRequestMessage {
   readonly type: typeof extensionHostProtocolMessageTypes.contextKeySet;
   readonly requestId: string;
@@ -167,6 +180,13 @@ export interface ExtensionHostExportProviderRegisterRequestMessage {
   readonly requestId: string;
   readonly extensionId: string;
   readonly provider: ExtensionHostProtocolExportProviderRegistration;
+}
+
+export interface ExtensionHostExportProviderUnregisterRequestMessage {
+  readonly type: typeof extensionHostProtocolMessageTypes.exportProviderUnregister;
+  readonly requestId: string;
+  readonly extensionId: string;
+  readonly format: string;
 }
 
 export interface ExtensionHostExportDocumentRequestMessage {
@@ -205,6 +225,13 @@ export interface ExtensionHostMarkdownRendererRenderResultMessage {
   readonly extensionId: string;
   readonly rendererId: string;
   readonly output: ExtensionHostProtocolMarkdownRendererOutput;
+}
+
+export interface ExtensionHostMarkdownRendererUnregisterRequestMessage {
+  readonly type: typeof extensionHostProtocolMessageTypes.markdownRendererUnregister;
+  readonly requestId: string;
+  readonly extensionId: string;
+  readonly rendererId: string;
 }
 
 export interface ExtensionHostProtocolCommandRegistration extends Pick<CommandMetadata, "id"> {
@@ -384,6 +411,19 @@ export function createExtensionHostCommandListRequestMessage(
   };
 }
 
+export function createExtensionHostCommandUnregisterRequestMessage(
+  requestId: string,
+  extensionId: string,
+  command: string
+): ExtensionHostCommandUnregisterRequestMessage {
+  return {
+    type: extensionHostProtocolMessageTypes.commandUnregister,
+    requestId: normalizeRequestId(requestId, "Extension host command unregister request id"),
+    extensionId: normalizeExtensionId(extensionId, "Extension host command unregister extension id"),
+    command: normalizeCommandId(command, "Extension host command unregister command id")
+  };
+}
+
 export function createExtensionHostContextKeySetRequestMessage(
   requestId: string,
   extensionId: string,
@@ -446,6 +486,19 @@ export function createExtensionHostExportDocumentRequestMessage(
   };
 }
 
+export function createExtensionHostExportProviderUnregisterRequestMessage(
+  requestId: string,
+  extensionId: string,
+  format: string
+): ExtensionHostExportProviderUnregisterRequestMessage {
+  return {
+    type: extensionHostProtocolMessageTypes.exportProviderUnregister,
+    requestId: normalizeRequestId(requestId, "Extension host export provider unregister request id"),
+    extensionId: normalizeExtensionId(extensionId, "Extension host export provider unregister extension id"),
+    format: normalizeExportFormat(format, "Extension host export provider unregister format")
+  };
+}
+
 export function createExtensionHostExportDocumentResultMessage(
   requestId: string,
   extensionId: string,
@@ -502,6 +555,19 @@ export function createExtensionHostMarkdownRendererRenderResultMessage(
   };
 }
 
+export function createExtensionHostMarkdownRendererUnregisterRequestMessage(
+  requestId: string,
+  extensionId: string,
+  rendererId: string
+): ExtensionHostMarkdownRendererUnregisterRequestMessage {
+  return {
+    type: extensionHostProtocolMessageTypes.markdownRendererUnregister,
+    requestId: normalizeRequestId(requestId, "Extension host Markdown renderer unregister request id"),
+    extensionId: normalizeExtensionId(extensionId, "Extension host Markdown renderer unregister extension id"),
+    rendererId: normalizeMarkdownRendererId(rendererId, "Extension host Markdown renderer unregister id")
+  };
+}
+
 export function serializeExtensionHostProtocolMessage(message: ExtensionHostProtocolMessage): string {
   return JSON.stringify(readExtensionHostProtocolMessage(message));
 }
@@ -531,12 +597,16 @@ export function readExtensionHostProtocolMessage(value: unknown): ExtensionHostP
       return readCommandExecuteRequestMessage(record);
     case extensionHostProtocolMessageTypes.commandList:
       return readCommandListRequestMessage(record);
+    case extensionHostProtocolMessageTypes.commandUnregister:
+      return readCommandUnregisterRequestMessage(record);
     case extensionHostProtocolMessageTypes.contextKeySet:
       return readContextKeySetRequestMessage(record);
     case extensionHostProtocolMessageTypes.contextKeyGet:
       return readContextKeyGetRequestMessage(record);
     case extensionHostProtocolMessageTypes.exportProviderRegister:
       return readExportProviderRegisterRequestMessage(record);
+    case extensionHostProtocolMessageTypes.exportProviderUnregister:
+      return readExportProviderUnregisterRequestMessage(record);
     case extensionHostProtocolMessageTypes.exportDocument:
       return readExportDocumentRequestMessage(record);
     case extensionHostProtocolMessageTypes.exportDocumentResult:
@@ -547,6 +617,8 @@ export function readExtensionHostProtocolMessage(value: unknown): ExtensionHostP
       return readMarkdownRendererRenderRequestMessage(record);
     case extensionHostProtocolMessageTypes.markdownRendererRenderResult:
       return readMarkdownRendererRenderResultMessage(record);
+    case extensionHostProtocolMessageTypes.markdownRendererUnregister:
+      return readMarkdownRendererUnregisterRequestMessage(record);
     default:
       throw new Error(`Unknown extension host protocol message type: ${type}`);
   }
@@ -653,6 +725,15 @@ function readCommandListRequestMessage(record: UnknownRecord): ExtensionHostComm
   };
 }
 
+function readCommandUnregisterRequestMessage(record: UnknownRecord): ExtensionHostCommandUnregisterRequestMessage {
+  return {
+    type: extensionHostProtocolMessageTypes.commandUnregister,
+    requestId: normalizeRequestId(record.requestId, "Extension host command unregister request id"),
+    extensionId: normalizeExtensionId(record.extensionId, "Extension host command unregister extension id"),
+    command: normalizeCommandId(record.command, "Extension host command unregister command id")
+  };
+}
+
 function readContextKeySetRequestMessage(record: UnknownRecord): ExtensionHostContextKeySetRequestMessage {
   const extensionId = normalizeExtensionId(record.extensionId, "Extension host context key set extension id");
   const key = normalizeExtensionOwnedContextKey(extensionId, record.key);
@@ -708,6 +789,17 @@ function readExportDocumentRequestMessage(record: UnknownRecord): ExtensionHostE
   };
 }
 
+function readExportProviderUnregisterRequestMessage(
+  record: UnknownRecord
+): ExtensionHostExportProviderUnregisterRequestMessage {
+  return {
+    type: extensionHostProtocolMessageTypes.exportProviderUnregister,
+    requestId: normalizeRequestId(record.requestId, "Extension host export provider unregister request id"),
+    extensionId: normalizeExtensionId(record.extensionId, "Extension host export provider unregister extension id"),
+    format: normalizeExportFormat(record.format, "Extension host export provider unregister format")
+  };
+}
+
 function readExportDocumentResultMessage(record: UnknownRecord): ExtensionHostExportDocumentResultMessage {
   return {
     type: extensionHostProtocolMessageTypes.exportDocumentResult,
@@ -749,6 +841,17 @@ function readMarkdownRendererRenderResultMessage(
     extensionId: normalizeExtensionId(record.extensionId, "Extension host Markdown renderer render result extension id"),
     rendererId: normalizeMarkdownRendererId(record.rendererId, "Extension host Markdown renderer render result id"),
     output: normalizeProtocolMarkdownRendererOutput(record.output)
+  };
+}
+
+function readMarkdownRendererUnregisterRequestMessage(
+  record: UnknownRecord
+): ExtensionHostMarkdownRendererUnregisterRequestMessage {
+  return {
+    type: extensionHostProtocolMessageTypes.markdownRendererUnregister,
+    requestId: normalizeRequestId(record.requestId, "Extension host Markdown renderer unregister request id"),
+    extensionId: normalizeExtensionId(record.extensionId, "Extension host Markdown renderer unregister extension id"),
+    rendererId: normalizeMarkdownRendererId(record.rendererId, "Extension host Markdown renderer unregister id")
   };
 }
 

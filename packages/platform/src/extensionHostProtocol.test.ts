@@ -10,14 +10,17 @@ import {
   createExtensionHostCommandExecuteRequestMessage,
   createExtensionHostCommandListRequestMessage,
   createExtensionHostCommandRegisterRequestMessage,
+  createExtensionHostCommandUnregisterRequestMessage,
   createExtensionHostContextKeyGetRequestMessage,
   createExtensionHostContextKeySetRequestMessage,
   createExtensionHostExportDocumentRequestMessage,
   createExtensionHostExportDocumentResultMessage,
   createExtensionHostExportProviderRegisterRequestMessage,
+  createExtensionHostExportProviderUnregisterRequestMessage,
   createExtensionHostMarkdownRendererRegisterRequestMessage,
   createExtensionHostMarkdownRendererRenderRequestMessage,
   createExtensionHostMarkdownRendererRenderResultMessage,
+  createExtensionHostMarkdownRendererUnregisterRequestMessage,
   deserializeExtensionHostProtocolMessage,
   extensionHostProtocolLimits,
   extensionHostProtocolMessageTypes,
@@ -141,6 +144,11 @@ describe("extension host protocol", () => {
       { preview: "A" }
     ]);
     const list = createExtensionHostCommandListRequestMessage("request-10", "notes.main");
+    const unregister = createExtensionHostCommandUnregisterRequestMessage(
+      "request-10b",
+      "notes.main",
+      " notes.open "
+    );
 
     expect(register).toEqual({
       type: extensionHostProtocolMessageTypes.commandRegister,
@@ -167,6 +175,13 @@ describe("extension host protocol", () => {
     expect(deserializeExtensionHostProtocolMessage(serializeExtensionHostProtocolMessage(register))).toEqual(register);
     expect(deserializeExtensionHostProtocolMessage(serializeExtensionHostProtocolMessage(execute))).toEqual(execute);
     expect(deserializeExtensionHostProtocolMessage(serializeExtensionHostProtocolMessage(list))).toEqual(list);
+    expect(unregister).toEqual({
+      type: extensionHostProtocolMessageTypes.commandUnregister,
+      requestId: "request-10b",
+      extensionId: "notes.main",
+      command: "notes.open"
+    });
+    expect(deserializeExtensionHostProtocolMessage(serializeExtensionHostProtocolMessage(unregister))).toEqual(unregister);
   });
 
   it("serializes context key broker messages with extension-owned keys only", () => {
@@ -272,6 +287,7 @@ describe("extension host protocol", () => {
       mimeType: " text/html;charset=utf-8 ",
       value: "<!doctype html>"
     });
+    const unregister = createExtensionHostExportProviderUnregisterRequestMessage("request-25b", "notes.export", " HTML ");
 
     expect(provider).toEqual({
       type: extensionHostProtocolMessageTypes.exportProviderRegister,
@@ -314,6 +330,13 @@ describe("extension host protocol", () => {
     expect(deserializeExtensionHostProtocolMessage(serializeExtensionHostProtocolMessage(provider))).toEqual(provider);
     expect(deserializeExtensionHostProtocolMessage(serializeExtensionHostProtocolMessage(request))).toEqual(request);
     expect(deserializeExtensionHostProtocolMessage(serializeExtensionHostProtocolMessage(result))).toEqual(result);
+    expect(unregister).toEqual({
+      type: extensionHostProtocolMessageTypes.exportProviderUnregister,
+      requestId: "request-25b",
+      extensionId: "notes.export",
+      format: "html"
+    });
+    expect(deserializeExtensionHostProtocolMessage(serializeExtensionHostProtocolMessage(unregister))).toEqual(unregister);
   });
 
   it("rejects invalid export broker payloads", () => {
@@ -393,6 +416,11 @@ describe("extension host protocol", () => {
     const result = createExtensionHostMarkdownRendererRenderResultMessage("request-33", "notes.render", " notes.diagram ", {
       html: "<img src=\"data:image/svg+xml,%3Csvg%3E\" alt=\"Diagram\">"
     });
+    const unregister = createExtensionHostMarkdownRendererUnregisterRequestMessage(
+      "request-33b",
+      "notes.render",
+      " notes.diagram "
+    );
 
     expect(register).toEqual({
       type: extensionHostProtocolMessageTypes.markdownRendererRegister,
@@ -431,6 +459,13 @@ describe("extension host protocol", () => {
     expect(deserializeExtensionHostProtocolMessage(serializeExtensionHostProtocolMessage(register))).toEqual(register);
     expect(deserializeExtensionHostProtocolMessage(serializeExtensionHostProtocolMessage(request))).toEqual(request);
     expect(deserializeExtensionHostProtocolMessage(serializeExtensionHostProtocolMessage(result))).toEqual(result);
+    expect(unregister).toEqual({
+      type: extensionHostProtocolMessageTypes.markdownRendererUnregister,
+      requestId: "request-33b",
+      extensionId: "notes.render",
+      rendererId: "notes.diagram"
+    });
+    expect(deserializeExtensionHostProtocolMessage(serializeExtensionHostProtocolMessage(unregister))).toEqual(unregister);
   });
 
   it("rejects invalid Markdown renderer broker payloads", () => {
