@@ -16,7 +16,7 @@ P0/P1 are implemented:
 - code fence block styling with inactive language/copy widgets
 - Markdown table block styling with inactive table previews
 - standalone image preview cards
-- KaTeX-backed display math preview blocks
+- KaTeX-backed display math preview blocks with TeX copy controls
 - KaTeX-backed inline math previews
 - focus mode and typewriter mode
 - command palette, sidebar, outline, current-note search

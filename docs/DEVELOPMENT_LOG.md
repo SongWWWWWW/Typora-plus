@@ -505,3 +505,33 @@ Known limitations:
 
 - Table parsing remains lightweight and does not yet handle escaped pipes.
 - Structural table editing controls such as row/column insert and alignment menus are still future work.
+
+## 2026-06-06 - P2 Math Preview Tools
+
+Completed:
+
+- Added a compact TeX toolbar to inactive display math previews.
+- Added a shared preview copy button path used by code fence and math previews.
+- Kept non-button preview clicks editable so clicking the math body restores Markdown source.
+- Added named constants for preview copy and math preview dimensions.
+- Added a focused test for preview event handling.
+
+Quality gate:
+
+- `npm run verify`: passed
+- `npm test`: passed, 58 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- Production browser preview: passed at `http://127.0.0.1:4173`
+- Desktop 1280px and mobile 390px checks: passed without horizontal overflow or console errors
+
+Review:
+
+- Math tooling remains inside `packages/editor`; no Workbench or platform dependency was added.
+- Code fence and math copy controls share one helper, reducing duplicated widget behavior.
+- The Markdown text model is unchanged; preview tools are still CodeMirror decorations.
+- Visual additions reuse existing theme tokens and named editor constants.
+
+Known limitations:
+
+- Clipboard contents could not be asserted in the in-app browser because its virtual clipboard is unavailable; button presence and stable click behavior were verified without console errors.
+- KaTeX is still rendered as MathML without the full KaTeX CSS layer.
