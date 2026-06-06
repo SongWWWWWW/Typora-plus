@@ -41,9 +41,11 @@ Current services:
 - `ICommandService`: command registration and execution
 - `ITextFileService`: active Markdown model, dirty state, conflict-aware save lifecycle
 - `IWorkspaceService`: workspace identity
-- `IFileService`: native workspace file tree, workspace change events, file open, save, save-as
+- `IFileService`: native workspace file tree, trusted recent workspace reopen, workspace change events, file open, save, save-as
 - `IAttachmentService`: pasted image persistence through a native bridge
 - `IRecentService`: persisted recent files and workspaces
+
+Native workspace trust is owned by the Electron main process. The renderer may request a recent workspace by URI, but the main process only opens paths previously selected through the native directory picker and recorded in the main-process trust store.
 
 Planned services:
 

@@ -151,3 +151,32 @@ Known limitations:
 
 - Recent workspaces are still displayed as history only; trusted reopen remains a future native-main flow.
 - Automated native dialog interaction is still not covered by browser verification.
+
+## 2026-06-06 - P2 Trusted Recent Workspace Reopen
+
+Completed:
+
+- Added `IFileService.openRecentWorkspace()` for reopening workspace roots through the file service boundary.
+- Added Electron IPC for recent workspace reopen.
+- Added a main-process trusted workspace store populated only after native directory picker selection.
+- Added shell configuration for trusted workspace storage file and maximum tracked entries.
+- Enabled recent workspace rows in the file sidebar when the native file service is available.
+- Added a platform test for native recent workspace reopening through `IFileService`.
+
+Quality gate:
+
+- `npm run verify`: passed
+- `npm test`: passed, 19 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- Production browser preview: passed at `http://127.0.0.1:4173`
+
+Review:
+
+- Renderer recent data is still treated as untrusted input.
+- Main process validates recent workspace paths against its own trust store before scanning files.
+- Workbench still coordinates workspace changes through `IFileService` and `IWorkspaceService`; it does not access local paths directly.
+
+Known limitations:
+
+- Existing recent workspace entries from before this trust store was introduced must be reopened once through the native picker before trusted reopen succeeds.
+- Automated native dialog interaction is still not covered by browser verification.

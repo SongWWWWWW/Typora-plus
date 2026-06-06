@@ -28,6 +28,7 @@ P2 main progress is implemented:
 - active workspace refresh
 - workspace file watcher refresh events
 - save conflict detection with reload/overwrite handling
+- trusted recent workspace reopening
 
 ## Commands
 
