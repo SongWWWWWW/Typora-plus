@@ -31,6 +31,7 @@ import {
   RefreshCw,
   Save,
   Search,
+  Settings as SettingsIcon,
   Sun,
   Target,
   Type,
@@ -39,6 +40,7 @@ import {
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import { updateSavedFileIndex } from "./savedFileIndexing";
+import { SettingsDialog } from "./SettingsDialog";
 import type { WorkbenchServices } from "./services";
 
 type SideView = "files" | "search" | "outline" | "backlinks" | "tags";
@@ -70,6 +72,7 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
   const [sideView, setSideView] = useState<SideView | null>("outline");
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [quickOpen, setQuickOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedTag, setSelectedTag] = useState<string | undefined>();
   const [operationError, setOperationError] = useState<string | undefined>();
@@ -238,6 +241,12 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
       run: () => setPaletteOpen(true)
     }));
     disposables.add(services.commandService.registerCommand({
+      id: "workbench.settings.open",
+      title: "Settings",
+      category: "Workbench",
+      run: () => setSettingsOpen(true)
+    }));
+    disposables.add(services.commandService.registerCommand({
       id: "workbench.sidebar.files",
       title: "Show Files",
       category: "Workbench",
@@ -357,7 +366,10 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
   );
 
   return (
-    <main className={sideView ? "tp-shell tp-shell-with-sidebar" : "tp-shell"}>
+    <main className={[
+      sideView ? "tp-shell tp-shell-with-sidebar" : "tp-shell",
+      `tp-density-${configuration.appearance.density}`
+    ].join(" ")}>
       <Titlebar
         model={model}
         workspaceName={workspace.name}
@@ -369,6 +381,7 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
           activeView={sideView}
           onToggle={(view) => toggleSideView(view, sideView, setSideView)}
           onOpenPalette={() => setPaletteOpen(true)}
+          onOpenSettings={() => services.commandService.executeCommand("workbench.settings.open")}
         />
         {sideView ? (
           <Sidebar
@@ -516,6 +529,12 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
           }, setOperationError, setSaveConflict);
         }}
       />
+      <SettingsDialog
+        open={settingsOpen}
+        configuration={configuration}
+        onClose={() => setSettingsOpen(false)}
+        onUpdate={(value) => services.configurationService.updateValue(value)}
+      />
     </main>
   );
 }
@@ -583,11 +602,13 @@ function Titlebar({
 function ActivityBar({
   activeView,
   onToggle,
-  onOpenPalette
+  onOpenPalette,
+  onOpenSettings
 }: {
   readonly activeView: SideView | null;
   readonly onToggle: (view: SideView) => void;
   readonly onOpenPalette: () => void;
+  readonly onOpenSettings: () => void;
 }) {
   return (
     <nav className="tp-activitybar" aria-label="Primary">
@@ -607,6 +628,9 @@ function ActivityBar({
         <Hash size={19} />
       </IconButton>
       <div className="tp-activitybar-spacer" />
+      <IconButton title="Settings" onClick={onOpenSettings}>
+        <SettingsIcon size={19} />
+      </IconButton>
       <IconButton title="Command Palette" onClick={onOpenPalette}>
         <CommandIcon size={19} />
       </IconButton>

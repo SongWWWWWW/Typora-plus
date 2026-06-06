@@ -116,6 +116,10 @@ const defaultWorkbenchKeybindings: readonly KeybindingRule[] = [
     keybinding: { key: "p", primary: true }
   },
   {
+    command: "workbench.settings.open",
+    keybinding: { key: ",", primary: true }
+  },
+  {
     command: "file.save",
     keybinding: { key: "s", primary: true }
   },
