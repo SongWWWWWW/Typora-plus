@@ -2564,3 +2564,37 @@ Known limitations:
 - There is no built-in inline renderer provider yet; the bridge is ready for future extension-host or built-in contributions with clear product value.
 - The cache is still in-memory only; previews are recomputed after app reload.
 - Mermaid remains isolated behind lazy loading, but its lazy chunk still needs future lower-end machine measurement.
+
+## 2026-06-07 - P2 Built-In Status Inline Renderer
+
+Completed:
+
+- Added the built-in Status inline Markdown renderer provider for language-qualified spans such as `` `status:done` ``.
+- Contributed Status renderer metadata through the built-in Workbench extension manifest.
+- Registered the Status provider lazily through the Workbench activation handler on `onMarkdownRenderer:<id>`.
+- Rendered compact escaped status badges for done, in-progress, pending, blocked, todo, and unknown neutral states.
+- Styled badges with existing theme tokens inside the editor inline renderer shell, without adding new color tokens.
+- Added tests for status rendering, escaping, custom labels, manifest contribution, activation registration, and existing editor inline renderer parsing/sanitizer behavior.
+
+Quality gate:
+
+- `npm run typecheck`: passed
+- `npm run test -- --run packages/workbench/src/statusMarkdownRenderer.test.ts packages/workbench/src/workbenchContributions.test.ts packages/workbench/src/workbenchExtensionActivation.test.ts packages/editor/src/livePreview.test.ts`: passed, 103 tests
+- `npm run verify`: passed, 251 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Browser smoke check at `http://127.0.0.1:5173/`: Workbench loaded, existing Mermaid preview remained ready, no horizontal overflow, and no console errors. Direct bulk editor input was blocked by the in-app browser clipboard shim, so status rendering itself is covered by provider, manifest, activation, parser, adapter, and sanitizer tests.
+
+Review:
+
+- Status is a Workbench built-in extension contribution, not an editor hard-code.
+- The editor still only knows the generic inline renderer callback and sanitizer path.
+- Status output is escaped before it reaches the editor sanitizer, and the sanitizer still strips unsupported attributes/classes.
+- Visual styling reuses existing `--tp-*` tokens and keeps the badge compact enough for a Typora-like writing surface.
+- No new dependency, storage path, extra documentation file, or direct DOM access by renderer providers was introduced.
+
+Known limitations:
+
+- Status aliases are intentionally small and built-in; future user-defined badge vocabularies would need a settings or extension contribution schema.
+- The renderer preview cache is still in-memory only; previews are recomputed after app reload.
+- Mermaid remains isolated behind lazy loading, but its lazy chunk still needs future lower-end machine measurement.
