@@ -1537,3 +1537,35 @@ Review:
 Known limitations:
 
 - Command palette search remains deterministic term matching rather than fuzzy ranking.
+
+## 2026-06-06 - P2 Palette List Keyboard Navigation
+
+Completed:
+
+- Added a shared Workbench list navigation model for active-row normalization and Arrow/Home/End movement.
+- Added Command Palette active-row state, visual selection, mouse hover synchronization, query-reset behavior, and Enter execution for the active command.
+- Added Quick Open active-row state, visual selection, mouse hover synchronization, query-reset behavior, and Enter opening for the active file when files are present.
+- Reused theme tokens for the active row treatment instead of introducing new color constants.
+- Added focused Workbench coverage for supported navigation keys, bounds normalization, and bounded movement.
+
+Quality gate:
+
+- `npm run test -- --run packages/workbench/src/listNavigationModel.test.ts packages/workbench/src/commandPaletteModel.test.ts`: passed, 6 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 134 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed
+- Browser regression: Command Palette opened with `Ctrl+Shift+P`, focused the input, selected the first row, moved selection with ArrowDown/Home/End, reset selection after searching `ctrl`, and Enter on the selected Quick Open command opened Quick Open.
+- Quick Open browser regression: in the current browser preview without a mounted workspace file list, ArrowDown/Home/End/input/Enter on the empty list stayed stable and produced no console errors.
+- Desktop 1280px and mobile 390px viewport checks: Command Palette and Quick Open fit within the viewport, had no horizontal overflow, and reported no console errors.
+
+Review:
+
+- Navigation rules are centralized in `listNavigationModel.ts`; `Application.tsx` only wires component state to commands and files.
+- Command Palette and Quick Open now follow the same bounded selection semantics, which keeps future palette-like surfaces extensible.
+- Query changes reset selection to the first visible result, preserving predictable keyboard flow.
+- The active-row styling uses existing surface and accent tokens, so theme work remains centralized.
+
+Known limitations:
+
+- Quick Open non-empty file-row navigation still needs a browser regression with a mounted native workspace fixture.

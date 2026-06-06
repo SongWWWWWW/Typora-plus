@@ -64,6 +64,8 @@ User preferences are owned by `IConfigurationService`. The service reads and wri
 
 The settings UI is a Workbench contribution, not a storage owner. `SettingsDialog` renders appearance, editor, workspace, and keybinding controls, then sends partial updates to `IConfigurationService`. Settings section definitions, section anchors, searchable setting entries, numeric setting bounds, asset-folder normalization, keybinding command/shortcut-label search, modified filtering, and keybinding override list updates live in focused Workbench models so the dialog can grow without scattering UI constants. When a recorded shortcut is already active for another command, Settings shows an inline conflict confirmation before writing the override. Batch keybinding reset clears persisted user overrides through the same configuration boundary instead of mutating keybinding service state directly.
 
+Keyboard-driven list surfaces share a small Workbench navigation model. Command Palette and Quick Open keep local active-row state, but bounds normalization and Arrow/Home/End movement live in `listNavigationModel.ts`, so new palette-like surfaces can reuse the same behavior without copying key handling into JSX.
+
 Planned services:
 
 - SQLite-backed index provider for `IIndexService`: persisted search, metadata, link graph queries, and tag queries
