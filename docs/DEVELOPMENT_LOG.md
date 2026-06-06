@@ -2663,4 +2663,35 @@ Known limitations:
 
 - External extension package loading is still not implemented.
 - The current Workbench host is still in-process; an out-of-process host implementation should plug into the same host service before third-party code can run.
-- Extension host IPC/protocol serialization is not implemented yet.
+- Extension host transport and IPC are not implemented yet.
+
+## 2026-06-07 - P2 Extension Host Protocol Messages
+
+Completed:
+
+- Added platform-level extension host protocol message types for activation requests, activation results, and activation errors.
+- Added bounded protocol limits for request ids, extension ids, activation events, activation-event lists, display names, and error details.
+- Added serializers, deserializers, and unknown-input validators that normalize protocol messages before they cross a future out-of-process host boundary.
+- Kept `ExtensionContext` functions, runtime command handlers, renderer providers, and internal services out of the serializable activation request payload.
+- Added tests for activation request serialization, response normalization, bounded error serialization, unknown-input reads, invalid type rejection, invalid activation-state rejection, and activation-event list bounds.
+
+Quality gate:
+
+- `npm run typecheck`: passed
+- `npx vitest run packages/platform/src/extensionHostProtocol.test.ts packages/platform/src/extensionHosts.test.ts`: passed, 9 tests
+- `npm run verify`: passed, 262 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+
+Review:
+
+- The protocol layer is platform-only and does not depend on Workbench, Electron, DOM, Node, or dynamic code loading.
+- Activation protocol payloads are JSON-safe data instead of service objects or closures, matching the intended VS Code-style main-thread/extension-host split.
+- Existing in-process Workbench activation remains unchanged; the new protocol is a preparation boundary for future host transport.
+- No new dependency, storage path, visual token, extra documentation file, or direct DOM access by extension runtimes was introduced.
+
+Known limitations:
+
+- External extension package loading is still not implemented.
+- Extension host transport and IPC are still not implemented.
+- Runtime API broker messages for commands, context keys, exports, and Markdown renderer providers remain future work.
