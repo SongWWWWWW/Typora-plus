@@ -8,6 +8,7 @@ import {
   type ViewUpdate,
   WidgetType
 } from "@codemirror/view";
+import { renderToString as renderKatexToString } from "katex";
 
 export interface MarkdownEditorConfiguration {
   readonly fontSize: number;
@@ -47,9 +48,20 @@ export interface MarkdownImageBlockState {
   readonly title?: string;
 }
 
+export type MarkdownMathBlockLineRole = "open" | "content" | "close";
+
+export interface MarkdownMathBlockState {
+  readonly blockEnd: number;
+  readonly blockStart: number;
+  readonly expression: string;
+  readonly line: number;
+  readonly role: MarkdownMathBlockLineRole;
+}
+
 export interface MarkdownLineClassificationState {
   readonly codeFenceRole?: MarkdownCodeFenceLineRole;
   readonly imageBlock?: MarkdownImageBlockState;
+  readonly mathBlock?: MarkdownMathBlockState;
   readonly tableState?: MarkdownTableLineState;
 }
 
@@ -95,7 +107,7 @@ export function classifyMarkdownLine(
   state: MarkdownLineClassificationState = {}
 ): string[] {
   const classes = ["tp-editor-line"];
-  const { codeFenceRole, imageBlock, tableState } = state;
+  const { codeFenceRole, imageBlock, mathBlock, tableState } = state;
 
   const heading = /^(#{1,6})\s+/.exec(text);
   if (heading?.[1]) {
@@ -130,6 +142,10 @@ export function classifyMarkdownLine(
     classes.push("tp-editor-image-line");
   }
 
+  if (mathBlock) {
+    classes.push("tp-editor-math-block", `tp-editor-math-${mathBlock.role}`);
+  }
+
   if (active) {
     classes.push("tp-editor-active-line");
   } else if (focusMode) {
@@ -147,6 +163,10 @@ export function analyzeMarkdownCodeFenceLines(lines: readonly string[]): readonl
 
 export function analyzeMarkdownImageBlocks(lines: readonly string[]): readonly MarkdownImageBlockState[] {
   return analyzeMarkdownLineBlocks(lines).flatMap((state) => state.imageBlock ? [state.imageBlock] : []);
+}
+
+export function analyzeMarkdownMathBlocks(lines: readonly string[]): readonly MarkdownMathBlockState[] {
+  return analyzeMarkdownLineBlocks(lines).flatMap((state) => state.mathBlock ? [state.mathBlock] : []);
 }
 
 export function analyzeMarkdownTableLines(lines: readonly string[]): readonly MarkdownTableLineState[] {
@@ -190,6 +210,7 @@ function buildDecorations(
       const line = view.state.doc.lineAt(position);
       const lineBlockState = lineBlockStates.get(line.number);
       const imageBlock = lineBlockState?.imageBlock;
+      const mathBlock = lineBlockState?.mathBlock;
       const classes = classifyMarkdownLine(
         line.text,
         line.number === activeLine,
@@ -199,8 +220,15 @@ function buildDecorations(
 
       builder.add(line.from, line.from, Decoration.line({ class: classes.join(" ") }));
       const lineIsActive = line.number === activeLine;
+      const mathBlockIsActive = mathBlock
+        ? activeLine >= mathBlock.blockStart && activeLine <= mathBlock.blockEnd
+        : false;
 
-      if (imageBlock && !lineIsActive) {
+      if (mathBlock && !mathBlockIsActive) {
+        builder.add(line.from, line.to, Decoration.replace(
+          mathBlock.role === "open" ? { widget: new MarkdownMathBlockWidget(mathBlock) } : {}
+        ));
+      } else if (imageBlock && !lineIsActive) {
         builder.add(line.from, line.to, Decoration.replace({
           widget: new MarkdownImageBlockWidget(imageBlock, resolveImageSource)
         }));
@@ -284,6 +312,20 @@ function analyzeMarkdownLineBlocksFromSource(source: {
       activeFence = marker;
       setLineState(lineNumber, { codeFenceRole: "open" });
       lineNumber += 1;
+      continue;
+    }
+
+    const mathBlock = readMarkdownMathBlockFromSource({
+      lineCount: source.lineCount,
+      readLine: source.readLine,
+      startLine: lineNumber
+    });
+    if (mathBlock) {
+      for (const mathState of mathBlock.states) {
+        setLineState(mathState.line, { mathBlock: mathState });
+      }
+
+      lineNumber = mathBlock.nextLine;
       continue;
     }
 
@@ -420,6 +462,77 @@ function imageSourceLabel(source: string): string {
 
 function unescapeMarkdownText(text: string): string {
   return text.replace(/\\([\\[\]()'"<>])/g, "$1");
+}
+
+interface MarkdownMathReadResult {
+  readonly nextLine: number;
+  readonly states: readonly MarkdownMathBlockState[];
+}
+
+function readMarkdownMathBlockFromSource(source: {
+  readonly lineCount: number;
+  readonly readLine: (lineNumber: number) => string;
+  readonly startLine: number;
+}): MarkdownMathReadResult | undefined {
+  if (!isMarkdownMathFence(source.readLine(source.startLine))) {
+    return undefined;
+  }
+
+  const expressionLines: string[] = [];
+  let closeLine: number | undefined;
+  let nextLine = source.startLine + 1;
+
+  while (nextLine <= source.lineCount) {
+    const text = source.readLine(nextLine);
+
+    if (isMarkdownMathFence(text)) {
+      closeLine = nextLine;
+      break;
+    }
+
+    expressionLines.push(text);
+    nextLine += 1;
+  }
+
+  const blockEnd = closeLine ?? source.lineCount;
+  const expression = expressionLines.join("\n").trim();
+  const states: MarkdownMathBlockState[] = [{
+    blockEnd,
+    blockStart: source.startLine,
+    expression,
+    line: source.startLine,
+    role: "open"
+  }];
+
+  const contentEndExclusive = closeLine ?? source.lineCount + 1;
+  for (let line = source.startLine + 1; line < contentEndExclusive; line += 1) {
+    states.push({
+      blockEnd,
+      blockStart: source.startLine,
+      expression,
+      line,
+      role: "content"
+    });
+  }
+
+  if (closeLine !== undefined) {
+    states.push({
+      blockEnd,
+      blockStart: source.startLine,
+      expression,
+      line: closeLine,
+      role: "close"
+    });
+  }
+
+  return {
+    nextLine: (closeLine ?? source.lineCount) + 1,
+    states
+  };
+}
+
+function isMarkdownMathFence(text: string): boolean {
+  return /^\s*\$\$\s*$/.test(text);
 }
 
 interface MarkdownTableReadResult {
@@ -603,6 +716,45 @@ class MarkdownImageBlockWidget extends WidgetType {
   private renderPlaceholder(preview: HTMLElement): void {
     preview.className = "tp-editor-image-placeholder";
     preview.textContent = "IMG";
+  }
+}
+
+class MarkdownMathBlockWidget extends WidgetType {
+  constructor(private readonly math: MarkdownMathBlockState) {
+    super();
+  }
+
+  override eq(widget: WidgetType): boolean {
+    return widget instanceof MarkdownMathBlockWidget && widget.math.expression === this.math.expression;
+  }
+
+  override toDOM(): HTMLElement {
+    const block = document.createElement("span");
+    block.className = "tp-editor-math-preview";
+    block.setAttribute("aria-label", "Math preview");
+
+    if (!this.math.expression) {
+      block.textContent = "Empty math block";
+      block.classList.add("tp-editor-math-preview-empty");
+      return block;
+    }
+
+    try {
+      block.innerHTML = renderKatexToString(this.math.expression, {
+        displayMode: true,
+        output: "mathml",
+        throwOnError: false
+      });
+    } catch {
+      block.textContent = this.math.expression;
+      block.classList.add("tp-editor-math-preview-error");
+    }
+
+    return block;
+  }
+
+  override get estimatedHeight(): number {
+    return 74;
   }
 }
 
@@ -873,6 +1025,49 @@ function markdownEditorTheme(configuration: MarkdownEditorConfiguration): Extens
       color: "var(--tp-color-text)",
       fontSize: "13px",
       fontWeight: "650"
+    },
+    ".tp-editor-math-block": {
+      fontFamily: "ui-monospace, SFMono-Regular, Consolas, monospace",
+      backgroundColor: "var(--tp-color-math-block)",
+      borderLeft: "3px solid var(--tp-color-math-block-border)",
+      paddingLeft: "12px",
+      paddingRight: "12px"
+    },
+    ".tp-editor-math-open": {
+      borderTopLeftRadius: "var(--tp-radius-control)",
+      borderTopRightRadius: "var(--tp-radius-control)",
+      paddingTop: "6px"
+    },
+    ".tp-editor-math-close": {
+      borderBottomLeftRadius: "var(--tp-radius-control)",
+      borderBottomRightRadius: "var(--tp-radius-control)",
+      paddingBottom: "6px"
+    },
+    ".tp-editor-math-content": {
+      color: "var(--tp-color-text-muted)"
+    },
+    ".tp-editor-math-preview": {
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      minHeight: "66px",
+      boxSizing: "border-box",
+      overflowX: "auto",
+      padding: "12px",
+      border: "1px solid var(--tp-color-math-block-border)",
+      borderLeft: "3px solid var(--tp-color-math-block-border)",
+      borderRadius: "var(--tp-radius-control)",
+      backgroundColor: "var(--tp-color-math-block)",
+      color: "var(--tp-color-text)"
+    },
+    ".tp-editor-math-preview math": {
+      maxWidth: "100%"
+    },
+    ".tp-editor-math-preview-empty, .tp-editor-math-preview-error": {
+      justifyContent: "flex-start",
+      color: "var(--tp-color-text-muted)",
+      fontFamily: "ui-monospace, SFMono-Regular, Consolas, monospace",
+      fontSize: "13px"
     },
     ".tp-editor-markdown-marker": {
       color: "var(--tp-color-text-soft)",

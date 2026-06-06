@@ -3,6 +3,7 @@ import {
   analyzeMarkdownCodeFenceLines,
   analyzeMarkdownImageBlocks,
   analyzeMarkdownLineBlocks,
+  analyzeMarkdownMathBlocks,
   analyzeMarkdownTableLines,
   classifyMarkdownLine,
   findInactiveMarkdownSyntaxMarkers
@@ -47,6 +48,18 @@ describe("classifyMarkdownLine", () => {
         sourceLabel: "diagram.png"
       }
     })).toContain("tp-editor-image-line");
+  });
+
+  it("adds math block classes when a math state is present", () => {
+    expect(classifyMarkdownLine("E = mc^2", false, false, {
+      mathBlock: {
+        blockEnd: 3,
+        blockStart: 1,
+        expression: "E = mc^2",
+        line: 2,
+        role: "content"
+      }
+    })).toContain("tp-editor-math-content");
   });
 });
 
@@ -96,6 +109,9 @@ describe("analyzeMarkdownLineBlocks", () => {
       "const value = 1",
       "```",
       "![Diagram](assets/diagram.png)",
+      "$$",
+      "E = mc^2",
+      "$$",
       "| Name | Value |",
       "| --- | ---: |",
       "| Alpha | 1 |"
@@ -103,15 +119,18 @@ describe("analyzeMarkdownLineBlocks", () => {
 
     expect(states.map((state) => [
       state.line,
-      state.codeFenceRole ?? state.imageBlock?.sourceLabel ?? state.tableState?.role
+      state.codeFenceRole ?? state.imageBlock?.sourceLabel ?? state.mathBlock?.role ?? state.tableState?.role
     ])).toEqual([
       [2, "open"],
       [3, "content"],
       [4, "close"],
       [5, "diagram.png"],
-      [6, "header"],
-      [7, "delimiter"],
-      [8, "body"]
+      [6, "open"],
+      [7, "content"],
+      [8, "close"],
+      [9, "header"],
+      [10, "delimiter"],
+      [11, "body"]
     ]);
   });
 
@@ -129,6 +148,44 @@ describe("analyzeMarkdownLineBlocks", () => {
       { line: 4, codeFenceRole: "content" },
       { line: 5, codeFenceRole: "close" }
     ]);
+  });
+});
+
+describe("analyzeMarkdownMathBlocks", () => {
+  it("marks opening, content, and closing display math lines", () => {
+    expect(analyzeMarkdownMathBlocks([
+      "before",
+      "$$",
+      "E = mc^2",
+      "$$",
+      "after"
+    ])).toEqual([
+      { blockEnd: 4, blockStart: 2, expression: "E = mc^2", line: 2, role: "open" },
+      { blockEnd: 4, blockStart: 2, expression: "E = mc^2", line: 3, role: "content" },
+      { blockEnd: 4, blockStart: 2, expression: "E = mc^2", line: 4, role: "close" }
+    ]);
+  });
+
+  it("keeps unclosed display math content marked until the document ends", () => {
+    expect(analyzeMarkdownMathBlocks([
+      "$$",
+      "x + y"
+    ])).toEqual([
+      { blockEnd: 2, blockStart: 1, expression: "x + y", line: 1, role: "open" },
+      { blockEnd: 2, blockStart: 1, expression: "x + y", line: 2, role: "content" }
+    ]);
+  });
+
+  it("does not collect image or table state inside display math", () => {
+    const states = analyzeMarkdownLineBlocks([
+      "$$",
+      "![Not image](plot.png)",
+      "| Not | Table |",
+      "| --- | --- |",
+      "$$"
+    ]);
+
+    expect(states.every((state) => state.mathBlock && !state.imageBlock && !state.tableState)).toBe(true);
   });
 });
 
