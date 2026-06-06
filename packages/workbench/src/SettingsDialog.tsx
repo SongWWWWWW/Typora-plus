@@ -1,5 +1,5 @@
 import { keybindingFromEvent } from "@typora-plus/platform";
-import type { Command, PartialConfiguration, TyporaPlusConfiguration } from "@typora-plus/platform";
+import type { Command, Keybinding, PartialConfiguration, TyporaPlusConfiguration } from "@typora-plus/platform";
 import { Settings as SettingsIcon, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
@@ -21,25 +21,31 @@ export function SettingsDialog({
   open,
   configuration,
   commands,
+  getCommandForKeybinding,
   getKeybindingLabel,
+  getKeybindingLabelForKeybinding,
   onClose,
   onUpdate
 }: {
   readonly open: boolean;
   readonly configuration: TyporaPlusConfiguration;
   readonly commands: readonly Command[];
+  readonly getCommandForKeybinding: (keybinding: Keybinding) => string | undefined;
   readonly getKeybindingLabel: (command: string) => string | undefined;
+  readonly getKeybindingLabelForKeybinding: (keybinding: Keybinding) => string;
   readonly onClose: () => void;
   readonly onUpdate: (value: PartialConfiguration) => void;
 }) {
   const [assetFolderDraft, setAssetFolderDraft] = useState(configuration.workspace.defaultAssetFolder);
   const [recordingCommand, setRecordingCommand] = useState<string | undefined>();
+  const [pendingKeybinding, setPendingKeybinding] = useState<PendingKeybindingOverride | undefined>();
   const searchMaxFileSizeMegabytes = bytesToMegabytes(configuration.workspace.searchMaxFileSizeBytes);
 
   useEffect(() => {
     if (open) {
       setAssetFolderDraft(configuration.workspace.defaultAssetFolder);
       setRecordingCommand(undefined);
+      setPendingKeybinding(undefined);
     }
   }, [configuration.workspace.defaultAssetFolder, open]);
 
@@ -69,6 +75,7 @@ export function SettingsDialog({
 
       if (event.key === "Escape") {
         setRecordingCommand(undefined);
+        setPendingKeybinding(undefined);
         return;
       }
 
@@ -78,20 +85,29 @@ export function SettingsDialog({
         return;
       }
 
-      onUpdate({
-        keybindings: {
-          overrides: upsertKeybindingOverride(configuration.keybindings.overrides, {
-            command: recordingCommand,
-            keybinding
-          })
-        }
-      });
+      const conflictCommand = getCommandForKeybinding(keybinding);
+      const nextKeybinding = {
+        command: recordingCommand,
+        keybinding
+      };
+
+      if (conflictCommand && conflictCommand !== recordingCommand) {
+        setPendingKeybinding({
+          ...nextKeybinding,
+          conflictCommand,
+          label: getKeybindingLabelForKeybinding(keybinding)
+        });
+        setRecordingCommand(undefined);
+        return;
+      }
+
+      applyKeybindingOverride(configuration, nextKeybinding, onUpdate);
       setRecordingCommand(undefined);
     };
 
     window.addEventListener("keydown", handleKeyDown, true);
     return () => window.removeEventListener("keydown", handleKeyDown, true);
-  }, [configuration.keybindings.overrides, onUpdate, recordingCommand]);
+  }, [configuration, getCommandForKeybinding, getKeybindingLabelForKeybinding, onUpdate, recordingCommand]);
 
   if (!open) {
     return null;
@@ -254,7 +270,10 @@ export function SettingsDialog({
                     <button
                       className="tp-settings-small-button"
                       type="button"
-                      onClick={() => setRecordingCommand(command.id)}
+                      onClick={() => {
+                        setPendingKeybinding(undefined);
+                        setRecordingCommand(command.id);
+                      }}
                     >
                       Record
                     </button>
@@ -270,6 +289,30 @@ export function SettingsDialog({
                     >
                       Reset
                     </button>
+                    {pendingKeybinding?.command === command.id ? (
+                      <div className="tp-settings-keybinding-conflict">
+                        <span>
+                          {pendingKeybinding.label} is used by {commandTitle(commands, pendingKeybinding.conflictCommand)}.
+                        </span>
+                        <button
+                          className="tp-settings-small-button"
+                          type="button"
+                          onClick={() => {
+                            applyKeybindingOverride(configuration, pendingKeybinding, onUpdate);
+                            setPendingKeybinding(undefined);
+                          }}
+                        >
+                          Replace
+                        </button>
+                        <button
+                          className="tp-settings-small-button"
+                          type="button"
+                          onClick={() => setPendingKeybinding(undefined)}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    ) : null}
                   </div>
                 );
               })}
@@ -279,6 +322,29 @@ export function SettingsDialog({
       </section>
     </div>
   );
+}
+
+interface PendingKeybindingOverride {
+  readonly command: string;
+  readonly keybinding: Keybinding;
+  readonly conflictCommand: string;
+  readonly label: string;
+}
+
+function applyKeybindingOverride(
+  configuration: TyporaPlusConfiguration,
+  override: { readonly command: string; readonly keybinding: Keybinding },
+  onUpdate: (value: PartialConfiguration) => void
+): void {
+  onUpdate({
+    keybindings: {
+      overrides: upsertKeybindingOverride(configuration.keybindings.overrides, override)
+    }
+  });
+}
+
+function commandTitle(commands: readonly Command[], id: string): string {
+  return commands.find((command) => command.id === id)?.title ?? id;
 }
 
 function SettingsSection({

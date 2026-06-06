@@ -45,6 +45,8 @@ export interface IKeybindingService {
   dispatch(event: KeybindingEvent, commandService: ICommandService): boolean;
   getKeybindings(): readonly ResolvedKeybinding[];
   getKeybindingLabel(command: string): string | undefined;
+  getKeybindingLabelForKeybinding(keybinding: Keybinding): string;
+  getCommandForKeybinding(keybinding: Keybinding): string | undefined;
 }
 
 export const IKeybindingService = createServiceIdentifier<IKeybindingService>("keybinding");
@@ -108,6 +110,7 @@ export class KeybindingService implements IKeybindingService {
 
   getKeybindings(): readonly ResolvedKeybinding[] {
     return this.getRuleRecords()
+      .filter((rule) => this.getCommandForKeybinding(rule.keybinding) === rule.command)
       .map((rule) => ({
         command: rule.command,
         keybinding: rule.keybinding,
@@ -119,9 +122,23 @@ export class KeybindingService implements IKeybindingService {
   getKeybindingLabel(command: string): string | undefined {
     const rule = this.getRuleRecords()
       .filter((entry) => entry.command === command)
-      .sort((first, second) => second.weight - first.weight || second.order - first.order)[0];
+      .sort((first, second) => second.weight - first.weight || second.order - first.order)
+      .find((entry) => this.getCommandForKeybinding(entry.keybinding) === command);
 
     return rule ? formatKeybinding(rule.keybinding, this.options) : undefined;
+  }
+
+  getKeybindingLabelForKeybinding(keybinding: Keybinding): string {
+    return formatKeybinding(normalizeKeybinding(keybinding), this.options);
+  }
+
+  getCommandForKeybinding(keybinding: Keybinding): string | undefined {
+    const normalizedKeybinding = normalizeKeybinding(keybinding);
+
+    return this.getRuleRecords()
+      .filter((rule) => keybindingEquals(rule.keybinding, normalizedKeybinding))
+      .sort((first, second) => second.weight - first.weight || second.order - first.order)[0]
+      ?.command;
   }
 
   private getRuleRecords(): readonly KeybindingRecord[] {

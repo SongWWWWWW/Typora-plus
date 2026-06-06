@@ -257,11 +257,39 @@ describe("keybindings", () => {
 
     expect(service.resolve({ key: "s", ctrlKey: true })).toBe("workbench.settings.open");
     expect(service.getKeybindingLabel("workbench.settings.open")).toBe("Ctrl+S");
+    expect(service.getKeybindingLabel("file.save")).toBeUndefined();
+    expect(service.getKeybindings().map((rule) => rule.command)).toEqual(["workbench.settings.open"]);
 
     service.setUserKeybindings([]);
 
     expect(service.resolve({ key: "s", ctrlKey: true })).toBe("file.save");
+    expect(service.getKeybindingLabel("file.save")).toBe("Ctrl+S");
     expect(service.getKeybindingLabel("workbench.settings.open")).toBeUndefined();
+  });
+
+  it("reports the active command and label for a keybinding", () => {
+    const service = new KeybindingService();
+
+    service.registerKeybinding({
+      command: "file.save",
+      keybinding: { key: "s", primary: true }
+    });
+    service.registerKeybinding({
+      command: "file.saveAs",
+      keybinding: { key: "s", primary: true, shift: true }
+    });
+
+    expect(service.getCommandForKeybinding({ key: "S", primary: true })).toBe("file.save");
+    expect(service.getKeybindingLabelForKeybinding({ key: "s", primary: true, alt: true })).toBe("Ctrl+Alt+S");
+
+    service.setUserKeybindings([
+      {
+        command: "workbench.settings.open",
+        keybinding: { key: "s", primary: true }
+      }
+    ]);
+
+    expect(service.getCommandForKeybinding({ key: "s", primary: true })).toBe("workbench.settings.open");
   });
 
   it("creates keybindings from keyboard events", () => {

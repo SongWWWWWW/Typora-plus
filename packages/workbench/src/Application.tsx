@@ -536,7 +536,9 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
         open={settingsOpen}
         configuration={configuration}
         commands={services.commandService.getCommands()}
+        getCommandForKeybinding={(keybinding) => services.keybindingService.getCommandForKeybinding(keybinding)}
         getKeybindingLabel={(id) => services.keybindingService.getKeybindingLabel(id)}
+        getKeybindingLabelForKeybinding={(keybinding) => services.keybindingService.getKeybindingLabelForKeybinding(keybinding)}
         onClose={() => setSettingsOpen(false)}
         onUpdate={(value) => services.configurationService.updateValue(value)}
       />

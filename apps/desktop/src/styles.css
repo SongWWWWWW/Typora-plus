@@ -897,6 +897,28 @@ button {
   min-height: 36px;
 }
 
+.tp-settings-keybinding-conflict {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: minmax(0, 1fr) 72px 64px;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 6px 8px;
+  border: 1px solid var(--tp-color-border);
+  border-radius: var(--tp-radius-control);
+  background: var(--tp-color-surface-muted);
+}
+
+.tp-settings-keybinding-conflict span {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--tp-color-text-muted);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .tp-settings-keybinding-name {
   display: flex;
   flex-direction: column;
@@ -1024,6 +1046,10 @@ button {
 
   .tp-settings-keybinding-row {
     grid-template-columns: minmax(0, 1fr) minmax(74px, auto);
+  }
+
+  .tp-settings-keybinding-conflict {
+    grid-template-columns: minmax(0, 1fr) 72px 64px;
   }
 
   .tp-settings-keybinding-value {
