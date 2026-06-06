@@ -66,13 +66,15 @@ Current features:
 - inactive Markdown marker soft hiding for headings, lists, quotes, fences, links, and strong emphasis
 - code fence block styling with visible-range-aware fence state tracking
 - table block styling with code-fence-aware table detection
+- standalone image preview cards with direct rendering limited to safe inline/blob sources
 - focus mode dimming
 - typewriter mode top spacing
 - imperative line scrolling for outline and search
 
 Next editor work:
 
-- block widgets for images, math, and richer code fences
+- workspace-backed image resource resolution
+- block widgets for math and richer code fences
 - richer table editing affordances
 - viewport-safe large document behavior tests
 - parser-backed position mapping

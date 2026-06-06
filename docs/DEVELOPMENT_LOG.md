@@ -297,3 +297,32 @@ Known limitations:
 
 - Tables are visually grouped but do not yet provide structural editing controls.
 - Escaped pipe parsing remains a future parser-backed Markdown enhancement.
+
+## 2026-06-06 - P2 Image Preview Cards
+
+Completed:
+
+- Added standalone Markdown image line analysis with code-fence awareness.
+- Added inactive-line image preview cards while keeping the active line editable as source Markdown.
+- Rendered safe inline/blob image sources directly and represented relative or external sources as compact cards.
+- Added image block, border, and preview theme tokens.
+- Kept image preview state inside the editor presentation layer.
+
+Quality gate:
+
+- `npm run typecheck`: passed
+- `npm test`: passed, 39 tests
+- `npm run verify`: passed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- Production browser preview: passed at `http://127.0.0.1:4173`
+
+Review:
+
+- The editor still owns Markdown presentation details; workbench and platform contracts did not change.
+- Image cards preserve the source text model and only replace inactive standalone image lines visually.
+- Direct rendering is intentionally limited to inline/blob sources to avoid implicit remote or local file loading.
+
+Known limitations:
+
+- Workspace-relative image files are not yet resolved into safe renderer URLs.
+- Remote image loading remains deferred until privacy controls and resource policy are defined.
