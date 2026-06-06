@@ -542,6 +542,20 @@ describe("analyzeMarkdownTableLines", () => {
     ]);
   });
 
+  it("keeps escaped pipes inside table cells", () => {
+    const tableBlock = analyzeMarkdownLineBlocks([
+      "| Name \\| Alias | Status |",
+      "| --- | --- |",
+      "| Alpha \\| Beta | Ready \\| Hold |"
+    ]).find((state) => state.tableBlock)?.tableBlock;
+
+    expect(tableBlock).toBeDefined();
+    expect(tableBlock?.headerCells).toEqual(["Name \\| Alias", "Status"]);
+    expect(tableBlock?.bodyRows).toEqual([
+      ["Alpha \\| Beta", "Ready \\| Hold"]
+    ]);
+  });
+
   it("supports tables without outer pipes", () => {
     expect(analyzeMarkdownTableLines([
       "Name | Value",
@@ -560,6 +574,13 @@ describe("analyzeMarkdownTableLines", () => {
       "| Name | Value |",
       "| --- | --- |",
       "```"
+    ])).toEqual([]);
+  });
+
+  it("does not treat escaped-only pipes as table separators", () => {
+    expect(analyzeMarkdownTableLines([
+      "Name \\| Value",
+      "--- \\| ---"
     ])).toEqual([]);
   });
 });
@@ -606,6 +627,26 @@ describe("Markdown table editing helpers", () => {
       "| Name |  | Count | Status |",
       "| :--- | --- | ---: | :---: |",
       "| Alpha |  | 1 | Ready |"
+    ]);
+  });
+
+  it("preserves escaped pipe cell source while editing columns", () => {
+    const tableBlock = analyzeMarkdownLineBlocks([
+      "| Name \\| Alias | Count | Status |",
+      "| :--- | ---: | :---: |",
+      "| Alpha \\| Beta | 1 | Ready \\| Hold |"
+    ]).find((state) => state.tableBlock)?.tableBlock;
+
+    expect(tableBlock).toBeDefined();
+    expect(createMarkdownTableWithInsertedColumn(tableBlock!, { columnIndex: 1 })).toEqual([
+      "| Name \\| Alias |  | Count | Status |",
+      "| :--- | --- | ---: | :---: |",
+      "| Alpha \\| Beta |  | 1 | Ready \\| Hold |"
+    ]);
+    expect(createMarkdownTableWithDeletedColumn(tableBlock!, { columnIndex: 1 })).toEqual([
+      "| Name \\| Alias | Status |",
+      "| :--- | :---: |",
+      "| Alpha \\| Beta | Ready \\| Hold |"
     ]);
   });
 

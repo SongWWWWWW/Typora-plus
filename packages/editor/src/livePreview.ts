@@ -1232,16 +1232,38 @@ function readMarkdownTableDelimiterCells(text: string): readonly string[] | unde
 
 function readMarkdownTableCells(text: string): readonly string[] | undefined {
   const trimmed = text.trim();
-
-  if (!trimmed.includes("|")) {
-    return undefined;
-  }
-
-  const withoutLeadingPipe = trimmed.startsWith("|") ? trimmed.slice(1) : trimmed;
-  const normalized = withoutLeadingPipe.endsWith("|") ? withoutLeadingPipe.slice(0, -1) : withoutLeadingPipe;
-  const cells = normalized.split("|").map((cell) => cell.trim());
+  const cells = splitMarkdownTableCells(trimmed).map((cell) => cell.trim());
 
   return cells.length >= 2 ? cells : undefined;
+}
+
+function splitMarkdownTableCells(text: string): readonly string[] {
+  const cells: string[] = [];
+  let current = "";
+
+  for (let index = 0; index < text.length; index += 1) {
+    const character = text[index];
+
+    if (character === "|" && !isEscaped(text, index)) {
+      cells.push(current);
+      current = "";
+      continue;
+    }
+
+    current += character;
+  }
+
+  cells.push(current);
+
+  if (text.startsWith("|")) {
+    cells.shift();
+  }
+
+  if (text.endsWith("|") && !isEscaped(text, text.length - 1)) {
+    cells.pop();
+  }
+
+  return cells;
 }
 
 function readMarkdownTableColumnAlignment(delimiter: string): MarkdownTableColumnAlignment {
@@ -1506,7 +1528,7 @@ class MarkdownTableBlockWidget extends WidgetType {
 
       const label = document.createElement("span");
       label.className = "tp-editor-table-header-label";
-      label.textContent = cell;
+      label.textContent = readMarkdownTableCellPreviewText(cell);
 
       content.append(label, createTableAlignmentButton({
         alignment: this.tableBlock.alignments[index] ?? "default",
@@ -1528,7 +1550,7 @@ class MarkdownTableBlockWidget extends WidgetType {
 
         row.forEach((cell, index) => {
           const bodyCell = document.createElement("td");
-          bodyCell.textContent = cell;
+          bodyCell.textContent = readMarkdownTableCellPreviewText(cell);
           setTableCellAlignment(bodyCell, this.tableBlock.alignments[index]);
           bodyRow.append(bodyCell);
         });
@@ -1638,6 +1660,23 @@ function readTableAlignmentLabel(alignment: MarkdownTableColumnAlignment): strin
 
 function setTableCellAlignment(cell: HTMLTableCellElement, alignment: MarkdownTableColumnAlignment | undefined): void {
   cell.dataset.align = alignment ?? "default";
+}
+
+function readMarkdownTableCellPreviewText(cell: string): string {
+  let preview = "";
+
+  for (let index = 0; index < cell.length; index += 1) {
+    const character = cell[index];
+
+    if (character === "|" && isEscaped(cell, index)) {
+      preview = preview.slice(0, -1) + "|";
+      continue;
+    }
+
+    preview += character;
+  }
+
+  return preview;
 }
 
 function serializeTableBlock(tableBlock: MarkdownTableBlockState): string {
@@ -2234,7 +2273,10 @@ function markdownEditorTheme(configuration: MarkdownEditorConfiguration): Extens
       display: "flex",
       flexDirection: "column",
       width: "100%",
+      maxWidth: "100%",
+      minWidth: "0",
       boxSizing: "border-box",
+      contain: "inline-size",
       overflow: "hidden",
       border: "1px solid var(--tp-color-table-border)",
       borderLeft: "3px solid var(--tp-color-table-border)",
@@ -2249,6 +2291,7 @@ function markdownEditorTheme(configuration: MarkdownEditorConfiguration): Extens
       justifyContent: "space-between",
       gap: "10px",
       width: "100%",
+      minWidth: "0",
       minHeight: `${tablePreviewToolbarEstimatedHeight}px`,
       boxSizing: "border-box",
       padding: "6px 8px",
@@ -2270,7 +2313,10 @@ function markdownEditorTheme(configuration: MarkdownEditorConfiguration): Extens
       display: "flex",
       alignItems: "center",
       gap: "6px",
-      flex: "0 0 auto"
+      flex: "0 1 auto",
+      flexWrap: "wrap",
+      justifyContent: "flex-end",
+      minWidth: "0"
     },
     ".tp-editor-table-tool": {
       minWidth: `${tableToolButtonMinWidthPx}px`,
@@ -2300,6 +2346,7 @@ function markdownEditorTheme(configuration: MarkdownEditorConfiguration): Extens
     ".tp-editor-table-scroll": {
       display: "block",
       width: "100%",
+      minWidth: "0",
       overflowX: "auto"
     },
     ".tp-editor-table-preview table": {
