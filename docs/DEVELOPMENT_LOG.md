@@ -2529,3 +2529,38 @@ Known limitations:
 - The cache is still in-memory only; previews are recomputed after app reload.
 - Inline renderer contributions are registered by the platform but are not connected to an editor preview surface yet.
 - Mermaid remains isolated behind lazy loading, but its lazy chunk still needs future lower-end machine measurement.
+
+## 2026-06-07 - P2 Inline Markdown Renderer Preview Bridge
+
+Completed:
+
+- Added an editor `MarkdownInlineRenderer` callback contract separate from the code-fence renderer callback.
+- Added inactive-line parsing for language-qualified inline code spans such as `` `badge:done` ``.
+- Connected registered inline Markdown renderer providers to those spans through the Workbench adapter.
+- Preserved active-line source editing and source-focused click editing for rendered inline spans.
+- Added inline-only renderer HTML sanitization so inline providers cannot insert block layouts or unsafe attributes into the editor line.
+- Reused the configuration-driven renderer preview cache for inline renderer results, keyed by renderer id, active document URI, language, and value.
+- Added tests for inline span parsing, ordinary inline-code exclusion, active-line source visibility, inline sanitizer behavior, inline renderer selection, lazy activation, document context propagation, and inline cache reuse.
+
+Quality gate:
+
+- `npm run typecheck`: passed
+- `npm run test -- --run packages/editor/src/livePreview.test.ts packages/workbench/src/markdownRendererPreview.test.ts`: passed, 99 tests
+- `npm run verify`: passed, 246 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Browser smoke check at `http://127.0.0.1:5173/`: Workbench loaded, Mermaid preview remained ready with one rendered image, no inline previews appeared without an inline provider, no horizontal overflow, and no console errors.
+
+Review:
+
+- The editor still has no dependency on platform or Workbench services; it receives narrow block and inline renderer callbacks.
+- Inline renderer activation, provider lookup, and document context remain Workbench/platform responsibilities.
+- Ordinary inline code is not routed to renderers, keeping the writing surface predictable.
+- Inline provider output uses a stricter sanitizer than block output, preventing provider HTML from changing line layout with tables, figures, or other block elements.
+- No new dependency, storage path, built-in inline effect, visual token, renderer-specific editor dependency, or extra documentation file was introduced.
+
+Known limitations:
+
+- There is no built-in inline renderer provider yet; the bridge is ready for future extension-host or built-in contributions with clear product value.
+- The cache is still in-memory only; previews are recomputed after app reload.
+- Mermaid remains isolated behind lazy loading, but its lazy chunk still needs future lower-end machine measurement.
