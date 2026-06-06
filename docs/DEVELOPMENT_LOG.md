@@ -238,3 +238,33 @@ Known limitations:
 
 - Marker hiding is regex-based for the initial live preview pass; parser-backed position mapping remains planned.
 - Rich block widgets for images, tables, math, and code fences remain future editor work.
+
+## 2026-06-06 - P2 Code Fence Block Styling
+
+Completed:
+
+- Added code fence line-state analysis for open, content, and close lines.
+- Styled fenced code blocks as cohesive blocks instead of styling only fence delimiter lines.
+- Kept fence analysis inside `packages/editor` and exposed it for focused unit tests.
+- Separated opening and closing fence detection so fence-like code content stays inside the block.
+- Added theme tokens for code block background and border colors.
+- Tightened fence-state tracking so editor decorations scan only the state needed for visible ranges.
+
+Quality gate:
+
+- `npm run typecheck`: passed
+- `npm test`: passed, 29 tests
+- `npm run verify`: passed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- Production browser preview: passed at `http://127.0.0.1:4173`
+
+Review:
+
+- Workbench and platform remain unaware of editor Markdown syntax details.
+- Code block visual values are supplied by theme tokens.
+- The plain Markdown text model remains unchanged; CodeMirror decorations only affect presentation.
+
+Known limitations:
+
+- Code fences are styled as blocks but do not yet have richer widgets such as language labels or copy controls.
+- Parser-backed position mapping remains planned for more complex Markdown constructs.

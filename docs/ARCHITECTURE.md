@@ -64,13 +64,14 @@ Current features:
 - history, search, selection, bracket matching
 - heading/quote/list/fence line styling
 - inactive Markdown marker soft hiding for headings, lists, quotes, fences, links, and strong emphasis
+- code fence block styling with visible-range-aware fence state tracking
 - focus mode dimming
 - typewriter mode top spacing
 - imperative line scrolling for outline and search
 
 Next editor work:
 
-- block widgets for images, tables, math, and code fences
+- block widgets for images, tables, math, and richer code fences
 - viewport-safe large document behavior tests
 - parser-backed position mapping
 
