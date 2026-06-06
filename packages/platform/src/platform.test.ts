@@ -6,6 +6,7 @@ import {
   NativeFileService,
   NativeAttachmentService,
   WorkspaceTextFileService,
+  RecentService,
   flattenFileTree,
   mergeConfiguration,
   ServiceCollection,
@@ -122,6 +123,32 @@ describe("attachments", () => {
   });
 });
 
+describe("recents", () => {
+  it("deduplicates and persists recent resources", () => {
+    const storage = createMemoryStorage();
+    const service = new RecentService({
+      storageKey: "recents",
+      maxEntries: 2,
+      now: createCounterClock(),
+      storage
+    });
+
+    service.addRecentFile(URI.file("C:/Notes/a.md"), "a.md");
+    service.addRecentWorkspace(URI.file("C:/Notes"), "Notes");
+    service.addRecentFile(URI.file("C:/Notes/a.md"), "a.md");
+
+    expect(service.getRecents().map((recent) => recent.name)).toEqual(["a.md", "Notes"]);
+
+    const restored = new RecentService({
+      storageKey: "recents",
+      maxEntries: 2,
+      storage
+    });
+
+    expect(restored.getRecentFiles()[0]?.uri.toString()).toBe("file://C:/Notes/a.md");
+  });
+});
+
 function createMemoryHost() {
   const files = new Map<string, string>([["file://C:/Notes/a.md", "# A"]]);
   const host: NativeFileSystemHost & { readonly files: Map<string, string> } = {
@@ -163,4 +190,24 @@ function createMemoryHost() {
   };
 
   return host;
+}
+
+function createMemoryStorage() {
+  const values = new Map<string, string>();
+  return {
+    read(key: string) {
+      return values.get(key);
+    },
+    write(key: string, value: string) {
+      values.set(key, value);
+    }
+  };
+}
+
+function createCounterClock() {
+  let value = 0;
+  return () => {
+    value += 1;
+    return value;
+  };
 }
