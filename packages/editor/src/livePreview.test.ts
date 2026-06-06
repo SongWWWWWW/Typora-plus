@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { classifyMarkdownLine, findInactiveMarkdownSyntaxMarkers } from "./index";
+import { analyzeMarkdownCodeFenceLines, classifyMarkdownLine, findInactiveMarkdownSyntaxMarkers } from "./index";
 
 describe("classifyMarkdownLine", () => {
   it("classifies headings by level", () => {
@@ -12,6 +12,48 @@ describe("classifyMarkdownLine", () => {
 
   it("keeps active lines readable in focus mode", () => {
     expect(classifyMarkdownLine("paragraph", true, true)).not.toContain("tp-editor-passive-line");
+  });
+
+  it("adds code block role classes when a fence state is present", () => {
+    expect(classifyMarkdownLine("const value = 1", false, false, "content")).toContain("tp-editor-code-block-content");
+  });
+});
+
+describe("analyzeMarkdownCodeFenceLines", () => {
+  it("marks opening, content, and closing fence lines", () => {
+    expect(analyzeMarkdownCodeFenceLines([
+      "before",
+      "```ts",
+      "const value = 1",
+      "```",
+      "after"
+    ])).toEqual([
+      { line: 2, role: "open" },
+      { line: 3, role: "content" },
+      { line: 4, role: "close" }
+    ]);
+  });
+
+  it("keeps unclosed fence content marked until the document ends", () => {
+    expect(analyzeMarkdownCodeFenceLines([
+      "~~~",
+      "code"
+    ])).toEqual([
+      { line: 1, role: "open" },
+      { line: 2, role: "content" }
+    ]);
+  });
+
+  it("keeps fence-like content lines inside an active block", () => {
+    expect(analyzeMarkdownCodeFenceLines([
+      "```",
+      "```not a closing fence",
+      "```"
+    ])).toEqual([
+      { line: 1, role: "open" },
+      { line: 2, role: "content" },
+      { line: 3, role: "close" }
+    ]);
   });
 });
 

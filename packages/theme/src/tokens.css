@@ -11,6 +11,8 @@
   --tp-color-text-soft: #8a9084;
   --tp-color-accent: #287d74;
   --tp-color-accent-strong: #12615a;
+  --tp-color-code-block: #eef1ec;
+  --tp-color-code-block-border: #c8d0c2;
   --tp-color-selection: #cde9e4;
   --tp-color-warning: #9a6a10;
   --tp-color-danger: #a43e42;
@@ -37,6 +39,8 @@
   --tp-color-text-soft: #7f8778;
   --tp-color-accent: #6db9ad;
   --tp-color-accent-strong: #8cd3c7;
+  --tp-color-code-block: #242821;
+  --tp-color-code-block-border: #46503f;
   --tp-color-selection: #264e49;
   --tp-color-warning: #d8ad4d;
   --tp-color-danger: #e07d80;

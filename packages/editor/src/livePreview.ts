@@ -15,6 +15,13 @@ export interface MarkdownSyntaxMarkerRange {
   readonly to: number;
 }
 
+export type MarkdownCodeFenceLineRole = "open" | "content" | "close";
+
+export interface MarkdownCodeFenceLineState {
+  readonly line: number;
+  readonly role: MarkdownCodeFenceLineRole;
+}
+
 const syntaxMarkerDecoration = Decoration.mark({ class: "tp-editor-markdown-marker" });
 
 export function livePreviewExtension(configuration: MarkdownEditorConfiguration): Extension {
@@ -41,7 +48,12 @@ export function livePreviewExtension(configuration: MarkdownEditorConfiguration)
   ];
 }
 
-export function classifyMarkdownLine(text: string, active: boolean, focusMode: boolean): string[] {
+export function classifyMarkdownLine(
+  text: string,
+  active: boolean,
+  focusMode: boolean,
+  codeFenceRole?: MarkdownCodeFenceLineRole
+): string[] {
   const classes = ["tp-editor-line"];
 
   const heading = /^(#{1,6})\s+/.exec(text);
@@ -57,6 +69,10 @@ export function classifyMarkdownLine(text: string, active: boolean, focusMode: b
     classes.push("tp-editor-empty");
   }
 
+  if (codeFenceRole) {
+    classes.push("tp-editor-code-block", `tp-editor-code-block-${codeFenceRole}`);
+  }
+
   if (active) {
     classes.push("tp-editor-active-line");
   } else if (focusMode) {
@@ -64,6 +80,35 @@ export function classifyMarkdownLine(text: string, active: boolean, focusMode: b
   }
 
   return classes;
+}
+
+export function analyzeMarkdownCodeFenceLines(lines: readonly string[]): readonly MarkdownCodeFenceLineState[] {
+  const states: MarkdownCodeFenceLineState[] = [];
+  let activeFence: string | undefined;
+
+  lines.forEach((line, index) => {
+    const marker = readOpeningFenceMarker(line);
+
+    if (!activeFence) {
+      if (!marker) {
+        return;
+      }
+
+      activeFence = marker;
+      states.push({ line: index + 1, role: "open" });
+      return;
+    }
+
+    if (isClosingFence(line, activeFence)) {
+      activeFence = undefined;
+      states.push({ line: index + 1, role: "close" });
+      return;
+    }
+
+    states.push({ line: index + 1, role: "content" });
+  });
+
+  return states;
 }
 
 export function findInactiveMarkdownSyntaxMarkers(text: string, active: boolean): readonly MarkdownSyntaxMarkerRange[] {
@@ -83,13 +128,19 @@ export function findInactiveMarkdownSyntaxMarkers(text: string, active: boolean)
 function buildDecorations(view: EditorView, configuration: MarkdownEditorConfiguration): DecorationSet {
   const builder = new RangeSetBuilder<Decoration>();
   const activeLine = view.state.doc.lineAt(view.state.selection.main.head).number;
+  const codeFenceLineRoles = analyzeVisibleCodeFenceLines(view);
 
   for (const range of view.visibleRanges) {
     let position = range.from;
 
     while (position <= range.to) {
       const line = view.state.doc.lineAt(position);
-      const classes = classifyMarkdownLine(line.text, line.number === activeLine, configuration.focusMode);
+      const classes = classifyMarkdownLine(
+        line.text,
+        line.number === activeLine,
+        configuration.focusMode,
+        codeFenceLineRoles.get(line.number)
+      );
 
       builder.add(line.from, line.from, Decoration.line({ class: classes.join(" ") }));
       for (const marker of findInactiveMarkdownSyntaxMarkers(line.text, line.number === activeLine)) {
@@ -106,6 +157,68 @@ function buildDecorations(view: EditorView, configuration: MarkdownEditorConfigu
   }
 
   return builder.finish();
+}
+
+function analyzeVisibleCodeFenceLines(view: EditorView): ReadonlyMap<number, MarkdownCodeFenceLineRole> {
+  const roles = new Map<number, MarkdownCodeFenceLineRole>();
+  let activeFence: string | undefined;
+  let cursorLine = 1;
+
+  for (const range of view.visibleRanges) {
+    const firstLine = view.state.doc.lineAt(range.from).number;
+    const lastLine = view.state.doc.lineAt(range.to).number;
+
+    while (cursorLine < firstLine) {
+      activeFence = nextFenceState(view.state.doc.line(cursorLine).text, activeFence);
+      cursorLine += 1;
+    }
+
+    while (cursorLine <= lastLine) {
+      const line = view.state.doc.line(cursorLine);
+      const marker = readOpeningFenceMarker(line.text);
+
+      if (!activeFence) {
+        if (marker) {
+          activeFence = marker;
+          roles.set(cursorLine, "open");
+        }
+      } else if (isClosingFence(line.text, activeFence)) {
+        activeFence = undefined;
+        roles.set(cursorLine, "close");
+      } else {
+        roles.set(cursorLine, "content");
+      }
+
+      cursorLine += 1;
+    }
+  }
+
+  return roles;
+}
+
+function nextFenceState(text: string, activeFence: string | undefined): string | undefined {
+  const marker = readOpeningFenceMarker(text);
+
+  if (!activeFence) {
+    return marker;
+  }
+
+  return isClosingFence(text, activeFence) ? undefined : activeFence;
+}
+
+function isClosingFence(text: string, activeFence: string): boolean {
+  const marker = readClosingFenceMarker(text);
+  return Boolean(marker && marker[0] === activeFence[0] && marker.length >= activeFence.length);
+}
+
+function readOpeningFenceMarker(text: string): string | undefined {
+  const match = /^\s{0,3}(`{3,}|~{3,})/.exec(text);
+  return match?.[1];
+}
+
+function readClosingFenceMarker(text: string): string | undefined {
+  const match = /^\s{0,3}(`{3,}|~{3,})\s*$/.exec(text);
+  return match?.[1];
 }
 
 function collectBlockMarkers(text: string, ranges: MarkdownSyntaxMarkerRange[]): void {
@@ -264,6 +377,26 @@ function markdownEditorTheme(configuration: MarkdownEditorConfiguration): Extens
     ".tp-editor-fence": {
       fontFamily: "ui-monospace, SFMono-Regular, Consolas, monospace",
       color: "var(--tp-color-accent-strong)"
+    },
+    ".tp-editor-code-block": {
+      fontFamily: "ui-monospace, SFMono-Regular, Consolas, monospace",
+      backgroundColor: "var(--tp-color-code-block)",
+      borderLeft: "3px solid var(--tp-color-code-block-border)",
+      paddingLeft: "12px",
+      paddingRight: "12px"
+    },
+    ".tp-editor-code-block-open": {
+      borderTopLeftRadius: "var(--tp-radius-control)",
+      borderTopRightRadius: "var(--tp-radius-control)",
+      paddingTop: "6px"
+    },
+    ".tp-editor-code-block-close": {
+      borderBottomLeftRadius: "var(--tp-radius-control)",
+      borderBottomRightRadius: "var(--tp-radius-control)",
+      paddingBottom: "6px"
+    },
+    ".tp-editor-code-block-content": {
+      color: "var(--tp-color-text-muted)"
     },
     ".tp-editor-markdown-marker": {
       color: "var(--tp-color-text-soft)",
