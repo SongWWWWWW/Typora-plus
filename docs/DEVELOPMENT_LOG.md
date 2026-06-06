@@ -922,3 +922,35 @@ Review:
 Known limitations:
 
 - Display math source ranges are scanner-based and select content lines as written; parser-backed math position mapping remains planned for deeper syntax-aware editing.
+
+## 2026-06-06 - P2 Workspace Index Metadata
+
+Completed:
+
+- Extended `IIndexService` with `getMetadata()` for indexed headings, tags, and links.
+- Added indexed resource metadata carrying URI, note name, relative path, and line number.
+- Collected Markdown headings, `#tags`, Markdown links, and wiki links while skipping fenced code and inline code spans.
+- Kept Workbench search behavior unchanged; metadata is exposed through the service boundary for future backlinks, tags, and persisted indexing.
+- Added platform tests for metadata extraction and metadata clearing.
+
+Quality gate:
+
+- `npm run test -- --run packages/platform/src/platform.test.ts`: passed, 16 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 97 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed
+- Browser search regression: current-note search for `topic` returned line 3 with `Alpha searchable topic`.
+- Browser layout check: search panel had no page horizontal overflow and no console errors.
+
+Review:
+
+- Metadata extraction remains in `packages/platform` behind `IIndexService`; Workbench does not parse Markdown metadata directly.
+- The existing in-memory index provider now has a shape that can be replaced by a SQLite-backed provider without UI contract churn.
+- Parsing is intentionally lightweight and skips code contexts to avoid obvious false positives.
+- No file-system assumptions, new hard-coded paths, or extra documentation files were introduced.
+
+Known limitations:
+
+- Metadata is still in-memory; SQLite persistence remains planned.
+- Link and tag extraction is scanner-based and should be replaced or backed by a fuller Markdown parser for more complex inline syntax.

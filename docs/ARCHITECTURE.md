@@ -44,7 +44,7 @@ Current services:
 - `IFileService`: native workspace file tree, trusted recent workspace reopen, workspace change events, file open, save, save-as
 - `IAttachmentService`: pasted image persistence through a native bridge
 - `IRecentService`: persisted recent files and workspaces
-- `IIndexService`: asynchronous workspace indexing and cross-file search
+- `IIndexService`: asynchronous workspace indexing, cross-file search, and Markdown metadata collection
 - `IResourceService`: workspace-backed preview resource resolution through a native bridge
 
 Native workspace trust is owned by the Electron main process. The renderer may request a recent workspace by URI, but the main process only opens paths previously selected through the native directory picker and recorded in the main-process trust store.
@@ -53,7 +53,7 @@ Preview resources are also resolved by the platform layer. The renderer passes t
 
 Planned services:
 
-- SQLite-backed index provider for `IIndexService`: persisted search, links, tags, headings
+- SQLite-backed index provider for `IIndexService`: persisted search and metadata
 - `IExportService`: PDF/HTML/DOCX export providers
 - `IExtensionService`: manifest, activation events, contribution points
 
