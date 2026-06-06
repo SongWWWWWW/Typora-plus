@@ -659,3 +659,38 @@ Known limitations:
 - Error feedback is inline text and tooltip-based; no dedicated diagnostics panel exists yet.
 - KaTeX is still rendered as MathML without the full KaTeX CSS layer.
 - Parser-backed position mapping remains planned for more complex inline math cases.
+
+## 2026-06-06 - P2 Table Deletion Tools
+
+Completed:
+
+- Added compact row and column deletion tools to inactive table previews.
+- Added pure Markdown table transformation helpers for deleting body rows and columns.
+- Disabled row deletion for tables without body rows.
+- Disabled column deletion at the default two-column minimum so preview tools do not collapse tables into a poor editing shape.
+- Reused the full-table re-read and replacement path so deletion does not depend on the current visible range.
+- Added focused tests for last-row deletion, clamped row deletion, empty-body behavior, last-column deletion, requested column deletion, and minimum-width protection.
+
+Quality gate:
+
+- `npm run test -- --run packages/editor/src/livePreview.test.ts`: passed, 56 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 76 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed
+- Production browser preview: passed at `http://127.0.0.1:4173`
+- Browser interaction check: `Row -` removed the last body row; `Col -` removed the last column and became disabled at two columns.
+- Desktop default viewport and mobile 390px checks: passed without horizontal overflow or console errors
+
+Review:
+
+- Table deletion remains inside `packages/editor`; Workbench, platform, and file services remain unaware of table syntax.
+- The plain Markdown table remains the source of truth; preview controls dispatch CodeMirror text edits only.
+- Transformation helpers are pure and covered by unit tests, keeping transaction wiring thin.
+- Visual behavior uses named editor constants and existing theme tokens; no new theme family or platform assumption was introduced.
+
+Known limitations:
+
+- Deletion controls currently target the last row or last column from the preview toolbar; direct row/column selection is still future work.
+- Direct table cell editing remains planned.
+- Escaped pipe parsing still depends on the planned parser-backed position mapping pass.
