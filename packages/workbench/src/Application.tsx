@@ -40,6 +40,11 @@ import {
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import { filterCommandPaletteCommands } from "./commandPaletteModel";
+import {
+  isListNavigationKey,
+  moveListSelection,
+  normalizeListSelection
+} from "./listNavigationModel";
 import { updateSavedFileIndex } from "./savedFileIndexing";
 import { SettingsDialog } from "./SettingsDialog";
 import type { WorkbenchServices } from "./services";
@@ -1178,6 +1183,7 @@ function CommandPalette({
   readonly onExecute: (id: string) => void;
 }) {
   const [query, setQuery] = useState("");
+  const [activeIndex, setActiveIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const filteredCommands = useMemo(
     () => filterCommandPaletteCommands(commands, query, {
@@ -1189,15 +1195,22 @@ function CommandPalette({
   useEffect(() => {
     if (!open) {
       setQuery("");
+      setActiveIndex(0);
       return;
     }
 
     window.setTimeout(() => inputRef.current?.focus(), 0);
   }, [open]);
 
+  useEffect(() => {
+    setActiveIndex((index) => normalizeListSelection(index, filteredCommands.length));
+  }, [filteredCommands.length]);
+
   if (!open) {
     return null;
   }
+
+  const activeCommandIndex = normalizeListSelection(activeIndex, filteredCommands.length);
 
   return (
     <div className="tp-command-overlay" role="presentation" onMouseDown={onClose}>
@@ -1208,23 +1221,42 @@ function CommandPalette({
             ref={inputRef}
             value={query}
             aria-label="Command"
-            onChange={(event) => setQuery(event.target.value)}
+            onChange={(event) => {
+              setQuery(event.target.value);
+              setActiveIndex(0);
+            }}
             onKeyDown={(event) => {
-              if (event.key === "Escape") {
+              const key = event.key;
+
+              if (key === "Escape") {
                 onClose();
+                return;
               }
-              if (event.key === "Enter" && filteredCommands[0]) {
-                onExecute(filteredCommands[0].id);
+              if (isListNavigationKey(key)) {
+                event.preventDefault();
+                setActiveIndex((index) => moveListSelection(index, filteredCommands.length, key));
+                return;
+              }
+              if (key === "Enter" && filteredCommands[activeCommandIndex]) {
+                onExecute(filteredCommands[activeCommandIndex].id);
               }
             }}
           />
         </div>
         <div className="tp-command-list">
-          {filteredCommands.map((command) => {
+          {filteredCommands.map((command, index) => {
             const keybindingLabel = getKeybindingLabel(command.id);
+            const active = index === activeCommandIndex;
 
             return (
-              <button className="tp-command-row" key={command.id} type="button" onClick={() => onExecute(command.id)}>
+              <button
+                className={active ? "tp-command-row tp-command-row-active" : "tp-command-row"}
+                key={command.id}
+                type="button"
+                aria-selected={active}
+                onClick={() => onExecute(command.id)}
+                onMouseEnter={() => setActiveIndex(index)}
+              >
                 <span className="tp-command-title">{command.title}</span>
                 <span className="tp-command-meta">
                   {command.category ? <small>{command.category}</small> : null}
@@ -1254,21 +1286,29 @@ function QuickOpen({
   readonly onOpen: (entry: FileTreeEntry) => void;
 }) {
   const [query, setQuery] = useState("");
+  const [activeIndex, setActiveIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const filteredFiles = useMemo(() => filterFiles(files, query), [files, query]);
 
   useEffect(() => {
     if (!open) {
       setQuery("");
+      setActiveIndex(0);
       return;
     }
 
     window.setTimeout(() => inputRef.current?.focus(), 0);
   }, [open]);
 
+  useEffect(() => {
+    setActiveIndex((index) => normalizeListSelection(index, filteredFiles.length));
+  }, [filteredFiles.length]);
+
   if (!open) {
     return null;
   }
+
+  const activeFileIndex = normalizeListSelection(activeIndex, filteredFiles.length);
 
   return (
     <div className="tp-command-overlay" role="presentation" onMouseDown={onClose}>
@@ -1279,20 +1319,38 @@ function QuickOpen({
             ref={inputRef}
             value={query}
             aria-label="Quick Open"
-            onChange={(event) => setQuery(event.target.value)}
+            onChange={(event) => {
+              setQuery(event.target.value);
+              setActiveIndex(0);
+            }}
             onKeyDown={(event) => {
-              if (event.key === "Escape") {
+              const key = event.key;
+
+              if (key === "Escape") {
                 onClose();
+                return;
               }
-              if (event.key === "Enter" && filteredFiles[0]) {
-                onOpen(filteredFiles[0]);
+              if (isListNavigationKey(key)) {
+                event.preventDefault();
+                setActiveIndex((index) => moveListSelection(index, filteredFiles.length, key));
+                return;
+              }
+              if (key === "Enter" && filteredFiles[activeFileIndex]) {
+                onOpen(filteredFiles[activeFileIndex]);
               }
             }}
           />
         </div>
         <div className="tp-command-list">
-          {filteredFiles.map((entry) => (
-            <button className="tp-quick-row" key={entry.uri.toString()} type="button" onClick={() => onOpen(entry)}>
+          {filteredFiles.map((entry, index) => (
+            <button
+              className={index === activeFileIndex ? "tp-quick-row tp-quick-row-active" : "tp-quick-row"}
+              key={entry.uri.toString()}
+              type="button"
+              aria-selected={index === activeFileIndex}
+              onClick={() => onOpen(entry)}
+              onMouseEnter={() => setActiveIndex(index)}
+            >
               <FileText size={15} />
               <span>{entry.name}</span>
               <small>{entry.relativePath}</small>

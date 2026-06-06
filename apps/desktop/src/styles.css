@@ -648,6 +648,12 @@ button {
   white-space: nowrap;
 }
 
+.tp-command-row-active,
+.tp-quick-row-active {
+  background: var(--tp-color-surface-muted);
+  color: var(--tp-color-accent-strong);
+}
+
 .tp-command-empty {
   min-height: 36px;
   padding: 9px;
