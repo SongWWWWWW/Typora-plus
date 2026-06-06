@@ -1,0 +1,355 @@
+import { Emitter, toDisposable, URI, type Event, type IDisposable } from "@typora-plus/base";
+import { describe, expect, it } from "vitest";
+import type { CommandMetadata } from "./commands";
+import type { ExtensionCommandHandler, ExtensionContext } from "./extensions";
+import type { ExportProvider } from "./exports";
+import type { MarkdownRendererProvider, MarkdownRendererRuntimeMetadata } from "./markdownRenderers";
+import {
+  createExtensionHostActivationErrorMessage,
+  createExtensionHostActivationResultMessage,
+  createExtensionHostApiResultMessage,
+  createExtensionHostCommandExecuteRequestMessage,
+  createExtensionHostCommandRegisterRequestMessage,
+  extensionHostProtocolMessageTypes,
+  readExtensionHostProtocolMessage,
+  type ExtensionHostProtocolMessage
+} from "./extensionHostProtocol";
+import {
+  ExtensionHostProtocolSession,
+  type ExtensionHostProtocolSessionRequestKind,
+  type ExtensionHostProtocolTransport
+} from "./extensionHostProtocolSession";
+
+describe("extension host protocol session", () => {
+  it("sends activation requests and resolves activation responses", async () => {
+    const transport = createMemoryTransport();
+    const { context } = createSessionTestContext();
+    const session = new ExtensionHostProtocolSession(transport, context, {
+      createRequestId: createSequentialRequestId()
+    });
+
+    const activation = session.activate({
+      activationEvent: "onStartup",
+      context,
+      extension: context.extension
+    });
+
+    expect(transport.sent).toEqual([{
+      type: extensionHostProtocolMessageTypes.activate,
+      requestId: "activate-1",
+      activationEvent: "onStartup",
+      extension: {
+        activationEvents: ["onStartup"],
+        activationState: "activated",
+        displayName: "Remote Notes",
+        id: "notes.remote"
+      }
+    }]);
+
+    transport.receive(createExtensionHostActivationResultMessage("activate-1", "notes.remote"));
+
+    await expect(activation).resolves.toBeUndefined();
+  });
+
+  it("rejects activation errors and response identity mismatches", async () => {
+    const transport = createMemoryTransport();
+    const { context } = createSessionTestContext();
+    const session = new ExtensionHostProtocolSession(transport, context, {
+      createRequestId: createSequentialRequestId()
+    });
+    const failedActivation = session.activate({
+      activationEvent: "onStartup",
+      context,
+      extension: context.extension
+    });
+
+    transport.receive(createExtensionHostActivationErrorMessage("activate-1", "notes.remote", new Error("failed")));
+
+    await expect(failedActivation).rejects.toThrow("failed");
+
+    const mismatchedActivation = session.activate({
+      activationEvent: "onStartup",
+      context,
+      extension: context.extension
+    });
+
+    transport.receive(createExtensionHostActivationResultMessage("activate-2", "other.remote"));
+
+    await expect(mismatchedActivation).rejects.toThrow("extension id mismatch");
+  });
+
+  it("dispatches inbound runtime API messages through the broker", async () => {
+    const transport = createMemoryTransport();
+    const { context, controls } = createSessionTestContext();
+    new ExtensionHostProtocolSession(transport, context, {
+      createRequestId: createSequentialRequestId()
+    });
+
+    transport.receive(createExtensionHostCommandRegisterRequestMessage("remote-1", "notes.remote", {
+      id: "notes.remote.run",
+      title: "Run Remote"
+    }));
+    await flushPromises();
+
+    expect(controls.commandRegistrations).toHaveLength(1);
+    expect(transport.sent[0]).toEqual(createExtensionHostApiResultMessage("remote-1", "notes.remote"));
+
+    const commandExecution = controls.commandRegistrations[0]?.handler("alpha");
+    await flushPromises();
+
+    expect(transport.sent[1]).toEqual(createExtensionHostCommandExecuteRequestMessage(
+      "commandExecute-1",
+      "notes.remote",
+      "notes.remote.run",
+      ["alpha"]
+    ));
+
+    transport.receive(createExtensionHostApiResultMessage("commandExecute-1", "notes.remote", {
+      ok: true
+    }));
+
+    await expect(commandExecution).resolves.toEqual({ ok: true });
+  });
+
+  it("executes inbound main-thread command requests and returns API results", async () => {
+    const transport = createMemoryTransport();
+    const { context, controls } = createSessionTestContext();
+    new ExtensionHostProtocolSession(transport, context);
+
+    controls.executeCommand = async (command, args) => ({ command, args });
+    transport.receive(createExtensionHostCommandExecuteRequestMessage(
+      "remote-2",
+      "notes.remote",
+      "workbench.open",
+      ["file://notes/a.md"]
+    ));
+    await flushPromises();
+
+    expect(transport.sent).toEqual([
+      createExtensionHostApiResultMessage("remote-2", "notes.remote", {
+        args: ["file://notes/a.md"],
+        command: "workbench.open"
+      })
+    ]);
+  });
+
+  it("correlates proxy export and renderer provider callbacks through transport responses", async () => {
+    const transport = createMemoryTransport();
+    const { context, controls } = createSessionTestContext();
+    new ExtensionHostProtocolSession(transport, context, {
+      createRequestId: createSequentialRequestId()
+    });
+
+    transport.receive({
+      type: extensionHostProtocolMessageTypes.exportProviderRegister,
+      requestId: "remote-3",
+      extensionId: "notes.remote",
+      provider: {
+        format: "html",
+        title: "HTML"
+      }
+    });
+    transport.receive({
+      type: extensionHostProtocolMessageTypes.markdownRendererRegister,
+      requestId: "remote-4",
+      extensionId: "notes.remote",
+      renderer: {
+        id: "notes.remote.diagram",
+        metadata: {
+          kind: "block",
+          label: "Diagram"
+        }
+      }
+    });
+    await flushPromises();
+
+    const exportDocument = controls.exportProviders[0]?.exportDocument({
+      assetMode: "file",
+      name: "A.md",
+      uri: URI.file("C:/Notes/A.md"),
+      value: "# A"
+    });
+    const render = controls.markdownProviders[0]?.provider.render({
+      value: "graph TD\nA-->B"
+    });
+    await flushPromises();
+
+    expect(transport.sent[2]).toMatchObject({
+      type: extensionHostProtocolMessageTypes.exportDocument,
+      requestId: "exportDocument-1"
+    });
+    expect(transport.sent[3]).toMatchObject({
+      type: extensionHostProtocolMessageTypes.markdownRendererRender,
+      requestId: "markdownRendererRender-2"
+    });
+
+    transport.receive({
+      type: extensionHostProtocolMessageTypes.exportDocumentResult,
+      requestId: "exportDocument-1",
+      extensionId: "notes.remote",
+      document: {
+        defaultFileName: "A.html",
+        format: "html",
+        mimeType: "text/html",
+        value: "<main>A</main>"
+      }
+    });
+    transport.receive({
+      type: extensionHostProtocolMessageTypes.markdownRendererRenderResult,
+      requestId: "markdownRendererRender-2",
+      extensionId: "notes.remote",
+      rendererId: "notes.remote.diagram",
+      output: {
+        html: "<span>Rendered</span>"
+      }
+    });
+
+    await expect(exportDocument).resolves.toEqual({
+      defaultFileName: "A.html",
+      format: "html",
+      mimeType: "text/html",
+      value: "<main>A</main>"
+    });
+    await expect(render).resolves.toEqual({
+      html: "<span>Rendered</span>"
+    });
+  });
+
+  it("reports unhandled inbound messages and rejects pending requests on dispose", async () => {
+    const transport = createMemoryTransport();
+    const { context } = createSessionTestContext();
+    const errors: string[] = [];
+    const session = new ExtensionHostProtocolSession(transport, context, {
+      createRequestId: createSequentialRequestId(),
+      onError: (error) => errors.push(error.message)
+    });
+
+    transport.receive(createExtensionHostApiResultMessage("missing", "notes.remote"));
+    transport.receive({ type: "bad" });
+    await flushPromises();
+
+    expect(errors).toEqual([
+      "Extension host protocol session received unhandled message: extensionHost/api/result",
+      "Unknown extension host protocol message type: bad"
+    ]);
+
+    const activation = session.activate({
+      activationEvent: "onStartup",
+      context,
+      extension: context.extension
+    });
+
+    session.dispose();
+
+    await expect(activation).rejects.toThrow("session disposed");
+  });
+});
+
+interface MemoryTransport extends ExtensionHostProtocolTransport {
+  readonly sent: ExtensionHostProtocolMessage[];
+  receive(message: unknown): void;
+}
+
+interface SessionTestControls {
+  readonly commandRegistrations: {
+    readonly command: string;
+    readonly handler: ExtensionCommandHandler;
+  }[];
+  commandMetadata: CommandMetadata[];
+  executeCommand(command: string, args: readonly unknown[]): Promise<unknown>;
+  readonly exportProviders: ExportProvider[];
+  readonly markdownProviders: {
+    readonly provider: MarkdownRendererProvider;
+    readonly metadata?: MarkdownRendererRuntimeMetadata;
+  }[];
+}
+
+function createMemoryTransport(): MemoryTransport {
+  const emitter = new Emitter<unknown>();
+  const sent: ExtensionHostProtocolMessage[] = [];
+
+  return {
+    onMessage: emitter.event as Event<unknown>,
+    sent,
+    receive(message) {
+      emitter.fire(message);
+    },
+    send(message) {
+      sent.push(readExtensionHostProtocolMessage(message));
+    }
+  };
+}
+
+function createSessionTestContext(): { readonly context: ExtensionContext; readonly controls: SessionTestControls } {
+  const controls: SessionTestControls = {
+    commandRegistrations: [],
+    commandMetadata: [],
+    executeCommand: async (command, args) => ({ args, command }),
+    exportProviders: [],
+    markdownProviders: []
+  };
+  const context: ExtensionContext = {
+    commands: {
+      executeCommand: async <T = unknown>(command: string, ...args: unknown[]) =>
+        await controls.executeCommand(command, args) as T,
+      getCommands: () => controls.commandMetadata,
+      registerCommand(command, handler) {
+        const registration = { command, handler };
+        controls.commandRegistrations.push(registration);
+        return removeFromArrayDisposable(controls.commandRegistrations, registration);
+      }
+    },
+    contextKeys: {
+      getValue: () => undefined,
+      setValue: () => undefined
+    },
+    exports: {
+      getProviders: () => controls.exportProviders,
+      registerProvider(provider) {
+        controls.exportProviders.push(provider);
+        return removeFromArrayDisposable(controls.exportProviders, provider);
+      }
+    },
+    extension: {
+      activationEvents: ["onStartup"],
+      activationState: "activated",
+      displayName: "Remote Notes",
+      id: "notes.remote"
+    },
+    markdown: {
+      getRenderers: () => [],
+      registerRendererProvider(provider, metadata) {
+        const registration = { provider, ...(metadata ? { metadata } : {}) };
+        controls.markdownProviders.push(registration);
+        return removeFromArrayDisposable(controls.markdownProviders, registration);
+      }
+    },
+    subscriptions: {
+      add(disposable) {
+        return disposable;
+      }
+    }
+  };
+
+  return { context, controls };
+}
+
+function createSequentialRequestId(): (kind: ExtensionHostProtocolSessionRequestKind) => string {
+  let count = 0;
+  return (kind) => `${kind}-${++count}`;
+}
+
+async function flushPromises(): Promise<void> {
+  await Promise.resolve();
+  await Promise.resolve();
+}
+
+function removeFromArrayDisposable<T>(array: T[], item: T): IDisposable {
+  return toDisposable(() => {
+    const index = array.indexOf(item);
+
+    if (index !== -1) {
+      array.splice(index, 1);
+    }
+  });
+}
