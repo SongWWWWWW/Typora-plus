@@ -2194,3 +2194,37 @@ Known limitations:
 
 - The activation handler is still injected in-process; a future out-of-process extension host must broker the same command and context-key APIs.
 - Themes, Markdown renderers, and export-provider contributions remain future extension runtime work.
+
+## 2026-06-07 - P2 Extension Export Provider API
+
+Completed:
+
+- Added a constrained `exports` API to `ExtensionContext`.
+- Allowed activated extensions to register provider-backed export formats through the existing `IExportService` boundary.
+- Wired Workbench service creation so extension export providers share the same platform export service as built-in HTML export.
+- Made runtime export providers lifecycle-owned by the extension record, so they are removed when activation fails or when an extension is unregistered.
+- Relaxed the platform export format type to support future provider formats while keeping native save support constrained by desktop export configuration.
+- Added duplicate-format rejection and provider field normalization to `ExportService`.
+- Added platform tests for extension export provider registration, failed activation cleanup, disposal cleanup, and duplicate provider rejection.
+
+Quality gate:
+
+- `npm run test -- --run packages/platform/src/platform.test.ts`: passed, 75 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 193 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Browser smoke check: not required for this stage because the user-facing Workbench UI did not change; Workbench service composition is covered by type/build verification.
+
+Review:
+
+- Export providers now follow the same extension runtime lifecycle pattern as commands and context keys.
+- Workbench still only triggers built-in export commands; it does not render Markdown, resolve resources, write files, or special-case extension formats.
+- Duplicate provider rejection prevents runtime providers from replacing built-in formats and leaving the export service in a broken state after disposal.
+- No dynamic code loading, unrestricted Node access, direct DOM access, new package, storage path, visual token, or extra documentation file was introduced.
+
+Known limitations:
+
+- The activation handler is still injected in-process; a future out-of-process extension host must broker the same export-provider API.
+- Native save dialogs only support formats listed in the desktop export configuration; extension formats need shell support before native save can handle them.
+- Themes and Markdown renderer contributions remain future extension runtime work.
