@@ -2862,3 +2862,36 @@ Known limitations:
 - External extension package loading is still not implemented.
 - Extension host transport and IPC are still not implemented.
 - The protocol host is not registered by Workbench or Electron yet; the next stage should introduce a concrete transport boundary only when the runtime environment is clear.
+
+## 2026-06-07 - P2 Extension Host Runtime Contribution Unregister
+
+Completed:
+
+- Added protocol messages for command unregister, export provider unregister, and Markdown renderer unregister.
+- Extended protocol serialization and unknown-input readers for bounded unregister payloads.
+- Extended `ExtensionHostRuntimeBroker` with per-command, per-export-format, and per-renderer proxy disposable registries.
+- Routed unregister messages through the broker so individual remote runtime contributions can be disposed without waiting for the whole extension session to end.
+- Kept session routing aware of unregister messages so future transports can deliver them through the same runtime API path.
+- Added tests for unregister message serialization, proxy disposal, and unknown proxy unregister errors.
+
+Quality gate:
+
+- `npm run typecheck`: passed
+- `npx vitest run packages/platform/src/extensionHostProtocol.test.ts packages/platform/src/extensionHostRuntimeBroker.test.ts packages/platform/src/extensionHostProtocolSession.test.ts`: passed, 24 tests
+- `npm run verify`: passed, 287 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Browser smoke check: not run because this stage only changes platform protocol/broker lifecycle code and documentation.
+
+Review:
+
+- Runtime contribution lifecycle is now explicit at protocol level instead of relying only on whole-session cleanup.
+- Broker proxy registries are keyed by normalized protocol ids and formats, avoiding hidden hard-coded contribution ownership.
+- The unregister path still stays platform-only and does not depend on Workbench, Electron, DOM, Node, dynamic imports, or external package loading.
+- No transport implementation, storage path, visual token, or extra documentation file was introduced.
+
+Known limitations:
+
+- External extension package loading is still not implemented.
+- Extension host transport and IPC are still not implemented.
+- A future protocol runtime facade should use these unregister messages when remote extension code disposes registered commands, export providers, or renderers.
