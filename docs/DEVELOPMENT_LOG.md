@@ -2427,3 +2427,39 @@ Known limitations:
 - No built-in Markdown renderer provider is contributed yet, so browser smoke currently verifies shell/editor stability while unit tests cover the renderer bridge.
 - Inline renderer contributions are registered by the platform but are not connected to an editor preview surface yet.
 - Third-party extension host code loading remains future work.
+
+## 2026-06-07 - P2 Built-In Mermaid Renderer
+
+Completed:
+
+- Added Mermaid as the first built-in block Markdown renderer provider.
+- Contributed Mermaid renderer metadata through the built-in Workbench extension manifest.
+- Added a Workbench activation handler that registers the Mermaid provider through `ExtensionContext.markdown` on `onMarkdownRenderer:<id>`.
+- Lazy-loaded Mermaid only when a matching inactive `mermaid` code fence is previewed.
+- Rendered Mermaid SVG as an encoded data image so provider output remains inert before editor insertion.
+- Extended the editor renderer sanitizer to allow only encoded data image sources and safe renderer classes while still dropping raw SVG data, scripts, event handlers, style attributes, and external image URLs.
+- Added renderer-specific preview image styling that preserves aspect ratio inside the editor preview block.
+- Split the Mermaid dependency graph into a dedicated production chunk so it does not inflate the startup vendor bundle.
+- Added tests for Mermaid provider output, built-in activation registration, manifest metadata, and stricter sanitizer image handling.
+
+Quality gate:
+
+- `npm run verify`: passed, 231 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Browser smoke check at `http://127.0.0.1:5173/`: typed a Mermaid code fence through the editor, observed one ready renderer block, one loaded Mermaid image, `flowchart-v2` label, no renderer errors, and no console errors.
+- Production build split check: startup vendor chunk stayed around 412 KB minified while Mermaid emitted as a separate lazy chunk around 3.1 MB minified.
+
+Review:
+
+- Mermaid uses the same manifest metadata, activation event, extension context, renderer service, Workbench adapter, and editor sanitizer boundaries as future extension renderers.
+- The editor still does not import Mermaid or platform services.
+- Workbench owns built-in runtime activation, but rejects unknown extension runtime activation instead of silently swallowing unsupported external extension work.
+- The Mermaid SVG is not inserted as raw DOM; it is encoded into a data image and then passed through the editor sanitizer.
+- No hard-coded file paths, storage paths, extra documentation files, or direct DOM access by renderer providers were introduced.
+
+Known limitations:
+
+- Mermaid's dependency graph is large; it is isolated behind lazy loading, but the lazy chunk still needs future measurement on lower-end machines.
+- Inline renderer contributions are registered by the platform but are not connected to an editor preview surface yet.
+- Third-party extension host code loading remains future work.
