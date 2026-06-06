@@ -1,0 +1,133 @@
+import { toDisposable, type IDisposable, type URI as URIType } from "@typora-plus/base";
+import { createServiceIdentifier } from "./instantiation";
+
+export type ExportFormat = "html";
+
+export interface ExportDocumentInput {
+  readonly uri: URIType;
+  readonly name: string;
+  readonly value: string;
+}
+
+export interface ExportedDocument {
+  readonly format: ExportFormat;
+  readonly defaultFileName: string;
+  readonly mimeType: string;
+  readonly value: string;
+}
+
+export interface SerializedExportedDocument {
+  readonly format: ExportFormat;
+  readonly defaultFileName: string;
+  readonly mimeType: string;
+  readonly value: string;
+}
+
+export interface ExportProvider {
+  readonly format: ExportFormat;
+  readonly title: string;
+  exportDocument(input: ExportDocumentInput): ExportedDocument | Promise<ExportedDocument>;
+}
+
+export interface NativeExportBridge {
+  readonly isAvailable: boolean;
+  saveDocument(document: SerializedExportedDocument): Promise<boolean>;
+}
+
+export interface ExportServiceOptions {
+  readonly nativeBridge?: NativeExportBridge;
+  readonly browserSave?: (document: ExportedDocument) => boolean;
+}
+
+export interface IExportService {
+  registerProvider(provider: ExportProvider): IDisposable;
+  getProviders(): readonly ExportProvider[];
+  exportDocument(input: ExportDocumentInput, format: ExportFormat): Promise<ExportedDocument>;
+  saveExportedDocument(document: ExportedDocument): Promise<boolean>;
+  exportAndSave(input: ExportDocumentInput, format: ExportFormat): Promise<boolean>;
+}
+
+export const IExportService = createServiceIdentifier<IExportService>("export");
+
+export class ExportService implements IExportService {
+  private readonly providers = new Map<ExportFormat, ExportProvider>();
+  private readonly nativeBridge: NativeExportBridge | undefined;
+  private readonly browserSave: (document: ExportedDocument) => boolean;
+
+  constructor(options: ExportServiceOptions = {}) {
+    this.nativeBridge = options.nativeBridge ?? createNativeExportBridge();
+    this.browserSave = options.browserSave ?? saveExportedDocumentInBrowser;
+  }
+
+  registerProvider(provider: ExportProvider): IDisposable {
+    this.providers.set(provider.format, provider);
+    return toDisposable(() => {
+      if (this.providers.get(provider.format) === provider) {
+        this.providers.delete(provider.format);
+      }
+    });
+  }
+
+  getProviders(): readonly ExportProvider[] {
+    return [...this.providers.values()];
+  }
+
+  async exportDocument(input: ExportDocumentInput, format: ExportFormat): Promise<ExportedDocument> {
+    const provider = this.providers.get(format);
+
+    if (!provider) {
+      throw new Error(`No export provider registered for ${format}`);
+    }
+
+    return provider.exportDocument(input);
+  }
+
+  async saveExportedDocument(document: ExportedDocument): Promise<boolean> {
+    if (this.nativeBridge?.isAvailable) {
+      return this.nativeBridge.saveDocument(document);
+    }
+
+    return this.browserSave(document);
+  }
+
+  async exportAndSave(input: ExportDocumentInput, format: ExportFormat): Promise<boolean> {
+    const document = await this.exportDocument(input, format);
+    return this.saveExportedDocument(document);
+  }
+}
+
+function saveExportedDocumentInBrowser(document: ExportedDocument): boolean {
+  if (typeof window === "undefined" || typeof Blob === "undefined" || typeof URL === "undefined") {
+    return false;
+  }
+
+  const body = window.document?.body;
+
+  if (!body) {
+    return false;
+  }
+
+  const blob = new Blob([document.value], { type: document.mimeType });
+  const objectUrl = URL.createObjectURL(blob);
+  const anchor = window.document.createElement("a");
+
+  anchor.href = objectUrl;
+  anchor.download = document.defaultFileName;
+  anchor.style.display = "none";
+  body.append(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(objectUrl);
+  return true;
+}
+
+function createNativeExportBridge(): NativeExportBridge | undefined {
+  const candidate = globalThis as {
+    readonly typoraPlus?: {
+      readonly documentExport?: NativeExportBridge;
+    };
+  };
+  const bridge = candidate.typoraPlus?.documentExport;
+
+  return bridge?.isAvailable ? bridge : undefined;
+}

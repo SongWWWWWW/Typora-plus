@@ -16,6 +16,16 @@ export const desktopShellConfig = {
     storageDirectory: "workspace-index",
     maxValueBytes: 5 * 1024 * 1024
   },
+  exportDocuments: {
+    maxValueBytes: 10 * 1024 * 1024,
+    formats: [
+      {
+        format: "html",
+        name: "HTML",
+        extensions: ["html"]
+      }
+    ]
+  },
   workspace: {
     maxDepth: 8,
     maxFiles: 5000,

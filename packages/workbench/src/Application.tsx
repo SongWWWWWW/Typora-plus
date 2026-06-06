@@ -19,6 +19,7 @@ import { applyTheme, resolveThemeName } from "@typora-plus/theme";
 import {
   AlertTriangle,
   Command as CommandIcon,
+  FileDown,
   FileText,
   FilePlus,
   Folder,
@@ -329,6 +330,20 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
       }, setOperationError, setSaveConflict)
     }));
     disposables.add(services.commandService.registerCommand({
+      id: "file.exportHtml",
+      title: "Export HTML",
+      category: "File",
+      run: () => runWorkbenchAction(async () => {
+        const activeModel = services.textFileService.getActiveModel();
+
+        await services.exportService.exportAndSave({
+          uri: activeModel.uri,
+          name: activeModel.name,
+          value: activeModel.value
+        }, "html");
+      }, setOperationError, setSaveConflict)
+    }));
+    disposables.add(services.commandService.registerCommand({
       id: "editor.focusMode.toggle",
       title: "Toggle Focus Mode",
       category: "Editor",
@@ -597,6 +612,9 @@ function Titlebar({
         </IconButton>
         <IconButton title="Save As" compactHidden onClick={() => onCommand("file.saveAs")}>
           <FileText size={17} />
+        </IconButton>
+        <IconButton title="Export HTML" compactHidden onClick={() => onCommand("file.exportHtml")}>
+          <FileDown size={17} />
         </IconButton>
         <IconButton
           title="Focus Mode"

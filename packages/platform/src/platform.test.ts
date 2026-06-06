@@ -4,6 +4,7 @@ import {
   CommandService,
   ConfigurationService,
   FileSaveConflictError,
+  ExportService,
   NativeFileService,
   NativeAttachmentService,
   WorkspaceTextFileService,
@@ -217,6 +218,70 @@ describe("commands", () => {
     });
 
     expect(commandService.executeCommand("test.echo", "ok")).toBe("ok");
+  });
+});
+
+describe("exports", () => {
+  it("exports documents through registered providers and saves through the native bridge", async () => {
+    const savedDocuments: string[] = [];
+    const service = new ExportService({
+      nativeBridge: {
+        isAvailable: true,
+        async saveDocument(document) {
+          savedDocuments.push(document.value);
+          return true;
+        }
+      }
+    });
+    service.registerProvider({
+      format: "html",
+      title: "HTML",
+      exportDocument(input) {
+        return {
+          format: "html",
+          defaultFileName: `${input.name}.html`,
+          mimeType: "text/html",
+          value: `<h1>${input.value}</h1>`
+        };
+      }
+    });
+
+    await expect(service.exportAndSave({
+      uri: URI.untitled("Draft.md"),
+      name: "Draft.md",
+      value: "Draft"
+    }, "html")).resolves.toBe(true);
+
+    expect(savedDocuments).toEqual(["<h1>Draft</h1>"]);
+  });
+
+  it("removes export providers through disposables", async () => {
+    const service = new ExportService({
+      browserSave: () => true
+    });
+    const disposable = service.registerProvider({
+      format: "html",
+      title: "HTML",
+      exportDocument(input) {
+        return {
+          format: "html",
+          defaultFileName: input.name,
+          mimeType: "text/html",
+          value: input.value
+        };
+      }
+    });
+
+    expect(service.getProviders().map((provider) => provider.format)).toEqual(["html"]);
+
+    disposable.dispose();
+
+    expect(service.getProviders()).toEqual([]);
+    await expect(service.exportDocument({
+      uri: URI.untitled("Draft.md"),
+      name: "Draft.md",
+      value: "Draft"
+    }, "html")).rejects.toThrow("No export provider");
   });
 });
 

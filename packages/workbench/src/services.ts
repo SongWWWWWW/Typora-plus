@@ -1,10 +1,12 @@
-import { createWelcomeDocument } from "@typora-plus/markdown";
+import { createWelcomeDocument, markdownHtmlExportProvider } from "@typora-plus/markdown";
 import {
   CommandService,
   ConfigurationService,
+  ExportService,
   IAttachmentService,
   IConfigurationService,
   ICommandService,
+  IExportService,
   IFileService,
   IIndexService,
   IKeybindingService,
@@ -26,6 +28,7 @@ import {
   type IAttachmentService as AttachmentServiceContract,
   type IConfigurationService as ConfigurationServiceContract,
   type ICommandService as CommandServiceContract,
+  type IExportService as ExportServiceContract,
   type IFileService as FileServiceContract,
   type IIndexService as IndexServiceContract,
   type IKeybindingService as KeybindingServiceContract,
@@ -41,6 +44,7 @@ export interface WorkbenchServices {
   readonly commandService: CommandServiceContract;
   readonly attachmentService: AttachmentServiceContract;
   readonly configurationService: ConfigurationServiceContract;
+  readonly exportService: ExportServiceContract;
   readonly fileService: FileServiceContract;
   readonly indexService: IndexServiceContract;
   readonly keybindingService: KeybindingServiceContract;
@@ -58,6 +62,7 @@ export function createWorkbenchServices(): WorkbenchServices {
     name: "Typora Plus"
   });
   const fileService = new NativeFileService();
+  const exportService = new ExportService();
   const indexSnapshotStorage = createDefaultWorkspaceIndexSnapshotStorage();
   const indexService = new WorkspaceIndexService(fileService, {
     maxFileSizeBytes: configurationService.getValue().workspace.searchMaxFileSizeBytes,
@@ -81,6 +86,7 @@ export function createWorkbenchServices(): WorkbenchServices {
 
   serviceCollection.set(IAttachmentService, attachmentService);
   serviceCollection.set(IConfigurationService, configurationService);
+  serviceCollection.set(IExportService, exportService);
   serviceCollection.set(IFileService, fileService);
   serviceCollection.set(IIndexService, indexService);
   serviceCollection.set(IKeybindingService, keybindingService);
@@ -91,6 +97,7 @@ export function createWorkbenchServices(): WorkbenchServices {
 
   const commandService = new CommandService(serviceCollection);
   serviceCollection.set(ICommandService, commandService);
+  exportService.registerProvider(markdownHtmlExportProvider);
 
   for (const rule of defaultWorkbenchKeybindings) {
     keybindingService.registerKeybinding(rule);
@@ -102,6 +109,7 @@ export function createWorkbenchServices(): WorkbenchServices {
     commandService,
     attachmentService,
     configurationService,
+    exportService,
     fileService,
     indexService,
     keybindingService,
@@ -132,6 +140,10 @@ const defaultWorkbenchKeybindings: readonly KeybindingRule[] = [
   {
     command: "file.saveAs",
     keybinding: { key: "s", primary: true, shift: true }
+  },
+  {
+    command: "file.exportHtml",
+    keybinding: { key: "e", primary: true, shift: true }
   }
 ];
 

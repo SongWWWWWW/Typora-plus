@@ -13,6 +13,10 @@ interface Window {
       read(key: string): string | undefined;
       write(key: string, value: string): boolean;
     };
+    readonly documentExport?: {
+      readonly isAvailable: boolean;
+      saveDocument(document: unknown): Promise<boolean>;
+    };
     readonly fileSystem?: {
       readonly isAvailable: boolean;
       onDidChangeWorkspaceFiles(listener: (workspace: unknown) => void): () => void;
