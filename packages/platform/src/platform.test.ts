@@ -25,6 +25,7 @@ import {
   configurationNumberConstraints,
   ServiceCollection,
   type FileTreeEntry,
+  type ExtensionActivationHandler,
   type NativeFileSystemHost,
   type SaveFileOptions,
   type WorkspaceIndexedDocument,
@@ -524,6 +525,116 @@ describe("extensions", () => {
     expect(() => commandService.executeCommand("notes.insertDate")).toThrow("No command handler registered");
   });
 
+  it("indexes explicit and command-derived activation events", async () => {
+    const activationCalls: string[] = [];
+    const { extensionService } = createExtensionServices((request) => {
+      activationCalls.push(`${request.activationEvent}:${request.extension.id}:${request.extension.activationState}`);
+    });
+
+    extensionService.registerExtension({
+      id: "notes.activation",
+      displayName: "Notes Activation",
+      activationEvents: ["onStartupFinished", "onLanguage:markdown", "onStartupFinished"],
+      contributes: {
+        commands: [
+          {
+            command: "notes.insertDate",
+            title: "Insert Date"
+          }
+        ]
+      }
+    });
+
+    expect(extensionService.getExtensions()).toEqual([
+      {
+        id: "notes.activation",
+        displayName: "Notes Activation",
+        activationEvents: [
+          "onStartupFinished",
+          "onLanguage:markdown",
+          "onCommand:notes.insertDate"
+        ],
+        activationState: "inactive"
+      }
+    ]);
+
+    await expect(extensionService.activateByEvent("onCommand:notes.insertDate")).resolves.toEqual([
+      {
+        id: "notes.activation",
+        displayName: "Notes Activation",
+        activationEvents: [
+          "onStartupFinished",
+          "onLanguage:markdown",
+          "onCommand:notes.insertDate"
+        ],
+        activationState: "activated"
+      }
+    ]);
+    await expect(extensionService.activateByEvent("onStartupFinished")).resolves.toEqual([]);
+    await expect(extensionService.activateByEvent("onCommand:missing")).resolves.toEqual([]);
+    expect(activationCalls).toEqual(["onCommand:notes.insertDate:notes.activation:activating"]);
+  });
+
+  it("rejects matching activation events when no activation handler is registered", async () => {
+    const { extensionService } = createExtensionServices();
+
+    extensionService.registerExtension({
+      id: "notes.noActivationHost",
+      activationEvents: ["onStartupFinished"]
+    });
+
+    await expect(extensionService.activateByEvent("onStartupFinished"))
+      .rejects.toThrow("No extension activation handler registered");
+    expect(extensionService.getExtensions().map((extension) => extension.activationState)).toEqual(["inactive"]);
+  });
+
+  it("removes activation events when unregistering extensions", async () => {
+    const activationCalls: string[] = [];
+    const { extensionService } = createExtensionServices((request) => {
+      activationCalls.push(request.extension.id);
+    });
+    const disposable = extensionService.registerExtension({
+      id: "notes.disposableActivation",
+      activationEvents: ["onStartupFinished"]
+    });
+
+    disposable.dispose();
+
+    await expect(extensionService.activateByEvent("onStartupFinished")).resolves.toEqual([]);
+    expect(activationCalls).toEqual([]);
+  });
+
+  it("marks failed extension activation without unregistering contributions", async () => {
+    const { commandService, extensionService } = createExtensionServices(() => {
+      throw new Error("Activation failed");
+    });
+
+    extensionService.registerExtension({
+      id: "notes.failedActivation",
+      activationEvents: ["onStartupFinished"],
+      contributes: {
+        commands: [
+          {
+            command: "notes.failedCommand",
+            title: "Failed Command"
+          }
+        ]
+      }
+    });
+
+    await expect(extensionService.activateByEvent("onStartupFinished")).rejects.toThrow("Activation failed");
+    expect(extensionService.getExtensions().map((extension) => ({
+      id: extension.id,
+      activationState: extension.activationState
+    }))).toEqual([
+      {
+        id: "notes.failedActivation",
+        activationState: "failed"
+      }
+    ]);
+    expect(commandService.getCommands().map((command) => command.id)).toEqual(["notes.failedCommand"]);
+  });
+
   it("parses manifest menu when clauses through context keys", () => {
     const { contextKeyService, extensionService, menuService } = createExtensionServices();
 
@@ -632,6 +743,11 @@ describe("extensions", () => {
         ]
       }
     })).toThrow("Command contribution id");
+
+    expect(() => extensionService.registerExtension({
+      id: "notes.invalid-activation",
+      activationEvents: [""]
+    })).toThrow("Activation event");
   });
 });
 
@@ -1829,13 +1945,18 @@ function createFileEntry(path: string, name: string, relativePath: string): File
   };
 }
 
-function createExtensionServices() {
+function createExtensionServices(activationHandler?: ExtensionActivationHandler) {
   const serviceCollection = new ServiceCollection();
   const commandService = new CommandService(serviceCollection);
   const contextKeyService = new ContextKeyService();
   const menuService = new MenuService(contextKeyService);
   const keybindingService = new KeybindingService();
-  const extensionService = new ExtensionService(commandService, menuService, keybindingService);
+  const extensionService = new ExtensionService(
+    commandService,
+    menuService,
+    keybindingService,
+    activationHandler ? { activationHandler } : {}
+  );
 
   return {
     commandService,

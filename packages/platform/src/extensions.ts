@@ -8,6 +8,7 @@ import type { IMenuService, MenuIconId, MenuId, MenuItemToggle } from "./menus";
 export interface ExtensionManifest {
   readonly id: string;
   readonly displayName?: string;
+  readonly activationEvents?: readonly string[];
   readonly contributes?: ExtensionContributions;
 }
 
@@ -45,10 +46,26 @@ export interface ExtensionKeybindingContribution {
 export interface RegisteredExtension {
   readonly id: string;
   readonly displayName?: string;
+  readonly activationEvents: readonly string[];
+  readonly activationState: ExtensionActivationState;
+}
+
+export type ExtensionActivationState = "inactive" | "activating" | "activated" | "failed";
+
+export interface ExtensionActivationRequest {
+  readonly activationEvent: string;
+  readonly extension: RegisteredExtension;
+}
+
+export type ExtensionActivationHandler = (request: ExtensionActivationRequest) => void | Promise<void>;
+
+export interface ExtensionServiceOptions {
+  readonly activationHandler?: ExtensionActivationHandler;
 }
 
 export interface IExtensionService {
   registerExtension(manifest: ExtensionManifest): IDisposable;
+  activateByEvent(activationEvent: string): Promise<readonly RegisteredExtension[]>;
   getExtensions(): readonly RegisteredExtension[];
 }
 
@@ -56,11 +73,13 @@ export const IExtensionService = createServiceIdentifier<IExtensionService>("ext
 
 export class ExtensionService extends Disposable implements IExtensionService {
   private readonly extensions = new Map<string, RegisteredExtensionRecord>();
+  private readonly activationEventIndex = new Map<string, Set<string>>();
 
   constructor(
     private readonly commandService: ICommandService,
     private readonly menuService: IMenuService,
-    private readonly keybindingService: IKeybindingService
+    private readonly keybindingService: IKeybindingService,
+    private readonly options: ExtensionServiceOptions = {}
   ) {
     super();
   }
@@ -104,9 +123,14 @@ export class ExtensionService extends Disposable implements IExtensionService {
 
       const record: RegisteredExtensionRecord = {
         manifest: normalizedManifest,
-        disposables
+        disposables,
+        activationState: "inactive"
       };
       this.extensions.set(normalizedManifest.id, record);
+
+      for (const activationEvent of normalizedManifest.activationEvents) {
+        this.addActivationEventIndex(activationEvent, normalizedManifest.id, disposables);
+      }
 
       return toDisposable(() => this.unregisterExtension(normalizedManifest.id, record));
     } catch (error) {
@@ -115,11 +139,51 @@ export class ExtensionService extends Disposable implements IExtensionService {
     }
   }
 
+  async activateByEvent(activationEvent: string): Promise<readonly RegisteredExtension[]> {
+    const normalizedActivationEvent = readRequiredString(activationEvent, "Activation event");
+    const extensionIds = [...(this.activationEventIndex.get(normalizedActivationEvent) ?? [])];
+    const activatedExtensions: RegisteredExtension[] = [];
+
+    for (const extensionId of extensionIds) {
+      const record = this.extensions.get(extensionId);
+
+      if (!record || record.activationState === "activated") {
+        continue;
+      }
+
+      if (record.activationState === "activating" && record.activationPromise) {
+        await record.activationPromise;
+        continue;
+      }
+
+      const activationHandler = this.options.activationHandler;
+
+      if (!activationHandler) {
+        throw new Error(`No extension activation handler registered: ${extensionId}`);
+      }
+
+      record.activationState = "activating";
+      record.activationPromise = Promise.resolve().then(() => activationHandler({
+        activationEvent: normalizedActivationEvent,
+        extension: toRegisteredExtension(record)
+      })).then(() => {
+        record.activationState = "activated";
+        delete record.activationPromise;
+      }).catch((error: unknown) => {
+        record.activationState = "failed";
+        delete record.activationPromise;
+        throw error;
+      });
+
+      await record.activationPromise;
+      activatedExtensions.push(toRegisteredExtension(record));
+    }
+
+    return activatedExtensions;
+  }
+
   getExtensions(): readonly RegisteredExtension[] {
-    return [...this.extensions.values()].map((extension) => ({
-      id: extension.manifest.id,
-      ...(extension.manifest.displayName ? { displayName: extension.manifest.displayName } : {})
-    }));
+    return [...this.extensions.values()].map(toRegisteredExtension);
   }
 
   override dispose(): void {
@@ -140,16 +204,41 @@ export class ExtensionService extends Disposable implements IExtensionService {
     this.extensions.delete(id);
     currentRecord.disposables.dispose();
   }
+
+  private addActivationEventIndex(
+    activationEvent: string,
+    extensionId: string,
+    disposables: DisposableStore
+  ): void {
+    let extensionIds = this.activationEventIndex.get(activationEvent);
+
+    if (!extensionIds) {
+      extensionIds = new Set<string>();
+      this.activationEventIndex.set(activationEvent, extensionIds);
+    }
+
+    extensionIds.add(extensionId);
+    disposables.add(toDisposable(() => {
+      extensionIds?.delete(extensionId);
+
+      if (extensionIds?.size === 0) {
+        this.activationEventIndex.delete(activationEvent);
+      }
+    }));
+  }
 }
 
 interface RegisteredExtensionRecord {
   readonly manifest: NormalizedExtensionManifest;
   readonly disposables: DisposableStore;
+  activationState: ExtensionActivationState;
+  activationPromise?: Promise<void>;
 }
 
 interface NormalizedExtensionManifest {
   readonly id: string;
   readonly displayName?: string;
+  readonly activationEvents: readonly string[];
   readonly contributes: {
     readonly commands: readonly ExtensionCommandContribution[];
     readonly menus: readonly NormalizedExtensionMenuContribution[];
@@ -176,6 +265,11 @@ function normalizeExtensionManifest(manifest: ExtensionManifest): NormalizedExte
     .map((contribution, index) => normalizeMenuContribution(contribution, id, index));
   const keybindings = readOptionalArray(contributes.keybindings, `Keybinding contributions for ${id}`)
     .map((contribution, index) => normalizeKeybindingContribution(contribution, id, index));
+  const activationEvents = uniqueValues([
+    ...readOptionalArray(record.activationEvents, `Activation events for ${id}`)
+      .map((activationEvent, index) => normalizeActivationEvent(activationEvent, id, index)),
+    ...commands.map((command) => commandActivationEvent(command.command))
+  ]);
 
   assertUnique(commands.map((command) => command.command), `Command contribution ids for ${id}`);
   assertUnique(menus.map((menu) => menu.id), `Menu contribution ids for ${id}`);
@@ -183,12 +277,17 @@ function normalizeExtensionManifest(manifest: ExtensionManifest): NormalizedExte
   return {
     id,
     ...(displayName ? { displayName } : {}),
+    activationEvents,
     contributes: {
       commands,
       menus,
       keybindings
     }
   };
+}
+
+function normalizeActivationEvent(value: unknown, extensionId: string, index: number): string {
+  return readRequiredString(value, `Activation event ${index + 1} for ${extensionId}`);
 }
 
 function normalizeCommandContribution(
@@ -387,4 +486,21 @@ function assertUnique(values: readonly string[], label: string): void {
 
     seenValues.add(value);
   }
+}
+
+function uniqueValues(values: readonly string[]): readonly string[] {
+  return [...new Set(values)];
+}
+
+function commandActivationEvent(command: string): string {
+  return `onCommand:${command}`;
+}
+
+function toRegisteredExtension(record: RegisteredExtensionRecord): RegisteredExtension {
+  return {
+    id: record.manifest.id,
+    ...(record.manifest.displayName ? { displayName: record.manifest.displayName } : {}),
+    activationEvents: record.manifest.activationEvents,
+    activationState: record.activationState
+  };
 }
