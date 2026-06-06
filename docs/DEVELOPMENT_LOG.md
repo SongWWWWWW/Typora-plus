@@ -2694,4 +2694,36 @@ Known limitations:
 
 - External extension package loading is still not implemented.
 - Extension host transport and IPC are still not implemented.
-- Runtime API broker messages for commands, context keys, exports, and Markdown renderer providers remain future work.
+- Runtime API broker messages for exports and Markdown renderer providers remain future work.
+
+## 2026-06-07 - P2 Extension Host Command and Context Broker Messages
+
+Completed:
+
+- Added extension host protocol messages for runtime command registration, command execution, and command list requests.
+- Added extension host protocol messages for extension-owned context key set, clear, and get requests.
+- Added shared runtime API result and error messages for future broker responses.
+- Added bounded JSON value validation for command arguments and API results, including finite numbers, string length limits, array length limits, object property limits, recursion depth limits, and plain-object checks.
+- Enforced extension-owned context key namespaces in protocol messages so external hosts cannot directly mutate global Workbench context keys.
+- Added tests for command registration, command execution, command list requests, context key set/clear/get, API result/error serialization, non-serializable argument rejection, invalid context values, argument-count bounds, and non-plain object rejection.
+
+Quality gate:
+
+- `npm run typecheck`: passed
+- `npx vitest run packages/platform/src/extensionHostProtocol.test.ts`: passed, 9 tests
+- `npm run verify`: passed, 266 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+
+Review:
+
+- The broker protocol remains platform-only and does not depend on Workbench, Electron, DOM, Node, or dynamic code loading.
+- Runtime command handlers and context-key service functions are still not serialized; protocol messages only describe bounded requests and JSON-safe payloads.
+- Context keys keep the existing extension-id namespace rule before any future IPC transport can touch platform context.
+- No new dependency, storage path, visual token, extra documentation file, or direct DOM access by extension runtimes was introduced.
+
+Known limitations:
+
+- External extension package loading is still not implemented.
+- Extension host transport and IPC are still not implemented.
+- Broker protocol messages for export providers and Markdown renderer providers remain future work.
