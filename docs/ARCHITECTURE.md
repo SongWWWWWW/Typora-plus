@@ -39,6 +39,7 @@ Current services:
 
 - `IConfigurationService`: centralized appearance, editor, workspace defaults
 - `ICommandService`: command registration and execution
+- `IKeybindingService`: keybinding registration, keyboard event resolution, and command dispatch
 - `ITextFileService`: active Markdown model, dirty state, conflict-aware save lifecycle
 - `IWorkspaceService`: workspace identity
 - `IFileService`: native workspace file tree, trusted recent workspace reopen, workspace change events, file open, save, save-as
@@ -56,6 +57,8 @@ Workbench navigation surfaces, including search, outline, files, backlinks, and 
 Successful workspace saves refresh the saved file's index record through `IIndexService.indexFile(file, value?)`. Workbench maps the saved model to the current workspace file entry and passes saved content; when save-as creates a file that is not listed yet, Workbench refreshes the workspace tree once and retries the index update. Markdown search, tag, and backlink extraction remain owned by the platform index provider.
 
 `WorkspaceIndexService` owns scan orchestration and status updates. Indexed storage and query behavior sit behind `WorkspaceIndexProvider`; `InMemoryWorkspaceIndexProvider` is the default provider for the current stage, and a future SQLite provider should implement the same storage/query contract without changing Workbench consumers.
+
+Keyboard shortcuts are resolved through `IKeybindingService` instead of hard-coded Workbench key checks. Workbench registers its default shortcuts as keybinding rules and dispatches resolved commands through `ICommandService`; command palette rows can read labels from the same service.
 
 Planned services:
 

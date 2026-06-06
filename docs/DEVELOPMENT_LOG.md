@@ -1166,3 +1166,32 @@ Known limitations:
 
 - The default provider is still in memory; this stage prepares the replacement boundary but does not add persisted SQLite storage yet.
 - Full-text ranking remains the current lightweight line scoring model.
+
+## 2026-06-06 - P2 Keybinding Service Boundary
+
+Completed:
+
+- Added `IKeybindingService` and `KeybindingService` for keybinding registration, resolution, labels, and command dispatch.
+- Registered Workbench defaults for command palette, quick open, save, and save-as through the keybinding service.
+- Replaced Workbench's hard-coded global shortcut checks with service-based dispatch through `ICommandService`.
+- Added shortcut labels in the command palette so keyboard affordances are visible.
+- Added platform tests for primary modifier resolution, rule precedence, disposal, and label formatting.
+
+Quality gate:
+
+- `npm run test -- --run packages/platform/src/platform.test.ts`: passed, 23 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 106 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- Browser regression: `Ctrl+Shift+P` opened Command Palette, `Ctrl+P` opened Quick Open, shortcut labels rendered, and no console errors or page horizontal overflow occurred.
+
+Review:
+
+- Keyboard behavior is now a platform service instead of UI-local conditional logic.
+- Workbench still owns its default shortcut contributions, keeping platform command/keybinding services generic.
+- Command execution continues through `ICommandService`, matching the existing service-bound architecture and leaving room for future user-editable keybindings.
+
+Known limitations:
+
+- Keybindings are registered as Workbench defaults only; user-customizable keybinding persistence is not implemented yet.
+- Shortcut conflict handling uses deterministic rule weight/order, but there is no user-facing conflict editor yet.
