@@ -180,3 +180,32 @@ Known limitations:
 
 - Existing recent workspace entries from before this trust store was introduced must be reopened once through the native picker before trusted reopen succeeds.
 - Automated native dialog interaction is still not covered by browser verification.
+
+## 2026-06-06 - P2 Workspace Index Search
+
+Completed:
+
+- Added `IIndexService` and `WorkspaceIndexService` for asynchronous workspace indexing.
+- Added centralized workspace search limits in configuration.
+- Indexed Markdown files through `IFileService` instead of direct file access.
+- Added cross-file search results in the Workbench search panel when a workspace is open.
+- Preserved current-note search behavior when no workspace is open.
+- Added platform tests for cross-file indexing and configured large-file skipping.
+
+Quality gate:
+
+- `npm run verify`: passed
+- `npm test`: passed, 21 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- Production browser preview: passed at `http://127.0.0.1:4173`
+
+Review:
+
+- Workbench depends on the index service boundary, so a future SQLite-backed provider can replace the in-memory implementation without changing UI search flows.
+- Indexing is asynchronous and yields during larger workspaces so editor input is not intentionally blocked by scanning.
+- Search limits live in configuration rather than scattered UI constants.
+
+Known limitations:
+
+- The current provider is in-memory; SQLite persistence remains planned for durable search, links, tags, and headings.
+- Saved-file updates rely on workspace refresh/watch to trigger reindexing.
