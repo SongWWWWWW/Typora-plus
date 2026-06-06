@@ -2161,3 +2161,36 @@ Known limitations:
 
 - The activation handler is still injected in-process; an out-of-process extension host is still needed before third-party extension code can run safely.
 - Extension-owned context keys, themes, Markdown renderers, and export-provider contributions remain future extension runtime work.
+
+## 2026-06-07 - P2 Extension Context Key Runtime API
+
+Completed:
+
+- Added a constrained `contextKeys` API to `ExtensionContext`.
+- Allowed activated extensions to set, clear, and read context keys under their own extension id namespace.
+- Wired Workbench service creation so extension runtime context keys use the platform `IContextKeyService` boundary.
+- Made extension-owned context keys drive contributed menu `when` clauses through the existing menu service.
+- Cleared extension-owned context keys when activation fails and when an extension is unregistered.
+- Rejected runtime context keys outside the extension namespace to avoid overwriting Workbench-owned context.
+- Added platform tests for menu visibility, runtime clearing, failed activation cleanup, unload cleanup, and namespace enforcement.
+
+Quality gate:
+
+- `npm run test -- --run packages/platform/src/platform.test.ts`: passed, 72 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 190 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Browser smoke check: not required for this stage because the user-facing Workbench UI did not change; Workbench service composition is covered by type/build verification.
+
+Review:
+
+- Extension-owned menu visibility now flows through the same context-key and menu services as built-in Workbench actions.
+- Runtime context keys are namespace-scoped by extension id, preventing extensions from mutating Workbench-owned state such as `workspace.open`.
+- Context key cleanup is owned by the extension record lifecycle, so failed activation and unload do not leave stale menu state.
+- No dynamic code loading, unrestricted Node access, direct DOM access, new package, storage path, visual token, or extra documentation file was introduced.
+
+Known limitations:
+
+- The activation handler is still injected in-process; a future out-of-process extension host must broker the same command and context-key APIs.
+- Themes, Markdown renderers, and export-provider contributions remain future extension runtime work.
