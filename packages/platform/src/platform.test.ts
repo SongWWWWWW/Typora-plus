@@ -602,11 +602,7 @@ describe("extensions", () => {
     const activationCalls: string[] = [];
     const services = createExtensionServices((request) => {
       activationCalls.push(`${request.activationEvent}:${request.extension.id}`);
-      services.commandService.registerCommand({
-        id: "notes.runCommand",
-        title: "Run Command",
-        run: () => "activated command"
-      });
+      request.context.commands.registerCommand("notes.runCommand", () => "activated command");
     });
 
     services.extensionService.registerExtension({
@@ -624,6 +620,103 @@ describe("extensions", () => {
     await expect(services.commandService.executeCommand("notes.runCommand")).resolves.toBe("activated command");
     await expect(services.commandService.executeCommand("notes.runCommand")).resolves.toBe("activated command");
     expect(activationCalls).toEqual(["onCommand:notes.runCommand:notes.commandActivation"]);
+  });
+
+  it("cleans up runtime command handlers when unregistering extensions", async () => {
+    const services = createExtensionServices((request) => {
+      request.context.commands.registerCommand("notes.runtimeCleanup", () => "runtime command");
+    });
+
+    const disposable = services.extensionService.registerExtension({
+      id: "notes.runtimeCleanup",
+      contributes: {
+        commands: [
+          {
+            command: "notes.runtimeCleanup",
+            title: "Runtime Cleanup"
+          }
+        ]
+      }
+    });
+
+    await expect(services.commandService.executeCommand("notes.runtimeCleanup")).resolves.toBe("runtime command");
+
+    disposable.dispose();
+
+    expect(services.extensionService.getExtensions()).toEqual([]);
+    await expect(services.commandService.executeCommand("notes.runtimeCleanup")).rejects.toThrow("Unknown command");
+  });
+
+  it("disposes partial runtime registrations when activation fails", async () => {
+    const services = createExtensionServices((request) => {
+      request.context.commands.registerCommand("notes.failedRuntime", () => "leaked");
+      throw new Error("Activation failed");
+    });
+
+    services.extensionService.registerExtension({
+      id: "notes.failedRuntime",
+      activationEvents: ["onStartupFinished"],
+      contributes: {
+        commands: [
+          {
+            command: "notes.failedRuntime",
+            title: "Failed Runtime"
+          }
+        ]
+      }
+    });
+
+    await expect(services.extensionService.activateByEvent("onStartupFinished")).rejects.toThrow("Activation failed");
+    expect(() => services.commandService.registerCommand({
+      id: "notes.failedRuntime",
+      title: "Recovered Runtime",
+      run: () => "recovered"
+    })).not.toThrow();
+    await expect(services.commandService.executeCommand("notes.failedRuntime")).resolves.toBe("recovered");
+  });
+
+  it("requires titles for uncontributed runtime commands", async () => {
+    const services = createExtensionServices((request) => {
+      request.context.commands.registerCommand("notes.hiddenRuntime", () => "hidden");
+    });
+
+    services.extensionService.registerExtension({
+      id: "notes.hiddenRuntime",
+      activationEvents: ["onStartupFinished"]
+    });
+
+    await expect(services.extensionService.activateByEvent("onStartupFinished"))
+      .rejects.toThrow("Runtime command title must be provided for uncontributed command");
+  });
+
+  it("registers titled uncontributed runtime commands through the extension context", async () => {
+    const services = createExtensionServices((request) => {
+      request.context.commands.registerCommand("notes.hiddenRuntime", () => "hidden", {
+        title: "Hidden Runtime",
+        category: "Notes"
+      });
+    });
+
+    const disposable = services.extensionService.registerExtension({
+      id: "notes.hiddenRuntime",
+      activationEvents: ["onStartupFinished"]
+    });
+
+    await expect(services.extensionService.activateByEvent("onStartupFinished")).resolves.toEqual([
+      {
+        id: "notes.hiddenRuntime",
+        activationEvents: ["onStartupFinished"],
+        activationState: "activated"
+      }
+    ]);
+    expect(services.commandService.getCommands()).toEqual([
+      { id: "notes.hiddenRuntime", title: "Hidden Runtime", category: "Notes" }
+    ]);
+    await expect(services.commandService.executeCommand("notes.hiddenRuntime")).resolves.toBe("hidden");
+
+    disposable.dispose();
+
+    expect(services.commandService.getCommands()).toEqual([]);
   });
 
   it("rejects matching activation events when no activation handler is registered", async () => {

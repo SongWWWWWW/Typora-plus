@@ -1,5 +1,5 @@
 import { Disposable, DisposableStore, toDisposable, type IDisposable } from "@typora-plus/base";
-import type { ICommandService } from "./commands";
+import type { CommandMetadata, ICommandService } from "./commands";
 import { parseContextKeyExpression, type ContextKeyExpression } from "./contextKeys";
 import { createServiceIdentifier } from "./instantiation";
 import type { IKeybindingService, Keybinding } from "./keybindings";
@@ -55,6 +55,7 @@ export type ExtensionActivationState = "inactive" | "activating" | "activated" |
 export interface ExtensionActivationRequest {
   readonly activationEvent: string;
   readonly extension: RegisteredExtension;
+  readonly context: ExtensionContext;
 }
 
 export type ExtensionActivationHandler = (request: ExtensionActivationRequest) => void | Promise<void>;
@@ -67,6 +68,29 @@ export interface IExtensionService {
   registerExtension(manifest: ExtensionManifest): IDisposable;
   activateByEvent(activationEvent: string): Promise<readonly RegisteredExtension[]>;
   getExtensions(): readonly RegisteredExtension[];
+}
+
+export interface ExtensionContext {
+  readonly extension: RegisteredExtension;
+  readonly subscriptions: ExtensionSubscriptionStore;
+  readonly commands: ExtensionCommandApi;
+}
+
+export interface ExtensionSubscriptionStore {
+  add<T extends IDisposable>(disposable: T): T;
+}
+
+export interface ExtensionCommandApi {
+  registerCommand(command: string, handler: ExtensionCommandHandler, metadata?: ExtensionRuntimeCommandMetadata): IDisposable;
+  executeCommand<T = unknown>(command: string, ...args: unknown[]): Promise<T>;
+  getCommands(): readonly CommandMetadata[];
+}
+
+export type ExtensionCommandHandler = (...args: unknown[]) => unknown;
+
+export interface ExtensionRuntimeCommandMetadata {
+  readonly title?: string;
+  readonly category?: string;
 }
 
 export const IExtensionService = createServiceIdentifier<IExtensionService>("extension");
@@ -124,6 +148,7 @@ export class ExtensionService extends Disposable implements IExtensionService {
       const record: RegisteredExtensionRecord = {
         manifest: normalizedManifest,
         disposables,
+        runtimeDisposables: new DisposableStore(),
         activationState: "inactive"
       };
       this.extensions.set(normalizedManifest.id, record);
@@ -163,14 +188,20 @@ export class ExtensionService extends Disposable implements IExtensionService {
       }
 
       record.activationState = "activating";
-      record.activationPromise = Promise.resolve().then(() => activationHandler({
-        activationEvent: normalizedActivationEvent,
-        extension: toRegisteredExtension(record)
-      })).then(() => {
+      record.activationPromise = Promise.resolve().then(() => {
+        const registeredExtension = toRegisteredExtension(record);
+
+        return activationHandler({
+          activationEvent: normalizedActivationEvent,
+          extension: registeredExtension,
+          context: createExtensionContext(record, registeredExtension, this.commandService)
+        });
+      }).then(() => {
         record.activationState = "activated";
         delete record.activationPromise;
       }).catch((error: unknown) => {
         record.activationState = "failed";
+        record.runtimeDisposables.clear();
         delete record.activationPromise;
         throw error;
       });
@@ -202,6 +233,7 @@ export class ExtensionService extends Disposable implements IExtensionService {
     }
 
     this.extensions.delete(id);
+    currentRecord.runtimeDisposables.dispose();
     currentRecord.disposables.dispose();
   }
 
@@ -231,6 +263,7 @@ export class ExtensionService extends Disposable implements IExtensionService {
 interface RegisteredExtensionRecord {
   readonly manifest: NormalizedExtensionManifest;
   readonly disposables: DisposableStore;
+  readonly runtimeDisposables: DisposableStore;
   activationState: ExtensionActivationState;
   activationPromise?: Promise<void>;
 }
@@ -502,5 +535,54 @@ function toRegisteredExtension(record: RegisteredExtensionRecord): RegisteredExt
     ...(record.manifest.displayName ? { displayName: record.manifest.displayName } : {}),
     activationEvents: record.manifest.activationEvents,
     activationState: record.activationState
+  };
+}
+
+function createExtensionContext(
+  record: RegisteredExtensionRecord,
+  extension: RegisteredExtension,
+  commandService: ICommandService
+): ExtensionContext {
+  return {
+    extension,
+    subscriptions: {
+      add: (disposable) => record.runtimeDisposables.add(disposable)
+    },
+    commands: {
+      registerCommand(command, handler, metadata) {
+        const commandMetadata = resolveRuntimeCommandMetadata(record.manifest, command, metadata);
+        const disposable = commandService.registerCommand({
+          id: commandMetadata.id,
+          title: commandMetadata.title,
+          ...(commandMetadata.category ? { category: commandMetadata.category } : {}),
+          run: (_accessor, ...args) => handler(...args)
+        });
+
+        return record.runtimeDisposables.add(disposable);
+      },
+      executeCommand: (command, ...args) => commandService.executeCommand(command, ...args),
+      getCommands: () => commandService.getCommands()
+    }
+  };
+}
+
+function resolveRuntimeCommandMetadata(
+  manifest: NormalizedExtensionManifest,
+  command: string,
+  metadata: ExtensionRuntimeCommandMetadata = {}
+): Required<Pick<CommandMetadata, "id" | "title">> & Pick<CommandMetadata, "category"> {
+  const id = readRequiredString(command, `Runtime command id for ${manifest.id}`);
+  const contributedCommand = manifest.contributes.commands.find((contribution) => contribution.command === id);
+  const title = readOptionalString(metadata.title, `Runtime command title for ${id}`) ?? contributedCommand?.title;
+  const category = readOptionalString(metadata.category, `Runtime command category for ${id}`) ?? contributedCommand?.category;
+
+  if (!title) {
+    throw new Error(`Runtime command title must be provided for uncontributed command: ${id}`);
+  }
+
+  return {
+    id,
+    title,
+    ...(category ? { category } : {})
   };
 }
