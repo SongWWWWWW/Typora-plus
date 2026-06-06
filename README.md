@@ -43,7 +43,7 @@ P2 main progress is implemented:
 - saved workspace files, including new save-as files after workspace catch-up, refresh their search, tag, and backlink index entries immediately after successful save
 - workspace index storage and query behavior sit behind a provider boundary, with the current in-memory provider ready to be replaced by SQLite
 - platform-level keybinding service for command execution, with Workbench shortcut defaults and command palette shortcut labels
-- persisted configuration service for appearance, editor, and workspace preferences
+- persisted configuration service for appearance, editor, and workspace preferences, with Electron native storage and browser fallback
 
 ## Commands
 

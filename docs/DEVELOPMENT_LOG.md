@@ -1224,3 +1224,32 @@ Known limitations:
 
 - Configuration storage is browser-local for now; native app-level settings storage is still planned.
 - There is no dedicated settings UI yet; preferences are currently changed by existing commands and defaults.
+
+## 2026-06-06 - P2 Native Configuration Storage Bridge
+
+Completed:
+
+- Added Electron main-process configuration storage backed by a file under the app data directory.
+- Exposed a narrow preload configuration bridge for reading and writing configuration values.
+- Updated `ConfigurationService` to prefer the native configuration bridge when available and keep browser storage as fallback.
+- Added shell configuration for the native configuration storage file and maximum value size.
+- Added platform coverage proving default configuration storage uses the native bridge when present.
+
+Quality gate:
+
+- `npm run test -- --run packages/platform/src/platform.test.ts`: passed, 26 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 109 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- Browser fallback regression: toggling theme through the command palette changed `data-theme` from `light` to `dark`, reload preserved `dark`, and no console errors or page horizontal overflow occurred.
+
+Review:
+
+- Renderer code still consumes `IConfigurationService`; it does not choose storage backends directly.
+- Native storage is owned by the Electron main process and exposed through a narrow preload API.
+- Stored values remain validated by the platform configuration service before they affect application behavior.
+
+Known limitations:
+
+- The native bridge is build-verified but not yet covered by an automated Electron runtime test.
+- There is still no dedicated settings UI; preferences are changed through existing commands and defaults.
