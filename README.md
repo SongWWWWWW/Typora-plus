@@ -36,7 +36,7 @@ P2 main progress is implemented:
 - workspace file watcher refresh events
 - save conflict detection with reload/overwrite handling
 - trusted recent workspace reopening
-- workspace-wide search and Markdown metadata collection through an index service boundary
+- workspace-wide search, Markdown metadata collection, and backlink queries through an index service boundary
 - workspace-backed image preview resource resolution
 
 ## Commands

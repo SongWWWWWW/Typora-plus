@@ -954,3 +954,36 @@ Known limitations:
 
 - Metadata is still in-memory; SQLite persistence remains planned.
 - Link and tag extraction is scanner-based and should be replaced or backed by a fuller Markdown parser for more complex inline syntax.
+
+## 2026-06-06 - P2 Workspace Backlink Queries
+
+Completed:
+
+- Extended `IIndexService` with `getBacklinks(uri)` for querying indexed inbound note links.
+- Resolved Markdown links against source note paths, including sibling paths, workspace-root paths, optional `.md` targets, fragments, queries, and URL-decoded paths.
+- Resolved wiki links against note names and workspace-relative paths.
+- Excluded self-links and external/protocol links from backlink results.
+- Added platform tests for Markdown backlinks, wiki backlinks, missing targets, and clear-state behavior.
+
+Quality gate:
+
+- `npm run test -- --run packages/platform/src/platform.test.ts`: passed, 17 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 98 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed
+- Browser search regression: current-note search for `topic` returned line 3 with `Alpha searchable topic`.
+- Browser layout check: search panel had no page horizontal overflow and no console errors.
+
+Review:
+
+- Backlink resolution remains in `packages/platform` behind `IIndexService`; Workbench still consumes indexed data through service contracts instead of parsing Markdown links.
+- The query returns stable sorted link records, keeping future backlinks UI work independent from the in-memory provider implementation.
+- The implementation reuses indexed metadata and does not introduce new filesystem access paths or hard-coded workspace paths.
+- SQLite persistence can replace the current provider without changing the `IIndexService` call shape.
+
+Known limitations:
+
+- Backlinks are still computed from the in-memory index; SQLite persistence remains planned.
+- Wiki-link disambiguation is name/path based and does not yet model duplicate-note resolution policies.
+- Link resolution remains scanner-based until a fuller Markdown parser-backed metadata pass is introduced.
