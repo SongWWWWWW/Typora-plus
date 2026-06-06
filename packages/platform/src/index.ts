@@ -5,5 +5,6 @@ export * from "./files";
 export * from "./indexing";
 export * from "./instantiation";
 export * from "./recents";
+export * from "./resources";
 export * from "./textFile";
 export * from "./workspace";

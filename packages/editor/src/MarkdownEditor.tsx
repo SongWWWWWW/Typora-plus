@@ -14,7 +14,7 @@ import {
   rectangularSelection
 } from "@codemirror/view";
 import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
-import { livePreviewExtension, type MarkdownEditorConfiguration } from "./livePreview";
+import { livePreviewExtension, type MarkdownEditorConfiguration, type MarkdownImageSourceResolver } from "./livePreview";
 
 export interface PastedEditorImage {
   readonly name: string;
@@ -32,12 +32,13 @@ export interface MarkdownEditorProps {
   readonly configuration: MarkdownEditorConfiguration;
   readonly onChange: (value: string) => void;
   readonly onPasteImage?: ((image: PastedEditorImage) => Promise<string | undefined>) | undefined;
+  readonly resolveImageSource?: MarkdownImageSourceResolver | undefined;
 }
 
 const editorPlaceholder = " ";
 
 export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorProps>(
-  ({ value, configuration, onChange, onPasteImage }, ref) => {
+  ({ value, configuration, onChange, onPasteImage, resolveImageSource }, ref) => {
     const containerRef = useRef<HTMLDivElement | null>(null);
     const viewRef = useRef<EditorView | null>(null);
     const onChangeRef = useRef(onChange);
@@ -90,7 +91,7 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
         extensions: [
           ...baseEditorExtensions(),
           imagePasteExtension(() => onPasteImageRef.current),
-          previewCompartmentRef.current.of(livePreviewExtension(configuration)),
+          previewCompartmentRef.current.of(livePreviewExtension(configuration, resolveImageSource)),
           updateListener
         ]
       });
@@ -115,9 +116,9 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
       }
 
       view.dispatch({
-        effects: previewCompartmentRef.current.reconfigure(livePreviewExtension(configuration))
+        effects: previewCompartmentRef.current.reconfigure(livePreviewExtension(configuration, resolveImageSource))
       });
-    }, [configuration]);
+    }, [configuration, resolveImageSource]);
 
     useEffect(() => {
       const view = viewRef.current;

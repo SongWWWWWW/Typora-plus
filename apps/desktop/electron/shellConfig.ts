@@ -11,8 +11,10 @@ export const desktopShellConfig = {
   workspace: {
     maxDepth: 8,
     maxFiles: 5000,
+    maxImagePreviewBytes: 5 * 1024 * 1024,
     maxTrustedWorkspaces: 40,
     defaultAssetFolder: "assets",
+    imagePreviewExtensions: [".png", ".jpg", ".jpeg", ".webp", ".gif", ".svg"],
     trustedWorkspacesStorageFile: "trusted-workspaces.json",
     markdownExtensions: [".md", ".markdown", ".mdown"],
     ignoredDirectories: [".git", ".typora-plus", "node_modules", "dist", "dist-electron"]

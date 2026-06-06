@@ -9,6 +9,7 @@ export const nativeFileIpcChannels = {
   refreshWorkspace: "typora-plus:workspace:refresh",
   workspaceChanged: "typora-plus:workspace:changed",
   readFile: "typora-plus:file:read",
+  resolveImageResource: "typora-plus:resource:image",
   writeFile: "typora-plus:file:write",
   saveFileAs: "typora-plus:file:saveAs",
   saveAttachment: "typora-plus:attachment:save"
@@ -17,8 +18,10 @@ export const nativeFileIpcChannels = {
 export interface NativeWorkspaceConfig {
   readonly maxDepth: number;
   readonly maxFiles: number;
+  readonly maxImagePreviewBytes: number;
   readonly maxTrustedWorkspaces: number;
   readonly defaultAssetFolder: string;
+  readonly imagePreviewExtensions: readonly string[];
   readonly trustedWorkspacesStorageFile: string;
   readonly markdownExtensions: readonly string[];
   readonly ignoredDirectories: readonly string[];
@@ -65,6 +68,12 @@ interface SerializedSavedAttachment {
   readonly uri: string;
   readonly relativePath: string;
   readonly markdown: string;
+}
+
+interface SerializedResolvedImageResource {
+  readonly dataUrl: string;
+  readonly mimeType: string;
+  readonly source: string;
 }
 
 const workspaceWatchDebounceMs = 180;
@@ -209,6 +218,36 @@ export function registerNativeFileIpc(config: NativeWorkspaceConfig): void {
       value,
       mtime: stat.mtimeMs
     } satisfies SerializedTextFileContent;
+  });
+
+  ipcMain.handle(nativeFileIpcChannels.resolveImageResource, async (_event, noteUri: string, source: string) => {
+    const notePath = assertReadableFile(noteUri, workspaceRoot, allowedFiles, config);
+    const imagePath = resolveImageResourcePath(notePath, workspaceRoot, source, config);
+
+    if (!imagePath) {
+      return undefined;
+    }
+
+    try {
+      const stat = await fs.stat(imagePath);
+      if (!stat.isFile() || stat.size > config.maxImagePreviewBytes) {
+        return undefined;
+      }
+
+      const mimeType = imageMimeType(imagePath, config);
+      if (!mimeType) {
+        return undefined;
+      }
+
+      const buffer = await fs.readFile(imagePath);
+      return {
+        dataUrl: `data:${mimeType};base64,${buffer.toString("base64")}`,
+        mimeType,
+        source
+      } satisfies SerializedResolvedImageResource;
+    } catch {
+      return undefined;
+    }
   });
 
   ipcMain.handle(nativeFileIpcChannels.writeFile, async (_event, uri: string, value: string, options: SerializedSaveFileOptions = {}) => {
@@ -488,6 +527,47 @@ function assertWritableFile(
   return assertReadableFile(uri, workspaceRoot, allowedFiles, config);
 }
 
+function resolveImageResourcePath(
+  notePath: string,
+  workspaceRoot: string | undefined,
+  source: string,
+  config: NativeWorkspaceConfig
+): string | undefined {
+  const relativeSource = decodeMarkdownResourcePath(source);
+  if (!relativeSource || path.isAbsolute(relativeSource) || hasUriScheme(relativeSource)) {
+    return undefined;
+  }
+
+  const root = workspaceRoot && isPathInside(notePath, workspaceRoot)
+    ? workspaceRoot
+    : path.dirname(notePath);
+  const candidate = path.resolve(path.dirname(notePath), relativeSource);
+
+  if (!isPathInside(candidate, root) || !isImagePreviewFile(candidate, config)) {
+    return undefined;
+  }
+
+  return candidate;
+}
+
+function decodeMarkdownResourcePath(source: string): string | undefined {
+  const pathSource = source.trim().split(/[?#]/, 1)[0];
+
+  if (!pathSource) {
+    return undefined;
+  }
+
+  try {
+    return decodeURIComponent(pathSource);
+  } catch {
+    return pathSource;
+  }
+}
+
+function hasUriScheme(value: string): boolean {
+  return /^[a-z][a-z0-9+.-]*:/i.test(value);
+}
+
 function hasSaveConflict(diskMtime: number, options: SerializedSaveFileOptions): boolean {
   return !options.overwrite
     && options.expectedMtime !== undefined
@@ -516,10 +596,41 @@ function isFileAllowed(filePath: string, workspaceRoot: string | undefined, allo
   return relativePath !== "" && !relativePath.startsWith("..") && !path.isAbsolute(relativePath);
 }
 
+function isPathInside(filePath: string, rootPath: string): boolean {
+  const relativePath = path.relative(rootPath, filePath);
+  return relativePath === "" || (!relativePath.startsWith("..") && !path.isAbsolute(relativePath));
+}
+
 function assertMarkdownFile(filePath: string, config: NativeWorkspaceConfig): void {
   if (!isMarkdownFile(filePath, config)) {
     throw new Error("Only Markdown files can be opened or saved by Typora Plus");
   }
+}
+
+function imageMimeType(filePath: string, config: NativeWorkspaceConfig): string | undefined {
+  if (!isImagePreviewFile(filePath, config)) {
+    return undefined;
+  }
+
+  switch (path.extname(filePath).toLowerCase()) {
+    case ".gif":
+      return "image/gif";
+    case ".jpg":
+    case ".jpeg":
+      return "image/jpeg";
+    case ".png":
+      return "image/png";
+    case ".svg":
+      return "image/svg+xml";
+    case ".webp":
+      return "image/webp";
+    default:
+      return undefined;
+  }
+}
+
+function isImagePreviewFile(filePath: string, config: NativeWorkspaceConfig): boolean {
+  return config.imagePreviewExtensions.includes(path.extname(filePath).toLowerCase());
 }
 
 async function createAttachmentPath(

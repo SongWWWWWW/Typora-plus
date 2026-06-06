@@ -22,5 +22,10 @@ contextBridge.exposeInMainWorld("typoraPlus", {
     isAvailable: true,
     saveImage: (noteUri: string, image: { readonly name: string; readonly mimeType: string; readonly base64: string }, assetFolder: string) =>
       ipcRenderer.invoke(nativeFileIpcChannels.saveAttachment, noteUri, image, assetFolder)
+  },
+  resources: {
+    isAvailable: true,
+    resolveImage: (noteUri: string, source: string) =>
+      ipcRenderer.invoke(nativeFileIpcChannels.resolveImageResource, noteUri, source)
   }
 });

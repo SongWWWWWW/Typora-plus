@@ -314,6 +314,12 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
     focusMode: configuration.editor.focusMode,
     typewriterMode: configuration.editor.typewriterMode
   };
+  const resolveImageSource = useMemo(
+    () => services.resourceService.isAvailable() && model.uri.scheme === "file"
+      ? (source: string) => services.resourceService.resolveImageSource(model.uri, source)
+      : undefined,
+    [model.uri, services]
+  );
 
   return (
     <main className={sideView ? "tp-shell tp-shell-with-sidebar" : "tp-shell"}>
@@ -392,6 +398,7 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
             value={model.value}
             configuration={editorConfiguration}
             onChange={(value) => services.textFileService.updateContent(value)}
+            resolveImageSource={resolveImageSource}
             onPasteImage={services.attachmentService.isAvailable()
               ? async (image) => {
                 const saved = await services.attachmentService.saveImage(model.uri, image);

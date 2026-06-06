@@ -53,9 +53,14 @@ export interface MarkdownLineClassificationState {
   readonly tableState?: MarkdownTableLineState;
 }
 
+export type MarkdownImageSourceResolver = (source: string) => Promise<string | undefined> | string | undefined;
+
 const syntaxMarkerDecoration = Decoration.mark({ class: "tp-editor-markdown-marker" });
 
-export function livePreviewExtension(configuration: MarkdownEditorConfiguration): Extension {
+export function livePreviewExtension(
+  configuration: MarkdownEditorConfiguration,
+  resolveImageSource?: MarkdownImageSourceResolver
+): Extension {
   return [
     markdownEditorTheme(configuration),
     ViewPlugin.fromClass(
@@ -63,12 +68,12 @@ export function livePreviewExtension(configuration: MarkdownEditorConfiguration)
         decorations: DecorationSet;
 
         constructor(view: EditorView) {
-          this.decorations = buildDecorations(view, configuration);
+          this.decorations = buildDecorations(view, configuration, resolveImageSource);
         }
 
         update(update: ViewUpdate): void {
           if (update.docChanged || update.viewportChanged || update.selectionSet) {
-            this.decorations = buildDecorations(update.view, configuration);
+            this.decorations = buildDecorations(update.view, configuration, resolveImageSource);
           }
         }
       },
@@ -230,7 +235,11 @@ export function findInactiveMarkdownSyntaxMarkers(text: string, active: boolean)
   return normalizeRanges(ranges);
 }
 
-function buildDecorations(view: EditorView, configuration: MarkdownEditorConfiguration): DecorationSet {
+function buildDecorations(
+  view: EditorView,
+  configuration: MarkdownEditorConfiguration,
+  resolveImageSource: MarkdownImageSourceResolver | undefined
+): DecorationSet {
   const builder = new RangeSetBuilder<Decoration>();
   const activeLine = view.state.doc.lineAt(view.state.selection.main.head).number;
   const codeFenceLineRoles = analyzeVisibleCodeFenceLines(view);
@@ -261,7 +270,7 @@ function buildDecorations(view: EditorView, configuration: MarkdownEditorConfigu
 
       if (imageBlock && !lineIsActive) {
         builder.add(line.from, line.to, Decoration.replace({
-          widget: new MarkdownImageBlockWidget(imageBlock)
+          widget: new MarkdownImageBlockWidget(imageBlock, resolveImageSource)
         }));
       } else {
         for (const marker of findInactiveMarkdownSyntaxMarkers(line.text, lineIsActive)) {
@@ -625,7 +634,10 @@ function readMarkdownTableCells(text: string): readonly string[] | undefined {
 }
 
 class MarkdownImageBlockWidget extends WidgetType {
-  constructor(private readonly image: MarkdownImageBlockState) {
+  constructor(
+    private readonly image: MarkdownImageBlockState,
+    private readonly resolveImageSource: MarkdownImageSourceResolver | undefined
+  ) {
     super();
   }
 
@@ -635,7 +647,8 @@ class MarkdownImageBlockWidget extends WidgetType {
       widget.image.previewable === this.image.previewable &&
       widget.image.source === this.image.source &&
       widget.image.sourceLabel === this.image.sourceLabel &&
-      widget.image.title === this.image.title;
+      widget.image.title === this.image.title &&
+      widget.resolveImageSource === this.resolveImageSource;
   }
 
   override toDOM(view: EditorView): HTMLElement {
@@ -644,25 +657,8 @@ class MarkdownImageBlockWidget extends WidgetType {
     figure.setAttribute("aria-label", this.image.altText || this.image.sourceLabel);
     figure.setAttribute("role", "group");
 
-    const preview = document.createElement("div");
-    preview.className = this.image.previewable ? "tp-editor-image-preview" : "tp-editor-image-placeholder";
-
-    if (this.image.previewable) {
-      const image = document.createElement("img");
-      image.alt = this.image.altText;
-      image.decoding = "async";
-      image.loading = "lazy";
-      image.src = this.image.source;
-      image.addEventListener("load", () => view.requestMeasure());
-      image.addEventListener("error", () => {
-        preview.className = "tp-editor-image-placeholder";
-        preview.textContent = "IMG";
-        view.requestMeasure();
-      });
-      preview.append(image);
-    } else {
-      preview.textContent = "IMG";
-    }
+    const preview = document.createElement("span");
+    this.renderPreview(preview, view);
 
     const caption = document.createElement("span");
     caption.className = "tp-editor-image-caption";
@@ -684,6 +680,53 @@ class MarkdownImageBlockWidget extends WidgetType {
 
   override ignoreEvent(): boolean {
     return false;
+  }
+
+  private renderPreview(preview: HTMLElement, view: EditorView): void {
+    if (this.image.previewable) {
+      this.renderImagePreview(preview, this.image.source, view);
+      return;
+    }
+
+    this.renderPlaceholder(preview);
+
+    if (!this.resolveImageSource) {
+      return;
+    }
+
+    Promise.resolve(this.resolveImageSource(this.image.source))
+      .then((resolvedSource) => {
+        if (!resolvedSource) {
+          return;
+        }
+
+        this.renderImagePreview(preview, resolvedSource, view);
+      })
+      .catch(() => {
+        this.renderPlaceholder(preview);
+      });
+  }
+
+  private renderImagePreview(preview: HTMLElement, source: string, view: EditorView): void {
+    preview.className = "tp-editor-image-preview";
+    preview.textContent = "";
+
+    const image = document.createElement("img");
+    image.alt = this.image.altText;
+    image.decoding = "async";
+    image.loading = "lazy";
+    image.src = source;
+    image.addEventListener("load", () => view.requestMeasure());
+    image.addEventListener("error", () => {
+      this.renderPlaceholder(preview);
+      view.requestMeasure();
+    });
+    preview.append(image);
+  }
+
+  private renderPlaceholder(preview: HTMLElement): void {
+    preview.className = "tp-editor-image-placeholder";
+    preview.textContent = "IMG";
   }
 }
 

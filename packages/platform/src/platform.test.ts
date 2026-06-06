@@ -9,6 +9,7 @@ import {
   WorkspaceTextFileService,
   WorkspaceIndexService,
   RecentService,
+  NativeResourceService,
   flattenFileTree,
   mergeConfiguration,
   ServiceCollection,
@@ -340,6 +341,40 @@ describe("attachments", () => {
 
     expect(saved?.uri.toString()).toBe("file://C:/Notes/assets/a/image.png");
     expect(saved?.markdown).toBe("![image](assets/a/image.png)");
+  });
+});
+
+describe("resources", () => {
+  it("resolves image sources through the native bridge for file notes", async () => {
+    const service = new NativeResourceService({
+      isAvailable: true,
+      async resolveImage(noteUri, source) {
+        return {
+          dataUrl: "data:image/png;base64,AA==",
+          mimeType: "image/png",
+          source: `${noteUri}:${source}`
+        };
+      }
+    });
+
+    await expect(service.resolveImageSource(URI.file("C:/Notes/a.md"), "assets/a.png")).resolves.toBe(
+      "data:image/png;base64,AA=="
+    );
+  });
+
+  it("does not resolve image sources for untitled notes", async () => {
+    const service = new NativeResourceService({
+      isAvailable: true,
+      async resolveImage() {
+        return {
+          dataUrl: "data:image/png;base64,AA==",
+          mimeType: "image/png",
+          source: "unused"
+        };
+      }
+    });
+
+    await expect(service.resolveImageSource(URI.untitled("Untitled.md"), "assets/a.png")).resolves.toBeUndefined();
   });
 });
 

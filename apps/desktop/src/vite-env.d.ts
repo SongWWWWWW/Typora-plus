@@ -17,5 +17,9 @@ interface Window {
       readonly isAvailable: boolean;
       saveImage(noteUri: string, image: { readonly name: string; readonly mimeType: string; readonly base64: string }, assetFolder: string): Promise<unknown>;
     };
+    readonly resources?: {
+      readonly isAvailable: boolean;
+      resolveImage(noteUri: string, source: string): Promise<unknown>;
+    };
   };
 }
