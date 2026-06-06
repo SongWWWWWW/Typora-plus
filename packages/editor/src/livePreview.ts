@@ -1064,7 +1064,7 @@ function findNextInlineMathDelimiter(
       !isEscaped(text, index) &&
       text[index - 1] !== "$" &&
       text[index + 1] !== "$" &&
-      !codeSpanRanges.some((range) => index >= range.from && index < range.to)
+      !isIndexInsideMarkdownRange(index, codeSpanRanges)
     ) {
       return index;
     }
@@ -1294,6 +1294,7 @@ function readMarkdownTableCellSpans(text: string): readonly MarkdownTableCellSou
     return undefined;
   }
 
+  const codeSpanRanges = readMarkdownCodeSpanRanges(text);
   const cells: MarkdownTableCellSourceSpan[] = [];
   let current = "";
   let cellStart = trimmedStart;
@@ -1301,7 +1302,7 @@ function readMarkdownTableCellSpans(text: string): readonly MarkdownTableCellSou
   for (let index = trimmedStart; index < trimmedEnd; index += 1) {
     const character = text[index];
 
-    if (character === "|" && !isEscaped(text, index)) {
+    if (isMarkdownTableCellSeparator(text, index, codeSpanRanges)) {
       cells.push({ from: cellStart, to: index, value: current });
       current = "";
       cellStart = index + 1;
@@ -1322,6 +1323,23 @@ function readMarkdownTableCellSpans(text: string): readonly MarkdownTableCellSou
   }
 
   return cells.length >= 2 ? cells : undefined;
+}
+
+function isMarkdownTableCellSeparator(
+  text: string,
+  index: number,
+  codeSpanRanges: readonly MarkdownSyntaxMarkerRange[]
+): boolean {
+  return text[index] === "|" &&
+    !isEscaped(text, index) &&
+    !isIndexInsideMarkdownRange(index, codeSpanRanges);
+}
+
+function isIndexInsideMarkdownRange(
+  index: number,
+  ranges: readonly Pick<MarkdownSyntaxMarkerRange, "from" | "to">[]
+): boolean {
+  return ranges.some((range) => index >= range.from && index < range.to);
 }
 
 function readFirstNonWhitespaceIndex(text: string): number {

@@ -558,6 +558,20 @@ describe("analyzeMarkdownTableLines", () => {
     ]);
   });
 
+  it("keeps inline code pipes inside table cells", () => {
+    const tableBlock = analyzeMarkdownLineBlocks([
+      "| Pattern | Status |",
+      "| --- | --- |",
+      "| `left | right` | Ready |"
+    ]).find((state) => state.tableBlock)?.tableBlock;
+
+    expect(tableBlock).toBeDefined();
+    expect(tableBlock?.headerCells).toEqual(["Pattern", "Status"]);
+    expect(tableBlock?.bodyRows).toEqual([
+      ["`left | right`", "Ready"]
+    ]);
+  });
+
   it("supports tables without outer pipes", () => {
     expect(analyzeMarkdownTableLines([
       "Name | Value",
@@ -585,6 +599,13 @@ describe("analyzeMarkdownTableLines", () => {
       "--- \\| ---"
     ])).toEqual([]);
   });
+
+  it("does not treat code-span-only pipes as table separators", () => {
+    expect(analyzeMarkdownTableLines([
+      "Name `|` Value",
+      "--- `|` ---"
+    ])).toEqual([]);
+  });
 });
 
 describe("Markdown table editing helpers", () => {
@@ -610,6 +631,14 @@ describe("Markdown table editing helpers", () => {
 
     expect(range).toEqual({ from: 2, to: 15 });
     expect(range ? line.slice(range.from, range.to) : "").toBe("Name \\| Alias");
+  });
+
+  it("keeps inline code pipes inside source cell ranges", () => {
+    const line = "| `left | right` | Status |";
+    const range = findMarkdownTableCellSourceRange(line, 0);
+
+    expect(range).toEqual({ from: 2, to: 16 });
+    expect(range ? line.slice(range.from, range.to) : "").toBe("`left | right`");
   });
 
   it("does not find a table cell range for escaped-only separators", () => {
@@ -711,6 +740,26 @@ describe("Markdown table editing helpers", () => {
       "| Name \\| Alias | Status |",
       "| :--- | :---: |",
       "| Alpha \\| Beta | Ready \\| Hold |"
+    ]);
+  });
+
+  it("preserves inline code pipe cell source while editing columns", () => {
+    const tableBlock = analyzeMarkdownLineBlocks([
+      "| Expression | Count | Status |",
+      "| :--- | ---: | :---: |",
+      "| `a | b` | 1 | Ready |"
+    ]).find((state) => state.tableBlock)?.tableBlock;
+
+    expect(tableBlock).toBeDefined();
+    expect(createMarkdownTableWithInsertedColumn(tableBlock!, { columnIndex: 1 })).toEqual([
+      "| Expression |  | Count | Status |",
+      "| :--- | --- | ---: | :---: |",
+      "| `a | b` |  | 1 | Ready |"
+    ]);
+    expect(createMarkdownTableWithDeletedColumn(tableBlock!, { columnIndex: 1 })).toEqual([
+      "| Expression | Status |",
+      "| :--- | :---: |",
+      "| `a | b` | Ready |"
     ]);
   });
 
