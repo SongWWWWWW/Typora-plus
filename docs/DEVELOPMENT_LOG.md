@@ -1476,3 +1476,34 @@ Review:
 Known limitations:
 
 - Settings search uses deterministic substring and multi-term matching; fuzzy ranking can be added later if the settings surface grows substantially.
+
+## 2026-06-06 - P2 Keybinding Shortcut Label Search
+
+Completed:
+
+- Extended Keybindings search to include the active shortcut label shown in each row.
+- Added `Unassigned` as a searchable row state for commands without an active shortcut.
+- Normalized shortcut labels so both `ctrl+p` and `ctrl shift p` style queries can match displayed shortcuts.
+- Kept the expanded matching logic in `keybindingSettings.ts` and passed active labels from `SettingsDialog`.
+- Added focused Workbench coverage for shortcut-label, expanded-label, unassigned, and multi-term matching.
+
+Quality gate:
+
+- `npm run test -- --run packages/workbench/src/keybindingSettings.test.ts`: passed, 7 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 128 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed
+- Browser regression: `ctrl shift p` found Command Palette, `ctrl+p` found Quick Open, `unassigned` found unbound commands, `workbench ctrl` found matching Workbench shortcuts, and clear restored all 16 rows.
+- Desktop 1280px and mobile 390px viewport checks: keybinding search, filtered rows, and Settings dialog had no horizontal overflow and no console errors were reported.
+
+Review:
+
+- Search still uses the same command data and active labels supplied by `IKeybindingService`; no duplicate shortcut registry was introduced.
+- `SettingsDialog` remains a coordinator and does not own shortcut matching rules.
+- The shortcut search understands the label the user sees, which keeps the settings experience discoverable without adding more controls.
+
+Known limitations:
+
+- Keybinding search is deterministic term matching rather than fuzzy ranking.
+- The keybinding editor still records single-stroke shortcuts only; multi-step chord shortcuts remain future work.
