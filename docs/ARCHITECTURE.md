@@ -33,6 +33,8 @@ theme -> workbench/app
 
 The editor package does not know about files, windows, Electron, or sidebars. The workbench does not parse Markdown manually beyond calling the Markdown package. The desktop app only bootstraps services and shell entry points.
 
+Architecture boundary tests scan package source imports, workspace package dependency declarations, and TypeScript project references against this dependency direction. A package cannot start depending on a higher layer without failing the normal test suite.
+
 ## Services
 
 Current services:
@@ -131,7 +133,7 @@ Extensions must not receive direct DOM or unrestricted Node access.
 At the end of every stage:
 
 - run the full quality gate
-- review package dependencies for boundary drift
+- review package dependencies for boundary drift; the architecture boundary tests must stay aligned with the documented layer direction
 - move repeated visual values into theme tokens
 - move repeated behavior defaults into configuration
 - reject hard-coded file paths and platform assumptions

@@ -42,6 +42,7 @@ P2 main progress is implemented:
 - workspace-backed image preview resource resolution
 - saved workspace files, including new save-as files after workspace catch-up, refresh their search, tag, and backlink index entries immediately after successful save
 - workspace index storage and query behavior sit behind a provider boundary, with an in-memory provider, workspace-scoped persisted snapshot provider, Electron native snapshot storage, browser fallback storage, and a contract ready for a future SQLite provider
+- automated architecture boundary tests for package source imports, workspace dependency declarations, and TypeScript project references
 - hardened HTML note export through a platform export service, Markdown HTML provider, Electron save dialog bridge, and browser download fallback
 - platform-level command service with separated command metadata, executable handlers, async execution, and `onCommand:<id>` activation before retrying metadata-only command execution; keybinding service support for command execution, Workbench shortcut defaults, active shortcut labels, user-editable overrides, and conflict confirmation
 - platform-level menu contribution and context-key services for titlebar and activitybar actions, with structured and string-parsed `when` clauses for future manifest-style contributions
@@ -78,6 +79,8 @@ Every stage must pass:
 - `npm test`
 - `npm run build`
 - `npm audit --audit-level=moderate`
+
+`npm test` includes package architecture boundary tests, so dependency-direction drift fails with the normal quality gate.
 
 Do not add user-facing behavior through scattered constants. Defaults belong in configuration, visual values belong in theme tokens, and platform behavior belongs behind services.
 

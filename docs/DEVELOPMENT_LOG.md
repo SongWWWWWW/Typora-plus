@@ -2331,3 +2331,33 @@ Known limitations:
 - Registered Markdown renderer providers are not connected to the CodeMirror live-preview surface yet.
 - Third-party extension host code loading is still not implemented.
 - Marketplace or extension package installation remains future work.
+
+## 2026-06-07 - P2 Architecture Boundary Guard
+
+Completed:
+
+- Added automated architecture boundary tests for workspace package source imports.
+- Added checks for workspace package dependency declarations.
+- Added checks for TypeScript project references.
+- Encoded the documented package direction in test rules: base and platform stay below Workbench/app code, editor depends on Markdown only, and desktop remains the outer app layer.
+- Kept the guard inside the existing test suite instead of adding another toolchain or documentation surface.
+
+Quality gate:
+
+- `npm run test -- --run packages/platform/src/architectureBoundaries.test.ts`: passed, 3 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 213 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed
+- Browser smoke check: not required for this stage because runtime UI code did not change; the desktop renderer build is covered by `npm run verify`.
+
+Review:
+
+- The stage review rule for dependency-boundary drift is now enforced automatically instead of relying only on manual inspection.
+- The guard checks imports, package metadata, and TypeScript references, so architectural drift in code or project setup is caught early.
+- No runtime behavior, visual token, platform path, dynamic extension loading, or extra documentation file was introduced.
+
+Known limitations:
+
+- The guard enforces current package direction only; it does not validate runtime service usage inside allowed layers.
+- Future package-layer changes must update both `docs/ARCHITECTURE.md` and the boundary test together.
