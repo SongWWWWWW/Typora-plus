@@ -16,6 +16,14 @@ import {
   type FileTreeEntry,
   type NativeFileSystemHost,
   type SaveFileOptions,
+  type WorkspaceIndexedDocument,
+  type WorkspaceIndexProvider,
+  type WorkspaceIndexQueryOptions,
+  type WorkspaceIndexMetadata,
+  type WorkspaceIndexedLink,
+  type WorkspaceIndexedTag,
+  type WorkspaceIndexedTagSummary,
+  type WorkspaceSearchResult,
   type WorkspaceFileTree
 } from "./index";
 
@@ -348,6 +356,31 @@ describe("workspace index", () => {
     expect(service.getBacklinks(URI.file("C:/Notes/b.md"))).toEqual([]);
   });
 
+  it("delegates indexed storage and queries through a provider boundary", async () => {
+    const host = createMemoryHost([["file://C:/Notes/a.md", "# Alpha\nShared topic"]]);
+    const provider = new RecordingWorkspaceIndexProvider();
+    const service = new WorkspaceIndexService(new NativeFileService(host), {
+      maxResults: 10
+    }, provider);
+
+    await service.indexWorkspace(createWorkspaceFileTree([
+      createFileEntry("C:/Notes/a.md", "a.md", "a.md")
+    ]));
+
+    expect(provider.storedDocuments.map((document) => document.relativePath)).toEqual(["a.md"]);
+
+    const results = service.query("shared");
+
+    expect(provider.lastQuery).toEqual({
+      value: "shared",
+      options: {
+        maxPreviewLength: 160,
+        maxResults: 10
+      }
+    });
+    expect(results.map((result) => result.relativePath)).toEqual(["provider.md"]);
+  });
+
   it("collects headings, tags, and links as workspace metadata", async () => {
     const host = createMemoryHost([
       ["file://C:/Notes/a.md", [
@@ -489,6 +522,55 @@ describe("workspace index", () => {
     expect(service.getTaggedResources("topic")).toEqual([]);
   });
 });
+
+class RecordingWorkspaceIndexProvider implements WorkspaceIndexProvider {
+  storedDocuments: WorkspaceIndexedDocument[] = [];
+  lastQuery: { readonly value: string; readonly options: WorkspaceIndexQueryOptions } | undefined;
+
+  clear(): void {
+    this.storedDocuments = [];
+  }
+
+  getDocumentCount(): number {
+    return this.storedDocuments.length;
+  }
+
+  upsertDocument(document: WorkspaceIndexedDocument): void {
+    this.storedDocuments = [...this.storedDocuments, document];
+  }
+
+  removeDocument(uri: URI): void {
+    this.storedDocuments = this.storedDocuments.filter((document) => document.uri.toString() !== uri.toString());
+  }
+
+  query(value: string, options: WorkspaceIndexQueryOptions): readonly WorkspaceSearchResult[] {
+    this.lastQuery = { value, options };
+    return [{
+      uri: URI.file("C:/Notes/provider.md"),
+      name: "provider.md",
+      relativePath: "provider.md",
+      line: 1,
+      preview: "provider result",
+      score: 1
+    }];
+  }
+
+  getMetadata(): WorkspaceIndexMetadata {
+    return { headings: [], links: [], tags: [] };
+  }
+
+  getTags(): readonly WorkspaceIndexedTagSummary[] {
+    return [];
+  }
+
+  getTaggedResources(): readonly WorkspaceIndexedTag[] {
+    return [];
+  }
+
+  getBacklinks(): readonly WorkspaceIndexedLink[] {
+    return [];
+  }
+}
 
 describe("attachments", () => {
   it("saves images through the native bridge", async () => {

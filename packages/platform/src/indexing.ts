@@ -65,6 +65,11 @@ export interface WorkspaceIndexServiceOptions {
   readonly now?: () => number;
 }
 
+export interface WorkspaceIndexQueryOptions {
+  readonly maxResults: number;
+  readonly maxPreviewLength: number;
+}
+
 export const defaultWorkspaceIndexServiceOptions: WorkspaceIndexServiceOptions = {
   maxFileSizeBytes: 2 * 1024 * 1024,
   maxResults: 120,
@@ -87,121 +92,49 @@ export interface IIndexService {
 
 export const IIndexService = createServiceIdentifier<IIndexService>("index");
 
-export class WorkspaceIndexService implements IIndexService {
-  private readonly emitter = new Emitter<WorkspaceIndexStatus>();
-  private readonly options: WorkspaceIndexServiceOptions;
-  private readonly now: () => number;
-  private documents: IndexedDocument[] = [];
-  private generation = 0;
-  private status: WorkspaceIndexStatus;
+export interface WorkspaceIndexProvider {
+  clear(): void;
+  getDocumentCount(): number;
+  upsertDocument(document: WorkspaceIndexedDocument): void;
+  removeDocument(uri: URIType): void;
+  query(value: string, options: WorkspaceIndexQueryOptions): readonly WorkspaceSearchResult[];
+  getMetadata(): WorkspaceIndexMetadata;
+  getTags(): readonly WorkspaceIndexedTagSummary[];
+  getTaggedResources(tag: string): readonly WorkspaceIndexedTag[];
+  getBacklinks(uri: URIType): readonly WorkspaceIndexedLink[];
+}
 
-  readonly onDidChangeStatus = this.emitter.event;
+export class InMemoryWorkspaceIndexProvider implements WorkspaceIndexProvider {
+  private documents: WorkspaceIndexedDocument[] = [];
 
-  constructor(
-    private readonly fileService: IFileService,
-    options: Partial<WorkspaceIndexServiceOptions> = {}
-  ) {
-    this.options = {
-      ...defaultWorkspaceIndexServiceOptions,
-      ...options
-    };
-    this.now = this.options.now ?? (() => Date.now());
-    this.status = this.createStatus("idle", 0, 0, 0);
-  }
-
-  getStatus(): WorkspaceIndexStatus {
-    return this.status;
-  }
-
-  async indexWorkspace(workspace: WorkspaceFileTree): Promise<void> {
-    const generation = this.generation + 1;
-    this.generation = generation;
+  clear(): void {
     this.documents = [];
-
-    const files = workspace.files.filter((file) => file.kind === "file");
-    let indexedFiles = 0;
-    let skippedFiles = 0;
-
-    this.updateStatus("indexing", indexedFiles, files.length, skippedFiles);
-
-    for (const [index, file] of files.entries()) {
-      if (generation !== this.generation) {
-        return;
-      }
-
-      if (shouldSkipFile(file, this.options.maxFileSizeBytes)) {
-        skippedFiles += 1;
-        this.updateStatus("indexing", indexedFiles, files.length, skippedFiles);
-        continue;
-      }
-
-      try {
-        const content = await this.fileService.openFile(file.uri);
-
-        if (content.value.length > this.options.maxFileSizeBytes) {
-          skippedFiles += 1;
-        } else {
-          this.documents.push(indexDocument(file, content.value));
-          indexedFiles += 1;
-        }
-      } catch {
-        skippedFiles += 1;
-      }
-
-      this.updateStatus("indexing", indexedFiles, files.length, skippedFiles);
-
-      if ((index + 1) % this.options.yieldEveryFiles === 0) {
-        await yieldToHost();
-      }
-    }
-
-    if (generation !== this.generation) {
-      return;
-    }
-
-    this.updateStatus("ready", indexedFiles, files.length, skippedFiles);
   }
 
-  async indexFile(file: FileTreeEntry, value?: string): Promise<void> {
-    const generation = this.generation;
-
-    if (file.kind !== "file") {
-      return;
-    }
-
-    if (value === undefined && shouldSkipFile(file, this.options.maxFileSizeBytes)) {
-      this.removeDocument(file.uri);
-      this.emitIndexChanged();
-      return;
-    }
-
-    let content = value;
-
-    if (content === undefined) {
-      try {
-        content = (await this.fileService.openFile(file.uri)).value;
-      } catch {
-        this.removeDocument(file.uri);
-        this.emitIndexChanged();
-        return;
-      }
-    }
-
-    if (generation !== this.generation) {
-      return;
-    }
-
-    if (content.length > this.options.maxFileSizeBytes) {
-      this.removeDocument(file.uri);
-      this.emitIndexChanged();
-      return;
-    }
-
-    this.upsertDocument(indexDocument(file, content));
-    this.emitIndexChanged();
+  getDocumentCount(): number {
+    return this.documents.length;
   }
 
-  query(value: string): readonly WorkspaceSearchResult[] {
+  upsertDocument(document: WorkspaceIndexedDocument): void {
+    const index = this.documents.findIndex((entry) => entry.uri.toString() === document.uri.toString());
+
+    if (index === -1) {
+      this.documents = [...this.documents, document];
+      return;
+    }
+
+    this.documents = [
+      ...this.documents.slice(0, index),
+      document,
+      ...this.documents.slice(index + 1)
+    ];
+  }
+
+  removeDocument(uri: URIType): void {
+    this.documents = this.documents.filter((document) => document.uri.toString() !== uri.toString());
+  }
+
+  query(value: string, options: WorkspaceIndexQueryOptions): readonly WorkspaceSearchResult[] {
     const terms = normalizeQuery(value);
 
     if (terms.length === 0) {
@@ -221,11 +154,11 @@ export class WorkspaceIndexService implements IIndexService {
           name: document.name,
           relativePath: document.relativePath,
           line: line.line,
-          preview: createPreview(line.value, this.options.maxPreviewLength),
+          preview: createPreview(line.value, options.maxPreviewLength),
           score: scoreLine(document, line.normalized, terms)
         });
 
-        if (results.length >= this.options.maxResults) {
+        if (results.length >= options.maxResults) {
           return sortResults(results);
         }
       }
@@ -284,10 +217,148 @@ export class WorkspaceIndexService implements IIndexService {
       .flatMap((document) => document.metadata.links
         .filter((link) => linkResolvesToDocument(link, document, targetDocument))));
   }
+}
+
+export class WorkspaceIndexService implements IIndexService {
+  private readonly emitter = new Emitter<WorkspaceIndexStatus>();
+  private readonly options: WorkspaceIndexServiceOptions;
+  private readonly now: () => number;
+  private generation = 0;
+  private status: WorkspaceIndexStatus;
+
+  readonly onDidChangeStatus = this.emitter.event;
+
+  constructor(
+    private readonly fileService: IFileService,
+    options: Partial<WorkspaceIndexServiceOptions> = {},
+    private readonly provider: WorkspaceIndexProvider = new InMemoryWorkspaceIndexProvider()
+  ) {
+    this.options = {
+      ...defaultWorkspaceIndexServiceOptions,
+      ...options
+    };
+    this.now = this.options.now ?? (() => Date.now());
+    this.status = this.createStatus("idle", 0, 0, 0);
+  }
+
+  getStatus(): WorkspaceIndexStatus {
+    return this.status;
+  }
+
+  async indexWorkspace(workspace: WorkspaceFileTree): Promise<void> {
+    const generation = this.generation + 1;
+    this.generation = generation;
+    this.provider.clear();
+
+    const files = workspace.files.filter((file) => file.kind === "file");
+    let indexedFiles = 0;
+    let skippedFiles = 0;
+
+    this.updateStatus("indexing", indexedFiles, files.length, skippedFiles);
+
+    for (const [index, file] of files.entries()) {
+      if (generation !== this.generation) {
+        return;
+      }
+
+      if (shouldSkipFile(file, this.options.maxFileSizeBytes)) {
+        skippedFiles += 1;
+        this.updateStatus("indexing", indexedFiles, files.length, skippedFiles);
+        continue;
+      }
+
+      try {
+        const content = await this.fileService.openFile(file.uri);
+
+        if (content.value.length > this.options.maxFileSizeBytes) {
+          skippedFiles += 1;
+        } else {
+          this.provider.upsertDocument(indexDocument(file, content.value));
+          indexedFiles += 1;
+        }
+      } catch {
+        skippedFiles += 1;
+      }
+
+      this.updateStatus("indexing", indexedFiles, files.length, skippedFiles);
+
+      if ((index + 1) % this.options.yieldEveryFiles === 0) {
+        await yieldToHost();
+      }
+    }
+
+    if (generation !== this.generation) {
+      return;
+    }
+
+    this.updateStatus("ready", indexedFiles, files.length, skippedFiles);
+  }
+
+  async indexFile(file: FileTreeEntry, value?: string): Promise<void> {
+    const generation = this.generation;
+
+    if (file.kind !== "file") {
+      return;
+    }
+
+    if (value === undefined && shouldSkipFile(file, this.options.maxFileSizeBytes)) {
+      this.provider.removeDocument(file.uri);
+      this.emitIndexChanged();
+      return;
+    }
+
+    let content = value;
+
+    if (content === undefined) {
+      try {
+        content = (await this.fileService.openFile(file.uri)).value;
+      } catch {
+        this.provider.removeDocument(file.uri);
+        this.emitIndexChanged();
+        return;
+      }
+    }
+
+    if (generation !== this.generation) {
+      return;
+    }
+
+    if (content.length > this.options.maxFileSizeBytes) {
+      this.provider.removeDocument(file.uri);
+      this.emitIndexChanged();
+      return;
+    }
+
+    this.provider.upsertDocument(indexDocument(file, content));
+    this.emitIndexChanged();
+  }
+
+  query(value: string): readonly WorkspaceSearchResult[] {
+    return this.provider.query(value, {
+      maxPreviewLength: this.options.maxPreviewLength,
+      maxResults: this.options.maxResults
+    });
+  }
+
+  getMetadata(): WorkspaceIndexMetadata {
+    return this.provider.getMetadata();
+  }
+
+  getTags(): readonly WorkspaceIndexedTagSummary[] {
+    return this.provider.getTags();
+  }
+
+  getTaggedResources(tag: string): readonly WorkspaceIndexedTag[] {
+    return this.provider.getTaggedResources(tag);
+  }
+
+  getBacklinks(uri: URIType): readonly WorkspaceIndexedLink[] {
+    return this.provider.getBacklinks(uri);
+  }
 
   clear(): void {
     this.generation += 1;
-    this.documents = [];
+    this.provider.clear();
     this.updateStatus("idle", 0, 0, 0);
   }
 
@@ -319,46 +390,27 @@ export class WorkspaceIndexService implements IIndexService {
     };
   }
 
-  private upsertDocument(document: IndexedDocument): void {
-    const index = this.documents.findIndex((entry) => entry.uri.toString() === document.uri.toString());
-
-    if (index === -1) {
-      this.documents = [...this.documents, document];
-      return;
-    }
-
-    this.documents = [
-      ...this.documents.slice(0, index),
-      document,
-      ...this.documents.slice(index + 1)
-    ];
-  }
-
-  private removeDocument(uri: URIType): void {
-    this.documents = this.documents.filter((document) => document.uri.toString() !== uri.toString());
-  }
-
   private emitIndexChanged(): void {
     this.updateStatus(
       this.status.state === "indexing" ? "indexing" : "ready",
-      this.documents.length,
-      Math.max(this.status.totalFiles, this.documents.length),
+      this.provider.getDocumentCount(),
+      Math.max(this.status.totalFiles, this.provider.getDocumentCount()),
       this.status.skippedFiles,
       this.status.message
     );
   }
 }
 
-interface IndexedDocument {
+export interface WorkspaceIndexedDocument {
   readonly uri: URIType;
   readonly name: string;
   readonly relativePath: string;
   readonly normalizedPath: string;
-  readonly lines: readonly IndexedLine[];
+  readonly lines: readonly WorkspaceIndexedLine[];
   readonly metadata: WorkspaceIndexMetadata;
 }
 
-interface IndexedLine {
+export interface WorkspaceIndexedLine {
   readonly line: number;
   readonly value: string;
   readonly normalized: string;
@@ -368,7 +420,7 @@ function shouldSkipFile(file: FileTreeEntry, maxFileSizeBytes: number): boolean 
   return file.size !== undefined && file.size > maxFileSizeBytes;
 }
 
-function indexDocument(file: FileTreeEntry, value: string): IndexedDocument {
+function indexDocument(file: FileTreeEntry, value: string): WorkspaceIndexedDocument {
   const lines = value.split(/\r?\n/).map((line, index) => ({
     line: index + 1,
     value: line,
@@ -387,7 +439,7 @@ function indexDocument(file: FileTreeEntry, value: string): IndexedDocument {
 
 function indexDocumentMetadata(
   file: FileTreeEntry,
-  lines: readonly IndexedLine[]
+  lines: readonly WorkspaceIndexedLine[]
 ): WorkspaceIndexMetadata {
   const headings: WorkspaceIndexedHeading[] = [];
   const links: WorkspaceIndexedLink[] = [];
@@ -515,8 +567,8 @@ function readMarkdownTags(line: string): readonly string[] {
 
 function linkResolvesToDocument(
   link: WorkspaceIndexedLink,
-  sourceDocument: IndexedDocument,
-  targetDocument: IndexedDocument
+  sourceDocument: WorkspaceIndexedDocument,
+  targetDocument: WorkspaceIndexedDocument
 ): boolean {
   if (link.kind === "wiki") {
     return wikiLinkTargetMatchesDocument(link.target, targetDocument);
@@ -534,7 +586,7 @@ function linkResolvesToDocument(
     `${normalizedTargetPath}.md` === normalizedDocumentPath;
 }
 
-function wikiLinkTargetMatchesDocument(target: string, document: IndexedDocument): boolean {
+function wikiLinkTargetMatchesDocument(target: string, document: WorkspaceIndexedDocument): boolean {
   const normalizedTarget = normalizeWikiTarget(target);
 
   if (!normalizedTarget) {
@@ -646,7 +698,7 @@ function matchesLine(value: string, terms: readonly string[]): boolean {
   return terms.every((term) => value.includes(term));
 }
 
-function scoreLine(document: IndexedDocument, line: string, terms: readonly string[]): number {
+function scoreLine(document: WorkspaceIndexedDocument, line: string, terms: readonly string[]): number {
   const firstTerm = terms[0] ?? "";
   let score = 10;
 
