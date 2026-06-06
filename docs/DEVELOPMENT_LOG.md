@@ -728,3 +728,38 @@ Known limitations:
 - More complex Markdown table cases, such as inline code spans containing pipes and full parser-backed source mapping, remain planned.
 - Deletion controls still target the last row or last column from the preview toolbar.
 - Direct table cell editing remains planned.
+
+## 2026-06-06 - P2 Targeted Table Deletion Controls
+
+Completed:
+
+- Added per-column delete controls to inactive table preview headers.
+- Added per-row delete controls to inactive table preview body rows.
+- Reused the existing pure row and column deletion transforms with explicit row and column indexes.
+- Kept the existing toolbar actions for quick last-row and last-column deletion.
+- Added shared preview button event wiring so table tool, alignment, and inline delete buttons use the same guarded interaction path.
+- Added focused coverage for deleting a requested body row index.
+
+Quality gate:
+
+- `npm run test -- --run packages/editor/src/livePreview.test.ts`: passed, 60 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 80 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed
+- Production browser preview: passed at `http://127.0.0.1:4173`
+- Browser interaction check: `Delete row 2` removed only the middle body row; `Delete column 2` removed only the middle column and preserved remaining alignment.
+- Desktop default viewport and mobile 390px checks: passed without horizontal overflow or console errors; all table controls stayed visible on mobile.
+
+Review:
+
+- Targeted deletion remains inside `packages/editor`; Workbench, platform, and file services remain unaware of Markdown table syntax.
+- The plain Markdown table remains the source of truth; preview controls dispatch CodeMirror text edits only.
+- UI controls feed explicit indexes into tested pure transforms instead of duplicating table rewrite logic.
+- Visual additions reuse existing theme tokens and table button dimensions, with no new hard-coded platform assumptions.
+
+Known limitations:
+
+- Direct table cell editing remains planned.
+- Row insertion and column insertion are still quick toolbar actions rather than targeted per-row/per-column insert controls.
+- More complex Markdown table cases still depend on the planned parser-backed source mapping pass.
