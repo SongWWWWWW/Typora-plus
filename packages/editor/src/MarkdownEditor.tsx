@@ -14,7 +14,12 @@ import {
   rectangularSelection
 } from "@codemirror/view";
 import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
-import { livePreviewExtension, type MarkdownEditorConfiguration, type MarkdownImageSourceResolver } from "./livePreview";
+import {
+  livePreviewExtension,
+  type MarkdownCodeFenceRenderer,
+  type MarkdownEditorConfiguration,
+  type MarkdownImageSourceResolver
+} from "./livePreview";
 
 export interface PastedEditorImage {
   readonly name: string;
@@ -33,12 +38,13 @@ export interface MarkdownEditorProps {
   readonly onChange: (value: string) => void;
   readonly onPasteImage?: ((image: PastedEditorImage) => Promise<string | undefined>) | undefined;
   readonly resolveImageSource?: MarkdownImageSourceResolver | undefined;
+  readonly renderCodeFence?: MarkdownCodeFenceRenderer | undefined;
 }
 
 const editorPlaceholder = " ";
 
 export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorProps>(
-  ({ value, configuration, onChange, onPasteImage, resolveImageSource }, ref) => {
+  ({ value, configuration, onChange, onPasteImage, resolveImageSource, renderCodeFence }, ref) => {
     const containerRef = useRef<HTMLDivElement | null>(null);
     const viewRef = useRef<EditorView | null>(null);
     const onChangeRef = useRef(onChange);
@@ -91,7 +97,7 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
         extensions: [
           ...baseEditorExtensions(),
           imagePasteExtension(() => onPasteImageRef.current),
-          previewCompartmentRef.current.of(livePreviewExtension(configuration, resolveImageSource)),
+          previewCompartmentRef.current.of(livePreviewExtension(configuration, resolveImageSource, renderCodeFence)),
           updateListener
         ]
       });
@@ -116,9 +122,11 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
       }
 
       view.dispatch({
-        effects: previewCompartmentRef.current.reconfigure(livePreviewExtension(configuration, resolveImageSource))
+        effects: previewCompartmentRef.current.reconfigure(
+          livePreviewExtension(configuration, resolveImageSource, renderCodeFence)
+        )
       });
-    }, [configuration, resolveImageSource]);
+    }, [configuration, resolveImageSource, renderCodeFence]);
 
     useEffect(() => {
       const view = viewRef.current;

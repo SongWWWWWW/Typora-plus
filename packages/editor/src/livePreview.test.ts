@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { JSDOM } from "jsdom";
 import {
   analyzeMarkdownCodeFenceLines,
   analyzeMarkdownImageBlocks,
@@ -13,12 +14,14 @@ import {
   createMarkdownTableWithInsertedBodyRow,
   createMarkdownTableWithInsertedColumn,
   createMarkdownTableWithUpdatedColumnAlignment,
+  findMarkdownCodeFenceSourceRange,
   findMarkdownTableCellSourceRange,
   findMarkdownMathBlockSourceRange,
   findInactiveMarkdownInlineMathRanges,
   findInactiveMarkdownSyntaxMarkers,
   getNextMarkdownTableColumnAlignment,
   renderMarkdownMathExpression,
+  sanitizeMarkdownRendererHtml,
   shouldReplaceInactiveCodeFenceLine,
   shouldIgnorePreviewEventTarget,
   shouldReplaceInactiveTableLine
@@ -175,6 +178,31 @@ describe("shouldReplaceInactiveCodeFenceLine", () => {
     expect(shouldReplaceInactiveCodeFenceLine("open", true)).toBe(false);
     expect(shouldReplaceInactiveCodeFenceLine("content", true)).toBe(false);
     expect(shouldReplaceInactiveCodeFenceLine("close", true)).toBe(false);
+  });
+});
+
+describe("findMarkdownCodeFenceSourceRange", () => {
+  it("finds content inside a closed code fence", () => {
+    expect(findMarkdownCodeFenceSourceRange([
+      "```ts",
+      "const value = 1;",
+      "console.log(value);",
+      "```"
+    ])).toEqual({ fromColumn: 0, fromLine: 2, toColumn: 19, toLine: 3 });
+  });
+
+  it("places empty content before a closing fence", () => {
+    expect(findMarkdownCodeFenceSourceRange([
+      "```mermaid",
+      "```"
+    ])).toEqual({ fromColumn: 0, fromLine: 2, toColumn: 0, toLine: 2 });
+  });
+
+  it("keeps unclosed code fence content editable", () => {
+    expect(findMarkdownCodeFenceSourceRange([
+      "~~~chart",
+      "value: 1"
+    ])).toEqual({ fromColumn: 0, fromLine: 2, toColumn: 8, toLine: 2 });
   });
 });
 
@@ -985,3 +1013,78 @@ describe("findInactiveMarkdownSyntaxMarkers", () => {
     expect(findInactiveMarkdownSyntaxMarkers("![Alt](image.png)", false)[0]).toEqual({ from: 0, to: 1 });
   });
 });
+
+describe("sanitizeMarkdownRendererHtml", () => {
+  it("removes scripts, event handlers, style attributes, and unsafe classes", () => {
+    withDom(() => {
+      const html = [
+        "<div class=\"tp-renderer-chart unsafe\" onclick=\"run()\" style=\"color:red\">",
+        "<script>window.bad = true</script>",
+        "<span class=\"tp-renderer-label note\" title=\"Label\">Text</span>",
+        "</div>"
+      ].join("");
+
+      expect(renderSanitizedHtml(html)).toBe(
+        "<div class=\"tp-renderer-chart\"><span class=\"tp-renderer-label\" title=\"Label\">Text</span></div>"
+      );
+    });
+  });
+
+  it("unwraps unsupported elements and strips URL-bearing attributes", () => {
+    withDom(() => {
+      const html = [
+        "<a href=\"https://example.com\" title=\"Open\">link</a>",
+        "<img src=\"https://example.com/chart.png\" alt=\"Chart\">",
+        "<table><tbody><tr><td colspan=\"2\" rowspan=\"100\">Cell</td></tr></tbody></table>"
+      ].join("");
+
+      expect(renderSanitizedHtml(html)).toBe(
+        "link<table><tbody><tr><td colspan=\"2\">Cell</td></tr></tbody></table>"
+      );
+    });
+  });
+});
+
+function renderSanitizedHtml(html: string): string {
+  const container = document.createElement("div");
+  container.append(sanitizeMarkdownRendererHtml(html));
+
+  return container.innerHTML;
+}
+
+function withDom<T>(run: () => T): T {
+  const dom = new JSDOM("<!doctype html><html><body></body></html>");
+  const previousDocument = Reflect.get(globalThis, "document");
+  const previousNode = Reflect.get(globalThis, "Node");
+  const previousElement = Reflect.get(globalThis, "Element");
+
+  setGlobal("document", dom.window.document);
+  setGlobal("Node", dom.window.Node);
+  setGlobal("Element", dom.window.Element);
+
+  try {
+    return run();
+  } finally {
+    restoreGlobal("document", previousDocument);
+    restoreGlobal("Node", previousNode);
+    restoreGlobal("Element", previousElement);
+    dom.window.close();
+  }
+}
+
+function setGlobal(name: string, value: unknown): void {
+  Object.defineProperty(globalThis, name, {
+    configurable: true,
+    value,
+    writable: true
+  });
+}
+
+function restoreGlobal(name: string, value: unknown): void {
+  if (value === undefined) {
+    Reflect.deleteProperty(globalThis, name);
+    return;
+  }
+
+  setGlobal(name, value);
+}

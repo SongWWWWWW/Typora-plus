@@ -48,6 +48,7 @@ import {
   moveListSelection,
   normalizeListSelection
 } from "./listNavigationModel";
+import { createMarkdownCodeFenceRenderer } from "./markdownRendererPreview";
 import { updateSavedFileIndex } from "./savedFileIndexing";
 import { SettingsDialog } from "./SettingsDialog";
 import type { WorkbenchServices } from "./services";
@@ -86,6 +87,7 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
   const [operationError, setOperationError] = useState<string | undefined>();
   const [saveConflict, setSaveConflict] = useState<FileSaveConflict | undefined>();
   const [indexStatus, setIndexStatus] = useState<WorkspaceIndexStatus>(() => services.indexService.getStatus());
+  const [markdownRendererRevision, setMarkdownRendererRevision] = useState(0);
   const editorRef = useRef<MarkdownEditorHandle | null>(null);
   const titlebarMenuItems = useMenuItems(services, "titlebar.primary");
   const activitybarPrimaryMenuItems = useMenuItems(services, "activitybar.primary");
@@ -148,6 +150,10 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
   }).dispose, [services]);
 
   useEffect(() => services.indexService.onDidChangeStatus(setIndexStatus).dispose, [services]);
+
+  useEffect(() => services.markdownRendererService.onDidChangeMarkdownRenderers(() => {
+    setMarkdownRendererRevision((revision) => revision + 1);
+  }).dispose, [services]);
 
   useEffect(() => {
     services.contextKeyService.setValue("activeResource.scheme", model.uri.scheme);
@@ -439,6 +445,13 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
       : undefined,
     [model.uri, services]
   );
+  const renderCodeFence = useMemo(
+    () => createMarkdownCodeFenceRenderer({
+      getUri: () => model.uri,
+      markdownRendererService: services.markdownRendererService
+    }),
+    [markdownRendererRevision, model.uri, services]
+  );
 
   return (
     <main className={[
@@ -547,6 +560,7 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
             configuration={editorConfiguration}
             onChange={(value) => services.textFileService.updateContent(value)}
             resolveImageSource={resolveImageSource}
+            renderCodeFence={renderCodeFence}
             onPasteImage={services.attachmentService.isAvailable()
               ? async (image) => {
                 const saved = await services.attachmentService.saveImage(model.uri, image);

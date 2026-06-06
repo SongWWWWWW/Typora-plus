@@ -128,7 +128,36 @@ export interface MarkdownVisibleLineRange {
 
 export type MarkdownImageSourceResolver = (source: string) => Promise<string | undefined> | string | undefined;
 
+export interface MarkdownCodeFenceRenderInput {
+  readonly info: string;
+  readonly language: string;
+  readonly value: string;
+}
+
+export interface MarkdownCodeFenceRenderResult {
+  readonly html: string;
+  readonly label?: string;
+  readonly rendererId: string;
+}
+
+export interface MarkdownCodeFenceRenderer {
+  canRender?(input: MarkdownCodeFenceRenderInput): boolean;
+  render(input: MarkdownCodeFenceRenderInput): Promise<MarkdownCodeFenceRenderResult | undefined> |
+    MarkdownCodeFenceRenderResult |
+    undefined;
+}
+
+export interface MarkdownCodeFenceSourceRange {
+  readonly fromColumn: number;
+  readonly fromLine: number;
+  readonly toColumn: number;
+  readonly toLine: number;
+}
+
 const syntaxMarkerDecoration = Decoration.mark({ class: "tp-editor-markdown-marker" });
+const externalRendererEstimatedMinHeightPx = 92;
+const externalRendererLineEstimatedHeightPx = 22;
+const externalRendererEstimatedMaxHeightPx = 360;
 const previewCopyFeedbackDurationMs = 1200;
 const previewCopyButtonHeightPx = 24;
 const previewCopyButtonMinWidthPx = 54;
@@ -149,7 +178,8 @@ const tableToolButtonMinWidthPx = 38;
 
 export function livePreviewExtension(
   configuration: MarkdownEditorConfiguration,
-  resolveImageSource?: MarkdownImageSourceResolver
+  resolveImageSource?: MarkdownImageSourceResolver,
+  renderCodeFence?: MarkdownCodeFenceRenderer
 ): Extension {
   return [
     markdownEditorTheme(configuration),
@@ -158,12 +188,12 @@ export function livePreviewExtension(
         decorations: DecorationSet;
 
         constructor(view: EditorView) {
-          this.decorations = buildDecorations(view, configuration, resolveImageSource);
+          this.decorations = buildDecorations(view, configuration, resolveImageSource, renderCodeFence);
         }
 
         update(update: ViewUpdate): void {
           if (update.docChanged || update.viewportChanged || update.selectionSet) {
-            this.decorations = buildDecorations(update.view, configuration, resolveImageSource);
+            this.decorations = buildDecorations(update.view, configuration, resolveImageSource, renderCodeFence);
           }
         }
       },
@@ -601,14 +631,67 @@ export function findMarkdownMathBlockSourceRange(
   };
 }
 
+export function findMarkdownCodeFenceSourceRange(
+  lines: readonly string[]
+): MarkdownCodeFenceSourceRange | undefined {
+  const openingFence = readOpeningFence(lines[0] ?? "");
+  if (!openingFence) {
+    return undefined;
+  }
+
+  const closeLineIndex = lines.findIndex((line, index) => index > 0 && isClosingFence(line, openingFence.marker));
+
+  if (closeLineIndex === -1) {
+    if (lines.length <= 1) {
+      const openerLength = lines[0]?.length ?? 0;
+
+      return {
+        fromColumn: openerLength,
+        fromLine: 1,
+        toColumn: openerLength,
+        toLine: 1
+      };
+    }
+
+    const lastContentLine = lines.at(-1) ?? "";
+
+    return {
+      fromColumn: 0,
+      fromLine: 2,
+      toColumn: lastContentLine.length,
+      toLine: lines.length
+    };
+  }
+
+  if (closeLineIndex === 1) {
+    return {
+      fromColumn: 0,
+      fromLine: 2,
+      toColumn: 0,
+      toLine: 2
+    };
+  }
+
+  const lastContentLine = lines[closeLineIndex - 1] ?? "";
+
+  return {
+    fromColumn: 0,
+    fromLine: 2,
+    toColumn: lastContentLine.length,
+    toLine: closeLineIndex
+  };
+}
+
 function buildDecorations(
   view: EditorView,
   configuration: MarkdownEditorConfiguration,
-  resolveImageSource: MarkdownImageSourceResolver | undefined
+  resolveImageSource: MarkdownImageSourceResolver | undefined,
+  renderCodeFence: MarkdownCodeFenceRenderer | undefined
 ): DecorationSet {
   const builder = new RangeSetBuilder<Decoration>();
   const activeLine = view.state.doc.lineAt(view.state.selection.main.head).number;
   const lineBlockStates = analyzeVisibleMarkdownLineBlocks(view);
+  const renderedExternalCodeFenceBlocks = new Set<string>();
 
   for (const range of view.visibleRanges) {
     let position = range.from;
@@ -639,7 +722,14 @@ function buildDecorations(
         ? activeLine >= tableBlock.blockStart && activeLine <= tableBlock.blockEnd
         : false;
 
-      if (codeFence && shouldReplaceInactiveCodeFenceLine(codeFence.role, codeFenceIsActive)) {
+      if (codeFence && renderCodeFence && !codeFenceIsActive && canRenderCodeFence(renderCodeFence, codeFence)) {
+        const codeFenceKey = `${codeFence.blockStart}:${codeFence.blockEnd}`;
+        const shouldRenderWidget = !renderedExternalCodeFenceBlocks.has(codeFenceKey);
+        renderedExternalCodeFenceBlocks.add(codeFenceKey);
+        builder.add(line.from, line.to, Decoration.replace(
+          shouldRenderWidget ? { widget: new MarkdownExternalCodeFenceWidget(codeFence, renderCodeFence) } : {}
+        ));
+      } else if (codeFence && shouldReplaceInactiveCodeFenceLine(codeFence.role, codeFenceIsActive)) {
         builder.add(line.from, line.to, Decoration.replace(
           codeFence.role === "open" ? { widget: new MarkdownCodeFenceHeaderWidget(codeFence) } : {}
         ));
@@ -2056,6 +2146,359 @@ class MarkdownCodeFenceHeaderWidget extends WidgetType {
   }
 }
 
+class MarkdownExternalCodeFenceWidget extends WidgetType {
+  private disposed = false;
+
+  constructor(
+    private readonly codeFence: MarkdownCodeFenceBlockState,
+    private readonly renderCodeFence: MarkdownCodeFenceRenderer
+  ) {
+    super();
+  }
+
+  override eq(widget: WidgetType): boolean {
+    return widget instanceof MarkdownExternalCodeFenceWidget &&
+      widget.codeFence.content === this.codeFence.content &&
+      widget.codeFence.info === this.codeFence.info &&
+      widget.codeFence.language === this.codeFence.language &&
+      widget.renderCodeFence === this.renderCodeFence;
+  }
+
+  override toDOM(view: EditorView): HTMLElement {
+    this.disposed = false;
+    const block = document.createElement("span");
+    block.className = "tp-editor-renderer-block tp-editor-renderer-loading";
+    block.setAttribute("aria-label", "Rendered code block");
+    block.setAttribute("role", "group");
+
+    const toolbar = document.createElement("span");
+    toolbar.className = "tp-editor-renderer-toolbar";
+
+    const label = document.createElement("span");
+    label.className = "tp-editor-renderer-label";
+    label.textContent = readCodeFencePreviewLabel(this.codeFence);
+
+    const copyButton = createPreviewCopyButton({
+      className: "tp-editor-renderer-copy",
+      content: this.codeFence.content,
+      copiedAriaLabel: "Code copied",
+      copiedTitle: "Copied",
+      defaultAriaLabel: "Copy code",
+      defaultTitle: "Copy code",
+      text: "Copy"
+    });
+
+    toolbar.append(label, copyButton);
+
+    const body = document.createElement("span");
+    body.className = "tp-editor-renderer-body";
+    addCodeFenceSourceNavigation(body, view, this.codeFence);
+    renderExternalCodeFenceLoading(body);
+
+    block.append(toolbar, body);
+    void this.renderExternalPreview(block, body, label, view);
+    return block;
+  }
+
+  override destroy(): void {
+    this.disposed = true;
+  }
+
+  override get estimatedHeight(): number {
+    const lineCount = Math.max(1, this.codeFence.content.split(/\r?\n/).length);
+    return Math.min(
+      externalRendererEstimatedMaxHeightPx,
+      Math.max(externalRendererEstimatedMinHeightPx, 60 + lineCount * externalRendererLineEstimatedHeightPx)
+    );
+  }
+
+  override ignoreEvent(event: Event): boolean {
+    return isPreviewInteractiveEvent(event) || isCodeFenceSourceNavigationEvent(event);
+  }
+
+  private async renderExternalPreview(
+    block: HTMLElement,
+    body: HTMLElement,
+    label: HTMLElement,
+    view: EditorView
+  ): Promise<void> {
+    try {
+      const result = await this.renderCodeFence.render({
+        info: this.codeFence.info,
+        language: this.codeFence.language,
+        value: this.codeFence.content
+      });
+
+      if (this.disposed) {
+        return;
+      }
+
+      if (!result) {
+        renderExternalCodeFenceFallback(body, this.codeFence.content);
+        block.classList.remove("tp-editor-renderer-loading", "tp-editor-renderer-error");
+        block.classList.add("tp-editor-renderer-fallback");
+        view.requestMeasure();
+        return;
+      }
+
+      label.textContent = result.label || readCodeFencePreviewLabel(this.codeFence);
+      renderSanitizedMarkdownRendererHtml(body, result.html);
+      block.classList.remove("tp-editor-renderer-loading", "tp-editor-renderer-error", "tp-editor-renderer-fallback");
+      block.classList.add("tp-editor-renderer-ready");
+      view.requestMeasure();
+    } catch (error) {
+      if (this.disposed) {
+        return;
+      }
+
+      renderExternalCodeFenceError(body, readRendererErrorMessage(error));
+      block.classList.remove("tp-editor-renderer-loading", "tp-editor-renderer-ready");
+      block.classList.add("tp-editor-renderer-error");
+      view.requestMeasure();
+    }
+  }
+}
+
+function readCodeFencePreviewLabel(codeFence: MarkdownCodeFenceBlockState): string {
+  return codeFence.language || "Code";
+}
+
+function canRenderCodeFence(
+  renderer: MarkdownCodeFenceRenderer,
+  codeFence: MarkdownCodeFenceBlockState
+): boolean {
+  return renderer.canRender
+    ? renderer.canRender({
+      info: codeFence.info,
+      language: codeFence.language,
+      value: codeFence.content
+    })
+    : true;
+}
+
+function renderExternalCodeFenceLoading(body: HTMLElement): void {
+  body.className = "tp-editor-renderer-body tp-editor-renderer-placeholder";
+  body.textContent = "Rendering preview...";
+}
+
+function renderExternalCodeFenceFallback(body: HTMLElement, content: string): void {
+  body.className = "tp-editor-renderer-body tp-editor-renderer-source";
+  body.textContent = "";
+
+  const pre = document.createElement("pre");
+  const code = document.createElement("code");
+  code.textContent = content || " ";
+  pre.append(code);
+  body.append(pre);
+}
+
+function renderExternalCodeFenceError(body: HTMLElement, message: string): void {
+  body.className = "tp-editor-renderer-body tp-editor-renderer-placeholder";
+  body.textContent = `Renderer unavailable: ${message}`;
+}
+
+function renderSanitizedMarkdownRendererHtml(body: HTMLElement, html: string): void {
+  body.className = "tp-editor-renderer-body tp-editor-renderer-html";
+  body.textContent = "";
+  body.append(sanitizeMarkdownRendererHtml(html));
+}
+
+export function sanitizeMarkdownRendererHtml(html: string): DocumentFragment {
+  const fragment = document.createDocumentFragment();
+  const parserDocument = document.implementation.createHTMLDocument("markdown-renderer");
+  parserDocument.body.innerHTML = html;
+
+  for (const child of Array.from(parserDocument.body.childNodes)) {
+    const sanitized = sanitizeMarkdownRendererNode(child);
+
+    if (sanitized) {
+      fragment.append(sanitized);
+    }
+  }
+
+  return fragment;
+}
+
+function sanitizeMarkdownRendererNode(node: Node): Node | undefined {
+  if (node.nodeType === Node.TEXT_NODE) {
+    return document.createTextNode(node.textContent ?? "");
+  }
+
+  if (!(node instanceof Element)) {
+    return undefined;
+  }
+
+  const tagName = node.tagName.toLowerCase();
+
+  if (blockedRendererHtmlTags.has(tagName)) {
+    return undefined;
+  }
+
+  if (!allowedRendererHtmlTags.has(tagName)) {
+    const fragment = document.createDocumentFragment();
+
+    for (const child of Array.from(node.childNodes)) {
+      const sanitized = sanitizeMarkdownRendererNode(child);
+
+      if (sanitized) {
+        fragment.append(sanitized);
+      }
+    }
+
+    return fragment;
+  }
+
+  const element = document.createElement(tagName);
+  copySafeRendererAttributes(node, element);
+
+  for (const child of Array.from(node.childNodes)) {
+    const sanitized = sanitizeMarkdownRendererNode(child);
+
+    if (sanitized) {
+      element.append(sanitized);
+    }
+  }
+
+  return element;
+}
+
+const allowedRendererHtmlTags = new Set([
+  "b",
+  "br",
+  "caption",
+  "code",
+  "col",
+  "colgroup",
+  "dd",
+  "div",
+  "dl",
+  "dt",
+  "em",
+  "figcaption",
+  "figure",
+  "hr",
+  "i",
+  "li",
+  "ol",
+  "p",
+  "pre",
+  "small",
+  "span",
+  "strong",
+  "table",
+  "tbody",
+  "td",
+  "tfoot",
+  "th",
+  "thead",
+  "tr",
+  "ul"
+]);
+
+const blockedRendererHtmlTags = new Set([
+  "iframe",
+  "link",
+  "meta",
+  "object",
+  "script",
+  "style"
+]);
+
+const allowedRendererHtmlAttributes = new Set([
+  "aria-label",
+  "aria-labelledby",
+  "class",
+  "colspan",
+  "data-align",
+  "role",
+  "rowspan",
+  "title"
+]);
+
+function copySafeRendererAttributes(source: Element, target: HTMLElement): void {
+  for (const attribute of Array.from(source.attributes)) {
+    const name = attribute.name.toLowerCase();
+
+    if (!allowedRendererHtmlAttributes.has(name)) {
+      continue;
+    }
+
+    if (name === "class") {
+      const className = sanitizeRendererClassName(attribute.value);
+      if (className) {
+        target.className = className;
+      }
+      continue;
+    }
+
+    if ((name === "colspan" || name === "rowspan") && !/^[1-9][0-9]?$/.test(attribute.value)) {
+      continue;
+    }
+
+    target.setAttribute(name, attribute.value);
+  }
+}
+
+function sanitizeRendererClassName(value: string): string {
+  return value
+    .split(/\s+/)
+    .filter((className) => /^tp-renderer-[A-Za-z0-9_-]+$/.test(className))
+    .join(" ");
+}
+
+function addCodeFenceSourceNavigation(
+  body: HTMLElement,
+  view: EditorView,
+  codeFence: MarkdownCodeFenceBlockState
+): void {
+  body.dataset.codeFenceSource = "true";
+  body.title = "Edit code source";
+  body.addEventListener("mousedown", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+  });
+  body.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    focusMarkdownCodeFenceSource(view, codeFence);
+  });
+}
+
+function focusMarkdownCodeFenceSource(view: EditorView, codeFence: MarkdownCodeFenceBlockState): void {
+  if (codeFence.blockStart < 1 || codeFence.blockEnd > view.state.doc.lines || codeFence.blockStart > codeFence.blockEnd) {
+    return;
+  }
+
+  const lines: string[] = [];
+  for (let lineNumber = codeFence.blockStart; lineNumber <= codeFence.blockEnd; lineNumber += 1) {
+    lines.push(view.state.doc.line(lineNumber).text);
+  }
+
+  const sourceRange = findMarkdownCodeFenceSourceRange(lines);
+  if (!sourceRange) {
+    return;
+  }
+
+  const fromLine = view.state.doc.line(codeFence.blockStart + sourceRange.fromLine - 1);
+  const toLine = view.state.doc.line(codeFence.blockStart + sourceRange.toLine - 1);
+  const from = fromLine.from + Math.min(sourceRange.fromColumn, fromLine.length);
+  const to = toLine.from + Math.min(sourceRange.toColumn, toLine.length);
+
+  view.dispatch({
+    selection: { anchor: from, head: to },
+    effects: EditorView.scrollIntoView(from, { y: "center" })
+  });
+  view.focus();
+}
+
+function isCodeFenceSourceNavigationEvent(event: Event): boolean {
+  return event.target instanceof Element && Boolean(event.target.closest("[data-code-fence-source='true']"));
+}
+
+function readRendererErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
 interface PreviewCopyButtonOptions {
   readonly className: string;
   readonly content: string;
@@ -2663,6 +3106,107 @@ function markdownEditorTheme(configuration: MarkdownEditorConfiguration): Extens
     ".tp-editor-preview-copy:hover, .tp-editor-preview-copy[data-copied='true']": {
       color: "var(--tp-color-accent-strong)",
       backgroundColor: "var(--tp-color-surface-raised)"
+    },
+    ".tp-editor-renderer-block": {
+      display: "flex",
+      flexDirection: "column",
+      alignItems: "stretch",
+      width: "100%",
+      minWidth: "0",
+      minHeight: `${externalRendererEstimatedMinHeightPx}px`,
+      boxSizing: "border-box",
+      overflow: "hidden",
+      border: "1px solid var(--tp-color-code-block-border)",
+      borderLeft: "3px solid var(--tp-color-code-block-border)",
+      borderRadius: "var(--tp-radius-control)",
+      backgroundColor: "var(--tp-color-code-block)",
+      color: "var(--tp-color-text)",
+      fontFamily: "var(--tp-font-ui)"
+    },
+    ".tp-editor-renderer-toolbar": {
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: "10px",
+      width: "100%",
+      minWidth: "0",
+      minHeight: "36px",
+      boxSizing: "border-box",
+      padding: "6px 8px",
+      borderBottom: "1px solid var(--tp-color-code-block-border)",
+      backgroundColor: "var(--tp-color-code-toolbar)",
+      color: "var(--tp-color-text-muted)",
+      fontSize: "12px",
+      lineHeight: "1"
+    },
+    ".tp-editor-renderer-label": {
+      minWidth: "0",
+      overflow: "hidden",
+      textOverflow: "ellipsis",
+      whiteSpace: "nowrap",
+      fontWeight: "650",
+      letterSpacing: "0"
+    },
+    ".tp-editor-renderer-body": {
+      display: "block",
+      width: "100%",
+      minWidth: "0",
+      minHeight: "52px",
+      boxSizing: "border-box",
+      padding: "12px",
+      overflow: "auto",
+      cursor: "text"
+    },
+    ".tp-editor-renderer-placeholder": {
+      color: "var(--tp-color-text-muted)",
+      fontFamily: "ui-monospace, SFMono-Regular, Consolas, monospace",
+      fontSize: "13px",
+      lineHeight: "1.45"
+    },
+    ".tp-editor-renderer-html": {
+      color: "var(--tp-color-text)",
+      fontSize: "14px",
+      lineHeight: "1.5"
+    },
+    ".tp-editor-renderer-html p, .tp-editor-renderer-html ul, .tp-editor-renderer-html ol, .tp-editor-renderer-html pre, .tp-editor-renderer-html table, .tp-editor-renderer-html figure": {
+      margin: "0 0 10px"
+    },
+    ".tp-editor-renderer-html p:last-child, .tp-editor-renderer-html ul:last-child, .tp-editor-renderer-html ol:last-child, .tp-editor-renderer-html pre:last-child, .tp-editor-renderer-html table:last-child, .tp-editor-renderer-html figure:last-child": {
+      marginBottom: "0"
+    },
+    ".tp-editor-renderer-html pre, .tp-editor-renderer-source pre": {
+      maxWidth: "100%",
+      margin: "0",
+      overflow: "auto",
+      whiteSpace: "pre",
+      fontFamily: "ui-monospace, SFMono-Regular, Consolas, monospace",
+      fontSize: "13px",
+      lineHeight: "1.45"
+    },
+    ".tp-editor-renderer-html code, .tp-editor-renderer-source code": {
+      fontFamily: "ui-monospace, SFMono-Regular, Consolas, monospace"
+    },
+    ".tp-editor-renderer-html table": {
+      width: "100%",
+      minWidth: "320px",
+      borderCollapse: "collapse",
+      tableLayout: "auto"
+    },
+    ".tp-editor-renderer-html th, .tp-editor-renderer-html td": {
+      padding: "7px 9px",
+      border: "1px solid var(--tp-color-table-border)",
+      textAlign: "left",
+      verticalAlign: "top"
+    },
+    ".tp-editor-renderer-html th": {
+      backgroundColor: "var(--tp-color-table-header)",
+      fontWeight: "650"
+    },
+    ".tp-editor-renderer-error": {
+      borderColor: "var(--tp-color-danger)"
+    },
+    ".tp-editor-renderer-error .tp-editor-renderer-toolbar": {
+      borderBottomColor: "var(--tp-color-danger)"
     },
     ".tp-editor-table-row": {
       backgroundColor: "var(--tp-color-table-row)",
