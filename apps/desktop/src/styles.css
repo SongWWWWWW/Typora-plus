@@ -345,6 +345,13 @@ button {
   font-size: 12px;
 }
 
+.tp-empty-row {
+  min-height: 32px;
+  padding: 7px 8px;
+  color: var(--tp-color-text-soft);
+  font-size: 13px;
+}
+
 .tp-result-row {
   display: grid;
   grid-template-columns: 34px minmax(0, 1fr);

@@ -7,6 +7,7 @@ import type {
   RecentResource,
   TextFileModel,
   TyporaPlusConfiguration,
+  WorkspaceIndexedLink,
   WorkspaceIndexStatus,
   WorkspaceSearchResult,
   WorkspaceState
@@ -20,6 +21,7 @@ import {
   FilePlus,
   Folder,
   FolderOpen,
+  Link2,
   ListTree,
   Moon,
   PanelLeft,
@@ -35,7 +37,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import type { WorkbenchServices } from "./services";
 
-type SideView = "files" | "search" | "outline";
+type SideView = "files" | "search" | "outline" | "backlinks";
 
 export interface WorkbenchApplicationProps {
   readonly services: WorkbenchServices;
@@ -77,6 +79,12 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
       ? services.indexService.query(searchQuery)
       : searchDocument(model.value, searchQuery),
     [indexStatus.updatedAt, model.value, searchQuery, services, workspace.files]
+  );
+  const backlinks = useMemo(
+    () => workspace.files && model.uri.scheme === "file"
+      ? services.indexService.getBacklinks(model.uri)
+      : [],
+    [indexStatus.updatedAt, model.uri, services, workspace.files]
   );
 
   useEffect(() => services.configurationService.onDidChangeConfiguration(setConfiguration).dispose, [services]);
@@ -220,6 +228,12 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
       run: () => toggleSideView("outline", sideView, setSideView)
     }));
     disposables.add(services.commandService.registerCommand({
+      id: "workbench.sidebar.backlinks",
+      title: "Show Backlinks",
+      category: "Workbench",
+      run: () => toggleSideView("backlinks", sideView, setSideView)
+    }));
+    disposables.add(services.commandService.registerCommand({
       id: "file.save",
       title: "Save",
       category: "File",
@@ -345,6 +359,7 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
             outline={outline}
             searchQuery={searchQuery}
             searchResults={searchResults}
+            backlinks={backlinks}
             indexStatus={indexStatus}
             onSearchQueryChange={setSearchQuery}
             onClose={() => setSideView(null)}
@@ -360,6 +375,14 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
                 const opened = await services.textFileService.openFile(result.uri);
                 services.recentService.addRecentFile(opened.uri, opened.name);
                 window.setTimeout(() => editorRef.current?.scrollToLine(result.line), 0);
+              }, setOperationError, setSaveConflict);
+            }}
+            onOpenBacklink={(link) => {
+              void runWorkbenchAction(async () => {
+                setSaveConflict(undefined);
+                const opened = await services.textFileService.openFile(link.uri);
+                services.recentService.addRecentFile(opened.uri, opened.name);
+                window.setTimeout(() => editorRef.current?.scrollToLine(link.line), 0);
               }, setOperationError, setSaveConflict);
             }}
             onOpenWorkspace={() => services.commandService.executeCommand("file.openWorkspace")}
@@ -542,6 +565,9 @@ function ActivityBar({
       <IconButton title="Outline" active={activeView === "outline"} onClick={() => onToggle("outline")}>
         <ListTree size={19} />
       </IconButton>
+      <IconButton title="Backlinks" active={activeView === "backlinks"} onClick={() => onToggle("backlinks")}>
+        <Link2 size={19} />
+      </IconButton>
       <div className="tp-activitybar-spacer" />
       <IconButton title="Command Palette" onClick={onOpenPalette}>
         <CommandIcon size={19} />
@@ -559,11 +585,13 @@ function Sidebar({
   outline,
   searchQuery,
   searchResults,
+  backlinks,
   indexStatus,
   onSearchQueryChange,
   onClose,
   onSelectLine,
   onOpenSearchResult,
+  onOpenBacklink,
   onOpenWorkspace,
   onOpenRecentWorkspace,
   onRefreshWorkspace,
@@ -577,11 +605,13 @@ function Sidebar({
   readonly outline: readonly OutlineEntry[];
   readonly searchQuery: string;
   readonly searchResults: readonly WorkbenchSearchResult[];
+  readonly backlinks: readonly WorkspaceIndexedLink[];
   readonly indexStatus: WorkspaceIndexStatus;
   readonly onSearchQueryChange: (value: string) => void;
   readonly onClose: () => void;
   readonly onSelectLine: (line: number) => void;
   readonly onOpenSearchResult: (result: WorkbenchSearchResult) => void;
+  readonly onOpenBacklink: (link: WorkspaceIndexedLink) => void;
   readonly onOpenWorkspace: () => void;
   readonly onOpenRecentWorkspace: (recent: RecentResource) => void;
   readonly onRefreshWorkspace: () => void;
@@ -617,6 +647,13 @@ function Sidebar({
         />
       ) : null}
       {view === "outline" ? <OutlinePanel outline={outline} onSelectLine={onSelectLine} /> : null}
+      {view === "backlinks" ? (
+        <BacklinksPanel
+          backlinks={backlinks}
+          indexStatus={indexStatus}
+          onOpenBacklink={onOpenBacklink}
+        />
+      ) : null}
     </aside>
   );
 }
@@ -877,6 +914,40 @@ function OutlinePanel({
   );
 }
 
+function BacklinksPanel({
+  backlinks,
+  indexStatus,
+  onOpenBacklink
+}: {
+  readonly backlinks: readonly WorkspaceIndexedLink[];
+  readonly indexStatus: WorkspaceIndexStatus;
+  readonly onOpenBacklink: (link: WorkspaceIndexedLink) => void;
+}) {
+  return (
+    <div className="tp-sidebar-content">
+      {indexStatus.state === "indexing" ? (
+        <div className="tp-search-status">{indexStatus.indexedFiles}/{indexStatus.totalFiles} indexed</div>
+      ) : null}
+      <div className="tp-result-list">
+        {backlinks.length > 0 ? backlinks.map((link, index) => (
+          <button
+            className="tp-result-row"
+            key={backlinkKey(link, index)}
+            type="button"
+            onClick={() => onOpenBacklink(link)}
+          >
+            <span className="tp-result-line">{link.line}</span>
+            <span className="tp-result-body">
+              <small>{link.relativePath}</small>
+              <span className="tp-result-preview">{formatBacklinkPreview(link)}</span>
+            </span>
+          </button>
+        )) : <div className="tp-empty-row">No backlinks</div>}
+      </div>
+    </div>
+  );
+}
+
 function Statusbar({
   model,
   stats,
@@ -1121,6 +1192,14 @@ function searchResultKey(result: WorkbenchSearchResult): string {
     : `${result.line}-${result.preview}`;
 }
 
+function backlinkKey(link: WorkspaceIndexedLink, index: number): string {
+  return `${link.uri.toString()}-${link.line}-${link.kind}-${link.target}-${link.label}-${index}`;
+}
+
+function formatBacklinkPreview(link: WorkspaceIndexedLink): string {
+  return link.label.trim() || link.target;
+}
+
 function filterCommands(
   commands: readonly { readonly id: string; readonly title: string; readonly category?: string }[],
   query: string
@@ -1199,6 +1278,8 @@ function sidebarTitle(view: SideView): string {
       return "Search";
     case "outline":
       return "Outline";
+    case "backlinks":
+      return "Backlinks";
   }
 }
 
