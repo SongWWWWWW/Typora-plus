@@ -80,7 +80,7 @@ Keyboard-driven list surfaces share a small Workbench navigation model. Command 
 
 Export is a provider-backed platform service. `IExportService` owns provider registration, duplicate-format rejection, save routing, and provider context such as resource resolution and asset mode. The Markdown package contributes the current HTML provider using `marked`, while the Electron main process owns the save dialog and bounded file writes. When export providers need note resources, `IExportService` injects a resolver backed by `IResourceService` into provider input. When native saving is available, providers receive file asset mode; browser fallback uses inline mode so a single downloaded document remains usable. Extension runtime export providers register through `ExtensionContext.exports` and share the same provider lifecycle and cleanup path as other runtime contributions. The HTML provider uses a safe renderer that escapes raw HTML, drops unsafe link/image targets, pre-collects safe relative Markdown image tokens, and either rewrites resolved workspace images to sibling export assets or embeds them as data URLs. Missing or unavailable resources fall back to the existing safe relative image path instead of blocking export. Native export asset writes are bounded by shell configuration, reject invalid paths, reject non-image MIME types, and keep all asset paths inside the chosen export directory. Native saving only supports formats present in the desktop export configuration, so new runtime formats need matching shell support before they can use the native save dialog. Workbench registers an `Export HTML` command and toolbar action but does not render Markdown, resolve image paths, or write exported files directly.
 
-Markdown renderer extensibility is also provider-backed. `IMarkdownRendererService` keeps renderer metadata separate from executable providers, mirroring the command metadata/handler split and the export provider boundary. Manifest contributions describe renderer id, label, block/inline kind, optional language, and priority; runtime providers register through `ExtensionContext.markdown` after activation. When `render()` is called for a known renderer without a provider, the service invokes its activation handler and retries provider lookup before failing. Unknown renderers do not trigger activation. `getRenderers()` reports whether a provider is available without exposing provider functions to Workbench callers. Provider output is not inserted into the DOM by the platform service; future editor integration must own sanitization and placement before any rendered HTML reaches a preview surface.
+Markdown renderer extensibility is also provider-backed. `IMarkdownRendererService` keeps renderer metadata separate from executable providers, mirroring the command metadata/handler split and the export provider boundary. Manifest contributions describe renderer id, label, block/inline kind, optional language, and priority; runtime providers register through `ExtensionContext.markdown` after activation. When `render()` is called for a known renderer without a provider, the service invokes its activation handler and retries provider lookup before failing. Unknown renderers do not trigger activation. `getRenderers()` reports whether a provider is available without exposing provider functions to Workbench callers. The platform service never inserts provider output into the DOM. Workbench adapts registered block renderers with matching code-fence languages into the editor through a `MarkdownCodeFenceRenderer` callback; the editor owns the capability gate, async preview widget lifecycle, source navigation, and HTML sanitization before provider output reaches the live-preview surface.
 
 Planned services:
 
@@ -98,7 +98,7 @@ Current features:
 - unified live preview block-state analysis with normalized visible editor ranges
 - heading/quote/list/fence line styling
 - inactive Markdown marker soft hiding for headings, lists, quotes, fences, links, and strong emphasis
-- code fence block styling with visible-range-aware fence state tracking and inactive language/copy widgets
+- code fence block styling with visible-range-aware fence state tracking, inactive language/copy widgets, and provider-backed previews for matching code-fence languages with sanitized HTML and source-focused click editing
 - table block styling with code-fence-aware table detection, escaped-pipe- and inline-code-aware inactive previews, targeted row/column insertion and deletion controls, column alignment controls, and source-focused cell navigation
 - standalone image preview cards with workspace-backed local image resolution and direct inline/blob rendering
 - KaTeX-backed display math preview blocks with TeX copy controls, render diagnostics, and source-focused click editing
@@ -120,11 +120,11 @@ Extensions should run out of process once external extension code loading is imp
 - menus
 - keybindings
 - themes
-- Markdown renderer contributions and runtime renderer providers
+- Markdown renderer contributions, runtime renderer providers, and sanitized code-fence preview integration
 - activation events
 - activation context with constrained command registration, command execution, command metadata reads, extension-owned context keys, export-provider registration, Markdown renderer provider registration, and extension-owned subscriptions
 
-Future renderer work should connect registered providers into editor preview surfaces with sanitization before DOM insertion.
+Registered block Markdown renderer providers are connected to code-fence preview surfaces through the Workbench adapter and editor-owned sanitizer. Future renderer work should extend additional preview surfaces without giving extensions direct DOM access.
 
 Extensions must not receive direct DOM or unrestricted Node access.
 

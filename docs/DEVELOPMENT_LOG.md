@@ -2394,3 +2394,36 @@ Known limitations:
 - Registered Markdown renderer providers are still not connected to CodeMirror live-preview surfaces.
 - Future editor integration must sanitize provider output before any preview DOM insertion.
 - Third-party extension host code loading remains future work.
+
+## 2026-06-07 - P2 Markdown Renderer Preview Bridge
+
+Completed:
+
+- Added an editor `MarkdownCodeFenceRenderer` callback contract with a synchronous capability gate and asynchronous render path.
+- Connected Workbench to `IMarkdownRendererService` through a focused adapter that selects matching block renderers by code-fence language and preserves the active document URI.
+- Rendered matching inactive code fences as live-preview widgets with loading, fallback, error, copy, and source-focused click editing states.
+- Sanitized provider HTML inside the editor before DOM insertion, with tag, attribute, and `tp-renderer-*` class allowlists.
+- Kept unmatched code fences on the existing source-oriented preview path instead of routing every fence through provider fallback.
+- Made long code-fence previews visible-range-aware so the preview widget can mount on the first visible line when the opening fence is outside the viewport.
+- Added editor tests for code-fence source ranges and renderer HTML sanitization.
+- Added Workbench tests for renderer selection, lazy activation through the platform service, and active document context propagation.
+
+Quality gate:
+
+- `npm run verify`: passed, 225 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- Browser smoke check at `http://127.0.0.1:5173/`: Workbench loaded with shell and editor, no renderer runtime errors, and no console errors.
+
+Review:
+
+- The editor still has no dependency on platform or Workbench services; it receives a narrow renderer callback.
+- Workbench adapts platform renderer metadata/providers without parsing or sanitizing provider HTML.
+- The platform renderer service still owns metadata/provider activation only and never writes DOM.
+- Provider HTML is sanitized before preview insertion, so renderer providers cannot inject scripts, event handlers, styles, links, images, or arbitrary classes into the editor surface.
+- No hard-coded renderer ids, languages, filesystem paths, storage paths, new packages, or extra documentation files were introduced.
+
+Known limitations:
+
+- No built-in Markdown renderer provider is contributed yet, so browser smoke currently verifies shell/editor stability while unit tests cover the renderer bridge.
+- Inline renderer contributions are registered by the platform but are not connected to an editor preview surface yet.
+- Third-party extension host code loading remains future work.
