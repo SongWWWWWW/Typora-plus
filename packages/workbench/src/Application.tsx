@@ -18,6 +18,7 @@ import {
   ListTree,
   Moon,
   PanelLeft,
+  RefreshCw,
   Save,
   Search,
   Sun,
@@ -133,6 +134,24 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
           const opened = await services.textFileService.openFile(workspaceFiles.files[0].uri);
           services.recentService.addRecentFile(opened.uri, opened.name);
         }
+      }, setOperationError)
+    }));
+    disposables.add(services.commandService.registerCommand({
+      id: "file.refreshWorkspace",
+      title: "Refresh Workspace",
+      category: "File",
+      run: () => runWorkbenchAction(async () => {
+        const workspaceFiles = await services.fileService.refreshWorkspace();
+
+        if (!workspaceFiles) {
+          return;
+        }
+
+        services.workspaceService.setWorkspace({
+          name: workspaceFiles.root.name,
+          rootUri: workspaceFiles.root.uri,
+          files: workspaceFiles
+        });
       }, setOperationError)
     }));
     disposables.add(services.commandService.registerCommand({
@@ -289,6 +308,7 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
             onClose={() => setSideView(null)}
             onSelectLine={(line) => editorRef.current?.scrollToLine(line)}
             onOpenWorkspace={() => services.commandService.executeCommand("file.openWorkspace")}
+            onRefreshWorkspace={() => services.commandService.executeCommand("file.refreshWorkspace")}
             onOpenFile={(entry) => {
               void runWorkbenchAction(async () => {
                 const opened = await services.textFileService.openFile(entry.uri);
@@ -437,6 +457,7 @@ function Sidebar({
   onClose,
   onSelectLine,
   onOpenWorkspace,
+  onRefreshWorkspace,
   onOpenFile
 }: {
   readonly view: SideView;
@@ -451,6 +472,7 @@ function Sidebar({
   readonly onClose: () => void;
   readonly onSelectLine: (line: number) => void;
   readonly onOpenWorkspace: () => void;
+  readonly onRefreshWorkspace: () => void;
   readonly onOpenFile: (entry: FileTreeEntry) => void;
 }) {
   return (
@@ -468,6 +490,7 @@ function Sidebar({
           recents={recents}
           fileServiceAvailable={fileServiceAvailable}
           onOpenWorkspace={onOpenWorkspace}
+          onRefreshWorkspace={onRefreshWorkspace}
           onOpenFile={onOpenFile}
         />
       ) : null}
@@ -490,6 +513,7 @@ function FilesPanel({
   recents,
   fileServiceAvailable,
   onOpenWorkspace,
+  onRefreshWorkspace,
   onOpenFile
 }: {
   readonly model: TextFileModel;
@@ -497,6 +521,7 @@ function FilesPanel({
   readonly recents: readonly RecentResource[];
   readonly fileServiceAvailable: boolean;
   readonly onOpenWorkspace: () => void;
+  readonly onRefreshWorkspace: () => void;
   readonly onOpenFile: (entry: FileTreeEntry) => void;
 }) {
   const workspaceFiles = workspace.files;
@@ -513,6 +538,15 @@ function FilesPanel({
       >
         <FolderOpen size={16} />
         <span>Open workspace</span>
+      </button>
+      <button
+        className="tp-sidebar-action"
+        type="button"
+        disabled={!workspace.rootUri}
+        onClick={onRefreshWorkspace}
+      >
+        <RefreshCw size={16} />
+        <span>Refresh workspace</span>
       </button>
       {workspaceFiles ? (
         <div className="tp-file-tree">

@@ -4,6 +4,7 @@ import { BrowserWindow, dialog, ipcMain, type OpenDialogOptions, type SaveDialog
 
 export const nativeFileIpcChannels = {
   openWorkspace: "typora-plus:workspace:open",
+  refreshWorkspace: "typora-plus:workspace:refresh",
   readFile: "typora-plus:file:read",
   writeFile: "typora-plus:file:write",
   saveFileAs: "typora-plus:file:saveAs",
@@ -63,6 +64,21 @@ export function registerNativeFileIpc(config: NativeWorkspaceConfig): void {
     }
 
     workspaceRoot = path.resolve(result.filePaths[0]);
+    allowedFiles.clear();
+
+    const workspace = await buildWorkspaceFileTree(workspaceRoot, config);
+    for (const file of workspace.files) {
+      allowedFiles.add(pathFromFileUri(file.uri));
+    }
+
+    return workspace;
+  });
+
+  ipcMain.handle(nativeFileIpcChannels.refreshWorkspace, async () => {
+    if (!workspaceRoot) {
+      return undefined;
+    }
+
     allowedFiles.clear();
 
     const workspace = await buildWorkspaceFileTree(workspaceRoot, config);

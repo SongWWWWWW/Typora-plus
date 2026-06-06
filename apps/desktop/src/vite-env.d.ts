@@ -6,6 +6,7 @@ interface Window {
     readonly fileSystem?: {
       readonly isAvailable: boolean;
       openWorkspace(): Promise<unknown>;
+      refreshWorkspace(): Promise<unknown>;
       readFile(uri: string): Promise<unknown>;
       writeFile(uri: string, value: string): Promise<unknown>;
       saveFileAs(defaultName: string, value: string): Promise<unknown>;

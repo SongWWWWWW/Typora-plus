@@ -157,6 +157,9 @@ function createMemoryHost() {
     async openWorkspace() {
       return undefined;
     },
+    async refreshWorkspace() {
+      return undefined;
+    },
     async readFile(uri) {
       const value = files.get(uri);
 

@@ -28,6 +28,7 @@ export interface TextFileContent {
 export interface NativeFileSystemHost {
   readonly isAvailable: boolean;
   openWorkspace(): Promise<WorkspaceFileTree | undefined>;
+  refreshWorkspace(): Promise<WorkspaceFileTree | undefined>;
   readFile(uri: string): Promise<TextFileContent>;
   writeFile(uri: string, value: string): Promise<TextFileContent>;
   saveFileAs(defaultName: string, value: string): Promise<TextFileContent | undefined>;
@@ -58,6 +59,7 @@ export interface SerializedTextFileContent {
 export interface NativeFileSystemBridge {
   readonly isAvailable: boolean;
   openWorkspace(): Promise<SerializedWorkspaceFileTree | undefined>;
+  refreshWorkspace(): Promise<SerializedWorkspaceFileTree | undefined>;
   readFile(uri: string): Promise<SerializedTextFileContent>;
   writeFile(uri: string, value: string): Promise<SerializedTextFileContent>;
   saveFileAs(defaultName: string, value: string): Promise<SerializedTextFileContent | undefined>;
@@ -68,6 +70,7 @@ export interface IFileService {
   isAvailable(): boolean;
   getWorkspaceFiles(): WorkspaceFileTree | undefined;
   openWorkspace(): Promise<WorkspaceFileTree | undefined>;
+  refreshWorkspace(): Promise<WorkspaceFileTree | undefined>;
   openFile(uri: URIType): Promise<TextFileContent>;
   saveFile(uri: URIType, value: string): Promise<TextFileContent>;
   saveFileAs(defaultName: string, value: string): Promise<TextFileContent | undefined>;
@@ -97,6 +100,16 @@ export class NativeFileService implements IFileService {
     }
 
     this.workspaceFiles = await this.host.openWorkspace();
+    this.emitter.fire(this.workspaceFiles);
+    return this.workspaceFiles;
+  }
+
+  async refreshWorkspace(): Promise<WorkspaceFileTree | undefined> {
+    if (!this.host?.isAvailable) {
+      return undefined;
+    }
+
+    this.workspaceFiles = await this.host.refreshWorkspace();
     this.emitter.fire(this.workspaceFiles);
     return this.workspaceFiles;
   }
@@ -160,6 +173,10 @@ export function createNativeFileSystemHost(): NativeFileSystemHost | undefined {
     isAvailable: bridge.isAvailable,
     async openWorkspace() {
       const workspace = await bridge.openWorkspace();
+      return workspace ? reviveWorkspaceFileTree(workspace) : undefined;
+    },
+    async refreshWorkspace() {
+      const workspace = await bridge.refreshWorkspace();
       return workspace ? reviveWorkspaceFileTree(workspace) : undefined;
     },
     async readFile(uri) {
