@@ -1632,3 +1632,33 @@ Review:
 Known limitations:
 
 - Browser verification covers Settings persistence and layout; native workspace reindex behavior is covered by platform tests rather than a mounted Electron workspace fixture.
+
+## 2026-06-07 - P2 Centralized Configuration Bounds
+
+Completed:
+
+- Added platform-owned numeric constraints for editor font size, line height, editor width, auto-save delay, workspace search file size, and workspace search result count.
+- Updated persisted configuration sanitization so out-of-range stored positive numeric values are clamped before consumers read them.
+- Reused platform numeric constraints in the Workbench Settings model instead of duplicating local UI bounds.
+- Centralized megabyte conversion constants for workspace search file-size display and storage conversion.
+- Reused `defaultConfiguration.workspace` values for default workspace index service limits.
+- Added platform coverage for clamping out-of-range stored numeric configuration values.
+
+Quality gate:
+
+- `npm run verify`: passed, 137 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Browser regression: Settings numeric fields clamped Font Size `999` to `24` and Search File Limit `100` to `20`, then restored and persisted the original values.
+- Desktop 1280px and mobile 390px viewport checks: filtered Settings surfaces fit without horizontal overflow or new console errors.
+
+Review:
+
+- Numeric behavior defaults and bounds now live in `packages/platform/src/configuration.ts`, matching the rule that platform behavior should not be owned by Workbench JSX.
+- Settings remains a presentation and coordination surface; it imports configuration constraints and delegates number clamping to the platform helper.
+- Stored configuration, UI controls, and index service defaults now read from the same platform source for shared workspace limits.
+- No new visual tokens, storage backends, hard-coded paths, or documentation files were introduced.
+
+Known limitations:
+
+- Numeric constraints are static platform metadata for now; a future extension or policy layer could expose contributed setting schemas if the settings system grows.

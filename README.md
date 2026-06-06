@@ -43,9 +43,9 @@ P2 main progress is implemented:
 - saved workspace files, including new save-as files after workspace catch-up, refresh their search, tag, and backlink index entries immediately after successful save
 - workspace index storage and query behavior sit behind a provider boundary, with the current in-memory provider ready to be replaced by SQLite
 - platform-level keybinding service for command execution, with Workbench shortcut defaults, active shortcut labels, user-editable overrides, and conflict confirmation
-- persisted configuration service for appearance, editor, including auto-save delay, and workspace preferences, with Electron native storage and browser fallback
+- persisted configuration service for appearance, editor, including auto-save delay, and workspace preferences, with platform-owned numeric constraints, stored-value clamping, Electron native storage, and browser fallback
 - workspace search and attachment settings are applied to platform services when preferences change
-- Settings preferences dialog with setting search and section navigation for appearance, editor, auto-save delay, workspace, and searchable keybinding options by command or shortcut label, including modified-only filtering and reset-all cleanup, opened from the activity bar, command palette, or `Ctrl+,`
+- Settings preferences dialog with setting search and section navigation for appearance, editor, auto-save delay, workspace, and searchable keybinding options by command or shortcut label, including modified-only filtering, reset-all cleanup, and numeric controls derived from platform configuration bounds, opened from the activity bar, command palette, or `Ctrl+,`
 
 ## Commands
 
