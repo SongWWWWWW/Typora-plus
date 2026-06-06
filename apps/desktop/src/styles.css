@@ -648,6 +648,13 @@ button {
   white-space: nowrap;
 }
 
+.tp-command-empty {
+  min-height: 36px;
+  padding: 9px;
+  color: var(--tp-color-text-soft);
+  font-size: 13px;
+}
+
 .tp-quick-row {
   display: grid;
   grid-template-columns: 20px minmax(120px, 0.8fr) minmax(0, 1.4fr);

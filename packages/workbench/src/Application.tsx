@@ -39,6 +39,7 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
+import { filterCommandPaletteCommands } from "./commandPaletteModel";
 import { updateSavedFileIndex } from "./savedFileIndexing";
 import { SettingsDialog } from "./SettingsDialog";
 import type { WorkbenchServices } from "./services";
@@ -1178,7 +1179,12 @@ function CommandPalette({
 }) {
   const [query, setQuery] = useState("");
   const inputRef = useRef<HTMLInputElement | null>(null);
-  const filteredCommands = useMemo(() => filterCommands(commands, query), [commands, query]);
+  const filteredCommands = useMemo(
+    () => filterCommandPaletteCommands(commands, query, {
+      getKeybindingLabel: (command) => getKeybindingLabel(command.id)
+    }),
+    [commands, getKeybindingLabel, query]
+  );
 
   useEffect(() => {
     if (!open) {
@@ -1227,6 +1233,9 @@ function CommandPalette({
               </button>
             );
           })}
+          {filteredCommands.length === 0 ? (
+            <div className="tp-command-empty">No matching commands</div>
+          ) : null}
         </div>
       </section>
     </div>
@@ -1362,22 +1371,6 @@ function formatBacklinkPreview(link: WorkspaceIndexedLink): string {
 
 function tagResourceKey(tag: WorkspaceIndexedTag, index: number): string {
   return `${tag.uri.toString()}-${tag.line}-${tag.tag}-${index}`;
-}
-
-function filterCommands(
-  commands: readonly { readonly id: string; readonly title: string; readonly category?: string }[],
-  query: string
-) {
-  const normalizedQuery = query.trim().toLowerCase();
-
-  if (!normalizedQuery) {
-    return commands;
-  }
-
-  return commands.filter((command) => {
-    const haystack = `${command.title} ${command.category ?? ""} ${command.id}`.toLowerCase();
-    return haystack.includes(normalizedQuery);
-  });
 }
 
 function filterFiles(files: readonly FileTreeEntry[], query: string): FileTreeEntry[] {
