@@ -16,6 +16,7 @@ P0/P1 are implemented:
 - code fence block styling
 - Markdown table block styling
 - standalone image preview cards
+- KaTeX-backed display math preview blocks
 - focus mode and typewriter mode
 - command palette, sidebar, outline, current-note search
 - browser draft persistence

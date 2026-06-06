@@ -384,3 +384,33 @@ Known limitations:
 
 - The analyzer is still regex-based; parser-backed position mapping remains planned.
 - Visible-range analysis still scans preceding lines to recover fence/table context.
+
+## 2026-06-06 - P2 Display Math Preview Blocks
+
+Completed:
+
+- Added display math block state to the unified live preview analyzer.
+- Added `analyzeMarkdownMathBlocks` for focused math block tests.
+- Rendered inactive `$$` blocks through KaTeX using MathML output.
+- Kept the full math source editable whenever the cursor is inside the math block.
+- Added math block theme tokens and preview styling.
+
+Quality gate:
+
+- `npm run typecheck`: passed
+- `npm test`: passed, 47 tests
+- `npm run verify`: passed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- Production browser preview: passed at `http://127.0.0.1:4173`
+
+Review:
+
+- Math rendering uses KaTeX rather than a hand-rolled formula renderer.
+- The feature stays in the editor presentation layer and does not change the Markdown text model.
+- Code fences still take precedence, so math-like text inside code blocks is not restyled.
+
+Known limitations:
+
+- Inline math is not yet rendered.
+- The display math parser remains regex-based pending parser-backed position mapping.
+- KaTeX is currently rendered as MathML without the full KaTeX CSS layer.
