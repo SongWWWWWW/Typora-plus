@@ -1507,3 +1507,33 @@ Known limitations:
 
 - Keybinding search is deterministic term matching rather than fuzzy ranking.
 - The keybinding editor still records single-stroke shortcuts only; multi-step chord shortcuts remain future work.
+
+## 2026-06-06 - P2 Command Palette Shortcut Search
+
+Completed:
+
+- Added a focused command palette model for filtering command rows.
+- Extended command palette search to include command title, category, command id, active shortcut labels, and expanded shortcut labels.
+- Added an explicit `No matching commands` empty state when command palette search has no results.
+- Removed the inline command filtering helper from `Application.tsx`.
+- Added focused Workbench model coverage for command/category/id matching and shortcut-label matching.
+
+Quality gate:
+
+- `npm run test -- --run packages/workbench/src/commandPaletteModel.test.ts`: passed, 3 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 131 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed
+- Browser regression: `ctrl shift p` found Command Palette, `ctrl+p` found Quick Open, `workbench ctrl` found matching Workbench shortcuts, and `zzzz` showed `No matching commands`.
+- Desktop 1280px and mobile 390px viewport checks: command palette input, list, rows, and empty state had no horizontal overflow and no console errors were reported.
+
+Review:
+
+- Command palette filtering now lives in `commandPaletteModel.ts`, keeping `Application.tsx` focused on shell composition.
+- The model consumes active labels supplied by `IKeybindingService`; it does not maintain a duplicate shortcut registry.
+- The empty state keeps the palette informative without adding extra controls or persistent state.
+
+Known limitations:
+
+- Command palette search remains deterministic term matching rather than fuzzy ranking.

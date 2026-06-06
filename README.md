@@ -19,7 +19,7 @@ P0/P1 are implemented:
 - KaTeX-backed display math preview blocks with TeX copy controls, error diagnostics, and source-focused click editing
 - KaTeX-backed inline math previews with error diagnostics and source-focused click editing
 - focus mode and typewriter mode
-- command palette, sidebar, outline, current-note search
+- command palette with command/category/shortcut search, sidebar, outline, current-note search
 - browser draft persistence
 - Electron shell skeleton
 - unit tests and build verification
