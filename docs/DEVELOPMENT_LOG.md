@@ -1285,4 +1285,37 @@ Review:
 Known limitations:
 
 - The browser automation environment could not exercise text entry into the numeric spinbutton because its fill/type helper requires a virtual clipboard. The control rendered correctly and non-text setting paths were verified interactively.
-- User-editable keybindings remain future work; Settings currently exposes application preferences only.
+
+## 2026-06-06 - P2 Editable Keybinding Overrides
+
+Completed:
+
+- Added user keybinding overrides to persisted, validated configuration.
+- Split keybinding resolution into default Workbench contributions and higher-priority user rules.
+- Added keybinding event capture helpers and duplicate override replacement behavior.
+- Added a Keybindings section to Settings with command labels, current shortcuts, Record, and Reset actions.
+- Synced configuration changes into `IKeybindingService` before Workbench rerenders shortcut labels.
+- Added platform tests for persisted keybinding overrides, runtime validation, user-rule priority, replacement, and event conversion.
+- Added Workbench tests for override insertion, duplicate shortcut movement, reset behavior, and recordable shortcut constraints.
+
+Quality gate:
+
+- `npm run test -- --run packages/platform/src/platform.test.ts packages/workbench/src/keybindingSettings.test.ts`: passed, 33 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 119 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed
+- Browser regression: recorded `Quick Open` as `Ctrl+Alt+O`, verified it opened Quick Open, reload preserved the override, Reset restored `Ctrl+P`, and no console errors or horizontal overflow occurred.
+- Mobile 390px viewport check: keybinding rows collapsed to two-column layout without horizontal overflow.
+
+Review:
+
+- Default keybindings remain Workbench contributions; user overrides are configuration-backed and applied as higher-priority rules rather than mutating defaults.
+- Workbench still executes keyboard shortcuts through `ICommandService`; Settings only edits persisted preference data.
+- Override list updates are centralized in `keybindingSettings.ts`, avoiding scattered duplicate-removal logic.
+- The browser verification reset the temporary shortcut after testing, so no local test override was left behind.
+
+Known limitations:
+
+- The keybinding editor records single-stroke shortcuts only; multi-step chord shortcuts remain future work.
+- Conflict handling currently moves an existing user override with the same key to the newly recorded command. A richer conflict preview can be added later without changing the service contract.
