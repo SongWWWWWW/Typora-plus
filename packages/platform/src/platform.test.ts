@@ -695,6 +695,71 @@ describe("markdown renderers", () => {
     expect(service.getRenderers()).toEqual([]);
   });
 
+  it("activates renderer contributions before rendering", async () => {
+    const activationCalls: string[] = [];
+    const service = new MarkdownRendererService({
+      activationHandler(rendererId) {
+        activationCalls.push(rendererId);
+        service.registerRendererProvider({
+          id: rendererId,
+          render(input) {
+            return { html: `<figure>${input.value}</figure>` };
+          }
+        });
+      }
+    });
+
+    service.registerRendererContribution({
+      id: "notes.mermaid",
+      label: "Mermaid",
+      kind: "block",
+      language: "mermaid"
+    });
+
+    await expect(service.render({
+      value: "graph TD"
+    }, "notes.mermaid")).resolves.toEqual({
+      html: "<figure>graph TD</figure>"
+    });
+    await expect(service.render({
+      value: "graph LR"
+    }, "notes.mermaid")).resolves.toEqual({
+      html: "<figure>graph LR</figure>"
+    });
+    expect(activationCalls).toEqual(["notes.mermaid"]);
+  });
+
+  it("does not activate unknown Markdown renderers", async () => {
+    const activationCalls: string[] = [];
+    const service = new MarkdownRendererService({
+      activationHandler(rendererId) {
+        activationCalls.push(rendererId);
+      }
+    });
+
+    await expect(service.render({ value: "graph TD" }, "notes.unknown")).rejects.toThrow("Unknown Markdown renderer");
+    expect(activationCalls).toEqual([]);
+  });
+
+  it("reports missing providers after activation attempts", async () => {
+    const activationCalls: string[] = [];
+    const service = new MarkdownRendererService({
+      activationHandler(rendererId) {
+        activationCalls.push(rendererId);
+      }
+    });
+
+    service.registerRendererContribution({
+      id: "notes.missingProvider",
+      label: "Missing Provider",
+      kind: "block"
+    });
+
+    await expect(service.render({ value: "" }, "notes.missingProvider")).rejects
+      .toThrow("No Markdown renderer provider registered");
+    expect(activationCalls).toEqual(["notes.missingProvider"]);
+  });
+
   it("rejects duplicate and invalid Markdown renderer registrations", () => {
     const service = new MarkdownRendererService();
 
@@ -1320,6 +1385,47 @@ describe("extensions", () => {
     disposable.dispose();
 
     expect(services.markdownRendererService.getRenderers()).toEqual([]);
+  });
+
+  it("activates extension Markdown renderer contributions before rendering", async () => {
+    const activationCalls: string[] = [];
+    const services = createExtensionServices((request) => {
+      activationCalls.push(`${request.activationEvent}:${request.extension.id}`);
+      request.context.markdown.registerRendererProvider({
+        id: "notes.lazyRenderer",
+        render(input) {
+          return {
+            html: `<section>${input.value}</section>`
+          };
+        }
+      });
+    });
+
+    services.extensionService.registerExtension({
+      id: "notes.lazyMarkdownRuntime",
+      contributes: {
+        markdownRenderers: [
+          {
+            id: "notes.lazyRenderer",
+            label: "Lazy Renderer",
+            kind: "block"
+          }
+        ]
+      }
+    });
+
+    await expect(services.markdownRendererService.render({
+      value: "lazy content"
+    }, "notes.lazyRenderer")).resolves.toEqual({
+      html: "<section>lazy content</section>"
+    });
+    await expect(services.markdownRendererService.render({
+      value: "second render"
+    }, "notes.lazyRenderer")).resolves.toEqual({
+      html: "<section>second render</section>"
+    });
+    expect(activationCalls).toEqual(["onMarkdownRenderer:notes.lazyRenderer:notes.lazyMarkdownRuntime"]);
+    expect(services.extensionService.getExtensions().map((extension) => extension.activationState)).toEqual(["activated"]);
   });
 
   it("cleans up extension export providers when activation fails", async () => {
@@ -2787,7 +2893,11 @@ function createExtensionServices(activationHandler?: ExtensionActivationHandler)
     browserSave: () => true
   });
   const themeService = new ThemeService();
-  const markdownRendererService = new MarkdownRendererService();
+  const markdownRendererService = new MarkdownRendererService({
+    activationHandler: async (rendererId) => {
+      await extensionService?.activateByEvent(`onMarkdownRenderer:${rendererId}`);
+    }
+  });
   extensionService = new ExtensionService(
     commandService,
     menuService,

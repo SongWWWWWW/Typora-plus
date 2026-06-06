@@ -76,6 +76,7 @@ export interface WorkbenchServices {
 
 export function createWorkbenchServices(): WorkbenchServices {
   const serviceCollection = new ServiceCollection();
+  let extensionService: ExtensionServiceContract | undefined;
 
   const configurationService = new ConfigurationService();
   const workspaceService = new WorkspaceService({
@@ -86,7 +87,11 @@ export function createWorkbenchServices(): WorkbenchServices {
   const exportService = new ExportService({ resourceService });
   const contextKeyService = new ContextKeyService();
   const themeService = new ThemeService();
-  const markdownRendererService = new MarkdownRendererService();
+  const markdownRendererService = new MarkdownRendererService({
+    activationHandler: async (rendererId) => {
+      await extensionService?.activateByEvent(`onMarkdownRenderer:${rendererId}`);
+    }
+  });
   const indexSnapshotStorage = createDefaultWorkspaceIndexSnapshotStorage();
   const indexService = new WorkspaceIndexService(fileService, {
     maxFileSizeBytes: configurationService.getValue().workspace.searchMaxFileSizeBytes,
@@ -123,7 +128,6 @@ export function createWorkbenchServices(): WorkbenchServices {
   serviceCollection.set(IWorkspaceService, workspaceService);
   serviceCollection.set(ITextFileService, textFileService);
 
-  let extensionService: ExtensionServiceContract | undefined;
   const commandService = new CommandService(serviceCollection, {
     activationHandler: async (command) => {
       await extensionService?.activateByEvent(`onCommand:${command}`);

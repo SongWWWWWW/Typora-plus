@@ -32,6 +32,12 @@ export interface MarkdownRendererProvider {
 
 export interface MarkdownRendererRuntimeMetadata extends Omit<MarkdownRendererContribution, "id"> {}
 
+export type MarkdownRendererActivationHandler = (rendererId: string) => void | Promise<void>;
+
+export interface MarkdownRendererServiceOptions {
+  readonly activationHandler?: MarkdownRendererActivationHandler;
+}
+
 export interface IMarkdownRendererService {
   readonly onDidChangeMarkdownRenderers: Event<void>;
   registerRendererContribution(contribution: MarkdownRendererContribution): IDisposable;
@@ -51,6 +57,8 @@ export class MarkdownRendererService implements IMarkdownRendererService {
   private readonly onDidChangeMarkdownRenderersEmitter = new Emitter<void>();
 
   readonly onDidChangeMarkdownRenderers = this.onDidChangeMarkdownRenderersEmitter.event;
+
+  constructor(private readonly options: MarkdownRendererServiceOptions = {}) {}
 
   registerRendererContribution(contribution: MarkdownRendererContribution): IDisposable {
     const normalizedContribution = normalizeMarkdownRendererContribution(contribution);
@@ -128,11 +136,7 @@ export class MarkdownRendererService implements IMarkdownRendererService {
 
   async render(input: MarkdownRendererInput, rendererId: string): Promise<MarkdownRendererOutput> {
     const normalizedId = readRequiredString(rendererId, "Markdown renderer id");
-    const provider = this.providers.get(normalizedId);
-
-    if (!provider) {
-      throw new Error(`No Markdown renderer provider registered: ${normalizedId}`);
-    }
+    const provider = await this.resolveRendererProvider(normalizedId);
 
     return normalizeMarkdownRendererOutput(await provider.render(normalizeMarkdownRendererInput(input)));
   }
@@ -142,6 +146,30 @@ export class MarkdownRendererService implements IMarkdownRendererService {
       ...cloneMarkdownRendererContribution(contribution),
       hasProvider: this.providers.has(contribution.id)
     };
+  }
+
+  private async resolveRendererProvider(rendererId: string): Promise<MarkdownRendererProvider> {
+    const provider = this.providers.get(rendererId);
+
+    if (provider) {
+      return provider;
+    }
+
+    if (!this.contributions.has(rendererId)) {
+      throw new Error(`Unknown Markdown renderer: ${rendererId}`);
+    }
+
+    if (this.options.activationHandler) {
+      await this.options.activationHandler(rendererId);
+    }
+
+    const activatedProvider = this.providers.get(rendererId);
+
+    if (!activatedProvider) {
+      throw new Error(`No Markdown renderer provider registered: ${rendererId}`);
+    }
+
+    return activatedProvider;
   }
 }
 
