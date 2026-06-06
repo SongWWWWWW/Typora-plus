@@ -2965,3 +2965,37 @@ Known limitations:
 - External extension package loading is still not implemented.
 - Extension host transport and IPC are still not implemented.
 - A production transport adapter still needs to decide between worker, process, or Electron IPC based on runtime constraints.
+
+## 2026-06-07 - P2 Extension Host Protocol Request Timeout Lifecycle
+
+Completed:
+
+- Added `ExtensionHostProtocolRequestTimer` as an injectable protocol timer boundary.
+- Added optional `requestTimeoutMs` handling to `ExtensionHostProtocolSession` for activation and broker callback requests.
+- Added optional `requestTimeoutMs` handling to `ExtensionHostProtocolRuntime` for proxy context commands and fire-and-forget runtime contribution requests.
+- Ensured normal responses, transport send failures, timeouts, and dispose all remove pending requests and clear request timers.
+- Kept late responses after timeout on the unhandled-message path instead of resolving already-rejected promises.
+- Passed protocol host timeout options into per-extension sessions for future transport-backed hosts.
+- Added focused tests for activation timeouts, request id reuse after timeout, proxy callback timeouts, runtime command timeouts, fire-and-forget registration timeout reporting, late responses, and dispose cleanup.
+
+Quality gate:
+
+- `npm run typecheck`: passed
+- `npx vitest run packages/platform/src/extensionHostProtocolSession.test.ts packages/platform/src/extensionHostProtocolRuntime.test.ts packages/platform/src/extensionHostProtocolTransport.test.ts`: passed, 21 tests
+- `npm run verify`: passed, 302 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Browser smoke check: not run because this stage only changes platform protocol lifecycle code and documentation.
+
+Review:
+
+- Timeout policy is injected and optional; no transport, IPC channel, or extension runtime is forced to use a hard-coded clock.
+- Pending request cleanup is centralized in the session/runtime request lifecycle, avoiding scattered timeout handling across brokers or future adapters.
+- Platform code remains independent of Workbench, Electron IPC, DOM access, Node APIs, dynamic imports, and external package loading.
+- No new dependency, storage path, visual token, or extra documentation file was introduced.
+
+Known limitations:
+
+- External extension package loading is still not implemented.
+- Extension host transport and IPC are still not implemented.
+- Future production transports still need an explicit default timeout policy based on worker/process/Electron runtime constraints.
