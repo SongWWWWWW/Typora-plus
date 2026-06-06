@@ -10,6 +10,7 @@ export * from "./extensionHostProtocolRuntime";
 export * from "./extensionHostProtocolRequestTimer";
 export * from "./extensionHostProtocolSession";
 export * from "./extensionHostProtocolTransport";
+export * from "./extensionHostProtocolWireTransport";
 export * from "./extensionHostRuntimeBroker";
 export * from "./exports";
 export * from "./files";
