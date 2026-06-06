@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import type {
-  ExtensionActivationRequest,
   ExtensionContext,
   MarkdownRendererProvider,
   RegisteredExtension
@@ -13,16 +12,18 @@ import {
 import {
   workbenchStatusRendererId
 } from "./statusMarkdownRenderer";
-import { createWorkbenchExtensionActivationHandler } from "./workbenchExtensionActivation";
+import { createWorkbenchExtensionHost, workbenchExtensionHostId } from "./workbenchExtensionActivation";
 import { defaultWorkbenchExtensionManifest } from "./workbenchContributions";
 
 describe("Workbench extension activation", () => {
   it("registers the built-in Mermaid provider on renderer activation", async () => {
     const subscriptions: IDisposable[] = [];
     let providerId: string | undefined;
-    const handler = createWorkbenchExtensionActivationHandler();
+    const host = createWorkbenchExtensionHost();
 
-    await handler({
+    expect(host.id).toBe(workbenchExtensionHostId);
+    expect(host.canActivate(createRegisteredExtension(defaultWorkbenchExtensionManifest.id))).toBe(true);
+    await host.activate({
       activationEvent: `onMarkdownRenderer:${workbenchMermaidRendererId}`,
       context: createActivationContext({
         addSubscription(disposable) {
@@ -43,7 +44,7 @@ describe("Workbench extension activation", () => {
   it("registers the built-in Status provider on renderer activation", async () => {
     const subscriptions: IDisposable[] = [];
     let provider: MarkdownRendererProvider | undefined;
-    const handler = createWorkbenchExtensionActivationHandler({
+    const host = createWorkbenchExtensionHost({
       getConfiguration: () => ({
         ...defaultConfiguration,
         markdown: {
@@ -59,7 +60,7 @@ describe("Workbench extension activation", () => {
       })
     });
 
-    await handler({
+    await host.activate({
       activationEvent: `onMarkdownRenderer:${workbenchStatusRendererId}`,
       context: createActivationContext({
         addSubscription(disposable) {
@@ -87,14 +88,16 @@ describe("Workbench extension activation", () => {
     expect(subscriptions).toHaveLength(1);
   });
 
-  it("rejects unknown extension activation through the Workbench runtime", async () => {
-    const handler = createWorkbenchExtensionActivationHandler();
+  it("rejects unknown extension activation through the Workbench host", async () => {
+    const host = createWorkbenchExtensionHost();
+    const externalExtension = createRegisteredExtension("notes.external");
 
-    await expect(handler({
+    expect(host.canActivate(externalExtension)).toBe(false);
+    await expect(host.activate({
       activationEvent: `onMarkdownRenderer:${workbenchMermaidRendererId}`,
       context: createActivationContext({}),
-      extension: createRegisteredExtension("notes.external")
-    })).rejects.toThrow("No Workbench activation runtime registered");
+      extension: externalExtension
+    })).rejects.toThrow("Workbench extension host cannot activate extension");
   });
 });
 

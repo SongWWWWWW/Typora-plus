@@ -3,12 +3,14 @@ import {
   CommandService,
   ConfigurationService,
   ContextKeyService,
+  ExtensionHostService,
   ExtensionService,
   ExportService,
   IAttachmentService,
   IConfigurationService,
   IContextKeyService,
   ICommandService,
+  IExtensionHostService,
   IExtensionService,
   IExportService,
   IFileService,
@@ -39,6 +41,7 @@ import {
   type IConfigurationService as ConfigurationServiceContract,
   type IContextKeyService as ContextKeyServiceContract,
   type ICommandService as CommandServiceContract,
+  type IExtensionHostService as ExtensionHostServiceContract,
   type IExtensionService as ExtensionServiceContract,
   type IExportService as ExportServiceContract,
   type IFileService as FileServiceContract,
@@ -52,7 +55,7 @@ import {
   type IThemeService as ThemeServiceContract,
   type IWorkspaceService as WorkspaceServiceContract
 } from "@typora-plus/platform";
-import { createWorkbenchExtensionActivationHandler } from "./workbenchExtensionActivation";
+import { createWorkbenchExtensionHost } from "./workbenchExtensionActivation";
 import { defaultWorkbenchExtensionManifest } from "./workbenchContributions";
 
 export interface WorkbenchServices {
@@ -61,6 +64,7 @@ export interface WorkbenchServices {
   readonly attachmentService: AttachmentServiceContract;
   readonly configurationService: ConfigurationServiceContract;
   readonly contextKeyService: ContextKeyServiceContract;
+  readonly extensionHostService: ExtensionHostServiceContract;
   readonly extensionService: ExtensionServiceContract;
   readonly exportService: ExportServiceContract;
   readonly fileService: FileServiceContract;
@@ -88,6 +92,7 @@ export function createWorkbenchServices(): WorkbenchServices {
   const exportService = new ExportService({ resourceService });
   const contextKeyService = new ContextKeyService();
   const themeService = new ThemeService();
+  const extensionHostService = new ExtensionHostService();
   const markdownRendererService = new MarkdownRendererService({
     activationHandler: async (rendererId) => {
       await extensionService?.activateByEvent(`onMarkdownRenderer:${rendererId}`);
@@ -117,6 +122,7 @@ export function createWorkbenchServices(): WorkbenchServices {
   serviceCollection.set(IAttachmentService, attachmentService);
   serviceCollection.set(IConfigurationService, configurationService);
   serviceCollection.set(IContextKeyService, contextKeyService);
+  serviceCollection.set(IExtensionHostService, extensionHostService);
   serviceCollection.set(IExportService, exportService);
   serviceCollection.set(IFileService, fileService);
   serviceCollection.set(IIndexService, indexService);
@@ -135,10 +141,11 @@ export function createWorkbenchServices(): WorkbenchServices {
     }
   });
   serviceCollection.set(ICommandService, commandService);
+  extensionHostService.registerHost(createWorkbenchExtensionHost({
+    getConfiguration: () => configurationService.getValue()
+  }));
   extensionService = new ExtensionService(commandService, menuService, keybindingService, {
-    activationHandler: createWorkbenchExtensionActivationHandler({
-      getConfiguration: () => configurationService.getValue()
-    }),
+    activationHandler: (request) => extensionHostService.activate(request),
     contextKeyService,
     exportService,
     markdownRendererService,
@@ -158,6 +165,7 @@ export function createWorkbenchServices(): WorkbenchServices {
     attachmentService,
     configurationService,
     contextKeyService,
+    extensionHostService,
     extensionService,
     exportService,
     fileService,

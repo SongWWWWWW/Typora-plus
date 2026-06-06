@@ -1,4 +1,4 @@
-import type { ExtensionActivationHandler, TyporaPlusConfiguration } from "@typora-plus/platform";
+import type { ExtensionHost, TyporaPlusConfiguration } from "@typora-plus/platform";
 import {
   createMermaidMarkdownRendererProvider,
   workbenchMermaidRendererId
@@ -9,34 +9,42 @@ import {
 } from "./statusMarkdownRenderer";
 import { defaultWorkbenchExtensionManifest } from "./workbenchContributions";
 
-export interface WorkbenchExtensionActivationHandlerOptions {
+export const workbenchExtensionHostId = "typora-plus.workbench.extensionHost";
+
+export interface WorkbenchExtensionHostOptions {
   readonly getConfiguration?: () => TyporaPlusConfiguration;
 }
 
-export function createWorkbenchExtensionActivationHandler(
-  options: WorkbenchExtensionActivationHandlerOptions = {}
-): ExtensionActivationHandler {
+export function createWorkbenchExtensionHost(
+  options: WorkbenchExtensionHostOptions = {}
+): ExtensionHost {
   const getConfiguration = options.getConfiguration;
 
-  return async (request) => {
-    if (request.extension.id !== defaultWorkbenchExtensionManifest.id) {
-      throw new Error(`No Workbench activation runtime registered for extension: ${request.extension.id}`);
-    }
+  return {
+    id: workbenchExtensionHostId,
+    canActivate(extension) {
+      return extension.id === defaultWorkbenchExtensionManifest.id;
+    },
+    async activate(request) {
+      if (request.extension.id !== defaultWorkbenchExtensionManifest.id) {
+        throw new Error(`Workbench extension host cannot activate extension: ${request.extension.id}`);
+      }
 
-    if (request.activationEvent === `onMarkdownRenderer:${workbenchMermaidRendererId}`) {
-      request.context.subscriptions.add(
-        request.context.markdown.registerRendererProvider(createMermaidMarkdownRendererProvider())
-      );
-    }
+      if (request.activationEvent === `onMarkdownRenderer:${workbenchMermaidRendererId}`) {
+        request.context.subscriptions.add(
+          request.context.markdown.registerRendererProvider(createMermaidMarkdownRendererProvider())
+        );
+      }
 
-    if (request.activationEvent === `onMarkdownRenderer:${workbenchStatusRendererId}`) {
-      request.context.subscriptions.add(
-        request.context.markdown.registerRendererProvider(createStatusMarkdownRendererProvider(
-          getConfiguration
-            ? { getStatusBadges: () => getConfiguration().markdown.statusBadges }
-            : undefined
-        ))
-      );
+      if (request.activationEvent === `onMarkdownRenderer:${workbenchStatusRendererId}`) {
+        request.context.subscriptions.add(
+          request.context.markdown.registerRendererProvider(createStatusMarkdownRendererProvider(
+            getConfiguration
+              ? { getStatusBadges: () => getConfiguration().markdown.statusBadges }
+              : undefined
+          ))
+        );
+      }
     }
   };
 }
