@@ -798,3 +798,33 @@ Known limitations:
 - Direct table cell editing remains planned.
 - Wide tables expose later column controls through the internal table scroll area rather than fitting every column on narrow screens.
 - More complex Markdown table cases still depend on the planned parser-backed source mapping pass.
+
+## 2026-06-06 - P2 Table Cell Source Navigation
+
+Completed:
+
+- Added source-range mapping for Markdown table cells, including tables without outer pipes and escaped `\|` content.
+- Added inactive-preview cell clicks that focus the editor and select the corresponding source cell text.
+- Kept preview button interactions separate from cell navigation so row/column tools remain guarded controls.
+- Added focused tests for cell source range detection and escaped-pipe behavior.
+
+Quality gate:
+
+- `npm run verify`: passed, 86 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed
+- Production browser preview: passed at `http://127.0.0.1:4173`
+- Browser interaction check: clicking `Ready` selected the source `Ready`; clicking `Name | Alias` selected source `Name \| Alias`; inline table buttons did not trigger cell selection.
+- Desktop default viewport and mobile 390px checks: passed without page horizontal overflow or console errors.
+
+Review:
+
+- Cell source navigation remains inside `packages/editor`; Workbench, platform, and file services remain unaware of table syntax.
+- The Markdown text model remains the source of truth; preview cells only dispatch editor selections.
+- Source-range detection reuses the table cell scanner instead of adding a parallel parser or hard-coded string split path.
+- Visual additions reuse existing theme tokens and table preview styling.
+
+Known limitations:
+
+- Cell clicks select source text rather than editing inline inside the preview.
+- More complex Markdown table cases, such as inline code spans containing pipes, still depend on parser-backed position mapping.
