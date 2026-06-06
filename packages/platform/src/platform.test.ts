@@ -369,6 +369,47 @@ describe("workspace index", () => {
     ]);
   });
 
+  it("resolves workspace backlinks from markdown and wiki links", async () => {
+    const host = createMemoryHost([
+      ["file://C:/Notes/a.md", "See [Beta](folder/b.md#details), [Daily](Daily%20Note.md?view=1#intro), and [[Daily Note]]."],
+      ["file://C:/Notes/folder/b.md", "# Beta\n[Self](b.md)"],
+      ["file://C:/Notes/folder/c.md", "Sibling [Beta](b.md) and [External](https://example.com)."],
+      ["file://C:/Notes/Daily Note.md", "# Daily"]
+    ]);
+    const service = new WorkspaceIndexService(new NativeFileService(host), {
+      maxResults: 10
+    });
+
+    await service.indexWorkspace(createWorkspaceFileTree([
+      createFileEntry("C:/Notes/a.md", "a.md", "a.md"),
+      createFileEntry("C:/Notes/folder/b.md", "b.md", "folder/b.md"),
+      createFileEntry("C:/Notes/folder/c.md", "c.md", "folder/c.md"),
+      createFileEntry("C:/Notes/Daily Note.md", "Daily Note.md", "Daily Note.md")
+    ]));
+
+    expect(service.getBacklinks(URI.file("C:/Notes/folder/b.md")).map((link) => ({
+      kind: link.kind,
+      label: link.label,
+      line: link.line,
+      relativePath: link.relativePath,
+      target: link.target
+    }))).toEqual([
+      { kind: "markdown", label: "Beta", line: 1, relativePath: "a.md", target: "folder/b.md#details" },
+      { kind: "markdown", label: "Beta", line: 1, relativePath: "folder/c.md", target: "b.md" }
+    ]);
+    expect(service.getBacklinks(URI.file("C:/Notes/Daily Note.md")).map((link) => ({
+      kind: link.kind,
+      label: link.label,
+      line: link.line,
+      relativePath: link.relativePath,
+      target: link.target
+    }))).toEqual([
+      { kind: "wiki", label: "Daily Note", line: 1, relativePath: "a.md", target: "Daily Note" },
+      { kind: "markdown", label: "Daily", line: 1, relativePath: "a.md", target: "Daily%20Note.md?view=1#intro" }
+    ]);
+    expect(service.getBacklinks(URI.file("C:/Notes/missing.md"))).toEqual([]);
+  });
+
   it("clears indexed workspace metadata", async () => {
     const host = createMemoryHost([["file://C:/Notes/a.md", "# Alpha\n#topic"]]);
     const service = new WorkspaceIndexService(new NativeFileService(host), {
@@ -382,6 +423,7 @@ describe("workspace index", () => {
 
     expect(service.getStatus().state).toBe("idle");
     expect(service.getMetadata()).toEqual({ headings: [], links: [], tags: [] });
+    expect(service.getBacklinks(URI.file("C:/Notes/a.md"))).toEqual([]);
   });
 });
 

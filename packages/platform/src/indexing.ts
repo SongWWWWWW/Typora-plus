@@ -73,6 +73,7 @@ export interface IIndexService {
   indexWorkspace(workspace: WorkspaceFileTree): Promise<void>;
   query(value: string): readonly WorkspaceSearchResult[];
   getMetadata(): WorkspaceIndexMetadata;
+  getBacklinks(uri: URIType): readonly WorkspaceIndexedLink[];
   clear(): void;
 }
 
@@ -192,6 +193,19 @@ export class WorkspaceIndexService implements IIndexService {
       links: this.documents.flatMap((document) => document.metadata.links),
       tags: this.documents.flatMap((document) => document.metadata.tags)
     };
+  }
+
+  getBacklinks(uri: URIType): readonly WorkspaceIndexedLink[] {
+    const targetDocument = this.documents.find((document) => document.uri.toString() === uri.toString());
+
+    if (!targetDocument) {
+      return [];
+    }
+
+    return sortIndexedLinks(this.documents
+      .filter((document) => document.uri.toString() !== targetDocument.uri.toString())
+      .flatMap((document) => document.metadata.links
+        .filter((link) => linkResolvesToDocument(link, document, targetDocument))));
   }
 
   clear(): void {
@@ -391,6 +405,115 @@ function readMarkdownTags(line: string): readonly string[] {
   }
 
   return tags;
+}
+
+function linkResolvesToDocument(
+  link: WorkspaceIndexedLink,
+  sourceDocument: IndexedDocument,
+  targetDocument: IndexedDocument
+): boolean {
+  if (link.kind === "wiki") {
+    return wikiLinkTargetMatchesDocument(link.target, targetDocument);
+  }
+
+  const targetPath = resolveMarkdownLinkTarget(sourceDocument.relativePath, link.target);
+
+  if (!targetPath) {
+    return false;
+  }
+
+  const normalizedTargetPath = normalizeIndexPath(targetPath);
+  const normalizedDocumentPath = normalizeIndexPath(targetDocument.relativePath);
+  return normalizedTargetPath === normalizedDocumentPath ||
+    `${normalizedTargetPath}.md` === normalizedDocumentPath;
+}
+
+function wikiLinkTargetMatchesDocument(target: string, document: IndexedDocument): boolean {
+  const normalizedTarget = normalizeWikiTarget(target);
+
+  if (!normalizedTarget) {
+    return false;
+  }
+
+  return normalizedTarget === normalizeWikiTarget(document.name) ||
+    normalizedTarget === normalizeWikiTarget(stripMarkdownExtension(document.name)) ||
+    normalizedTarget === normalizeWikiTarget(document.relativePath) ||
+    normalizedTarget === normalizeWikiTarget(stripMarkdownExtension(document.relativePath));
+}
+
+function resolveMarkdownLinkTarget(sourceRelativePath: string, target: string): string | undefined {
+  const cleanTarget = decodeLinkTarget(stripLinkTargetFragment(target)).trim();
+
+  if (!cleanTarget || cleanTarget.startsWith("#") || /^[a-z][a-z0-9+.-]*:/i.test(cleanTarget)) {
+    return undefined;
+  }
+
+  if (cleanTarget.startsWith("/")) {
+    return normalizePathSegments(cleanTarget.slice(1));
+  }
+
+  return normalizePathSegments([readParentPath(sourceRelativePath), cleanTarget].filter(Boolean).join("/"));
+}
+
+function stripLinkTargetFragment(target: string): string {
+  const queryIndex = target.indexOf("?");
+  const hashIndex = target.indexOf("#");
+  const indexes = [queryIndex, hashIndex].filter((index) => index >= 0);
+  const end = indexes.length > 0 ? Math.min(...indexes) : target.length;
+  return target.slice(0, end);
+}
+
+function decodeLinkTarget(target: string): string {
+  try {
+    return decodeURIComponent(target);
+  } catch {
+    return target;
+  }
+}
+
+function readParentPath(relativePath: string): string {
+  const normalized = normalizeIndexPath(relativePath);
+  const separator = normalized.lastIndexOf("/");
+  return separator >= 0 ? normalized.slice(0, separator) : "";
+}
+
+function normalizePathSegments(path: string): string {
+  const segments: string[] = [];
+
+  for (const segment of path.replaceAll("\\", "/").split("/")) {
+    if (!segment || segment === ".") {
+      continue;
+    }
+
+    if (segment === "..") {
+      segments.pop();
+      continue;
+    }
+
+    segments.push(segment);
+  }
+
+  return segments.join("/");
+}
+
+function normalizeIndexPath(path: string): string {
+  return normalizePathSegments(path).toLowerCase();
+}
+
+function normalizeWikiTarget(target: string): string {
+  return normalizeIndexPath(target).replace(/\.md$/i, "").trim();
+}
+
+function stripMarkdownExtension(path: string): string {
+  return path.replace(/\.md$/i, "");
+}
+
+function sortIndexedLinks(links: readonly WorkspaceIndexedLink[]): readonly WorkspaceIndexedLink[] {
+  return [...links].sort((first, second) =>
+    first.relativePath.localeCompare(second.relativePath) ||
+    first.line - second.line ||
+    first.target.localeCompare(second.target)
+  );
 }
 
 function normalizeQuery(value: string): readonly string[] {
