@@ -564,3 +564,34 @@ Known limitations:
 
 - Visible-range analysis still scans preceding source lines to recover block context for scanner-based Markdown constructs.
 - Parser-backed position mapping remains planned for more complex Markdown syntax and escaped table pipes.
+
+## 2026-06-06 - P2 Table Editing Tools
+
+Completed:
+
+- Added compact row and column insert tools to inactive table previews.
+- Added pure Markdown table transformation helpers for empty body row creation and blank column insertion.
+- Re-read the full current table before applying table edit transactions so visible-range truncation cannot rewrite only part of a large table.
+- Added focused tests for row creation, column insertion, alignment preservation, and requested insertion indexes.
+
+Quality gate:
+
+- `npm run verify`: passed
+- `npm test`: passed, 64 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- Production browser preview: passed at `http://127.0.0.1:4173`
+- Browser interaction check: row and column buttons correctly rewrote Markdown source
+- Desktop 1280px and mobile 390px checks: passed without horizontal overflow or console errors
+
+Review:
+
+- Table editing remains inside `packages/editor`; Workbench, platform, and file services remain unaware of table syntax.
+- The plain Markdown text model remains the source of truth; table tools dispatch CodeMirror text edits only.
+- Visual values use named editor constants and existing theme tokens.
+- Column insertion normalizes table source to pipe-delimited Markdown while preserving existing column alignments.
+
+Known limitations:
+
+- Table editing is limited to inserting a row below and inserting a column to the right.
+- Alignment menus, row/column deletion, and cell-level editing remain future work.
+- Escaped pipe parsing still depends on the planned parser-backed position mapping pass.
