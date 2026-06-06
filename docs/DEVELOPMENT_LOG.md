@@ -2262,3 +2262,37 @@ Known limitations:
 - Registered extension themes are not yet selectable or applied to the document; a future stage needs a theme selection model and safe CSS variable application path.
 - The activation handler is still injected in-process; a future out-of-process extension host must broker the same manifest contribution boundary.
 - Markdown renderer contributions remain future extension runtime work.
+
+## 2026-06-07 - P2 Selectable Theme Contributions
+
+Completed:
+
+- Added persisted optional `appearance.themeId` configuration, including explicit clearing under strict optional typing.
+- Added safe `applyThemeTokens()` overlay and cleanup in the theme package.
+- Added theme change events to `IThemeService`.
+- Wired Workbench theme state to refresh from theme service changes and apply selected theme tokens.
+- Added a Custom Theme Settings control with Default fallback.
+- Added the built-in Ink theme through the built-in extension manifest.
+- Added tests for configuration clearing, theme token overlay cleanup, settings search, and built-in theme contribution metadata.
+
+Quality gate:
+
+- `npm run test -- --run packages/platform/src/platform.test.ts packages/theme/src/theme.test.ts packages/workbench/src/settingsModel.test.ts packages/workbench/src/workbenchContributions.test.ts`: passed, 98 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 202 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Browser smoke check: desktop Settings can select Ink and apply dark `--tp-*` tokens; Default clears token overrides; 390px Settings remains usable without horizontal overflow; no console errors were observed.
+
+Review:
+
+- Theme application now flows through the theme package, configuration service, and `IThemeService` instead of scattered Workbench constants.
+- Custom themes only apply validated Typora Plus `--tp-*` tokens.
+- Clearing or losing a selected theme removes the prior CSS-variable overlay instead of leaving stale visual state.
+- The built-in Ink theme is contributed through the manifest boundary, keeping the path compatible with future extension themes.
+
+Known limitations:
+
+- Third-party extension host code loading is still not implemented.
+- There is no marketplace, theme import, or external theme management UI yet.
+- Markdown renderer contributions remain future extension runtime work.
