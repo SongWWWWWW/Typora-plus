@@ -1,4 +1,5 @@
 import { Disposable, Emitter, type Event, URI } from "@typora-plus/base";
+import type { IFileService, TextFileContent } from "./files";
 import { createServiceIdentifier } from "./instantiation";
 
 export interface TextFileModel {
@@ -22,8 +23,11 @@ export interface ITextFileService {
   readonly onDidChangeModel: Event<TextFileModel>;
   openDefault(): TextFileModel;
   getActiveModel(): TextFileModel;
+  openFile(uri: URI): Promise<TextFileModel>;
+  newUntitled(): TextFileModel;
   updateContent(value: string): TextFileModel;
-  save(): TextFileModel;
+  save(): Promise<TextFileModel>;
+  saveAs(): Promise<TextFileModel | undefined>;
 }
 
 export const ITextFileService = createServiceIdentifier<ITextFileService>("textFile");
@@ -50,6 +54,24 @@ export class BrowserTextFileService extends Disposable implements ITextFileServi
     return this.model;
   }
 
+  async openFile(_uri: URI): Promise<TextFileModel> {
+    throw new Error("BrowserTextFileService cannot open native files");
+  }
+
+  newUntitled(): TextFileModel {
+    this.model = {
+      uri: URI.untitled(this.options.defaultName),
+      name: this.options.defaultName,
+      languageId: "markdown",
+      value: this.options.defaultContent,
+      dirty: false,
+      version: this.model.version + 1
+    };
+    this.persistDraft();
+    this.emitter.fire(this.model);
+    return this.model;
+  }
+
   updateContent(value: string): TextFileModel {
     if (value === this.model.value) {
       return this.model;
@@ -67,7 +89,7 @@ export class BrowserTextFileService extends Disposable implements ITextFileServi
     return this.model;
   }
 
-  save(): TextFileModel {
+  async save(): Promise<TextFileModel> {
     this.model = {
       ...this.model,
       dirty: false,
@@ -77,6 +99,10 @@ export class BrowserTextFileService extends Disposable implements ITextFileServi
     this.persistDraft();
     this.emitter.fire(this.model);
     return this.model;
+  }
+
+  async saveAs(): Promise<TextFileModel | undefined> {
+    return this.save();
   }
 
   private createInitialModel(): TextFileModel {
@@ -99,6 +125,128 @@ export class BrowserTextFileService extends Disposable implements ITextFileServi
     const storedModel: StoredTextFileModel = {
       value: this.model.value,
       dirty: this.model.dirty
+    };
+
+    if (this.model.lastSavedAt) {
+      writeStorage(this.options.storageKey, {
+        ...storedModel,
+        lastSavedAt: this.model.lastSavedAt.toISOString()
+      });
+      return;
+    }
+
+    writeStorage(this.options.storageKey, storedModel);
+  }
+}
+
+export class WorkspaceTextFileService extends Disposable implements ITextFileService {
+  private readonly emitter = new Emitter<TextFileModel>();
+  private model: TextFileModel;
+
+  readonly onDidChangeModel = this.emitter.event;
+
+  constructor(
+    private readonly fileService: IFileService,
+    private readonly options: TextFileServiceOptions
+  ) {
+    super();
+    this.model = this.createInitialModel();
+  }
+
+  openDefault(): TextFileModel {
+    this.emitter.fire(this.model);
+    return this.model;
+  }
+
+  getActiveModel(): TextFileModel {
+    return this.model;
+  }
+
+  async openFile(uri: URI): Promise<TextFileModel> {
+    const content = await this.fileService.openFile(uri);
+    this.model = modelFromContent(content, this.model.version + 1, false);
+    this.persistDraft(false);
+    this.emitter.fire(this.model);
+    return this.model;
+  }
+
+  newUntitled(): TextFileModel {
+    this.model = {
+      uri: URI.untitled(this.options.defaultName),
+      name: this.options.defaultName,
+      languageId: "markdown",
+      value: this.options.defaultContent,
+      dirty: false,
+      version: this.model.version + 1
+    };
+    this.persistDraft(true);
+    this.emitter.fire(this.model);
+    return this.model;
+  }
+
+  updateContent(value: string): TextFileModel {
+    if (value === this.model.value) {
+      return this.model;
+    }
+
+    this.model = {
+      ...this.model,
+      value,
+      dirty: true,
+      version: this.model.version + 1
+    };
+
+    this.persistDraft(true);
+    this.emitter.fire(this.model);
+    return this.model;
+  }
+
+  async save(): Promise<TextFileModel> {
+    if (this.model.uri.scheme !== "file") {
+      const saved = await this.saveAs();
+      return saved ?? this.model;
+    }
+
+    const content = await this.fileService.saveFile(this.model.uri, this.model.value);
+    this.model = modelFromContent(content, this.model.version + 1, false);
+    this.persistDraft(false);
+    this.emitter.fire(this.model);
+    return this.model;
+  }
+
+  async saveAs(): Promise<TextFileModel | undefined> {
+    const content = await this.fileService.saveFileAs(this.model.name, this.model.value);
+
+    if (!content) {
+      return undefined;
+    }
+
+    this.model = modelFromContent(content, this.model.version + 1, false);
+    this.persistDraft(false);
+    this.emitter.fire(this.model);
+    return this.model;
+  }
+
+  private createInitialModel(): TextFileModel {
+    const stored = readStorage(this.options.storageKey);
+    const value = stored?.value ?? this.options.defaultContent;
+    const lastSavedAt = stored?.lastSavedAt ? new Date(stored.lastSavedAt) : undefined;
+
+    return {
+      uri: URI.untitled(this.options.defaultName),
+      name: this.options.defaultName,
+      languageId: "markdown",
+      value,
+      dirty: stored?.dirty ?? false,
+      version: 1,
+      ...(lastSavedAt ? { lastSavedAt } : {})
+    };
+  }
+
+  private persistDraft(includeContent: boolean): void {
+    const storedModel: StoredTextFileModel = {
+      value: includeContent ? this.model.value : "",
+      dirty: includeContent ? this.model.dirty : false
     };
 
     if (this.model.lastSavedAt) {
@@ -148,4 +296,16 @@ function writeStorage(key: string, value: StoredTextFileModel): void {
 
 function hasLocalStorage(): boolean {
   return typeof window !== "undefined" && "localStorage" in window;
+}
+
+function modelFromContent(content: TextFileContent, version: number, dirty: boolean): TextFileModel {
+  return {
+    uri: content.uri,
+    name: content.name,
+    languageId: "markdown",
+    value: content.value,
+    dirty,
+    version,
+    ...(content.mtime ? { lastSavedAt: new Date(content.mtime) } : {})
+  };
 }
