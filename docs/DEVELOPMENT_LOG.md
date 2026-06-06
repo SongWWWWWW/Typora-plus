@@ -694,3 +694,37 @@ Known limitations:
 - Deletion controls currently target the last row or last column from the preview toolbar; direct row/column selection is still future work.
 - Direct table cell editing remains planned.
 - Escaped pipe parsing still depends on the planned parser-backed position mapping pass.
+
+## 2026-06-06 - P2 Escaped Pipe Table Parsing
+
+Completed:
+
+- Replaced direct pipe splitting with a small table-cell scanner that ignores escaped `\|` separators.
+- Kept escaped pipe source text in the table block model so insert, delete, and alignment tools preserve Markdown source.
+- Rendered escaped pipe cells in table previews as normal `|` characters for a closer Markdown preview experience.
+- Added inline-size containment to table preview widgets so wide tables scroll internally without pushing toolbar controls off mobile viewports.
+- Added focused tests for escaped-pipe table parsing, escaped-only non-table lines, and escaped source preservation through column edits.
+
+Quality gate:
+
+- `npm run test -- --run packages/editor/src/livePreview.test.ts`: passed, 59 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 79 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed
+- Production browser preview: passed at `http://127.0.0.1:4173`
+- Browser interaction check: escaped pipe cells rendered as normal `|`; column insertion preserved `\|` in source Markdown.
+- Desktop default viewport and mobile 390px checks: passed without horizontal overflow or console errors; wide table toolbars stayed visible on mobile.
+
+Review:
+
+- Table parsing remains isolated in `packages/editor`; Workbench, platform, and file services remain unaware of Markdown table syntax.
+- The plain Markdown source remains the durable model; preview display unescapes only for visual rendering.
+- The scanner is small, deterministic, and covered by unit tests instead of scattering pipe-handling branches across editing tools.
+- The mobile layout fix keeps table content scrollable inside the preview while preserving the toolbar as a stable control surface.
+
+Known limitations:
+
+- More complex Markdown table cases, such as inline code spans containing pipes and full parser-backed source mapping, remain planned.
+- Deletion controls still target the last row or last column from the preview toolbar.
+- Direct table cell editing remains planned.
