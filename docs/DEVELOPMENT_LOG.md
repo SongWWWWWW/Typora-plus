@@ -52,3 +52,42 @@ Repository handoff:
 - Connected local project to `https://github.com/SongWWWWWW/Typora-plus.git`.
 - Pushed P0/P1 stage work to `main` as separate feature commits.
 - Future non-mainline work should use topic branches and pull requests after the main-stage milestone is complete.
+
+## 2026-06-06 - P2 Main Progress
+
+Completed:
+
+- Added platform file service contracts and native host bridge.
+- Added observable workspace state with file tree metadata.
+- Added native Electron IPC for opening Markdown workspaces, reading files, saving files, and save-as.
+- Added restricted IPC path validation so renderer code cannot directly access arbitrary files.
+- Added Workbench file explorer with active note switching and browser fallback state.
+- Added quick open overlay with fuzzy matching for workspace files.
+- Added attachment service contract and Electron IPC for pasted images.
+- Added editor paste handling that inserts Markdown image syntax after the attachment service saves the image.
+- Added tests for workspace file services and attachment service behavior.
+
+Quality gate:
+
+- `npm run verify`: passed
+- `npm test`: passed, 14 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- Production browser preview: passed at `http://127.0.0.1:4173`
+
+Review:
+
+- File system access is behind `IFileService`; Workbench does not call Electron directly.
+- Attachment persistence is behind `IAttachmentService`; the editor only inserts returned Markdown.
+- Electron preload exposes a narrow IPC bridge with context isolation and sandbox still enabled.
+- Workspace scanning limits depth and file count through shell configuration.
+- Visual additions use existing theme tokens and stable row dimensions.
+
+Known limitations:
+
+- Recent files are not persisted yet; this should be handled as the next mainline feature before SQLite indexing.
+- Native file dialog behavior was type/build verified, but automated dialog interaction was not exercised in the in-app browser.
+- File conflict prompts and external file watcher refresh are not implemented yet.
+
+Next stage:
+
+- P2 continuation: persisted recent files, workspace refresh/watch, save conflict prompts, then SQLite indexing.

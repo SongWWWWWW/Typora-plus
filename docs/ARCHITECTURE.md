@@ -41,11 +41,11 @@ Current services:
 - `ICommandService`: command registration and execution
 - `ITextFileService`: active Markdown model, dirty state, save lifecycle
 - `IWorkspaceService`: workspace identity
+- `IFileService`: native workspace file tree, file open, save, save-as
+- `IAttachmentService`: pasted image persistence through a native bridge
 
 Planned services:
 
-- `IFileService`: native file read/write/watch through Electron IPC
-- `IAttachmentService`: image paste, asset folders, relative paths
 - `IIndexService`: SQLite-backed search, links, tags, headings
 - `IExportService`: PDF/HTML/DOCX export providers
 - `IExtensionService`: manifest, activation events, contribution points

@@ -17,6 +17,14 @@ P0/P1 are implemented:
 - Electron shell skeleton
 - unit tests and build verification
 
+P2 main progress is implemented:
+
+- native Electron workspace picker and Markdown file tree scanning
+- restricted file read/write/save-as IPC
+- workbench file explorer and active file switching
+- quick open overlay with fuzzy file matching
+- pasted image attachment bridge and editor insertion path
+
 ## Commands
 
 ```bash
