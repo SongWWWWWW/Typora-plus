@@ -1600,3 +1600,35 @@ Review:
 Known limitations:
 
 - Configuration sanitization accepts any positive stored delay; the Settings UI clamps normal user edits to 250-5000 ms.
+
+## 2026-06-06 - P2 Live Workspace Settings
+
+Completed:
+
+- Added a configuration entry point to `IIndexService` for workspace search file-size and result-count limits.
+- Added a configuration entry point to `IAttachmentService` for the default pasted-image asset folder.
+- Synchronized workspace preference changes from Workbench into the affected platform services through the configuration listener.
+- Reindexed the active workspace when the search file-size limit changes, so previously skipped files can be included after a larger limit.
+- Recomputed workspace search results when the result-count limit changes.
+- Added platform coverage for updated index limits and updated attachment asset folders.
+
+Quality gate:
+
+- `npm run test -- --run packages/platform/src/platform.test.ts`: passed, 32 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 136 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed
+- Browser regression: Settings changed Search Results from 120 to 140, reload preserved 140, and the value was restored to 120; Asset Folder changed from `assets` to `media-test`, reload preserved it, and it was restored to `assets`.
+- Desktop 1280px and mobile 390px viewport checks: Workspace settings fields fit within the dialog, had no horizontal overflow, and the clean verification run produced no new console errors.
+
+Review:
+
+- Settings still writes only to `IConfigurationService`; Workbench translates configuration changes into service configuration calls.
+- Indexing and attachment behavior remain behind platform services; Workbench does not inspect file paths or attachment destinations.
+- Search-result limit changes affect queries without reindexing, while file-size limit changes reindex only the active workspace through the existing index service path.
+- No new visual tokens, storage backends, or documentation files were introduced.
+
+Known limitations:
+
+- Browser verification covers Settings persistence and layout; native workspace reindex behavior is covered by platform tests rather than a mounted Electron workspace fixture.
