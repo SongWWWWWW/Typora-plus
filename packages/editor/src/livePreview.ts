@@ -55,6 +55,19 @@ export interface MarkdownTableLineState {
   readonly role: MarkdownTableLineRole;
 }
 
+export type MarkdownTableColumnAlignment = "center" | "default" | "left" | "right";
+
+export interface MarkdownTableBlockState {
+  readonly alignments: readonly MarkdownTableColumnAlignment[];
+  readonly blockEnd: number;
+  readonly blockStart: number;
+  readonly bodyRows: readonly (readonly string[])[];
+  readonly headerCells: readonly string[];
+  readonly line: number;
+  readonly previewLine: number;
+  readonly role: MarkdownTableLineRole;
+}
+
 export interface MarkdownImageBlockState {
   readonly altText: string;
   readonly line: number;
@@ -79,6 +92,7 @@ export interface MarkdownLineClassificationState {
   readonly codeFenceRole?: MarkdownCodeFenceLineRole;
   readonly imageBlock?: MarkdownImageBlockState;
   readonly mathBlock?: MarkdownMathBlockState;
+  readonly tableBlock?: MarkdownTableBlockState;
   readonly tableState?: MarkdownTableLineState;
 }
 
@@ -90,6 +104,10 @@ export type MarkdownImageSourceResolver = (source: string) => Promise<string | u
 
 const syntaxMarkerDecoration = Decoration.mark({ class: "tp-editor-markdown-marker" });
 const codeCopyFeedbackDurationMs = 1200;
+const tablePreviewCellMaxWidthPx = 260;
+const tablePreviewCellMinWidthPx = 88;
+const tablePreviewHeaderEstimatedHeight = 42;
+const tablePreviewRowEstimatedHeight = 34;
 
 export function livePreviewExtension(
   configuration: MarkdownEditorConfiguration,
@@ -205,6 +223,10 @@ export function shouldReplaceInactiveCodeFenceLine(
   return !codeFenceIsActive && role !== "content";
 }
 
+export function shouldReplaceInactiveTableLine(tableBlockIsActive: boolean): boolean {
+  return !tableBlockIsActive;
+}
+
 export function findInactiveMarkdownSyntaxMarkers(text: string, active: boolean): readonly MarkdownSyntaxMarkerRange[] {
   if (active) {
     return [];
@@ -291,6 +313,7 @@ function buildDecorations(
       const codeFence = lineBlockState?.codeFence;
       const imageBlock = lineBlockState?.imageBlock;
       const mathBlock = lineBlockState?.mathBlock;
+      const tableBlock = lineBlockState?.tableBlock;
       const classes = classifyMarkdownLine(
         line.text,
         line.number === activeLine,
@@ -306,6 +329,9 @@ function buildDecorations(
       const mathBlockIsActive = mathBlock
         ? activeLine >= mathBlock.blockStart && activeLine <= mathBlock.blockEnd
         : false;
+      const tableBlockIsActive = tableBlock
+        ? activeLine >= tableBlock.blockStart && activeLine <= tableBlock.blockEnd
+        : false;
 
       if (codeFence && shouldReplaceInactiveCodeFenceLine(codeFence.role, codeFenceIsActive)) {
         builder.add(line.from, line.to, Decoration.replace(
@@ -315,12 +341,16 @@ function buildDecorations(
         builder.add(line.from, line.to, Decoration.replace(
           mathBlock.role === "open" ? { widget: new MarkdownMathBlockWidget(mathBlock) } : {}
         ));
+      } else if (tableBlock && shouldReplaceInactiveTableLine(tableBlockIsActive)) {
+        builder.add(line.from, line.to, Decoration.replace(
+          tableBlock.line === tableBlock.previewLine ? { widget: new MarkdownTableBlockWidget(tableBlock) } : {}
+        ));
       } else if (imageBlock && !lineIsActive) {
         builder.add(line.from, line.to, Decoration.replace({
           widget: new MarkdownImageBlockWidget(imageBlock, resolveImageSource)
         }));
       } else {
-        const inlineMathRanges = lineBlockState?.codeFenceRole || lineBlockState?.mathBlock
+        const inlineMathRanges = lineBlockState?.codeFenceRole || lineBlockState?.mathBlock || tableBlockIsActive
           ? []
           : findInactiveMarkdownInlineMathRanges(line.text, lineIsActive);
         const inlineDecorations = inlineMathRanges.map((inlineMath) => ({
@@ -328,7 +358,7 @@ function buildDecorations(
           from: line.from + inlineMath.from,
           to: line.from + inlineMath.to
         }));
-        const sourceLineIsActive = lineIsActive || codeFenceIsActive;
+        const sourceLineIsActive = lineIsActive || codeFenceIsActive || tableBlockIsActive;
         const markerDecorations = findInactiveMarkdownSyntaxMarkers(line.text, sourceLineIsActive)
           .filter((marker) => !inlineMathRanges.some((inlineMath) => rangesOverlap(marker, inlineMath)))
           .map((marker) => ({
@@ -438,6 +468,7 @@ function analyzeMarkdownLineBlocksFromSource(source: {
     }
 
     const table = readMarkdownTableFromSource({
+      ...(source.isVisible === undefined ? {} : { isVisible: source.isVisible }),
       lineCount: source.lineCount,
       readLine: source.readLine,
       startLine: lineNumber,
@@ -445,7 +476,10 @@ function analyzeMarkdownLineBlocksFromSource(source: {
     });
     if (table) {
       for (const tableState of table.states) {
-        setLineState(tableState.line, { tableState });
+        setLineState(tableState.tableLine.line, {
+          tableBlock: tableState.tableBlock,
+          tableState: tableState.tableLine
+        });
       }
 
       lineNumber = table.nextLine;
@@ -851,10 +885,16 @@ function rangesOverlap(
 
 interface MarkdownTableReadResult {
   readonly nextLine: number;
-  readonly states: readonly MarkdownTableLineState[];
+  readonly states: readonly MarkdownTableReadLineResult[];
+}
+
+interface MarkdownTableReadLineResult {
+  readonly tableBlock: MarkdownTableBlockState;
+  readonly tableLine: MarkdownTableLineState;
 }
 
 function readMarkdownTableFromSource(source: {
+  readonly isVisible?: (lineNumber: number) => boolean;
   readonly lineCount: number;
   readonly lookaheadLimit?: number;
   readonly readLine: (lineNumber: number) => string;
@@ -876,10 +916,12 @@ function readMarkdownTableFromSource(source: {
     return undefined;
   }
 
-  const rows: Array<Pick<MarkdownTableLineState, "line" | "role">> = [
-    { line: source.startLine, role: "header" },
-    { line: source.startLine + 1, role: "delimiter" }
+  const alignments = delimiterCells.map(readMarkdownTableColumnAlignment);
+  const rows: Array<Pick<MarkdownTableLineState, "line" | "role"> & { readonly cells: readonly string[] }> = [
+    { cells: headerCells, line: source.startLine, role: "header" },
+    { cells: delimiterCells, line: source.startLine + 1, role: "delimiter" }
   ];
+  const bodyRows: string[][] = [];
   let nextLine = source.startLine + 2;
   let tableContinuesAfterLookahead = false;
 
@@ -889,27 +931,52 @@ function readMarkdownTableFromSource(source: {
       break;
     }
 
-    if (!isMarkdownTableBodyRow(source.readLine(nextLine), delimiterCells.length)) {
+    const bodyCells = readMarkdownTableBodyCells(source.readLine(nextLine), delimiterCells.length);
+    if (!bodyCells) {
       break;
     }
 
-    rows.push({ line: nextLine, role: "body" });
+    bodyRows.push([...bodyCells]);
+    rows.push({ cells: bodyCells, line: nextLine, role: "body" });
     nextLine += 1;
   }
 
+  const blockEnd = rows.at(-1)?.line ?? source.startLine + 1;
+  const visibleRows = source.isVisible ? rows.filter((row) => source.isVisible?.(row.line)) : rows;
+  const previewLine = visibleRows.at(0)?.line ?? source.startLine;
+
   return {
     nextLine,
-    states: rows.map((row, index) => ({
-      ...row,
-      first: index === 0,
-      last: index === rows.length - 1 && !tableContinuesAfterLookahead
-    }))
+    states: rows
+      .map((row, index) => ({
+        tableBlock: {
+          alignments,
+          blockEnd,
+          blockStart: source.startLine,
+          bodyRows,
+          headerCells,
+          line: row.line,
+          previewLine,
+          role: row.role
+        },
+        tableLine: {
+          first: index === 0,
+          last: index === rows.length - 1 && !tableContinuesAfterLookahead,
+          line: row.line,
+          role: row.role
+        }
+      }))
+      .filter((state) => !source.isVisible || source.isVisible(state.tableLine.line))
   };
 }
 
 function isMarkdownTableBodyRow(text: string, columnCount: number): boolean {
+  return Boolean(readMarkdownTableBodyCells(text, columnCount));
+}
+
+function readMarkdownTableBodyCells(text: string, columnCount: number): readonly string[] | undefined {
   const cells = readMarkdownTableCells(text);
-  return Boolean(cells && cells.length === columnCount && !readMarkdownTableDelimiterCells(text));
+  return cells && cells.length === columnCount && !readMarkdownTableDelimiterCells(text) ? cells : undefined;
 }
 
 function readMarkdownTableDelimiterCells(text: string): readonly string[] | undefined {
@@ -934,6 +1001,101 @@ function readMarkdownTableCells(text: string): readonly string[] | undefined {
   const cells = normalized.split("|").map((cell) => cell.trim());
 
   return cells.length >= 2 ? cells : undefined;
+}
+
+function readMarkdownTableColumnAlignment(delimiter: string): MarkdownTableColumnAlignment {
+  const startsWithColon = delimiter.startsWith(":");
+  const endsWithColon = delimiter.endsWith(":");
+
+  if (startsWithColon && endsWithColon) {
+    return "center";
+  }
+
+  if (endsWithColon) {
+    return "right";
+  }
+
+  if (startsWithColon) {
+    return "left";
+  }
+
+  return "default";
+}
+
+class MarkdownTableBlockWidget extends WidgetType {
+  constructor(private readonly tableBlock: MarkdownTableBlockState) {
+    super();
+  }
+
+  override eq(widget: WidgetType): boolean {
+    return widget instanceof MarkdownTableBlockWidget &&
+      serializeTableBlock(widget.tableBlock) === serializeTableBlock(this.tableBlock);
+  }
+
+  override toDOM(): HTMLElement {
+    const wrapper = document.createElement("span");
+    wrapper.className = "tp-editor-table-preview";
+    wrapper.setAttribute("aria-label", "Table preview");
+    wrapper.setAttribute("role", "group");
+
+    const table = document.createElement("table");
+    const thead = document.createElement("thead");
+    const headerRow = document.createElement("tr");
+
+    this.tableBlock.headerCells.forEach((cell, index) => {
+      const headerCell = document.createElement("th");
+      headerCell.scope = "col";
+      headerCell.textContent = cell;
+      setTableCellAlignment(headerCell, this.tableBlock.alignments[index]);
+      headerRow.append(headerCell);
+    });
+
+    thead.append(headerRow);
+    table.append(thead);
+
+    if (this.tableBlock.bodyRows.length > 0) {
+      const tbody = document.createElement("tbody");
+
+      for (const row of this.tableBlock.bodyRows) {
+        const bodyRow = document.createElement("tr");
+
+        row.forEach((cell, index) => {
+          const bodyCell = document.createElement("td");
+          bodyCell.textContent = cell;
+          setTableCellAlignment(bodyCell, this.tableBlock.alignments[index]);
+          bodyRow.append(bodyCell);
+        });
+
+        tbody.append(bodyRow);
+      }
+
+      table.append(tbody);
+    }
+
+    wrapper.append(table);
+    return wrapper;
+  }
+
+  override get estimatedHeight(): number {
+    return tablePreviewHeaderEstimatedHeight +
+      Math.max(1, this.tableBlock.bodyRows.length) * tablePreviewRowEstimatedHeight;
+  }
+
+  override ignoreEvent(): boolean {
+    return false;
+  }
+}
+
+function setTableCellAlignment(cell: HTMLTableCellElement, alignment: MarkdownTableColumnAlignment | undefined): void {
+  cell.dataset.align = alignment ?? "default";
+}
+
+function serializeTableBlock(tableBlock: MarkdownTableBlockState): string {
+  return JSON.stringify({
+    alignments: tableBlock.alignments,
+    bodyRows: tableBlock.bodyRows,
+    headerCells: tableBlock.headerCells
+  });
 }
 
 class MarkdownCodeFenceHeaderWidget extends WidgetType {
@@ -1438,6 +1600,56 @@ function markdownEditorTheme(configuration: MarkdownEditorConfiguration): Extens
       borderBottomLeftRadius: "var(--tp-radius-control)",
       borderBottomRightRadius: "var(--tp-radius-control)",
       paddingBottom: "4px"
+    },
+    ".tp-editor-table-preview": {
+      display: "block",
+      width: "100%",
+      boxSizing: "border-box",
+      overflowX: "auto",
+      border: "1px solid var(--tp-color-table-border)",
+      borderLeft: "3px solid var(--tp-color-table-border)",
+      borderRadius: "var(--tp-radius-control)",
+      backgroundColor: "var(--tp-color-table-row)",
+      color: "var(--tp-color-text)",
+      fontFamily: "var(--tp-font-ui)"
+    },
+    ".tp-editor-table-preview table": {
+      width: "100%",
+      minWidth: "100%",
+      borderCollapse: "collapse",
+      tableLayout: "auto"
+    },
+    ".tp-editor-table-preview th, .tp-editor-table-preview td": {
+      minWidth: `${tablePreviewCellMinWidthPx}px`,
+      maxWidth: `${tablePreviewCellMaxWidthPx}px`,
+      padding: "8px 10px",
+      borderBottom: "1px solid var(--tp-color-table-border)",
+      borderRight: "1px solid var(--tp-color-table-border)",
+      overflow: "hidden",
+      textOverflow: "ellipsis",
+      whiteSpace: "nowrap",
+      fontSize: "13px",
+      lineHeight: "1.35",
+      textAlign: "left"
+    },
+    ".tp-editor-table-preview th": {
+      backgroundColor: "var(--tp-color-table-header)",
+      fontWeight: "650"
+    },
+    ".tp-editor-table-preview td": {
+      color: "var(--tp-color-text-muted)"
+    },
+    ".tp-editor-table-preview th[data-align='center'], .tp-editor-table-preview td[data-align='center']": {
+      textAlign: "center"
+    },
+    ".tp-editor-table-preview th[data-align='right'], .tp-editor-table-preview td[data-align='right']": {
+      textAlign: "right"
+    },
+    ".tp-editor-table-preview tr:last-child td": {
+      borderBottom: "0"
+    },
+    ".tp-editor-table-preview th:last-child, .tp-editor-table-preview td:last-child": {
+      borderRight: "0"
     },
     ".tp-editor-image-line": {
       paddingTop: "4px",

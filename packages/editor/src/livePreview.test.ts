@@ -8,7 +8,8 @@ import {
   classifyMarkdownLine,
   findInactiveMarkdownInlineMathRanges,
   findInactiveMarkdownSyntaxMarkers,
-  shouldReplaceInactiveCodeFenceLine
+  shouldReplaceInactiveCodeFenceLine,
+  shouldReplaceInactiveTableLine
 } from "./index";
 
 describe("classifyMarkdownLine", () => {
@@ -162,6 +163,13 @@ describe("shouldReplaceInactiveCodeFenceLine", () => {
     expect(shouldReplaceInactiveCodeFenceLine("open", true)).toBe(false);
     expect(shouldReplaceInactiveCodeFenceLine("content", true)).toBe(false);
     expect(shouldReplaceInactiveCodeFenceLine("close", true)).toBe(false);
+  });
+});
+
+describe("shouldReplaceInactiveTableLine", () => {
+  it("replaces inactive table lines and keeps active table source visible", () => {
+    expect(shouldReplaceInactiveTableLine(false)).toBe(true);
+    expect(shouldReplaceInactiveTableLine(true)).toBe(false);
   });
 });
 
@@ -360,6 +368,70 @@ describe("analyzeMarkdownTableLines", () => {
       { first: false, last: false, line: 3, role: "delimiter" },
       { first: false, last: false, line: 4, role: "body" },
       { first: false, last: true, line: 5, role: "body" }
+    ]);
+  });
+
+  it("collects table preview cells, alignments, and block range", () => {
+    const tableBlocks = analyzeMarkdownLineBlocks([
+      "| Name | Count | Status |",
+      "| :--- | ---: | :---: |",
+      "| Alpha | 1 | Ready |",
+      "| Beta | 2 | Hold |"
+    ]).flatMap((state) => state.tableBlock ? [state.tableBlock] : []);
+
+    expect(tableBlocks).toEqual([
+      {
+        alignments: ["left", "right", "center"],
+        blockEnd: 4,
+        blockStart: 1,
+        bodyRows: [
+          ["Alpha", "1", "Ready"],
+          ["Beta", "2", "Hold"]
+        ],
+        headerCells: ["Name", "Count", "Status"],
+        line: 1,
+        previewLine: 1,
+        role: "header"
+      },
+      {
+        alignments: ["left", "right", "center"],
+        blockEnd: 4,
+        blockStart: 1,
+        bodyRows: [
+          ["Alpha", "1", "Ready"],
+          ["Beta", "2", "Hold"]
+        ],
+        headerCells: ["Name", "Count", "Status"],
+        line: 2,
+        previewLine: 1,
+        role: "delimiter"
+      },
+      {
+        alignments: ["left", "right", "center"],
+        blockEnd: 4,
+        blockStart: 1,
+        bodyRows: [
+          ["Alpha", "1", "Ready"],
+          ["Beta", "2", "Hold"]
+        ],
+        headerCells: ["Name", "Count", "Status"],
+        line: 3,
+        previewLine: 1,
+        role: "body"
+      },
+      {
+        alignments: ["left", "right", "center"],
+        blockEnd: 4,
+        blockStart: 1,
+        bodyRows: [
+          ["Alpha", "1", "Ready"],
+          ["Beta", "2", "Hold"]
+        ],
+        headerCells: ["Name", "Count", "Status"],
+        line: 4,
+        previewLine: 1,
+        role: "body"
+      }
     ]);
   });
 
