@@ -1080,3 +1080,33 @@ Known limitations:
 
 - Browser verification covers the no-workspace fallback; full tagged-resource navigation still depends on native workspace fixture coverage or future Workbench component tests.
 - Tags are based on the current in-memory index, so saved-file updates still rely on workspace refresh/watch until SQLite persistence and incremental indexing land.
+
+## 2026-06-06 - P2 Saved File Index Refresh
+
+Completed:
+
+- Added `IIndexService.indexFile(file, value?)` for single-file index refresh.
+- Updated saved workspace file records without forcing a full workspace reindex.
+- Refreshed the index after auto-save, manual save, save-as, and conflict overwrite success paths.
+- Added platform coverage proving saved content updates search results, tags, and backlinks.
+
+Quality gate:
+
+- `npm run test -- --run packages/platform/src/platform.test.ts`: passed, 19 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 100 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed
+- Browser search regression: current-note search for `Project` returned line 1 with `# Project note`; the earlier `topic` query had no match because the current browser fallback note did not contain that text.
+- Browser layout and save-button checks: no page horizontal overflow and no console errors.
+
+Review:
+
+- Incremental refresh stays behind the platform index service; Workbench does not parse Markdown metadata.
+- Workbench only locates the saved file in the current workspace tree and passes the saved model content.
+- Search, tag, and backlink data now update immediately after a successful save instead of relying only on watcher or refresh timing.
+
+Known limitations:
+
+- Save-as refreshes the index only when the saved URI is already present in the current workspace file list; newly created files may still rely on workspace refresh or watcher updates until the file tree catches up.
+- The index remains in memory; SQLite-backed incremental persistence is still planned.

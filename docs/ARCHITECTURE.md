@@ -53,6 +53,8 @@ Preview resources are also resolved by the platform layer. The renderer passes t
 
 Workbench navigation surfaces, including search, outline, files, backlinks, and tags, consume package/service contracts. Backlinks and tags are queried through `IIndexService`; Workbench opens indexed source notes and scrolls to indexed lines without resolving Markdown links or processing raw tag metadata itself.
 
+Successful workspace saves refresh the saved file's index record through `IIndexService.indexFile(file, value?)`. Workbench only maps the saved model to the current workspace file entry and passes saved content; Markdown search, tag, and backlink extraction remain owned by the platform index provider.
+
 Planned services:
 
 - SQLite-backed index provider for `IIndexService`: persisted search, metadata, link graph queries, and tag queries
