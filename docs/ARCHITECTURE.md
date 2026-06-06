@@ -62,6 +62,8 @@ Keyboard shortcuts are resolved through `IKeybindingService` instead of hard-cod
 
 User preferences are owned by `IConfigurationService`. The service reads and writes validated configuration through an injected storage boundary, so Workbench commands update preferences through the service without accessing storage directly. In Electron, the preload bridge routes configuration storage to a main-process file under the app data directory; browser builds fall back to browser storage.
 
+The settings UI is a Workbench contribution, not a storage owner. `SettingsDialog` renders appearance, editor, and workspace controls, then sends partial updates to `IConfigurationService`. Numeric setting bounds and asset-folder normalization live in the Workbench settings model so the dialog can grow without scattering UI constants.
+
 Planned services:
 
 - SQLite-backed index provider for `IIndexService`: persisted search, metadata, link graph queries, and tag queries

@@ -1253,3 +1253,36 @@ Known limitations:
 
 - The native bridge is build-verified but not yet covered by an automated Electron runtime test.
 - There is still no dedicated settings UI; preferences are changed through existing commands and defaults.
+
+## 2026-06-06 - P2 Settings Preferences Dialog
+
+Completed:
+
+- Added a dedicated Workbench settings dialog for appearance, editor, and workspace preferences.
+- Added an activity bar Settings entry, `workbench.settings.open` command, and `Ctrl+,` keybinding.
+- Wired all setting changes through `IConfigurationService` partial updates.
+- Added compact density styling so the existing density preference has visible UI effect.
+- Added a settings model for numeric UI bounds, search file-size conversion, and asset folder normalization.
+- Added focused Workbench tests for settings model behavior.
+
+Quality gate:
+
+- `npm run test -- --run packages/workbench/src/settingsModel.test.ts`: passed, 3 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 112 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed
+- Browser regression: Settings opened from the activity bar, theme/density/auto-save changes applied, reload preserved persisted values, and no console errors or horizontal overflow occurred.
+- Mobile 390px viewport check: Settings dialog collapsed to single-column fields without horizontal overflow.
+
+Review:
+
+- Workbench still does not access configuration storage directly; settings updates stay behind `IConfigurationService`.
+- The settings dialog is split into its own component, keeping `Application.tsx` focused on shell assembly and command registration.
+- Numeric limits and path input normalization are centralized in `settingsModel.ts`, avoiding scattered UI constants.
+- The dialog reuses existing modal/button styling and theme tokens; no new platform assumptions or extra documentation files were introduced.
+
+Known limitations:
+
+- The browser automation environment could not exercise text entry into the numeric spinbutton because its fill/type helper requires a virtual clipboard. The control rendered correctly and non-text setting paths were verified interactively.
+- User-editable keybindings remain future work; Settings currently exposes application preferences only.
