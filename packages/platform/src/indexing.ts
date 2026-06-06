@@ -100,6 +100,7 @@ export interface IIndexService {
 export const IIndexService = createServiceIdentifier<IIndexService>("index");
 
 export interface WorkspaceIndexProvider {
+  setSnapshotScope?(scope: string | undefined): void;
   beginBatch?(): void;
   endBatch?(): void;
   clear(): void;
@@ -117,6 +118,7 @@ export const workspaceIndexProviderSnapshotVersion = 1;
 
 export interface WorkspaceIndexProviderSnapshot {
   readonly version: typeof workspaceIndexProviderSnapshotVersion;
+  readonly scope?: string;
   readonly documents: readonly WorkspaceIndexedDocumentSnapshot[];
 }
 
@@ -145,9 +147,14 @@ export const defaultWorkspaceIndexSnapshotProviderOptions = {
 
 export class InMemoryWorkspaceIndexProvider implements WorkspaceIndexProvider {
   private documents: WorkspaceIndexedDocument[];
+  private snapshotScope: string | undefined;
 
   constructor(documents: readonly WorkspaceIndexedDocument[] = []) {
     this.documents = [...documents];
+  }
+
+  setSnapshotScope(scope: string | undefined): void {
+    this.snapshotScope = normalizeWorkspaceIndexSnapshotScope(scope);
   }
 
   clear(): void {
@@ -262,7 +269,7 @@ export class InMemoryWorkspaceIndexProvider implements WorkspaceIndexProvider {
   }
 
   toSnapshot(): WorkspaceIndexProviderSnapshot {
-    return createWorkspaceIndexProviderSnapshot(this.documents);
+    return createWorkspaceIndexProviderSnapshot(this.documents, this.snapshotScope);
   }
 
   restoreSnapshot(snapshot: WorkspaceIndexProviderSnapshot): void {
@@ -277,16 +284,26 @@ export class InMemoryWorkspaceIndexProvider implements WorkspaceIndexProvider {
 
 export class PersistedWorkspaceIndexProvider extends InMemoryWorkspaceIndexProvider {
   private readonly storage: WorkspaceIndexSnapshotStorage;
-  private readonly storageKey: string;
+  private readonly baseStorageKey: string;
   private readonly maxSnapshotBytes: number;
+  private storageKey: string;
+  private currentSnapshotScope: string | undefined;
   private batchDepth = 0;
   private pendingPersist = false;
 
   constructor(options: PersistedWorkspaceIndexProviderOptions) {
     super();
     this.storage = options.storage;
-    this.storageKey = options.storageKey ?? defaultWorkspaceIndexSnapshotProviderOptions.storageKey;
+    this.baseStorageKey = options.storageKey ?? defaultWorkspaceIndexSnapshotProviderOptions.storageKey;
+    this.storageKey = this.baseStorageKey;
     this.maxSnapshotBytes = options.maxSnapshotBytes ?? defaultWorkspaceIndexSnapshotProviderOptions.maxSnapshotBytes;
+    this.restorePersistedSnapshot();
+  }
+
+  override setSnapshotScope(scope: string | undefined): void {
+    this.currentSnapshotScope = normalizeWorkspaceIndexSnapshotScope(scope);
+    this.storageKey = createWorkspaceIndexSnapshotStorageKey(this.baseStorageKey, this.currentSnapshotScope);
+    super.setSnapshotScope(this.currentSnapshotScope);
     this.restorePersistedSnapshot();
   }
 
@@ -322,6 +339,12 @@ export class PersistedWorkspaceIndexProvider extends InMemoryWorkspaceIndexProvi
     const snapshot = readWorkspaceIndexProviderSnapshot(this.storage.read(this.storageKey));
 
     if (!snapshot) {
+      this.restoreSnapshot(createEmptyIndexSnapshot(this.currentSnapshotScope));
+      return;
+    }
+
+    if (snapshot.scope !== undefined && snapshot.scope !== this.currentSnapshotScope) {
+      this.restoreSnapshot(createEmptyIndexSnapshot(this.currentSnapshotScope));
       return;
     }
 
@@ -339,13 +362,15 @@ export class PersistedWorkspaceIndexProvider extends InMemoryWorkspaceIndexProvi
 
   private persistSnapshot(): void {
     const value = JSON.stringify(this.toSnapshot());
-    const persistedValue = value.length <= this.maxSnapshotBytes ? value : JSON.stringify(createEmptyIndexSnapshot());
+    const persistedValue = value.length <= this.maxSnapshotBytes
+      ? value
+      : JSON.stringify(createEmptyIndexSnapshot(this.currentSnapshotScope));
 
     try {
       this.storage.write(this.storageKey, persistedValue);
     } catch {
       try {
-        this.storage.write(this.storageKey, JSON.stringify(createEmptyIndexSnapshot()));
+        this.storage.write(this.storageKey, JSON.stringify(createEmptyIndexSnapshot(this.currentSnapshotScope)));
       } catch {
         // Storage backends such as localStorage can reject writes when quota is exhausted.
       }
@@ -393,6 +418,7 @@ export class WorkspaceIndexService implements IIndexService {
   async indexWorkspace(workspace: WorkspaceFileTree): Promise<void> {
     const generation = this.generation + 1;
     this.generation = generation;
+    this.provider.setSnapshotScope?.(workspace.root.uri.toString());
     this.provider.beginBatch?.();
 
     try {
@@ -891,10 +917,12 @@ function createPreview(value: string, maxLength: number): string {
 }
 
 function createWorkspaceIndexProviderSnapshot(
-  documents: readonly WorkspaceIndexedDocument[]
+  documents: readonly WorkspaceIndexedDocument[],
+  scope: string | undefined
 ): WorkspaceIndexProviderSnapshot {
   return {
     version: workspaceIndexProviderSnapshotVersion,
+    ...(scope === undefined ? {} : { scope }),
     documents: documents.map((document) => ({
       uri: document.uri.toString(),
       name: document.name,
@@ -904,9 +932,10 @@ function createWorkspaceIndexProviderSnapshot(
   };
 }
 
-function createEmptyIndexSnapshot(): WorkspaceIndexProviderSnapshot {
+function createEmptyIndexSnapshot(scope: string | undefined): WorkspaceIndexProviderSnapshot {
   return {
     version: workspaceIndexProviderSnapshotVersion,
+    ...(scope === undefined ? {} : { scope }),
     documents: []
   };
 }
@@ -930,6 +959,7 @@ function sanitizeWorkspaceIndexProviderSnapshot(value: unknown): WorkspaceIndexP
 
   return {
     version: workspaceIndexProviderSnapshotVersion,
+    ...(typeof value.scope === "string" ? { scope: value.scope } : {}),
     documents: value.documents.filter(isWorkspaceIndexedDocumentSnapshot)
   };
 }
@@ -955,6 +985,32 @@ export function createBrowserWorkspaceIndexSnapshotStorage(): WorkspaceIndexSnap
       window.localStorage.setItem(key, value);
     }
   };
+}
+
+export function createWorkspaceIndexSnapshotStorageKey(baseKey: string, scope: string | undefined): string {
+  const normalizedScope = normalizeWorkspaceIndexSnapshotScope(scope);
+
+  if (!normalizedScope) {
+    return baseKey;
+  }
+
+  return `${baseKey}.${hashWorkspaceIndexSnapshotScope(normalizedScope)}`;
+}
+
+function normalizeWorkspaceIndexSnapshotScope(scope: string | undefined): string | undefined {
+  const value = scope?.trim();
+  return value ? value : undefined;
+}
+
+function hashWorkspaceIndexSnapshotScope(scope: string): string {
+  let hash = 2166136261;
+
+  for (let index = 0; index < scope.length; index += 1) {
+    hash ^= scope.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+
+  return (hash >>> 0).toString(36);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

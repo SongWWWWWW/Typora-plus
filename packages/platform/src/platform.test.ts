@@ -728,6 +728,7 @@ describe("workspace index", () => {
       storageKey: "workspace-index",
       maxSnapshotBytes: 10000
     });
+    restoredProvider.setSnapshotScope(URI.file("C:/Notes").toString());
     const restoredService = new WorkspaceIndexService(new NativeFileService(createMemoryHost()), {
       maxResults: 10
     }, restoredProvider);
@@ -736,6 +737,49 @@ describe("workspace index", () => {
     expect(restoredService.query("shared").map((result) => result.relativePath)).toEqual(["a.md"]);
     expect(restoredService.getTaggedResources("project").map((tag) => tag.relativePath)).toEqual(["a.md"]);
     expect(restoredService.getMetadata().links.map((link) => link.target)).toEqual(["b.md"]);
+  });
+
+  it("scopes persisted index snapshots by workspace root", async () => {
+    const storage = createMemoryStorage();
+    const host = createMemoryHost([
+      ["file://C:/Notes/a.md", "alpha workspace topic"],
+      ["file://D:/Other/b.md", "beta workspace topic"]
+    ]);
+    const provider = new PersistedWorkspaceIndexProvider({
+      storage,
+      storageKey: "workspace-index",
+      maxSnapshotBytes: 10000
+    });
+    const service = new WorkspaceIndexService(new NativeFileService(host), {
+      maxResults: 10
+    }, provider);
+
+    await service.indexWorkspace(createWorkspaceFileTree([
+      createFileEntry("C:/Notes/a.md", "a.md", "a.md")
+    ], "C:/Notes", "Notes"));
+    await service.indexWorkspace(createWorkspaceFileTree([
+      createFileEntry("D:/Other/b.md", "b.md", "b.md")
+    ], "D:/Other", "Other"));
+
+    const notesProvider = new PersistedWorkspaceIndexProvider({
+      storage,
+      storageKey: "workspace-index",
+      maxSnapshotBytes: 10000
+    });
+    notesProvider.setSnapshotScope(URI.file("C:/Notes").toString());
+    const otherProvider = new PersistedWorkspaceIndexProvider({
+      storage,
+      storageKey: "workspace-index",
+      maxSnapshotBytes: 10000
+    });
+    otherProvider.setSnapshotScope(URI.file("D:/Other").toString());
+
+    expect(notesProvider.query("alpha", { maxPreviewLength: 80, maxResults: 10 }).map((result) => result.relativePath))
+      .toEqual(["a.md"]);
+    expect(notesProvider.query("beta", { maxPreviewLength: 80, maxResults: 10 })).toEqual([]);
+    expect(otherProvider.query("beta", { maxPreviewLength: 80, maxResults: 10 }).map((result) => result.relativePath))
+      .toEqual(["b.md"]);
+    expect(otherProvider.query("alpha", { maxPreviewLength: 80, maxResults: 10 })).toEqual([]);
   });
 
   it("does not let a canceled workspace scan write stale documents", async () => {
@@ -1151,12 +1195,12 @@ function createMemoryHost(entries: readonly (readonly [string, string])[] = [["f
 
 function createWorkspaceFileTree(files: readonly FileTreeEntry[] = [
   createFileEntry("C:/Notes/a.md", "a.md", "a.md")
-]): WorkspaceFileTree {
+], rootPath = "C:/Notes", rootName = "Notes"): WorkspaceFileTree {
 
   return {
     root: {
-      uri: URI.file("C:/Notes"),
-      name: "Notes",
+      uri: URI.file(rootPath),
+      name: rootName,
       relativePath: "",
       kind: "directory",
       children: files
