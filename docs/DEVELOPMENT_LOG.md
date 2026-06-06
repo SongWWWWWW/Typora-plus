@@ -414,3 +414,33 @@ Known limitations:
 - Inline math is not yet rendered.
 - The display math parser remains regex-based pending parser-backed position mapping.
 - KaTeX is currently rendered as MathML without the full KaTeX CSS layer.
+
+## 2026-06-06 - P2 Inline Math Preview
+
+Completed:
+
+- Added inactive-line inline math range detection for `$...$` expressions.
+- Rendered inline math through KaTeX while keeping active lines fully editable as Markdown source.
+- Skipped escaped dollars, `$$` display math delimiters, and inline code spans.
+- Kept inline math previews out of fenced code blocks and display math blocks.
+- Added a theme token for inline math preview styling.
+
+Quality gate:
+
+- `npm run verify`: passed
+- `npm test`: passed, 52 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- Production browser preview: passed at `http://127.0.0.1:4173`
+- Desktop and 390px viewport checks: passed without horizontal overflow or console errors
+
+Review:
+
+- Inline math remains an editor presentation feature and does not change the Markdown text model.
+- KaTeX continues to own formula rendering; no hand-rolled renderer was added.
+- Theme styling uses centralized tokens rather than local color constants.
+- Parser logic is isolated in `packages/editor`, keeping Workbench and platform services unaware of Markdown inline syntax.
+
+Known limitations:
+
+- Inline math parsing is still lightweight and regex/scan based; parser-backed position mapping remains planned.
+- KaTeX is still rendered as MathML without the full KaTeX CSS layer.

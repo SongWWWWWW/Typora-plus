@@ -17,6 +17,7 @@ P0/P1 are implemented:
 - Markdown table block styling
 - standalone image preview cards
 - KaTeX-backed display math preview blocks
+- KaTeX-backed inline math previews
 - focus mode and typewriter mode
 - command palette, sidebar, outline, current-note search
 - browser draft persistence

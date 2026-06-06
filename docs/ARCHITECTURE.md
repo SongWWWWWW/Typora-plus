@@ -72,15 +72,16 @@ Current features:
 - table block styling with code-fence-aware table detection
 - standalone image preview cards with workspace-backed local image resolution and direct inline/blob rendering
 - KaTeX-backed display math preview blocks
+- KaTeX-backed inline math previews for inactive lines
 - focus mode dimming
 - typewriter mode top spacing
 - imperative line scrolling for outline and search
 
 Next editor work:
 
-- richer display math editing affordances
 - richer code fence widgets
 - richer table editing affordances
+- richer math editing affordances
 - viewport-safe large document behavior tests
 - parser-backed position mapping
 
