@@ -2794,3 +2794,37 @@ Known limitations:
 - External extension package loading is still not implemented.
 - Extension host transport and IPC are still not implemented.
 - The broker is not wired into an extension host implementation yet; the next step is a transport/session adapter that owns message correlation and broker lifetime.
+
+## 2026-06-07 - P2 Extension Host Protocol Session Boundary
+
+Completed:
+
+- Added `ExtensionHostProtocolSession` as a platform-level session adapter around a transport-shaped `send`/`onMessage` boundary.
+- Added activation request dispatch with request id generation, pending request correlation, activation result handling, and activation error propagation.
+- Routed inbound runtime API messages through `ExtensionHostRuntimeBroker` and sent broker API responses back through the injected transport.
+- Added response identity checks so mismatched extension ids or request ids reject the pending request instead of being accepted silently.
+- Added disposal behavior that rejects all pending requests and disposes the broker-owned proxy runtime contributions.
+- Added focused tests for activation success, activation errors, response mismatches, inbound command registration, remote command callback correlation, main-thread command execution, export/renderer proxy callback correlation, unhandled inbound messages, invalid inbound payloads, and pending rejection on dispose.
+
+Quality gate:
+
+- `npm run typecheck`: passed
+- `npx vitest run packages/platform/src/extensionHostProtocolSession.test.ts packages/platform/src/extensionHostRuntimeBroker.test.ts packages/platform/src/extensionHostProtocol.test.ts`: passed, 23 tests
+- `npm run verify`: passed, 280 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Browser smoke check: not run because this stage only changes platform session/protocol code and documentation.
+
+Review:
+
+- The session remains platform-only and depends only on base events/lifecycle plus platform extension contracts.
+- Transport behavior is abstracted as `send` and `onMessage`; Electron IPC, worker messaging, and external extension package loading remain outside this boundary.
+- Request correlation is owned by the session instead of being scattered through future hosts or Workbench code.
+- Runtime API mapping remains owned by `ExtensionHostRuntimeBroker`, keeping protocol validation, session correlation, and service invocation separate.
+- No new dependency, storage path, visual token, extra documentation file, or direct DOM access by extension runtimes was introduced.
+
+Known limitations:
+
+- External extension package loading is still not implemented.
+- Extension host transport and IPC are still not implemented.
+- No concrete out-of-process extension host implementation is wired to the session yet.
