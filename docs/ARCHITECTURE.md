@@ -44,7 +44,7 @@ Current services:
 - `IFileService`: native workspace file tree, trusted recent workspace reopen, workspace change events, file open, save, save-as
 - `IAttachmentService`: pasted image persistence through a native bridge
 - `IRecentService`: persisted recent files and workspaces
-- `IIndexService`: asynchronous workspace indexing, cross-file search, Markdown metadata collection, backlink/link graph queries, and tag queries
+- `IIndexService`: asynchronous workspace indexing, cross-file search, Markdown metadata collection, backlink/link graph queries, and tag queries through a replaceable index provider
 - `IResourceService`: workspace-backed preview resource resolution through a native bridge
 
 Native workspace trust is owned by the Electron main process. The renderer may request a recent workspace by URI, but the main process only opens paths previously selected through the native directory picker and recorded in the main-process trust store.
@@ -54,6 +54,8 @@ Preview resources are also resolved by the platform layer. The renderer passes t
 Workbench navigation surfaces, including search, outline, files, backlinks, and tags, consume package/service contracts. Backlinks and tags are queried through `IIndexService`; Workbench opens indexed source notes and scrolls to indexed lines without resolving Markdown links or processing raw tag metadata itself.
 
 Successful workspace saves refresh the saved file's index record through `IIndexService.indexFile(file, value?)`. Workbench maps the saved model to the current workspace file entry and passes saved content; when save-as creates a file that is not listed yet, Workbench refreshes the workspace tree once and retries the index update. Markdown search, tag, and backlink extraction remain owned by the platform index provider.
+
+`WorkspaceIndexService` owns scan orchestration and status updates. Indexed storage and query behavior sit behind `WorkspaceIndexProvider`; `InMemoryWorkspaceIndexProvider` is the default provider for the current stage, and a future SQLite provider should implement the same storage/query contract without changing Workbench consumers.
 
 Planned services:
 

@@ -1137,3 +1137,32 @@ Known limitations:
 
 - Save-as files outside the active workspace are intentionally not indexed into the active workspace.
 - The index remains in memory; SQLite-backed incremental persistence is still planned.
+
+## 2026-06-06 - P2 Workspace Index Provider Boundary
+
+Completed:
+
+- Added `WorkspaceIndexProvider` as the storage/query boundary behind `IIndexService`.
+- Added `InMemoryWorkspaceIndexProvider` as the current provider implementation.
+- Refactored `WorkspaceIndexService` to orchestrate scanning, generation, and status while delegating search, metadata, tags, and backlinks to the provider.
+- Added a platform test proving `WorkspaceIndexService` can delegate storage and query work through a custom provider.
+
+Quality gate:
+
+- `npm run test -- --run packages/platform/src/platform.test.ts`: passed, 20 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 103 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed
+- Browser regression: current-note search for `Project` returned line 1 with `# Project note`; no console errors or page horizontal overflow.
+
+Review:
+
+- The Workbench-facing `IIndexService` contract stayed stable.
+- Query and storage behavior are no longer hidden inside `WorkspaceIndexService`, which reduces the blast radius for a future SQLite provider.
+- Platform still owns Markdown metadata extraction and link/tag/backlink semantics; Workbench did not gain Markdown parsing or filesystem assumptions.
+
+Known limitations:
+
+- The default provider is still in memory; this stage prepares the replacement boundary but does not add persisted SQLite storage yet.
+- Full-text ranking remains the current lightweight line scoring model.
