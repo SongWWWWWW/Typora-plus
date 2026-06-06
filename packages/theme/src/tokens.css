@@ -16,6 +16,9 @@
   --tp-color-table-row: #f4f6f1;
   --tp-color-table-header: #e9eee5;
   --tp-color-table-border: #cbd5c2;
+  --tp-color-image-block: #f2f5f5;
+  --tp-color-image-block-border: #c7d4d6;
+  --tp-color-image-preview: #e5ecee;
   --tp-color-selection: #cde9e4;
   --tp-color-warning: #9a6a10;
   --tp-color-danger: #a43e42;
@@ -47,6 +50,9 @@
   --tp-color-table-row: #22261f;
   --tp-color-table-header: #2b3028;
   --tp-color-table-border: #4a5544;
+  --tp-color-image-block: #22272a;
+  --tp-color-image-block-border: #46565b;
+  --tp-color-image-preview: #1a1f22;
   --tp-color-selection: #264e49;
   --tp-color-warning: #d8ad4d;
   --tp-color-danger: #e07d80;

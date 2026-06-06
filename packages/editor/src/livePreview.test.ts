@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   analyzeMarkdownCodeFenceLines,
+  analyzeMarkdownImageBlocks,
   analyzeMarkdownTableLines,
   classifyMarkdownLine,
   findInactiveMarkdownSyntaxMarkers
@@ -33,6 +34,18 @@ describe("classifyMarkdownLine", () => {
       "tp-editor-table-header",
       "tp-editor-table-first"
     ]));
+  });
+
+  it("adds image line classes when an image block is present", () => {
+    expect(classifyMarkdownLine("![Diagram](diagram.png)", false, false, {
+      imageBlock: {
+        altText: "Diagram",
+        line: 1,
+        previewable: false,
+        source: "diagram.png",
+        sourceLabel: "diagram.png"
+      }
+    })).toContain("tp-editor-image-line");
   });
 });
 
@@ -71,6 +84,68 @@ describe("analyzeMarkdownCodeFenceLines", () => {
       { line: 2, role: "content" },
       { line: 3, role: "close" }
     ]);
+  });
+});
+
+describe("analyzeMarkdownImageBlocks", () => {
+  it("marks standalone image lines", () => {
+    expect(analyzeMarkdownImageBlocks([
+      "before",
+      "![Diagram](assets/diagram.png)",
+      "after"
+    ])).toEqual([
+      {
+        altText: "Diagram",
+        line: 2,
+        previewable: false,
+        source: "assets/diagram.png",
+        sourceLabel: "diagram.png"
+      }
+    ]);
+  });
+
+  it("supports image titles and angle-bracket sources", () => {
+    expect(analyzeMarkdownImageBlocks([
+      "![Alt](<images/hero image.png> \"Hero title\")"
+    ])).toEqual([
+      {
+        altText: "Alt",
+        line: 1,
+        previewable: false,
+        source: "images/hero image.png",
+        sourceLabel: "hero image.png",
+        title: "Hero title"
+      }
+    ]);
+  });
+
+  it("marks data images as directly previewable without exposing the full source as the label", () => {
+    expect(analyzeMarkdownImageBlocks([
+      "![Dot](data:image/png;base64,abc)"
+    ])).toEqual([
+      {
+        altText: "Dot",
+        line: 1,
+        previewable: true,
+        source: "data:image/png;base64,abc",
+        sourceLabel: "inline image"
+      }
+    ]);
+  });
+
+  it("does not mark inline text images or images inside code fences", () => {
+    expect(analyzeMarkdownImageBlocks([
+      "See ![Diagram](diagram.png)",
+      "```",
+      "![Code](code.png)",
+      "```"
+    ])).toEqual([]);
+  });
+
+  it("does not mark malformed image targets with trailing text", () => {
+    expect(analyzeMarkdownImageBlocks([
+      "![Broken](diagram.png trailing text)"
+    ])).toEqual([]);
   });
 });
 

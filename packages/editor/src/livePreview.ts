@@ -1,6 +1,13 @@
 import { RangeSetBuilder } from "@codemirror/state";
 import type { Extension } from "@codemirror/state";
-import { Decoration, type DecorationSet, EditorView, ViewPlugin, type ViewUpdate } from "@codemirror/view";
+import {
+  Decoration,
+  type DecorationSet,
+  EditorView,
+  ViewPlugin,
+  type ViewUpdate,
+  WidgetType
+} from "@codemirror/view";
 
 export interface MarkdownEditorConfiguration {
   readonly fontSize: number;
@@ -31,8 +38,18 @@ export interface MarkdownTableLineState {
   readonly role: MarkdownTableLineRole;
 }
 
+export interface MarkdownImageBlockState {
+  readonly altText: string;
+  readonly line: number;
+  readonly previewable: boolean;
+  readonly source: string;
+  readonly sourceLabel: string;
+  readonly title?: string;
+}
+
 export interface MarkdownLineClassificationState {
   readonly codeFenceRole?: MarkdownCodeFenceLineRole;
+  readonly imageBlock?: MarkdownImageBlockState;
   readonly tableState?: MarkdownTableLineState;
 }
 
@@ -69,7 +86,7 @@ export function classifyMarkdownLine(
   state: MarkdownLineClassificationState = {}
 ): string[] {
   const classes = ["tp-editor-line"];
-  const { codeFenceRole, tableState } = state;
+  const { codeFenceRole, imageBlock, tableState } = state;
 
   const heading = /^(#{1,6})\s+/.exec(text);
   if (heading?.[1]) {
@@ -98,6 +115,10 @@ export function classifyMarkdownLine(
     if (tableState.last) {
       classes.push("tp-editor-table-last");
     }
+  }
+
+  if (imageBlock) {
+    classes.push("tp-editor-image-line");
   }
 
   if (active) {
@@ -133,6 +154,30 @@ export function analyzeMarkdownCodeFenceLines(lines: readonly string[]): readonl
     }
 
     states.push({ line: index + 1, role: "content" });
+  });
+
+  return states;
+}
+
+export function analyzeMarkdownImageBlocks(lines: readonly string[]): readonly MarkdownImageBlockState[] {
+  const states: MarkdownImageBlockState[] = [];
+  let activeFence: string | undefined;
+
+  lines.forEach((line, index) => {
+    if (activeFence) {
+      activeFence = nextFenceState(line, activeFence);
+      return;
+    }
+
+    activeFence = nextFenceState(line, activeFence);
+    if (activeFence) {
+      return;
+    }
+
+    const block = readMarkdownImageBlock(line, index + 1);
+    if (block) {
+      states.push(block);
+    }
   });
 
   return states;
@@ -189,6 +234,7 @@ function buildDecorations(view: EditorView, configuration: MarkdownEditorConfigu
   const builder = new RangeSetBuilder<Decoration>();
   const activeLine = view.state.doc.lineAt(view.state.selection.main.head).number;
   const codeFenceLineRoles = analyzeVisibleCodeFenceLines(view);
+  const imageBlocks = analyzeVisibleImageBlocks(view);
   const tableLineStates = analyzeVisibleTableLines(view);
 
   for (const range of view.visibleRanges) {
@@ -197,6 +243,7 @@ function buildDecorations(view: EditorView, configuration: MarkdownEditorConfigu
     while (position <= range.to) {
       const line = view.state.doc.lineAt(position);
       const codeFenceRole = codeFenceLineRoles.get(line.number);
+      const imageBlock = imageBlocks.get(line.number);
       const tableState = tableLineStates.get(line.number);
       const classes = classifyMarkdownLine(
         line.text,
@@ -204,13 +251,22 @@ function buildDecorations(view: EditorView, configuration: MarkdownEditorConfigu
         configuration.focusMode,
         {
           ...(codeFenceRole ? { codeFenceRole } : {}),
+          ...(imageBlock ? { imageBlock } : {}),
           ...(tableState ? { tableState } : {})
         }
       );
 
       builder.add(line.from, line.from, Decoration.line({ class: classes.join(" ") }));
-      for (const marker of findInactiveMarkdownSyntaxMarkers(line.text, line.number === activeLine)) {
-        builder.add(line.from + marker.from, line.from + marker.to, syntaxMarkerDecoration);
+      const lineIsActive = line.number === activeLine;
+
+      if (imageBlock && !lineIsActive) {
+        builder.add(line.from, line.to, Decoration.replace({
+          widget: new MarkdownImageBlockWidget(imageBlock)
+        }));
+      } else {
+        for (const marker of findInactiveMarkdownSyntaxMarkers(line.text, lineIsActive)) {
+          builder.add(line.from + marker.from, line.from + marker.to, syntaxMarkerDecoration);
+        }
       }
 
       const nextPosition = line.to + 1;
@@ -260,6 +316,39 @@ function analyzeVisibleCodeFenceLines(view: EditorView): ReadonlyMap<number, Mar
   }
 
   return roles;
+}
+
+function analyzeVisibleImageBlocks(view: EditorView): ReadonlyMap<number, MarkdownImageBlockState> {
+  const blocks = new Map<number, MarkdownImageBlockState>();
+  const visibleLineRanges = view.visibleRanges.map((range) => ({
+    first: view.state.doc.lineAt(range.from).number,
+    last: view.state.doc.lineAt(range.to).number
+  }));
+  const lastVisibleLine = Math.max(...visibleLineRanges.map((range) => range.last));
+  const isVisible = (lineNumber: number): boolean =>
+    visibleLineRanges.some((range) => lineNumber >= range.first && lineNumber <= range.last);
+  let activeFence: string | undefined;
+
+  for (let lineNumber = 1; lineNumber <= lastVisibleLine; lineNumber += 1) {
+    const text = view.state.doc.line(lineNumber).text;
+
+    if (activeFence) {
+      activeFence = nextFenceState(text, activeFence);
+      continue;
+    }
+
+    activeFence = nextFenceState(text, activeFence);
+    if (activeFence || !isVisible(lineNumber)) {
+      continue;
+    }
+
+    const block = readMarkdownImageBlock(text, lineNumber);
+    if (block) {
+      blocks.set(lineNumber, block);
+    }
+  }
+
+  return blocks;
 }
 
 function analyzeVisibleTableLines(view: EditorView): ReadonlyMap<number, MarkdownTableLineState> {
@@ -331,6 +420,100 @@ function readOpeningFenceMarker(text: string): string | undefined {
 function readClosingFenceMarker(text: string): string | undefined {
   const match = /^\s{0,3}(`{3,}|~{3,})\s*$/.exec(text);
   return match?.[1];
+}
+
+function readMarkdownImageBlock(text: string, line: number): MarkdownImageBlockState | undefined {
+  const trimmed = text.trim();
+  const match = /^!\[((?:\\.|[^\]\\])*)]\((.*)\)$/.exec(trimmed);
+
+  if (!match?.[2]) {
+    return undefined;
+  }
+
+  const target = readMarkdownImageTarget(match[2]);
+  if (!target) {
+    return undefined;
+  }
+
+  return {
+    altText: unescapeMarkdownText(match[1] ?? ""),
+    line,
+    previewable: isPreviewableImageSource(target.source),
+    source: target.source,
+    sourceLabel: imageSourceLabel(target.source),
+    ...(target.title ? { title: target.title } : {})
+  };
+}
+
+function readMarkdownImageTarget(value: string): { readonly source: string; readonly title?: string } | undefined {
+  const trimmed = value.trim();
+
+  if (!trimmed) {
+    return undefined;
+  }
+
+  const source = readMarkdownImageSource(trimmed);
+  if (!source) {
+    return undefined;
+  }
+
+  const title = source.rest ? readMarkdownImageTitle(source.rest) : undefined;
+  if (source.rest && title === undefined) {
+    return undefined;
+  }
+
+  return {
+    source: source.value,
+    ...(title !== undefined ? { title } : {})
+  };
+}
+
+function readMarkdownImageSource(value: string): { readonly rest: string; readonly value: string } | undefined {
+  if (value.startsWith("<")) {
+    const closingIndex = value.indexOf(">");
+    const source = closingIndex > 0 ? value.slice(1, closingIndex).trim() : "";
+    return source ? { rest: value.slice(closingIndex + 1).trim(), value: source } : undefined;
+  }
+
+  const match = /^(\S+)(.*)$/.exec(value);
+  const source = match?.[1]?.trim();
+  return source ? { rest: match?.[2]?.trim() ?? "", value: source } : undefined;
+}
+
+function readMarkdownImageTitle(value: string): string | undefined {
+  if (!value) {
+    return undefined;
+  }
+
+  const match = /^(?:"([^"]*)"|'([^']*)'|\(([^)]*)\))$/.exec(value.trim());
+  return match ? unescapeMarkdownText(match[1] ?? match[2] ?? match[3] ?? "") : undefined;
+}
+
+function isPreviewableImageSource(source: string): boolean {
+  return /^data:image\/[a-z0-9.+-]+[;,]/i.test(source) || /^blob:/i.test(source);
+}
+
+function imageSourceLabel(source: string): string {
+  if (/^data:image\//i.test(source)) {
+    return "inline image";
+  }
+
+  if (/^blob:/i.test(source)) {
+    return "browser image";
+  }
+
+  const cleanSource = source.split(/[?#]/, 1)[0] ?? source;
+  const candidate = cleanSource.split(/[\\/]/).filter(Boolean).at(-1) ?? source;
+
+  try {
+    return decodeURIComponent(candidate);
+  } catch {
+    return candidate;
+  }
+}
+
+function unescapeMarkdownText(text: string): string {
+  return text.replace(/\\([\\[\]()'"<>])/g, "$1");
 }
 
 interface MarkdownTableReadResult {
@@ -439,6 +622,69 @@ function readMarkdownTableCells(text: string): readonly string[] | undefined {
   const cells = normalized.split("|").map((cell) => cell.trim());
 
   return cells.length >= 2 ? cells : undefined;
+}
+
+class MarkdownImageBlockWidget extends WidgetType {
+  constructor(private readonly image: MarkdownImageBlockState) {
+    super();
+  }
+
+  override eq(widget: WidgetType): boolean {
+    return widget instanceof MarkdownImageBlockWidget &&
+      widget.image.altText === this.image.altText &&
+      widget.image.previewable === this.image.previewable &&
+      widget.image.source === this.image.source &&
+      widget.image.sourceLabel === this.image.sourceLabel &&
+      widget.image.title === this.image.title;
+  }
+
+  override toDOM(view: EditorView): HTMLElement {
+    const figure = document.createElement("span");
+    figure.className = "tp-editor-image-block";
+    figure.setAttribute("aria-label", this.image.altText || this.image.sourceLabel);
+    figure.setAttribute("role", "group");
+
+    const preview = document.createElement("div");
+    preview.className = this.image.previewable ? "tp-editor-image-preview" : "tp-editor-image-placeholder";
+
+    if (this.image.previewable) {
+      const image = document.createElement("img");
+      image.alt = this.image.altText;
+      image.decoding = "async";
+      image.loading = "lazy";
+      image.src = this.image.source;
+      image.addEventListener("load", () => view.requestMeasure());
+      image.addEventListener("error", () => {
+        preview.className = "tp-editor-image-placeholder";
+        preview.textContent = "IMG";
+        view.requestMeasure();
+      });
+      preview.append(image);
+    } else {
+      preview.textContent = "IMG";
+    }
+
+    const caption = document.createElement("span");
+    caption.className = "tp-editor-image-caption";
+
+    const title = document.createElement("strong");
+    title.textContent = this.image.altText || this.image.title || this.image.sourceLabel;
+
+    const source = document.createElement("span");
+    source.textContent = this.image.sourceLabel;
+
+    caption.append(title, source);
+    figure.append(preview, caption);
+    return figure;
+  }
+
+  override get estimatedHeight(): number {
+    return 104;
+  }
+
+  override ignoreEvent(): boolean {
+    return false;
+  }
 }
 
 function collectBlockMarkers(text: string, ranges: MarkdownSyntaxMarkerRange[]): void {
@@ -645,6 +891,69 @@ function markdownEditorTheme(configuration: MarkdownEditorConfiguration): Extens
       borderBottomLeftRadius: "var(--tp-radius-control)",
       borderBottomRightRadius: "var(--tp-radius-control)",
       paddingBottom: "4px"
+    },
+    ".tp-editor-image-line": {
+      paddingTop: "4px",
+      paddingBottom: "4px"
+    },
+    ".tp-editor-image-block": {
+      display: "grid",
+      gridTemplateColumns: "minmax(64px, 136px) minmax(0, 1fr)",
+      alignItems: "center",
+      gap: "12px",
+      width: "100%",
+      minHeight: "86px",
+      boxSizing: "border-box",
+      margin: "0",
+      padding: "10px 12px",
+      border: "1px solid var(--tp-color-image-block-border)",
+      borderLeft: "3px solid var(--tp-color-image-block-border)",
+      borderRadius: "var(--tp-radius-control)",
+      backgroundColor: "var(--tp-color-image-block)"
+    },
+    ".tp-editor-image-preview, .tp-editor-image-placeholder": {
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      minWidth: "0",
+      minHeight: "64px",
+      overflow: "hidden",
+      borderRadius: "6px",
+      backgroundColor: "var(--tp-color-image-preview)"
+    },
+    ".tp-editor-image-preview img": {
+      display: "block",
+      maxWidth: "100%",
+      maxHeight: "180px",
+      objectFit: "contain"
+    },
+    ".tp-editor-image-placeholder": {
+      color: "var(--tp-color-text-soft)",
+      fontFamily: "var(--tp-font-ui)",
+      fontSize: "12px",
+      fontWeight: "700",
+      letterSpacing: "0"
+    },
+    ".tp-editor-image-caption": {
+      display: "flex",
+      flexDirection: "column",
+      gap: "4px",
+      minWidth: "0",
+      color: "var(--tp-color-text-muted)",
+      fontFamily: "var(--tp-font-ui)",
+      fontSize: "12px",
+      lineHeight: "1.35"
+    },
+    ".tp-editor-image-caption strong, .tp-editor-image-caption span": {
+      minWidth: "0",
+      overflow: "hidden",
+      textOverflow: "ellipsis",
+      whiteSpace: "nowrap"
+    },
+    ".tp-editor-image-caption strong": {
+      color: "var(--tp-color-text)",
+      fontSize: "13px",
+      fontWeight: "650"
     },
     ".tp-editor-markdown-marker": {
       color: "var(--tp-color-text-soft)",
