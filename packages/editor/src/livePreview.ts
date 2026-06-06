@@ -87,6 +87,15 @@ export interface MarkdownMathBlockState {
   readonly role: MarkdownMathBlockLineRole;
 }
 
+export type MarkdownMathRenderStatus = "empty" | "error" | "valid";
+
+export interface MarkdownMathRenderResult {
+  readonly error?: string;
+  readonly html?: string;
+  readonly source: string;
+  readonly status: MarkdownMathRenderStatus;
+}
+
 export interface MarkdownLineClassificationState {
   readonly codeFence?: MarkdownCodeFenceBlockState;
   readonly codeFenceRole?: MarkdownCodeFenceLineRole;
@@ -413,6 +422,35 @@ export function findInactiveMarkdownInlineMathRanges(text: string, active: boole
   }
 
   return ranges;
+}
+
+export function renderMarkdownMathExpression(
+  expression: string,
+  displayMode: boolean
+): MarkdownMathRenderResult {
+  const source = expression.trim();
+
+  if (!source) {
+    return { source, status: "empty" };
+  }
+
+  try {
+    return {
+      html: renderKatexToString(source, {
+        displayMode,
+        output: "mathml",
+        throwOnError: true
+      }),
+      source,
+      status: "valid"
+    };
+  } catch (error) {
+    return {
+      error: readMathRenderErrorMessage(error),
+      source,
+      status: "error"
+    };
+  }
 }
 
 function buildDecorations(
@@ -1734,8 +1772,9 @@ class MarkdownMathBlockWidget extends WidgetType {
   }
 
   override toDOM(): HTMLElement {
+    const renderResult = renderMarkdownMathExpression(this.math.expression, true);
     const block = document.createElement("span");
-    block.className = "tp-editor-math-preview";
+    block.className = `tp-editor-math-preview tp-editor-math-preview-state-${renderResult.status}`;
     block.setAttribute("aria-label", "Math preview");
 
     const toolbar = document.createElement("span");
@@ -1743,7 +1782,7 @@ class MarkdownMathBlockWidget extends WidgetType {
 
     const label = document.createElement("span");
     label.className = "tp-editor-math-label";
-    label.textContent = "TeX";
+    label.textContent = readMathPreviewLabel(renderResult.status);
 
     const copyButton = createPreviewCopyButton({
       className: "tp-editor-math-copy",
@@ -1761,24 +1800,22 @@ class MarkdownMathBlockWidget extends WidgetType {
     const body = document.createElement("span");
     body.className = "tp-editor-math-body";
 
-    if (!this.math.expression) {
+    if (renderResult.status === "empty") {
       body.textContent = "Empty math block";
       body.classList.add("tp-editor-math-preview-empty");
       block.append(body);
       return block;
     }
 
-    try {
-      body.innerHTML = renderKatexToString(this.math.expression, {
-        displayMode: true,
-        output: "mathml",
-        throwOnError: false
-      });
-    } catch {
-      body.textContent = this.math.expression;
+    if (renderResult.status === "error") {
+      body.textContent = `Invalid TeX: ${renderResult.error}`;
+      body.title = renderResult.source;
       body.classList.add("tp-editor-math-preview-error");
+      block.append(body);
+      return block;
     }
 
+    body.innerHTML = renderResult.html ?? "";
     block.append(body);
     return block;
   }
@@ -1802,23 +1839,37 @@ class MarkdownInlineMathWidget extends WidgetType {
   }
 
   override toDOM(): HTMLElement {
+    const renderResult = renderMarkdownMathExpression(this.math.expression, false);
     const inline = document.createElement("span");
-    inline.className = "tp-editor-inline-math-preview";
-    inline.setAttribute("aria-label", "Inline math preview");
+    inline.className = `tp-editor-inline-math-preview tp-editor-inline-math-preview-${renderResult.status}`;
+    inline.setAttribute("aria-label", renderResult.status === "error" ? "Invalid inline math" : "Inline math preview");
 
-    try {
-      inline.innerHTML = renderKatexToString(this.math.expression, {
-        displayMode: false,
-        output: "mathml",
-        throwOnError: false
-      });
-    } catch {
-      inline.textContent = this.math.expression;
+    if (renderResult.status !== "valid") {
+      inline.textContent = renderResult.status === "empty" ? "" : renderResult.source;
+      inline.title = renderResult.error ? `Invalid TeX: ${renderResult.error}` : "";
       inline.classList.add("tp-editor-inline-math-preview-error");
+      return inline;
     }
 
+    inline.innerHTML = renderResult.html ?? "";
     return inline;
   }
+}
+
+function readMathPreviewLabel(status: MarkdownMathRenderStatus): string {
+  if (status === "empty") {
+    return "Empty TeX";
+  }
+
+  if (status === "error") {
+    return "TeX error";
+  }
+
+  return "TeX";
+}
+
+function readMathRenderErrorMessage(error: unknown): string {
+  return error instanceof Error && error.message ? error.message : "Unable to render expression";
 }
 
 function collectBlockMarkers(text: string, ranges: MarkdownSyntaxMarkerRange[]): void {

@@ -13,6 +13,7 @@ import {
   findInactiveMarkdownInlineMathRanges,
   findInactiveMarkdownSyntaxMarkers,
   getNextMarkdownTableColumnAlignment,
+  renderMarkdownMathExpression,
   shouldReplaceInactiveCodeFenceLine,
   shouldIgnorePreviewEventTarget,
   shouldReplaceInactiveTableLine
@@ -341,6 +342,30 @@ describe("analyzeMarkdownMathBlocks", () => {
     ]);
 
     expect(states.every((state) => state.mathBlock && !state.imageBlock && !state.tableState)).toBe(true);
+  });
+});
+
+describe("renderMarkdownMathExpression", () => {
+  it("renders valid display math as MathML", () => {
+    const result = renderMarkdownMathExpression("x + y = z", true);
+
+    expect(result.status).toBe("valid");
+    expect(result.html).toContain("<math");
+  });
+
+  it("marks empty math expressions without calling them errors", () => {
+    expect(renderMarkdownMathExpression("   ", true)).toEqual({
+      source: "",
+      status: "empty"
+    });
+  });
+
+  it("returns a clear error result for invalid TeX", () => {
+    const result = renderMarkdownMathExpression("\\frac{", false);
+
+    expect(result.status).toBe("error");
+    expect(result.source).toBe("\\frac{");
+    expect(result.error).toEqual(expect.any(String));
   });
 });
 
