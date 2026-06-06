@@ -2999,3 +2999,36 @@ Known limitations:
 - External extension package loading is still not implemented.
 - Extension host transport and IPC are still not implemented.
 - Future production transports still need an explicit default timeout policy based on worker/process/Electron runtime constraints.
+
+## 2026-06-07 - P2 Extension Host Protocol Wire Transport
+
+Completed:
+
+- Added `ExtensionHostProtocolWireTransport` as a platform adapter from protocol messages to an injected string channel.
+- Added outbound protocol serialization and inbound protocol deserialization at the transport boundary.
+- Added invalid inbound wire-message reporting without firing malformed messages into sessions or runtimes.
+- Added optional injected maximum wire-message length checks for both send and receive paths.
+- Kept channel ownership external so future Electron IPC, worker, or process adapters can decide their own lifecycle.
+- Added tests for outbound serialization, inbound deserialization, invalid inbound messages, message length limits, disposal behavior, option validation, and host/runtime integration over a string wire-channel pair.
+
+Quality gate:
+
+- `npm run typecheck`: passed
+- `npx vitest run packages/platform/src/extensionHostProtocolWireTransport.test.ts packages/platform/src/extensionHostProtocolTransport.test.ts`: passed, 10 tests
+- `npm run verify`: passed, 309 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Browser smoke check: not run because this stage only changes platform protocol transport code and documentation.
+
+Review:
+
+- The adapter is still platform-only and does not depend on Workbench, Electron IPC, DOM APIs, Node streams, dynamic imports, or external extension package loading.
+- Serialization/deserialization is centralized at one transport boundary instead of being left to future adapters to duplicate.
+- Length policy is injected and disabled by default, so future runtime-specific hosts can configure limits from their own shell policy rather than inheriting a hidden constant.
+- No new dependency, storage path, visual token, or extra documentation file was introduced.
+
+Known limitations:
+
+- External extension package loading is still not implemented.
+- A concrete worker/process/Electron IPC extension host adapter is still not implemented.
+- Future production adapters still need runtime-specific lifecycle, trust, and default timeout/message-size policy.
