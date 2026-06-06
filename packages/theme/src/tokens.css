@@ -20,6 +20,8 @@
   --tp-radius-control: 8px;
   --tp-motion-fast: 120ms;
   --tp-motion-normal: 180ms;
+  --tp-opacity-markdown-marker: 0.26;
+  --tp-opacity-passive-line: 0.38;
   color-scheme: light;
 }
 
@@ -39,5 +41,7 @@
   --tp-color-warning: #d8ad4d;
   --tp-color-danger: #e07d80;
   --tp-color-shadow: rgba(0, 0, 0, 0.34);
+  --tp-opacity-markdown-marker: 0.3;
+  --tp-opacity-passive-line: 0.42;
   color-scheme: dark;
 }

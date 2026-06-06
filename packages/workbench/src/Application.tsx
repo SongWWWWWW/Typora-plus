@@ -485,12 +485,13 @@ function Titlebar({
         <IconButton title="Save" onClick={() => onCommand("file.save")}>
           <Save size={17} />
         </IconButton>
-        <IconButton title="Save As" onClick={() => onCommand("file.saveAs")}>
+        <IconButton title="Save As" compactHidden onClick={() => onCommand("file.saveAs")}>
           <FileText size={17} />
         </IconButton>
         <IconButton
           title="Focus Mode"
           active={configuration.editor.focusMode}
+          compactHidden
           onClick={() => onCommand("editor.focusMode.toggle")}
         >
           <Target size={17} />
@@ -498,11 +499,12 @@ function Titlebar({
         <IconButton
           title="Typewriter Mode"
           active={configuration.editor.typewriterMode}
+          compactHidden
           onClick={() => onCommand("editor.typewriterMode.toggle")}
         >
           <Type size={17} />
         </IconButton>
-        <IconButton title="Theme" onClick={() => onCommand("theme.toggle")}>
+        <IconButton title="Theme" compactHidden onClick={() => onCommand("theme.toggle")}>
           {themeIsDark ? <Sun size={17} /> : <Moon size={17} />}
         </IconButton>
         <IconButton title="Command Palette" onClick={() => onCommand("workbench.commandPalette.open")}>
@@ -1058,17 +1060,24 @@ function QuickOpen({
 function IconButton({
   title,
   active = false,
+  compactHidden = false,
   children,
   onClick
 }: {
   readonly title: string;
   readonly active?: boolean;
+  readonly compactHidden?: boolean;
   readonly children: ReactNode;
   readonly onClick: () => void;
 }) {
+  const className = [
+    active ? "tp-icon-button tp-icon-button-active" : "tp-icon-button",
+    compactHidden ? "tp-icon-button-compact-hidden" : ""
+  ].filter(Boolean).join(" ");
+
   return (
     <button
-      className={active ? "tp-icon-button tp-icon-button-active" : "tp-icon-button"}
+      className={className}
       type="button"
       aria-label={title}
       title={title}

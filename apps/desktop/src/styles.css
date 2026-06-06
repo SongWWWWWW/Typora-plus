@@ -591,6 +591,10 @@ button {
 }
 
 @media (max-width: 760px) {
+  .tp-icon-button-compact-hidden {
+    display: none;
+  }
+
   .tp-shell-with-sidebar .tp-body,
   .tp-body {
     grid-template-columns: 48px minmax(0, 1fr);

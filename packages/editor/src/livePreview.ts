@@ -10,6 +10,13 @@ export interface MarkdownEditorConfiguration {
   readonly typewriterMode: boolean;
 }
 
+export interface MarkdownSyntaxMarkerRange {
+  readonly from: number;
+  readonly to: number;
+}
+
+const syntaxMarkerDecoration = Decoration.mark({ class: "tp-editor-markdown-marker" });
+
 export function livePreviewExtension(configuration: MarkdownEditorConfiguration): Extension {
   return [
     markdownEditorTheme(configuration),
@@ -59,6 +66,20 @@ export function classifyMarkdownLine(text: string, active: boolean, focusMode: b
   return classes;
 }
 
+export function findInactiveMarkdownSyntaxMarkers(text: string, active: boolean): readonly MarkdownSyntaxMarkerRange[] {
+  if (active) {
+    return [];
+  }
+
+  const ranges: MarkdownSyntaxMarkerRange[] = [];
+  collectBlockMarkers(text, ranges);
+  collectDelimitedMarkers(text, ranges, "**");
+  collectDelimitedMarkers(text, ranges, "__");
+  collectLinkMarkers(text, ranges);
+
+  return normalizeRanges(ranges);
+}
+
 function buildDecorations(view: EditorView, configuration: MarkdownEditorConfiguration): DecorationSet {
   const builder = new RangeSetBuilder<Decoration>();
   const activeLine = view.state.doc.lineAt(view.state.selection.main.head).number;
@@ -71,6 +92,9 @@ function buildDecorations(view: EditorView, configuration: MarkdownEditorConfigu
       const classes = classifyMarkdownLine(line.text, line.number === activeLine, configuration.focusMode);
 
       builder.add(line.from, line.from, Decoration.line({ class: classes.join(" ") }));
+      for (const marker of findInactiveMarkdownSyntaxMarkers(line.text, line.number === activeLine)) {
+        builder.add(line.from + marker.from, line.from + marker.to, syntaxMarkerDecoration);
+      }
 
       const nextPosition = line.to + 1;
       if (nextPosition <= position) {
@@ -82,6 +106,95 @@ function buildDecorations(view: EditorView, configuration: MarkdownEditorConfigu
   }
 
   return builder.finish();
+}
+
+function collectBlockMarkers(text: string, ranges: MarkdownSyntaxMarkerRange[]): void {
+  const heading = /^(#{1,6})(?=\s+)/.exec(text);
+  if (heading?.[1]) {
+    ranges.push({ from: 0, to: heading[1].length });
+    return;
+  }
+
+  const quote = /^(\s*>+\s?)/.exec(text);
+  if (quote?.[1]) {
+    ranges.push({ from: 0, to: quote[1].length });
+    return;
+  }
+
+  const list = /^(\s*)([-*+]|\d+[.)])(\s+)/.exec(text);
+  if (list?.[1] !== undefined && list[2]) {
+    ranges.push({ from: list[1].length, to: list[1].length + list[2].length });
+    return;
+  }
+
+  const fence = /^(\s*)(`{3,}|~{3,})/.exec(text);
+  if (fence?.[1] !== undefined && fence[2]) {
+    ranges.push({ from: fence[1].length, to: fence[1].length + fence[2].length });
+  }
+}
+
+function collectDelimitedMarkers(text: string, ranges: MarkdownSyntaxMarkerRange[], delimiter: string): void {
+  let cursor = 0;
+
+  while (cursor < text.length) {
+    const start = text.indexOf(delimiter, cursor);
+    if (start === -1) {
+      return;
+    }
+
+    const contentStart = start + delimiter.length;
+    const end = text.indexOf(delimiter, contentStart);
+    if (end === -1) {
+      return;
+    }
+
+    if (end > contentStart && !/\s/.test(text[contentStart] ?? "") && !/\s/.test(text[end - 1] ?? "")) {
+      ranges.push({ from: start, to: contentStart });
+      ranges.push({ from: end, to: end + delimiter.length });
+    }
+
+    cursor = end + delimiter.length;
+  }
+}
+
+function collectLinkMarkers(text: string, ranges: MarkdownSyntaxMarkerRange[]): void {
+  const expression = /!?\[[^\]\n]+\]\([^)]+\)/g;
+
+  for (const match of text.matchAll(expression)) {
+    const value = match[0];
+    const start = match.index ?? 0;
+    const bangLength = value.startsWith("!") ? 1 : 0;
+    const closeBracket = value.indexOf("]");
+    const closeParen = value.length - 1;
+
+    if (bangLength > 0) {
+      ranges.push({ from: start, to: start + 1 });
+    }
+
+    ranges.push({ from: start + bangLength, to: start + bangLength + 1 });
+    ranges.push({ from: start + closeBracket, to: start + closeBracket + 1 });
+    ranges.push({ from: start + closeBracket + 1, to: start + closeBracket + 2 });
+    ranges.push({ from: start + closeParen, to: start + closeParen + 1 });
+  }
+}
+
+function normalizeRanges(ranges: readonly MarkdownSyntaxMarkerRange[]): readonly MarkdownSyntaxMarkerRange[] {
+  const normalized: MarkdownSyntaxMarkerRange[] = [];
+
+  for (const range of [...ranges].sort((first, second) => first.from - second.from || first.to - second.to)) {
+    if (range.to <= range.from) {
+      continue;
+    }
+
+    const previous = normalized.at(-1);
+    if (previous && range.from < previous.to) {
+      continue;
+    }
+
+    normalized.push(range);
+  }
+
+  return normalized;
 }
 
 function markdownEditorTheme(configuration: MarkdownEditorConfiguration): Extension {
@@ -152,8 +265,12 @@ function markdownEditorTheme(configuration: MarkdownEditorConfiguration): Extens
       fontFamily: "ui-monospace, SFMono-Regular, Consolas, monospace",
       color: "var(--tp-color-accent-strong)"
     },
+    ".tp-editor-markdown-marker": {
+      color: "var(--tp-color-text-soft)",
+      opacity: "var(--tp-opacity-markdown-marker)"
+    },
     ".tp-editor-passive-line": {
-      opacity: "0.38"
+      opacity: "var(--tp-opacity-passive-line)"
     },
     ".cm-activeLine": {
       backgroundColor: "transparent"
