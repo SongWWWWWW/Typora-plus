@@ -40,6 +40,7 @@ Current services:
 - `IConfigurationService`: centralized and persisted appearance, editor, and workspace defaults
 - `IContextKeyService`: structured context values and expression evaluation for conditional contributions
 - `ICommandService`: command registration and execution
+- `IExtensionService`: static extension manifest registration for commands, menus, and keybindings
 - `IKeybindingService`: keybinding registration, keyboard event resolution, and command dispatch
 - `IMenuService`: menu/action contribution registration for Workbench surfaces such as titlebar and activitybar
 - `ITextFileService`: active Markdown model, dirty state, conflict-aware save lifecycle
@@ -65,6 +66,8 @@ Keyboard shortcuts are resolved through `IKeybindingService` instead of hard-cod
 
 Titlebar and activitybar actions are resolved through `IMenuService` instead of fixed button lists inside React components. Workbench default actions live in `workbenchContributions.ts` with stable menu ids, command ids, icon ids, order metadata, compact visibility, toggle context, and optional `when` expressions. `IContextKeyService` owns structured context values and expression evaluation, and `MenuService` filters contributed items when context changes. The platform also exposes a constrained `when` parser for manifest-style strings with keys, `!`, `==`, `!=`, `&&`, `||`, parentheses, and primitive values; it creates structured expressions rather than executing code. `Application.tsx` synchronizes Workbench state such as active resource scheme, side view, editor modes, workspace availability, and native file-system availability into context keys, then renders the filtered contributions and maps icon ids to React icons locally. This mirrors VS Code-style contribution registration: commands, keybindings, menus, and context keys are separate contribution points that can later be fed by extensions without rewriting the shell.
 
+`IExtensionService` is the current static manifest boundary. It accepts extension manifests with command, menu, and keybinding contributions, validates required ids and primitive fields, parses menu `when` strings into structured context expressions, registers contributions through the existing command/menu/keybinding services, and returns one disposable that unregisters the whole extension. Registration failures roll back partial contributions. Manifest commands are registered as metadata-only placeholders with a clear no-handler error because there is not yet an extension runtime or activation host. Workbench default menus and shortcuts are supplied through a built-in extension manifest, while Workbench command handlers remain registered by `Application.tsx` so placeholder manifest commands do not shadow real built-in commands.
+
 User preferences are owned by `IConfigurationService`. The service reads and writes validated configuration through an injected storage boundary, so Workbench commands update preferences through the service without accessing storage directly. Editor behavior defaults, including auto-save timing, live in configuration rather than Workbench constants. Numeric configuration bounds are platform-owned and persisted numeric values are clamped by the configuration layer before consumers read them. Workspace preference changes are synchronized into the affected platform services, including index limits and attachment asset folders. In Electron, the preload bridge routes configuration storage to a main-process file under the app data directory; browser builds fall back to browser storage.
 
 The settings UI is a Workbench contribution, not a storage owner. `SettingsDialog` renders appearance, editor, workspace, and keybinding controls, then sends partial updates to `IConfigurationService`. Settings section definitions, section anchors, searchable setting entries, asset-folder normalization, keybinding command/shortcut-label search, modified filtering, and keybinding override list updates live in focused Workbench models so the dialog can grow without scattering UI constants. Numeric Settings controls reuse platform configuration constraints, including megabyte display conversion for workspace file-size limits, so UI bounds and stored-value validation stay aligned. When a recorded shortcut is already active for another command, Settings shows an inline conflict confirmation before writing the override. Batch keybinding reset clears persisted user overrides through the same configuration boundary instead of mutating keybinding service state directly.
@@ -76,7 +79,7 @@ Export is a provider-backed platform service. `IExportService` owns provider reg
 Planned services:
 
 - SQLite-backed index provider for `IIndexService`: durable search, metadata, link graph queries, and tag queries beyond the current snapshot cache
-- `IExtensionService`: manifest, activation events, contribution points
+- out-of-process extension host for activation events, extension code execution, and runtime APIs
 
 ## Editor Model
 
@@ -105,11 +108,14 @@ Next editor work:
 
 ## Extension Direction
 
-Extensions should run out of process once implemented. They should contribute through a manifest:
+Extensions should run out of process once runtime execution is implemented. The current platform supports static manifest registration for:
 
 - commands
 - menus
 - keybindings
+
+Future manifest contribution points should add:
+
 - themes
 - Markdown renderers
 - export providers

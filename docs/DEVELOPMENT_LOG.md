@@ -1990,3 +1990,40 @@ Known limitations:
 
 - The parser intentionally does not support arbitrary operators or custom functions; any future manifest expansion should add explicit grammar cases with tests.
 - Extension manifest loading and extension-owned context updates remain future `IExtensionService` work.
+
+## 2026-06-07 - P2 Extension Manifest Registration
+
+Completed:
+
+- Added `IExtensionService` and `ExtensionService` for static extension manifest registration.
+- Supported manifest contributions for commands, menus, and keybindings.
+- Validated extension ids, contribution ids, command titles, menu fields, keybinding fields, primitive option types, and duplicate ids before registration.
+- Parsed menu `when` strings through the existing structured context-key parser instead of executing user-authored strings.
+- Registered all contributions through `ICommandService`, `IMenuService`, and `IKeybindingService` with one disposable that unregisters the whole extension.
+- Kept manifest command contributions metadata-only with a clear no-handler error until an extension runtime exists.
+- Moved Workbench default menu and keybinding contributions behind a built-in extension manifest while keeping real built-in command handlers in `Application.tsx`.
+- Added platform and Workbench coverage for manifest registration, context-filtered menus, disposable unregister, duplicate ids, invalid manifest rollback, and built-in command-handler separation.
+
+Quality gate:
+
+- `npm run test -- --run packages/platform/src/platform.test.ts packages/workbench/src/workbenchContributions.test.ts`: passed, 62 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 174 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Browser desktop smoke check at `http://127.0.0.1:5173`: browser-context menu filtering remained correct, no horizontal overflow, and no console errors.
+- Browser 390px viewport smoke check: menu actions rendered without horizontal overflow and no console errors.
+
+Review:
+
+- Extension registration is a platform boundary; Workbench consumes registered menus and keybindings without knowing whether they came from built-ins or future extensions.
+- The implementation does not add dynamic code execution, `eval`, direct DOM access, or unrestricted Node access.
+- Static manifest parsing stays deterministic and covered by tests; invalid manifests fail before partial state is exposed.
+- Built-in Workbench command handlers remain outside the manifest, avoiding placeholder command handlers shadowing real commands.
+- No new packages, storage paths, visual tokens, or extra documentation files were introduced.
+
+Known limitations:
+
+- There is no extension host, activation event handling, extension code execution, or extension-owned context mutation yet.
+- Manifest commands are metadata placeholders only; runtime command handlers need a future out-of-process extension host and command activation flow.
+- Themes, Markdown renderers, and export providers are still future manifest contribution points.
