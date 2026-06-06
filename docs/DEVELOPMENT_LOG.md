@@ -535,3 +535,32 @@ Known limitations:
 
 - Clipboard contents could not be asserted in the in-app browser because its virtual clipboard is unavailable; button presence and stable click behavior were verified without console errors.
 - KaTeX is still rendered as MathML without the full KaTeX CSS layer.
+
+## 2026-06-06 - P2 Viewport-Aware Block Analysis
+
+Completed:
+
+- Extracted visible-range live preview analysis into `analyzeMarkdownLineBlocksForVisibleRanges`.
+- Normalized unordered, overlapping, adjacent, and out-of-bounds visible line ranges before scanning.
+- Preserved block context while returning states only for visible lines.
+- Added focused tests for unordered visible ranges, invalid ranges, and large table previews where the header is outside the visible viewport.
+
+Quality gate:
+
+- `npm run verify`: passed
+- `npm test`: passed, 61 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- Production browser preview: passed at `http://127.0.0.1:4173`
+- Desktop 1280px and mobile 390px checks: passed without horizontal overflow or console errors
+
+Review:
+
+- The viewport analyzer is pure and testable, keeping CodeMirror view details out of Markdown block-state logic.
+- Workbench and platform boundaries did not change; live preview syntax knowledge remains in `packages/editor`.
+- The implementation keeps the plain Markdown text model unchanged and only affects editor decoration analysis.
+- No new visual constants or platform assumptions were introduced.
+
+Known limitations:
+
+- Visible-range analysis still scans preceding source lines to recover block context for scanner-based Markdown constructs.
+- Parser-backed position mapping remains planned for more complex Markdown syntax and escaped table pipes.

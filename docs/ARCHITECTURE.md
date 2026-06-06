@@ -65,7 +65,7 @@ Current features:
 
 - Markdown language support
 - history, search, selection, bracket matching
-- unified live preview block-state analysis for visible editor ranges
+- unified live preview block-state analysis with normalized visible editor ranges
 - heading/quote/list/fence line styling
 - inactive Markdown marker soft hiding for headings, lists, quotes, fences, links, and strong emphasis
 - code fence block styling with visible-range-aware fence state tracking and inactive language/copy widgets
@@ -79,10 +79,8 @@ Current features:
 
 Next editor work:
 
-- viewport-aware block analysis refinements
 - richer table editing affordances
 - richer math editing affordances
-- viewport-safe large document behavior tests
 - parser-backed position mapping
 
 ## Extension Direction
