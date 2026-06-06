@@ -283,6 +283,43 @@ describe("exports", () => {
       value: "Draft"
     }, "html")).rejects.toThrow("No export provider");
   });
+
+  it("adds a resource resolver context to export provider input", async () => {
+    const requestedResources: string[] = [];
+    const service = new ExportService({
+      browserSave: () => true,
+      resourceService: {
+        isAvailable: () => true,
+        async resolveImageSource(noteUri, source) {
+          requestedResources.push(`${noteUri.toString()}:${source}`);
+          return `data:image/png;base64,${source}`;
+        }
+      }
+    });
+    service.registerProvider({
+      format: "html",
+      title: "HTML",
+      async exportDocument(input) {
+        const imageSource = await input.resolveImageSource?.("assets/a.png");
+
+        return {
+          format: "html",
+          defaultFileName: input.name,
+          mimeType: "text/html",
+          value: imageSource ?? "missing"
+        };
+      }
+    });
+
+    const exported = await service.exportDocument({
+      uri: URI.file("C:/Notes/a.md"),
+      name: "a.md",
+      value: "Draft"
+    }, "html");
+
+    expect(exported.value).toBe("data:image/png;base64,assets/a.png");
+    expect(requestedResources).toEqual(["file://C:/Notes/a.md:assets/a.png"]);
+  });
 });
 
 describe("keybindings", () => {

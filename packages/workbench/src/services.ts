@@ -62,7 +62,8 @@ export function createWorkbenchServices(): WorkbenchServices {
     name: "Typora Plus"
   });
   const fileService = new NativeFileService();
-  const exportService = new ExportService();
+  const resourceService = new NativeResourceService();
+  const exportService = new ExportService({ resourceService });
   const indexSnapshotStorage = createDefaultWorkspaceIndexSnapshotStorage();
   const indexService = new WorkspaceIndexService(fileService, {
     maxFileSizeBytes: configurationService.getValue().workspace.searchMaxFileSizeBytes,
@@ -77,7 +78,6 @@ export function createWorkbenchServices(): WorkbenchServices {
   const attachmentService = new NativeAttachmentService(
     configurationService.getValue().workspace.defaultAssetFolder
   );
-  const resourceService = new NativeResourceService();
   const textFileService = new WorkspaceTextFileService(fileService, {
     storageKey: "typora-plus.default-draft",
     defaultName: "Untitled.md",

@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 import { createMarkdownHtmlExport } from "./index";
 
 describe("createMarkdownHtmlExport", () => {
-  it("renders Markdown into a complete HTML document", () => {
-    const exported = createMarkdownHtmlExport({
+  it("renders Markdown into a complete HTML document", async () => {
+    const exported = await createMarkdownHtmlExport({
       name: "Project.md",
       value: "# Project\n\n- Write\n- Review"
     });
@@ -16,8 +16,8 @@ describe("createMarkdownHtmlExport", () => {
     expect(exported.value).toContain("<li>Write</li>");
   });
 
-  it("escapes titles and normalizes unsafe filenames", () => {
-    const exported = createMarkdownHtmlExport({
+  it("escapes titles and normalizes unsafe filenames", async () => {
+    const exported = await createMarkdownHtmlExport({
       name: "A<bad>|name.md",
       value: "# Safe"
     });
@@ -26,8 +26,8 @@ describe("createMarkdownHtmlExport", () => {
     expect(exported.value).toContain("<title>A&lt;bad&gt;|name</title>");
   });
 
-  it("escapes raw HTML instead of passing it through", () => {
-    const exported = createMarkdownHtmlExport({
+  it("escapes raw HTML instead of passing it through", async () => {
+    const exported = await createMarkdownHtmlExport({
       name: "Unsafe.md",
       value: "<script>alert('x')</script>\n\n<div onclick=\"x\">Raw</div>"
     });
@@ -38,8 +38,8 @@ describe("createMarkdownHtmlExport", () => {
     expect(exported.value).toContain("&lt;div onclick=&quot;x&quot;&gt;Raw&lt;/div&gt;");
   });
 
-  it("drops unsafe link and image targets while keeping visible text", () => {
-    const exported = createMarkdownHtmlExport({
+  it("drops unsafe link and image targets while keeping visible text", async () => {
+    const exported = await createMarkdownHtmlExport({
       name: "Links.md",
       value: [
         "[Safe](https://example.com)",
@@ -55,5 +55,41 @@ describe("createMarkdownHtmlExport", () => {
     expect(exported.value).toContain("<img src=\"assets/image.png\" alt=\"Local\">");
     expect(exported.value).toContain("Unsafe image");
     expect(exported.value).not.toContain("src=\"javascript:");
+  });
+
+  it("embeds resolved relative image sources as data URLs", async () => {
+    const requests: string[] = [];
+    const exported = await createMarkdownHtmlExport({
+      name: "Images.md",
+      value: [
+        "![Local](assets/image.png)",
+        "![Duplicate](assets/image.png)",
+        "![Missing](assets/missing.png)",
+        "![Remote](https://example.com/image.png)"
+      ].join("\n\n"),
+      async resolveImageSource(source) {
+        requests.push(source);
+        return source === "assets/image.png" ? "data:image/png;base64,AA==" : undefined;
+      }
+    });
+
+    expect(requests).toEqual(["assets/image.png", "assets/missing.png"]);
+    expect(exported.value).toContain("<img src=\"data:image/png;base64,AA==\" alt=\"Local\">");
+    expect(exported.value).toContain("<img src=\"data:image/png;base64,AA==\" alt=\"Duplicate\">");
+    expect(exported.value).toContain("<img src=\"assets/missing.png\" alt=\"Missing\">");
+    expect(exported.value).toContain("Remote");
+    expect(exported.value).not.toContain("src=\"https://example.com/image.png\"");
+  });
+
+  it("keeps export working when image resolution fails", async () => {
+    const exported = await createMarkdownHtmlExport({
+      name: "Images.md",
+      value: "![Local](assets/image.png)",
+      async resolveImageSource() {
+        throw new Error("Image unavailable");
+      }
+    });
+
+    expect(exported.value).toContain("<img src=\"assets/image.png\" alt=\"Local\">");
   });
 });

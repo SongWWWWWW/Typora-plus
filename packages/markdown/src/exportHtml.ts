@@ -1,8 +1,11 @@
 import { Renderer, marked } from "marked";
 
+export type MarkdownImageSourceResolver = (source: string) => Promise<string | undefined> | string | undefined;
+
 export interface MarkdownExportInput {
   readonly name: string;
   readonly value: string;
+  readonly resolveImageSource?: MarkdownImageSourceResolver;
 }
 
 export interface MarkdownHtmlExportedDocument {
@@ -15,18 +18,21 @@ export interface MarkdownHtmlExportedDocument {
 export const markdownHtmlExportProvider = {
   format: "html",
   title: "HTML",
-  exportDocument(input: MarkdownExportInput): MarkdownHtmlExportedDocument {
+  exportDocument(input: MarkdownExportInput): Promise<MarkdownHtmlExportedDocument> {
     return createMarkdownHtmlExport(input);
   }
 } as const;
 
-export function createMarkdownHtmlExport(input: MarkdownExportInput): MarkdownHtmlExportedDocument {
+export async function createMarkdownHtmlExport(input: MarkdownExportInput): Promise<MarkdownHtmlExportedDocument> {
   const title = normalizeExportTitle(input.name);
+  const resolvedImageSources = input.resolveImageSource
+    ? await resolveExportImageSources(input.value, input.resolveImageSource)
+    : new Map<string, string>();
   const body = marked.parse(input.value, {
     async: false,
     breaks: false,
     gfm: true,
-    renderer: createSafeHtmlExportRenderer()
+    renderer: createSafeHtmlExportRenderer(resolvedImageSources)
   });
 
   return {
@@ -37,7 +43,7 @@ export function createMarkdownHtmlExport(input: MarkdownExportInput): MarkdownHt
   };
 }
 
-function createSafeHtmlExportRenderer(): Renderer<string, string> {
+function createSafeHtmlExportRenderer(resolvedImageSources: ReadonlyMap<string, string>): Renderer<string, string> {
   const renderer = new Renderer<string, string>();
 
   renderer.html = ({ text }) => escapeHtml(text);
@@ -58,11 +64,65 @@ function createSafeHtmlExportRenderer(): Renderer<string, string> {
       return escapeHtml(altText);
     }
 
+    const source = resolvedImageSources.get(href) ?? href;
     const titleAttribute = title ? ` title="${escapeHtmlAttribute(title)}"` : "";
-    return `<img src="${escapeHtmlAttribute(href)}" alt="${escapeHtmlAttribute(altText)}"${titleAttribute}>`;
+    return `<img src="${escapeHtmlAttribute(source)}" alt="${escapeHtmlAttribute(altText)}"${titleAttribute}>`;
   };
 
   return renderer;
+}
+
+async function resolveExportImageSources(
+  markdown: string,
+  resolveImageSource: MarkdownImageSourceResolver
+): Promise<ReadonlyMap<string, string>> {
+  const sources = collectResolvableImageSources(markdown);
+  const resolvedSources = new Map<string, string>();
+
+  await Promise.all([...sources].map(async (source) => {
+    try {
+      const resolvedSource = await resolveImageSource(source);
+      if (resolvedSource && isSafeExportImageSource(resolvedSource)) {
+        resolvedSources.set(source, resolvedSource);
+      }
+    } catch {
+      // A missing or unreadable image should not block exporting the note.
+    }
+  }));
+
+  return resolvedSources;
+}
+
+function collectResolvableImageSources(markdown: string): ReadonlySet<string> {
+  const sources = new Set<string>();
+  const tokens = marked.lexer(markdown, { gfm: true });
+
+  collectImageSourcesFromTokens(tokens, sources);
+
+  return sources;
+}
+
+function collectImageSourcesFromTokens(value: unknown, sources: Set<string>): void {
+  if (Array.isArray(value)) {
+    for (const child of value) {
+      collectImageSourcesFromTokens(child, sources);
+    }
+    return;
+  }
+
+  if (!isRecord(value)) {
+    return;
+  }
+
+  if (value.type === "image" && typeof value.href === "string" && isResolvableExportImageSource(value.href)) {
+    sources.add(value.href);
+  }
+
+  for (const child of Object.values(value)) {
+    if (child && typeof child === "object") {
+      collectImageSourcesFromTokens(child, sources);
+    }
+  }
 }
 
 function createHtmlDocument(title: string, body: string): string {
@@ -145,6 +205,18 @@ function isSafeExportImageSource(value: string): boolean {
   }
 
   return /^(data:image\/|blob:|file:)/i.test(target);
+}
+
+function isResolvableExportImageSource(value: string): boolean {
+  const target = value.trim();
+
+  return isSafeExportImageSource(target)
+    && !target.startsWith("/")
+    && !/^[a-z][a-z0-9+.-]*:/i.test(target);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
 }
 
 function escapeHtml(value: string): string {

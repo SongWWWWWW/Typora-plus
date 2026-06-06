@@ -2,11 +2,13 @@ import { toDisposable, type IDisposable, type URI as URIType } from "@typora-plu
 import { createServiceIdentifier } from "./instantiation";
 
 export type ExportFormat = "html";
+export type ExportImageSourceResolver = (source: string) => Promise<string | undefined>;
 
 export interface ExportDocumentInput {
   readonly uri: URIType;
   readonly name: string;
   readonly value: string;
+  readonly resolveImageSource?: ExportImageSourceResolver;
 }
 
 export interface ExportedDocument {
@@ -34,9 +36,15 @@ export interface NativeExportBridge {
   saveDocument(document: SerializedExportedDocument): Promise<boolean>;
 }
 
+export interface ExportResourceService {
+  isAvailable(): boolean;
+  resolveImageSource(noteUri: URIType, source: string): Promise<string | undefined>;
+}
+
 export interface ExportServiceOptions {
   readonly nativeBridge?: NativeExportBridge;
   readonly browserSave?: (document: ExportedDocument) => boolean;
+  readonly resourceService?: ExportResourceService;
 }
 
 export interface IExportService {
@@ -53,10 +61,12 @@ export class ExportService implements IExportService {
   private readonly providers = new Map<ExportFormat, ExportProvider>();
   private readonly nativeBridge: NativeExportBridge | undefined;
   private readonly browserSave: (document: ExportedDocument) => boolean;
+  private readonly resourceService: ExportResourceService | undefined;
 
   constructor(options: ExportServiceOptions = {}) {
     this.nativeBridge = options.nativeBridge ?? createNativeExportBridge();
     this.browserSave = options.browserSave ?? saveExportedDocumentInBrowser;
+    this.resourceService = options.resourceService;
   }
 
   registerProvider(provider: ExportProvider): IDisposable {
@@ -79,7 +89,7 @@ export class ExportService implements IExportService {
       throw new Error(`No export provider registered for ${format}`);
     }
 
-    return provider.exportDocument(input);
+    return provider.exportDocument(this.withResourceContext(input));
   }
 
   async saveExportedDocument(document: ExportedDocument): Promise<boolean> {
@@ -93,6 +103,19 @@ export class ExportService implements IExportService {
   async exportAndSave(input: ExportDocumentInput, format: ExportFormat): Promise<boolean> {
     const document = await this.exportDocument(input, format);
     return this.saveExportedDocument(document);
+  }
+
+  private withResourceContext(input: ExportDocumentInput): ExportDocumentInput {
+    const resourceService = this.resourceService;
+
+    if (input.resolveImageSource || !resourceService?.isAvailable()) {
+      return input;
+    }
+
+    return {
+      ...input,
+      resolveImageSource: (source) => resourceService.resolveImageSource(input.uri, source)
+    };
   }
 }
 
