@@ -38,6 +38,7 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
+import { updateSavedFileIndex } from "./savedFileIndexing";
 import type { WorkbenchServices } from "./services";
 
 type SideView = "files" | "search" | "outline" | "backlinks" | "tags";
@@ -151,7 +152,7 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
     const handle = window.setTimeout(() => {
       void runWorkbenchAction(async () => {
         const saved = await services.textFileService.save();
-        await updateIndexedFile(services.indexService, workspace.files, saved);
+        await updateSavedFileIndexAndWorkspace(services, workspace.files, saved);
         return saved;
       }, setOperationError, setSaveConflict);
     }, autoSaveDelayMs);
@@ -277,7 +278,7 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
           services.recentService.addRecentFile(saved.uri, saved.name);
         }
 
-        await updateIndexedFile(services.indexService, workspace.files, saved);
+        await updateSavedFileIndexAndWorkspace(services, workspace.files, saved);
         return saved;
       }, setOperationError, setSaveConflict)
     }));
@@ -290,7 +291,7 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
 
         if (saved) {
           services.recentService.addRecentFile(saved.uri, saved.name);
-          await updateIndexedFile(services.indexService, workspace.files, saved);
+          await updateSavedFileIndexAndWorkspace(services, workspace.files, saved);
         }
 
         return saved;
@@ -500,7 +501,7 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
                 services.recentService.addRecentFile(saved.uri, saved.name);
               }
 
-              await updateIndexedFile(services.indexService, workspace.files, saved);
+              await updateSavedFileIndexAndWorkspace(services, workspace.files, saved);
               setSaveConflict(undefined);
               return saved;
             }, setOperationError, setSaveConflict);
@@ -1430,22 +1431,18 @@ function workspaceStateFromFiles(workspaceFiles: NonNullable<WorkspaceState["fil
   };
 }
 
-async function updateIndexedFile(
-  indexService: WorkbenchServices["indexService"],
+async function updateSavedFileIndexAndWorkspace(
+  services: WorkbenchServices,
   workspaceFiles: WorkspaceState["files"],
   model: TextFileModel
 ): Promise<void> {
-  if (model.uri.scheme !== "file" || !workspaceFiles) {
+  const refreshedWorkspace = await updateSavedFileIndex(services, workspaceFiles, model);
+
+  if (!refreshedWorkspace) {
     return;
   }
 
-  const file = workspaceFiles.files.find((entry) => entry.uri.toString() === model.uri.toString());
-
-  if (!file) {
-    return;
-  }
-
-  await indexService.indexFile(file, model.value);
+  services.workspaceService.setWorkspace(workspaceStateFromFiles(refreshedWorkspace));
 }
 
 async function runWorkbenchAction<T>(
