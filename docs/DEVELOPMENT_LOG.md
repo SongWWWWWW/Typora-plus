@@ -2296,3 +2296,38 @@ Known limitations:
 - Third-party extension host code loading is still not implemented.
 - There is no marketplace, theme import, or external theme management UI yet.
 - Markdown renderer contributions remain future extension runtime work.
+
+## 2026-06-07 - P2 Markdown Renderer Contributions
+
+Completed:
+
+- Added platform `IMarkdownRendererService` and `MarkdownRendererService`.
+- Split Markdown renderer metadata from runtime providers, following the same contribution/runtime separation as commands and exports.
+- Added renderer contribution support to extension manifests.
+- Derived `onMarkdownRenderer:<id>` activation events from manifest renderer contributions.
+- Added constrained `ExtensionContext.markdown` runtime API for registering renderer providers.
+- Wired Workbench service creation so extension manifests and runtime APIs share one Markdown renderer service instance.
+- Added duplicate registration rejection, renderer metadata normalization, provider cleanup, runtime metadata support, and disposable lifecycle cleanup.
+- Added platform tests for renderer registration, provider rendering, invalid registrations, manifest registration, rollback, missing service errors, runtime provider registration, and failed activation cleanup.
+
+Quality gate:
+
+- `npm run test -- --run packages/platform/src/platform.test.ts`: passed, 89 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 210 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Browser smoke check at `http://127.0.0.1:5173/`: Workbench loaded with shell, titlebar, activitybar, and editor; no horizontal overflow; no console errors.
+
+Review:
+
+- Markdown renderer extensibility now has a platform service boundary instead of future ad hoc editor constants.
+- Manifest renderer metadata can activate extensions lazily, while runtime providers are lifecycle-owned by the extension record.
+- Provider output is not inserted into the DOM by the platform service; future editor integration must sanitize and place rendered output before preview use.
+- No dynamic code loading, unrestricted Node access, direct DOM access, visual token, storage path, or extra documentation file was introduced.
+
+Known limitations:
+
+- Registered Markdown renderer providers are not connected to the CodeMirror live-preview surface yet.
+- Third-party extension host code loading is still not implemented.
+- Marketplace or extension package installation remains future work.
