@@ -53,6 +53,10 @@ export interface MarkdownLineClassificationState {
   readonly tableState?: MarkdownTableLineState;
 }
 
+export interface MarkdownLineBlockState extends MarkdownLineClassificationState {
+  readonly line: number;
+}
+
 export type MarkdownImageSourceResolver = (source: string) => Promise<string | undefined> | string | undefined;
 
 const syntaxMarkerDecoration = Decoration.mark({ class: "tp-editor-markdown-marker" });
@@ -136,89 +140,24 @@ export function classifyMarkdownLine(
 }
 
 export function analyzeMarkdownCodeFenceLines(lines: readonly string[]): readonly MarkdownCodeFenceLineState[] {
-  const states: MarkdownCodeFenceLineState[] = [];
-  let activeFence: string | undefined;
-
-  lines.forEach((line, index) => {
-    const marker = readOpeningFenceMarker(line);
-
-    if (!activeFence) {
-      if (!marker) {
-        return;
-      }
-
-      activeFence = marker;
-      states.push({ line: index + 1, role: "open" });
-      return;
-    }
-
-    if (isClosingFence(line, activeFence)) {
-      activeFence = undefined;
-      states.push({ line: index + 1, role: "close" });
-      return;
-    }
-
-    states.push({ line: index + 1, role: "content" });
-  });
-
-  return states;
+  return analyzeMarkdownLineBlocks(lines).flatMap((state) =>
+    state.codeFenceRole ? [{ line: state.line, role: state.codeFenceRole }] : []
+  );
 }
 
 export function analyzeMarkdownImageBlocks(lines: readonly string[]): readonly MarkdownImageBlockState[] {
-  const states: MarkdownImageBlockState[] = [];
-  let activeFence: string | undefined;
-
-  lines.forEach((line, index) => {
-    if (activeFence) {
-      activeFence = nextFenceState(line, activeFence);
-      return;
-    }
-
-    activeFence = nextFenceState(line, activeFence);
-    if (activeFence) {
-      return;
-    }
-
-    const block = readMarkdownImageBlock(line, index + 1);
-    if (block) {
-      states.push(block);
-    }
-  });
-
-  return states;
+  return analyzeMarkdownLineBlocks(lines).flatMap((state) => state.imageBlock ? [state.imageBlock] : []);
 }
 
 export function analyzeMarkdownTableLines(lines: readonly string[]): readonly MarkdownTableLineState[] {
-  const states: MarkdownTableLineState[] = [];
-  let activeFence: string | undefined;
-  let lineNumber = 1;
+  return analyzeMarkdownLineBlocks(lines).flatMap((state) => state.tableState ? [state.tableState] : []);
+}
 
-  while (lineNumber <= lines.length) {
-    const text = lines[lineNumber - 1] ?? "";
-
-    if (activeFence) {
-      activeFence = nextFenceState(text, activeFence);
-      lineNumber += 1;
-      continue;
-    }
-
-    activeFence = nextFenceState(text, activeFence);
-    if (activeFence) {
-      lineNumber += 1;
-      continue;
-    }
-
-    const table = readMarkdownTable(lines, lineNumber);
-    if (!table) {
-      lineNumber += 1;
-      continue;
-    }
-
-    states.push(...table.states);
-    lineNumber = table.nextLine;
-  }
-
-  return states;
+export function analyzeMarkdownLineBlocks(lines: readonly string[]): readonly MarkdownLineBlockState[] {
+  return analyzeMarkdownLineBlocksFromSource({
+    lineCount: lines.length,
+    readLine: (lineNumber) => lines[lineNumber - 1] ?? ""
+  });
 }
 
 export function findInactiveMarkdownSyntaxMarkers(text: string, active: boolean): readonly MarkdownSyntaxMarkerRange[] {
@@ -242,27 +181,20 @@ function buildDecorations(
 ): DecorationSet {
   const builder = new RangeSetBuilder<Decoration>();
   const activeLine = view.state.doc.lineAt(view.state.selection.main.head).number;
-  const codeFenceLineRoles = analyzeVisibleCodeFenceLines(view);
-  const imageBlocks = analyzeVisibleImageBlocks(view);
-  const tableLineStates = analyzeVisibleTableLines(view);
+  const lineBlockStates = analyzeVisibleMarkdownLineBlocks(view);
 
   for (const range of view.visibleRanges) {
     let position = range.from;
 
     while (position <= range.to) {
       const line = view.state.doc.lineAt(position);
-      const codeFenceRole = codeFenceLineRoles.get(line.number);
-      const imageBlock = imageBlocks.get(line.number);
-      const tableState = tableLineStates.get(line.number);
+      const lineBlockState = lineBlockStates.get(line.number);
+      const imageBlock = lineBlockState?.imageBlock;
       const classes = classifyMarkdownLine(
         line.text,
         line.number === activeLine,
         configuration.focusMode,
-        {
-          ...(codeFenceRole ? { codeFenceRole } : {}),
-          ...(imageBlock ? { imageBlock } : {}),
-          ...(tableState ? { tableState } : {})
-        }
+        lineBlockState
       );
 
       builder.add(line.from, line.from, Decoration.line({ class: classes.join(" ") }));
@@ -290,130 +222,95 @@ function buildDecorations(
   return builder.finish();
 }
 
-function analyzeVisibleCodeFenceLines(view: EditorView): ReadonlyMap<number, MarkdownCodeFenceLineRole> {
-  const roles = new Map<number, MarkdownCodeFenceLineRole>();
-  let activeFence: string | undefined;
-  let cursorLine = 1;
-
-  for (const range of view.visibleRanges) {
-    const firstLine = view.state.doc.lineAt(range.from).number;
-    const lastLine = view.state.doc.lineAt(range.to).number;
-
-    while (cursorLine < firstLine) {
-      activeFence = nextFenceState(view.state.doc.line(cursorLine).text, activeFence);
-      cursorLine += 1;
-    }
-
-    while (cursorLine <= lastLine) {
-      const line = view.state.doc.line(cursorLine);
-      const marker = readOpeningFenceMarker(line.text);
-
-      if (!activeFence) {
-        if (marker) {
-          activeFence = marker;
-          roles.set(cursorLine, "open");
-        }
-      } else if (isClosingFence(line.text, activeFence)) {
-        activeFence = undefined;
-        roles.set(cursorLine, "close");
-      } else {
-        roles.set(cursorLine, "content");
-      }
-
-      cursorLine += 1;
-    }
-  }
-
-  return roles;
-}
-
-function analyzeVisibleImageBlocks(view: EditorView): ReadonlyMap<number, MarkdownImageBlockState> {
-  const blocks = new Map<number, MarkdownImageBlockState>();
+function analyzeVisibleMarkdownLineBlocks(view: EditorView): ReadonlyMap<number, MarkdownLineBlockState> {
   const visibleLineRanges = view.visibleRanges.map((range) => ({
     first: view.state.doc.lineAt(range.from).number,
     last: view.state.doc.lineAt(range.to).number
   }));
-  const lastVisibleLine = Math.max(...visibleLineRanges.map((range) => range.last));
+  const lastVisibleLine = Math.max(1, ...visibleLineRanges.map((range) => range.last));
   const isVisible = (lineNumber: number): boolean =>
     visibleLineRanges.some((range) => lineNumber >= range.first && lineNumber <= range.last);
-  let activeFence: string | undefined;
 
-  for (let lineNumber = 1; lineNumber <= lastVisibleLine; lineNumber += 1) {
-    const text = view.state.doc.line(lineNumber).text;
-
-    if (activeFence) {
-      activeFence = nextFenceState(text, activeFence);
-      continue;
-    }
-
-    activeFence = nextFenceState(text, activeFence);
-    if (activeFence || !isVisible(lineNumber)) {
-      continue;
-    }
-
-    const block = readMarkdownImageBlock(text, lineNumber);
-    if (block) {
-      blocks.set(lineNumber, block);
-    }
-  }
-
-  return blocks;
+  return new Map(analyzeMarkdownLineBlocksFromSource({
+    isVisible,
+    lineCount: view.state.doc.lines,
+    lookaheadLimit: lastVisibleLine + 1,
+    readLine: (lineNumber) => view.state.doc.line(lineNumber).text,
+    scanUntilLine: lastVisibleLine
+  }).map((state) => [state.line, state]));
 }
 
-function analyzeVisibleTableLines(view: EditorView): ReadonlyMap<number, MarkdownTableLineState> {
-  const states = new Map<number, MarkdownTableLineState>();
-  const visibleLineRanges = view.visibleRanges.map((range) => ({
-    first: view.state.doc.lineAt(range.from).number,
-    last: view.state.doc.lineAt(range.to).number
-  }));
-  const lastVisibleLine = Math.max(...visibleLineRanges.map((range) => range.last));
-  const isVisible = (lineNumber: number): boolean =>
-    visibleLineRanges.some((range) => lineNumber >= range.first && lineNumber <= range.last);
+function analyzeMarkdownLineBlocksFromSource(source: {
+  readonly isVisible?: (lineNumber: number) => boolean;
+  readonly lineCount: number;
+  readonly lookaheadLimit?: number;
+  readonly readLine: (lineNumber: number) => string;
+  readonly scanUntilLine?: number;
+}): readonly MarkdownLineBlockState[] {
+  const states = new Map<number, MarkdownLineBlockState>();
+  const scanUntilLine = Math.min(source.scanUntilLine ?? source.lineCount, source.lineCount);
+  const setLineState = (line: number, state: Omit<MarkdownLineClassificationState, "line">) => {
+    if (source.isVisible && !source.isVisible(line)) {
+      return;
+    }
+
+    states.set(line, {
+      ...states.get(line),
+      line,
+      ...state
+    });
+  };
 
   let activeFence: string | undefined;
   let lineNumber = 1;
 
-  while (lineNumber <= lastVisibleLine) {
-    const text = view.state.doc.line(lineNumber).text;
+  while (lineNumber <= scanUntilLine) {
+    const text = source.readLine(lineNumber);
 
     if (activeFence) {
-      activeFence = nextFenceState(text, activeFence);
-      lineNumber += 1;
-      continue;
-    }
-
-    activeFence = nextFenceState(text, activeFence);
-    if (activeFence) {
-      lineNumber += 1;
-      continue;
-    }
-
-    const table = readMarkdownTableFromDocument(view, lineNumber, lastVisibleLine + 1);
-    if (!table) {
-      lineNumber += 1;
-      continue;
-    }
-
-    for (const state of table.states) {
-      if (isVisible(state.line)) {
-        states.set(state.line, state);
+      if (isClosingFence(text, activeFence)) {
+        activeFence = undefined;
+        setLineState(lineNumber, { codeFenceRole: "close" });
+      } else {
+        setLineState(lineNumber, { codeFenceRole: "content" });
       }
+
+      lineNumber += 1;
+      continue;
     }
 
-    lineNumber = table.nextLine;
+    const marker = readOpeningFenceMarker(text);
+    if (marker) {
+      activeFence = marker;
+      setLineState(lineNumber, { codeFenceRole: "open" });
+      lineNumber += 1;
+      continue;
+    }
+
+    const table = readMarkdownTableFromSource({
+      lineCount: source.lineCount,
+      readLine: source.readLine,
+      startLine: lineNumber,
+      ...(source.lookaheadLimit === undefined ? {} : { lookaheadLimit: source.lookaheadLimit })
+    });
+    if (table) {
+      for (const tableState of table.states) {
+        setLineState(tableState.line, { tableState });
+      }
+
+      lineNumber = table.nextLine;
+      continue;
+    }
+
+    const imageBlock = readMarkdownImageBlock(text, lineNumber);
+    if (imageBlock) {
+      setLineState(lineNumber, { imageBlock });
+    }
+
+    lineNumber += 1;
   }
 
-  return states;
-}
-
-function nextFenceState(text: string, activeFence: string | undefined): string | undefined {
-  const marker = readOpeningFenceMarker(text);
-
-  if (!activeFence) {
-    return marker;
-  }
-
-  return isClosingFence(text, activeFence) ? undefined : activeFence;
+  return Array.from(states.values()).sort((first, second) => first.line - second.line);
 }
 
 function isClosingFence(text: string, activeFence: string): boolean {
@@ -528,27 +425,6 @@ function unescapeMarkdownText(text: string): string {
 interface MarkdownTableReadResult {
   readonly nextLine: number;
   readonly states: readonly MarkdownTableLineState[];
-}
-
-function readMarkdownTable(lines: readonly string[], lineNumber: number): MarkdownTableReadResult | undefined {
-  return readMarkdownTableFromSource({
-    lineCount: lines.length,
-    readLine: (currentLine) => lines[currentLine - 1] ?? "",
-    startLine: lineNumber
-  });
-}
-
-function readMarkdownTableFromDocument(
-  view: EditorView,
-  lineNumber: number,
-  lookaheadLimit: number
-): MarkdownTableReadResult | undefined {
-  return readMarkdownTableFromSource({
-    lineCount: view.state.doc.lines,
-    lookaheadLimit,
-    readLine: (currentLine) => view.state.doc.line(currentLine).text,
-    startLine: lineNumber
-  });
 }
 
 function readMarkdownTableFromSource(source: {

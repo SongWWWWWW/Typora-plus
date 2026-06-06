@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   analyzeMarkdownCodeFenceLines,
   analyzeMarkdownImageBlocks,
+  analyzeMarkdownLineBlocks,
   analyzeMarkdownTableLines,
   classifyMarkdownLine,
   findInactiveMarkdownSyntaxMarkers
@@ -83,6 +84,50 @@ describe("analyzeMarkdownCodeFenceLines", () => {
       { line: 1, role: "open" },
       { line: 2, role: "content" },
       { line: 3, role: "close" }
+    ]);
+  });
+});
+
+describe("analyzeMarkdownLineBlocks", () => {
+  it("collects code fences, image cards, and table rows in document order", () => {
+    const states = analyzeMarkdownLineBlocks([
+      "# Mixed",
+      "```ts",
+      "const value = 1",
+      "```",
+      "![Diagram](assets/diagram.png)",
+      "| Name | Value |",
+      "| --- | ---: |",
+      "| Alpha | 1 |"
+    ]);
+
+    expect(states.map((state) => [
+      state.line,
+      state.codeFenceRole ?? state.imageBlock?.sourceLabel ?? state.tableState?.role
+    ])).toEqual([
+      [2, "open"],
+      [3, "content"],
+      [4, "close"],
+      [5, "diagram.png"],
+      [6, "header"],
+      [7, "delimiter"],
+      [8, "body"]
+    ]);
+  });
+
+  it("does not collect image or table state inside code fences", () => {
+    expect(analyzeMarkdownLineBlocks([
+      "```",
+      "![Code](code.png)",
+      "| Name | Value |",
+      "| --- | --- |",
+      "```"
+    ])).toEqual([
+      { line: 1, codeFenceRole: "open" },
+      { line: 2, codeFenceRole: "content" },
+      { line: 3, codeFenceRole: "content" },
+      { line: 4, codeFenceRole: "content" },
+      { line: 5, codeFenceRole: "close" }
     ]);
   });
 });
