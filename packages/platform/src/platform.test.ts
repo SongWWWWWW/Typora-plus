@@ -12,6 +12,7 @@ import {
   RecentService,
   NativeResourceService,
   flattenFileTree,
+  keybindingFromEvent,
   mergeConfiguration,
   ServiceCollection,
   type FileTreeEntry,
@@ -91,6 +92,45 @@ describe("configuration", () => {
     expect(service.getValue().editor.fontSize).toBe(17);
     expect(service.getValue().editor.typewriterMode).toBe(true);
     expect(service.getValue().workspace.searchMaxResults).toBe(120);
+  });
+
+  it("persists and validates keybinding overrides", () => {
+    const storage = createMemoryStorage();
+    const service = new ConfigurationService({
+      storageKey: "configuration",
+      storage
+    });
+
+    service.updateValue({
+      keybindings: {
+        overrides: [
+          { command: "file.save", keybinding: { key: "k", primary: true } }
+        ]
+      }
+    });
+
+    const restored = new ConfigurationService({
+      storageKey: "configuration",
+      storage
+    });
+
+    expect(restored.getValue().keybindings.overrides).toEqual([
+      { command: "file.save", keybinding: { key: "k", primary: true } }
+    ]);
+
+    service.updateValue({
+      keybindings: {
+        overrides: [
+          { command: "", keybinding: { key: "x", primary: true } },
+          { command: "file.save", keybinding: { key: "" } },
+          { command: "file.saveAs", keybinding: { key: "s", primary: true, shift: true } }
+        ]
+      }
+    });
+
+    expect(service.getValue().keybindings.overrides).toEqual([
+      { command: "file.saveAs", keybinding: { key: "s", primary: true, shift: true } }
+    ]);
   });
 
   it("uses a native configuration bridge when available", () => {
@@ -199,6 +239,38 @@ describe("keybindings", () => {
     expect(keybindingService.dispatch({ key: "s" }, commandService)).toBe(false);
     expect(keybindingService.dispatch({ key: "s", ctrlKey: true }, commandService)).toBe(true);
     expect(saved).toBe(true);
+  });
+
+  it("applies user keybindings over defaults and replaces user rules", () => {
+    const service = new KeybindingService();
+
+    service.registerKeybinding({
+      command: "file.save",
+      keybinding: { key: "s", primary: true }
+    });
+    service.setUserKeybindings([
+      {
+        command: "workbench.settings.open",
+        keybinding: { key: "s", primary: true }
+      }
+    ]);
+
+    expect(service.resolve({ key: "s", ctrlKey: true })).toBe("workbench.settings.open");
+    expect(service.getKeybindingLabel("workbench.settings.open")).toBe("Ctrl+S");
+
+    service.setUserKeybindings([]);
+
+    expect(service.resolve({ key: "s", ctrlKey: true })).toBe("file.save");
+    expect(service.getKeybindingLabel("workbench.settings.open")).toBeUndefined();
+  });
+
+  it("creates keybindings from keyboard events", () => {
+    expect(keybindingFromEvent({ key: "K", ctrlKey: true, shiftKey: true })).toEqual({
+      key: "k",
+      primary: true,
+      shift: true
+    });
+    expect(keybindingFromEvent({ key: "Control", ctrlKey: true })).toBeUndefined();
   });
 });
 

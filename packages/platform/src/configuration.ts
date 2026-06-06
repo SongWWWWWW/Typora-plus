@@ -1,5 +1,6 @@
 import { Emitter, type Event } from "@typora-plus/base";
 import { createServiceIdentifier } from "./instantiation";
+import type { UserKeybindingRule } from "./keybindings";
 
 export type ColorSchemePreference = "light" | "dark" | "system";
 
@@ -20,6 +21,9 @@ export interface TyporaPlusConfiguration {
     readonly defaultAssetFolder: string;
     readonly searchMaxFileSizeBytes: number;
     readonly searchMaxResults: number;
+  };
+  readonly keybindings: {
+    readonly overrides: readonly UserKeybindingRule[];
   };
 }
 
@@ -49,6 +53,7 @@ export type PartialConfiguration = {
   readonly appearance?: Partial<TyporaPlusConfiguration["appearance"]>;
   readonly editor?: Partial<TyporaPlusConfiguration["editor"]>;
   readonly workspace?: Partial<TyporaPlusConfiguration["workspace"]>;
+  readonly keybindings?: Partial<TyporaPlusConfiguration["keybindings"]>;
 };
 
 export const IConfigurationService = createServiceIdentifier<IConfigurationService>("configuration");
@@ -74,6 +79,9 @@ export const defaultConfiguration: TyporaPlusConfiguration = {
     defaultAssetFolder: "assets",
     searchMaxFileSizeBytes: 2 * 1024 * 1024,
     searchMaxResults: 120
+  },
+  keybindings: {
+    overrides: []
   }
 };
 
@@ -94,7 +102,7 @@ export class ConfigurationService implements IConfigurationService {
   }
 
   updateValue(value: PartialConfiguration): void {
-    this.value = mergeConfiguration(this.value, value);
+    this.value = mergeConfiguration(this.value, sanitizePartialConfiguration(value));
     this.persist();
     this.emitter.fire(this.value);
   }
@@ -135,6 +143,10 @@ export function mergeConfiguration(
     workspace: {
       ...base.workspace,
       ...value.workspace
+    },
+    keybindings: {
+      ...base.keybindings,
+      ...value.keybindings
     }
   };
 }
@@ -147,7 +159,8 @@ function sanitizePartialConfiguration(value: unknown): PartialConfiguration {
   return {
     ...(isRecord(value.appearance) ? { appearance: sanitizeAppearanceConfiguration(value.appearance) } : {}),
     ...(isRecord(value.editor) ? { editor: sanitizeEditorConfiguration(value.editor) } : {}),
-    ...(isRecord(value.workspace) ? { workspace: sanitizeWorkspaceConfiguration(value.workspace) } : {})
+    ...(isRecord(value.workspace) ? { workspace: sanitizeWorkspaceConfiguration(value.workspace) } : {}),
+    ...(isRecord(value.keybindings) ? { keybindings: sanitizeKeybindingsConfiguration(value.keybindings) } : {})
   };
 }
 
@@ -177,6 +190,16 @@ function sanitizeWorkspaceConfiguration(value: Record<string, unknown>): Partial
   };
 }
 
+function sanitizeKeybindingsConfiguration(value: Record<string, unknown>): Partial<TyporaPlusConfiguration["keybindings"]> {
+  if (!Array.isArray(value.overrides)) {
+    return {};
+  }
+
+  return {
+    overrides: value.overrides.filter(isUserKeybindingRule)
+  };
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -191,6 +214,21 @@ function isPositiveFiniteNumber(value: unknown): value is number {
 
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;
+}
+
+function isUserKeybindingRule(value: unknown): value is UserKeybindingRule {
+  if (!isRecord(value) || !isNonEmptyString(value.command) || !isRecord(value.keybinding)) {
+    return false;
+  }
+
+  return isNonEmptyString(value.keybinding.key) &&
+    isOptionalBoolean(value.keybinding.primary) &&
+    isOptionalBoolean(value.keybinding.shift) &&
+    isOptionalBoolean(value.keybinding.alt);
+}
+
+function isOptionalBoolean(value: unknown): boolean {
+  return value === undefined || typeof value === "boolean";
 }
 
 function createBrowserConfigurationStorage(): ConfigurationStorage {

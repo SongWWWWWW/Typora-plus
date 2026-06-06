@@ -15,6 +15,11 @@ export interface KeybindingRule {
   readonly weight?: number;
 }
 
+export interface UserKeybindingRule {
+  readonly command: string;
+  readonly keybinding: Keybinding;
+}
+
 export interface KeybindingEvent {
   readonly key: string;
   readonly ctrlKey?: boolean;
@@ -35,6 +40,7 @@ export interface KeybindingServiceOptions {
 
 export interface IKeybindingService {
   registerKeybinding(rule: KeybindingRule): IDisposable;
+  setUserKeybindings(rules: readonly UserKeybindingRule[]): void;
   resolve(event: KeybindingEvent): string | undefined;
   dispatch(event: KeybindingEvent, commandService: ICommandService): boolean;
   getKeybindings(): readonly ResolvedKeybinding[];
@@ -44,7 +50,8 @@ export interface IKeybindingService {
 export const IKeybindingService = createServiceIdentifier<IKeybindingService>("keybinding");
 
 export class KeybindingService implements IKeybindingService {
-  private rules: KeybindingRecord[] = [];
+  private defaultRules: KeybindingRecord[] = [];
+  private userRules: KeybindingRecord[] = [];
   private order = 0;
   private readonly options: KeybindingServiceOptions;
 
@@ -59,19 +66,30 @@ export class KeybindingService implements IKeybindingService {
     const record: KeybindingRecord = {
       command: rule.command,
       keybinding: normalizeKeybinding(rule.keybinding),
+      source: "default",
       weight: rule.weight ?? 0,
       order: this.order
     };
     this.order += 1;
-    this.rules = [...this.rules, record];
+    this.defaultRules = [...this.defaultRules, record];
 
     return toDisposable(() => {
-      this.rules = this.rules.filter((entry) => entry !== record);
+      this.defaultRules = this.defaultRules.filter((entry) => entry !== record);
     });
   }
 
+  setUserKeybindings(rules: readonly UserKeybindingRule[]): void {
+    this.userRules = rules.map((rule, index) => ({
+      command: rule.command,
+      keybinding: normalizeKeybinding(rule.keybinding),
+      source: "user",
+      weight: userKeybindingWeight,
+      order: index
+    }));
+  }
+
   resolve(event: KeybindingEvent): string | undefined {
-    return this.rules
+    return this.getRuleRecords()
       .filter((rule) => matchesKeybinding(rule.keybinding, event))
       .sort((first, second) => second.weight - first.weight || second.order - first.order)[0]
       ?.command;
@@ -89,7 +107,7 @@ export class KeybindingService implements IKeybindingService {
   }
 
   getKeybindings(): readonly ResolvedKeybinding[] {
-    return this.rules
+    return this.getRuleRecords()
       .map((rule) => ({
         command: rule.command,
         keybinding: rule.keybinding,
@@ -99,20 +117,27 @@ export class KeybindingService implements IKeybindingService {
   }
 
   getKeybindingLabel(command: string): string | undefined {
-    const rule = this.rules
+    const rule = this.getRuleRecords()
       .filter((entry) => entry.command === command)
       .sort((first, second) => second.weight - first.weight || second.order - first.order)[0];
 
     return rule ? formatKeybinding(rule.keybinding, this.options) : undefined;
+  }
+
+  private getRuleRecords(): readonly KeybindingRecord[] {
+    return [...this.defaultRules, ...this.userRules];
   }
 }
 
 interface KeybindingRecord {
   readonly command: string;
   readonly keybinding: Keybinding;
+  readonly source: "default" | "user";
   readonly weight: number;
   readonly order: number;
 }
+
+const userKeybindingWeight = 1_000;
 
 function normalizeKeybinding(keybinding: Keybinding): Keybinding {
   return {
@@ -142,6 +167,31 @@ function normalizeKey(key: string): string {
   }
 
   return normalized;
+}
+
+export function keybindingFromEvent(event: KeybindingEvent): Keybinding | undefined {
+  const key = normalizeKey(event.key);
+
+  if (key === "control" || key === "ctrl" || key === "meta" || key === "shift" || key === "alt") {
+    return undefined;
+  }
+
+  return {
+    key,
+    ...(event.ctrlKey || event.metaKey ? { primary: true } : {}),
+    ...(event.shiftKey ? { shift: true } : {}),
+    ...(event.altKey ? { alt: true } : {})
+  };
+}
+
+export function keybindingEquals(first: Keybinding, second: Keybinding): boolean {
+  const normalizedFirst = normalizeKeybinding(first);
+  const normalizedSecond = normalizeKeybinding(second);
+
+  return normalizedFirst.key === normalizedSecond.key &&
+    Boolean(normalizedFirst.primary) === Boolean(normalizedSecond.primary) &&
+    Boolean(normalizedFirst.shift) === Boolean(normalizedSecond.shift) &&
+    Boolean(normalizedFirst.alt) === Boolean(normalizedSecond.alt);
 }
 
 function formatKeybinding(keybinding: Keybinding, options: KeybindingServiceOptions): string {

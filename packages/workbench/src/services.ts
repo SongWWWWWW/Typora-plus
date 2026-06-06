@@ -90,6 +90,7 @@ export function createWorkbenchServices(): WorkbenchServices {
   for (const rule of defaultWorkbenchKeybindings) {
     keybindingService.registerKeybinding(rule);
   }
+  keybindingService.setUserKeybindings(configurationService.getValue().keybindings.overrides);
 
   return {
     serviceCollection,

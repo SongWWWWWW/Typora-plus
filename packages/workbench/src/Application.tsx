@@ -103,7 +103,10 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
     [indexStatus.updatedAt, selectedTag, services, workspace.files]
   );
 
-  useEffect(() => services.configurationService.onDidChangeConfiguration(setConfiguration).dispose, [services]);
+  useEffect(() => services.configurationService.onDidChangeConfiguration((nextConfiguration) => {
+    services.keybindingService.setUserKeybindings(nextConfiguration.keybindings.overrides);
+    setConfiguration(nextConfiguration);
+  }).dispose, [services]);
 
   useEffect(() => services.textFileService.onDidChangeModel(setModel).dispose, [services]);
 
@@ -532,6 +535,8 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
       <SettingsDialog
         open={settingsOpen}
         configuration={configuration}
+        commands={services.commandService.getCommands()}
+        getKeybindingLabel={(id) => services.keybindingService.getKeybindingLabel(id)}
         onClose={() => setSettingsOpen(false)}
         onUpdate={(value) => services.configurationService.updateValue(value)}
       />

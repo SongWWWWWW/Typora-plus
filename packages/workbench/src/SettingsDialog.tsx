@@ -1,7 +1,13 @@
-import type { PartialConfiguration, TyporaPlusConfiguration } from "@typora-plus/platform";
+import { keybindingFromEvent } from "@typora-plus/platform";
+import type { Command, PartialConfiguration, TyporaPlusConfiguration } from "@typora-plus/platform";
 import { Settings as SettingsIcon, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
+import {
+  isRecordableKeybinding,
+  removeKeybindingOverride,
+  upsertKeybindingOverride
+} from "./keybindingSettings";
 import {
   bytesToMegabytes,
   clampSettingNumber,
@@ -14,20 +20,26 @@ import {
 export function SettingsDialog({
   open,
   configuration,
+  commands,
+  getKeybindingLabel,
   onClose,
   onUpdate
 }: {
   readonly open: boolean;
   readonly configuration: TyporaPlusConfiguration;
+  readonly commands: readonly Command[];
+  readonly getKeybindingLabel: (command: string) => string | undefined;
   readonly onClose: () => void;
   readonly onUpdate: (value: PartialConfiguration) => void;
 }) {
   const [assetFolderDraft, setAssetFolderDraft] = useState(configuration.workspace.defaultAssetFolder);
+  const [recordingCommand, setRecordingCommand] = useState<string | undefined>();
   const searchMaxFileSizeMegabytes = bytesToMegabytes(configuration.workspace.searchMaxFileSizeBytes);
 
   useEffect(() => {
     if (open) {
       setAssetFolderDraft(configuration.workspace.defaultAssetFolder);
+      setRecordingCommand(undefined);
     }
   }, [configuration.workspace.defaultAssetFolder, open]);
 
@@ -45,6 +57,41 @@ export function SettingsDialog({
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [onClose, open]);
+
+  useEffect(() => {
+    if (!recordingCommand) {
+      return;
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      event.preventDefault();
+      event.stopPropagation();
+
+      if (event.key === "Escape") {
+        setRecordingCommand(undefined);
+        return;
+      }
+
+      const keybinding = keybindingFromEvent(event);
+
+      if (!keybinding || !isRecordableKeybinding(keybinding)) {
+        return;
+      }
+
+      onUpdate({
+        keybindings: {
+          overrides: upsertKeybindingOverride(configuration.keybindings.overrides, {
+            command: recordingCommand,
+            keybinding
+          })
+        }
+      });
+      setRecordingCommand(undefined);
+    };
+
+    window.addEventListener("keydown", handleKeyDown, true);
+    return () => window.removeEventListener("keydown", handleKeyDown, true);
+  }, [configuration.keybindings.overrides, onUpdate, recordingCommand]);
 
   if (!open) {
     return null;
@@ -187,6 +234,46 @@ export function SettingsDialog({
               constraint={settingsNumberConstraints.workspaceSearchMaxResults}
               onChange={(searchMaxResults) => onUpdate({ workspace: { searchMaxResults } })}
             />
+          </SettingsSection>
+
+          <SettingsSection title="Keybindings">
+            <div className="tp-settings-keybinding-list">
+              {commands.map((command) => {
+                const hasOverride = configuration.keybindings.overrides.some((override) => override.command === command.id);
+                const recording = recordingCommand === command.id;
+
+                return (
+                  <div className="tp-settings-keybinding-row" key={command.id}>
+                    <span className="tp-settings-keybinding-name">
+                      <span>{command.title}</span>
+                      {command.category ? <small>{command.category}</small> : null}
+                    </span>
+                    <kbd className={recording ? "tp-settings-keybinding-value tp-settings-keybinding-value-recording" : "tp-settings-keybinding-value"}>
+                      {recording ? "Press keys" : getKeybindingLabel(command.id) ?? "Unassigned"}
+                    </kbd>
+                    <button
+                      className="tp-settings-small-button"
+                      type="button"
+                      onClick={() => setRecordingCommand(command.id)}
+                    >
+                      Record
+                    </button>
+                    <button
+                      className="tp-settings-small-button"
+                      type="button"
+                      disabled={!hasOverride}
+                      onClick={() => onUpdate({
+                        keybindings: {
+                          overrides: removeKeybindingOverride(configuration.keybindings.overrides, command.id)
+                        }
+                      })}
+                    >
+                      Reset
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
           </SettingsSection>
         </div>
       </section>
