@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest";
 import {
   CommandService,
   ConfigurationService,
+  ContextKeyExpr,
+  ContextKeyService,
   FileSaveConflictError,
   ExportService,
   NativeFileService,
@@ -222,6 +224,49 @@ describe("commands", () => {
   });
 });
 
+describe("context keys", () => {
+  it("evaluates structured context key expressions", () => {
+    const service = new ContextKeyService();
+    service.setValue("fileSystem.available", true);
+    service.setValue("activeResource.scheme", "file");
+
+    expect(service.matches(ContextKeyExpr.equals("fileSystem.available", true))).toBe(true);
+    expect(service.matches(ContextKeyExpr.notEquals("activeResource.scheme", "untitled"))).toBe(true);
+    expect(service.matches(ContextKeyExpr.defined("activeResource.scheme"))).toBe(true);
+    expect(service.matches(ContextKeyExpr.and(
+      ContextKeyExpr.equals("fileSystem.available", true),
+      ContextKeyExpr.equals("activeResource.scheme", "file")
+    ))).toBe(true);
+    expect(service.matches(ContextKeyExpr.or(
+      ContextKeyExpr.equals("activeResource.scheme", "untitled"),
+      ContextKeyExpr.equals("activeResource.scheme", "file")
+    ))).toBe(true);
+
+    service.setValue("activeResource.scheme", undefined);
+
+    expect(service.matches(ContextKeyExpr.defined("activeResource.scheme"))).toBe(false);
+    expect(service.matches(ContextKeyExpr.not(ContextKeyExpr.defined("activeResource.scheme")))).toBe(true);
+  });
+
+  it("publishes context changes only when values change", () => {
+    const service = new ContextKeyService();
+    const changedKeys: string[][] = [];
+    service.onDidChangeContext((event) => changedKeys.push([...event.keys]));
+
+    service.setValue("workspace.open", false);
+    service.setValue("workspace.open", false);
+    service.setValue("workspace.open", true);
+    service.setValue("workspace.open", undefined);
+    service.setValue("workspace.open", undefined);
+
+    expect(changedKeys).toEqual([
+      ["workspace.open"],
+      ["workspace.open"],
+      ["workspace.open"]
+    ]);
+  });
+});
+
 describe("menus", () => {
   it("registers menu items in stable group and order sequence", () => {
     const service = new MenuService();
@@ -278,6 +323,55 @@ describe("menus", () => {
 
     expect(service.getMenuItems("titlebar.primary")).toEqual([]);
     expect(changedMenus).toEqual(["titlebar.primary", "titlebar.primary"]);
+  });
+
+  it("filters menu items through context key expressions", () => {
+    const contextKeyService = new ContextKeyService();
+    const service = new MenuService(contextKeyService);
+    service.registerMenuItem({
+      id: "titlebar.save",
+      menu: "titlebar.primary",
+      command: "file.save",
+      order: 10,
+      when: ContextKeyExpr.equals("fileSystem.available", true)
+    });
+    service.registerMenuItem({
+      id: "titlebar.export",
+      menu: "titlebar.primary",
+      command: "file.exportHtml",
+      order: 20
+    });
+
+    expect(service.getMenuItems("titlebar.primary").map((item) => item.command)).toEqual(["file.exportHtml"]);
+
+    contextKeyService.setValue("fileSystem.available", true);
+
+    expect(service.getMenuItems("titlebar.primary").map((item) => item.command)).toEqual(["file.save", "file.exportHtml"]);
+  });
+
+  it("publishes affected menu changes when context values change", () => {
+    const contextKeyService = new ContextKeyService();
+    const service = new MenuService(contextKeyService);
+    const changedMenus: string[] = [];
+    service.registerMenuItem({
+      id: "titlebar.save",
+      menu: "titlebar.primary",
+      command: "file.save",
+      when: ContextKeyExpr.equals("fileSystem.available", true)
+    });
+    service.registerMenuItem({
+      id: "activitybar.tags",
+      menu: "activitybar.primary",
+      command: "workbench.sidebar.tags",
+      when: ContextKeyExpr.equals("workspace.open", true)
+    });
+    service.onDidChangeMenu((menu) => changedMenus.push(menu));
+
+    contextKeyService.setValue("fileSystem.available", true);
+    contextKeyService.setValue("workspace.open", true);
+    contextKeyService.setValue("unrelated", true);
+
+    expect(changedMenus).toEqual(["titlebar.primary", "activitybar.primary"]);
   });
 });
 

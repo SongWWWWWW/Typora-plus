@@ -2,9 +2,11 @@ import { createWelcomeDocument, markdownHtmlExportProvider } from "@typora-plus/
 import {
   CommandService,
   ConfigurationService,
+  ContextKeyService,
   ExportService,
   IAttachmentService,
   IConfigurationService,
+  IContextKeyService,
   ICommandService,
   IExportService,
   IFileService,
@@ -29,6 +31,7 @@ import {
   createDefaultWorkspaceIndexSnapshotStorage,
   type IAttachmentService as AttachmentServiceContract,
   type IConfigurationService as ConfigurationServiceContract,
+  type IContextKeyService as ContextKeyServiceContract,
   type ICommandService as CommandServiceContract,
   type IExportService as ExportServiceContract,
   type IFileService as FileServiceContract,
@@ -47,6 +50,7 @@ export interface WorkbenchServices {
   readonly commandService: CommandServiceContract;
   readonly attachmentService: AttachmentServiceContract;
   readonly configurationService: ConfigurationServiceContract;
+  readonly contextKeyService: ContextKeyServiceContract;
   readonly exportService: ExportServiceContract;
   readonly fileService: FileServiceContract;
   readonly indexService: IndexServiceContract;
@@ -68,6 +72,7 @@ export function createWorkbenchServices(): WorkbenchServices {
   const fileService = new NativeFileService();
   const resourceService = new NativeResourceService();
   const exportService = new ExportService({ resourceService });
+  const contextKeyService = new ContextKeyService();
   const indexSnapshotStorage = createDefaultWorkspaceIndexSnapshotStorage();
   const indexService = new WorkspaceIndexService(fileService, {
     maxFileSizeBytes: configurationService.getValue().workspace.searchMaxFileSizeBytes,
@@ -78,7 +83,7 @@ export function createWorkbenchServices(): WorkbenchServices {
   const keybindingService = new KeybindingService({
     primaryModifierLabel: readPrimaryModifierLabel()
   });
-  const menuService = new MenuService();
+  const menuService = new MenuService(contextKeyService);
   const recentService = new RecentService();
   const attachmentService = new NativeAttachmentService(
     configurationService.getValue().workspace.defaultAssetFolder
@@ -91,6 +96,7 @@ export function createWorkbenchServices(): WorkbenchServices {
 
   serviceCollection.set(IAttachmentService, attachmentService);
   serviceCollection.set(IConfigurationService, configurationService);
+  serviceCollection.set(IContextKeyService, contextKeyService);
   serviceCollection.set(IExportService, exportService);
   serviceCollection.set(IFileService, fileService);
   serviceCollection.set(IIndexService, indexService);
@@ -104,6 +110,9 @@ export function createWorkbenchServices(): WorkbenchServices {
   const commandService = new CommandService(serviceCollection);
   serviceCollection.set(ICommandService, commandService);
   exportService.registerProvider(markdownHtmlExportProvider);
+  contextKeyService.setValue("fileSystem.available", fileService.isAvailable());
+  contextKeyService.setValue("attachment.available", attachmentService.isAvailable());
+  contextKeyService.setValue("resource.available", resourceService.isAvailable());
 
   for (const rule of defaultWorkbenchKeybindings) {
     keybindingService.registerKeybinding(rule);
@@ -118,6 +127,7 @@ export function createWorkbenchServices(): WorkbenchServices {
     commandService,
     attachmentService,
     configurationService,
+    contextKeyService,
     exportService,
     fileService,
     indexService,

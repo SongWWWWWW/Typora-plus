@@ -1,4 +1,5 @@
 import { Emitter, toDisposable, type Event, type IDisposable } from "@typora-plus/base";
+import { contextKeyExpressionKeys, type ContextKeyExpression, type IContextKeyService } from "./contextKeys";
 import { createServiceIdentifier } from "./instantiation";
 
 export type MenuId = string;
@@ -20,6 +21,7 @@ export interface MenuItem {
   readonly icon?: MenuIconId;
   readonly compactHidden?: boolean;
   readonly toggled?: MenuItemToggle;
+  readonly when?: ContextKeyExpression;
 }
 
 export interface IMenuService {
@@ -33,8 +35,26 @@ export const IMenuService = createServiceIdentifier<IMenuService>("menu");
 export class MenuService implements IMenuService {
   private readonly items = new Map<string, MenuItem>();
   private readonly onDidChangeMenuEmitter = new Emitter<MenuId>();
+  private readonly contextSubscription: IDisposable | undefined;
 
   readonly onDidChangeMenu = this.onDidChangeMenuEmitter.event;
+
+  constructor(private readonly contextKeyService?: IContextKeyService) {
+    this.contextSubscription = contextKeyService?.onDidChangeContext((event) => {
+      const changedKeys = new Set(event.keys);
+      const changedMenus = new Set<MenuId>();
+
+      for (const item of this.items.values()) {
+        if (contextKeyExpressionKeys(item.when).some((key) => changedKeys.has(key))) {
+          changedMenus.add(item.menu);
+        }
+      }
+
+      for (const menu of changedMenus) {
+        this.onDidChangeMenuEmitter.fire(menu);
+      }
+    });
+  }
 
   registerMenuItem(item: MenuItem): IDisposable {
     if (this.items.has(item.id)) {
@@ -55,7 +75,12 @@ export class MenuService implements IMenuService {
   getMenuItems(menu: MenuId): readonly MenuItem[] {
     return [...this.items.values()]
       .filter((item) => item.menu === menu)
+      .filter((item) => this.contextKeyService?.matches(item.when) ?? true)
       .sort(compareMenuItems);
+  }
+
+  dispose(): void {
+    this.contextSubscription?.dispose();
   }
 }
 

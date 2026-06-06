@@ -1,4 +1,4 @@
-import type { KeybindingRule, MenuItem } from "@typora-plus/platform";
+import { ContextKeyExpr, type KeybindingRule, type MenuItem } from "@typora-plus/platform";
 
 export const defaultWorkbenchMenuItems: readonly MenuItem[] = [
   {
@@ -17,7 +17,8 @@ export const defaultWorkbenchMenuItems: readonly MenuItem[] = [
     title: "Open Workspace",
     icon: "folder-open",
     group: "10_file",
-    order: 20
+    order: 20,
+    when: ContextKeyExpr.equals("fileSystem.available", true)
   },
   {
     id: "titlebar.file.save",
@@ -26,7 +27,8 @@ export const defaultWorkbenchMenuItems: readonly MenuItem[] = [
     title: "Save",
     icon: "save",
     group: "10_file",
-    order: 30
+    order: 30,
+    when: ContextKeyExpr.equals("fileSystem.available", true)
   },
   {
     id: "titlebar.file.saveAs",
@@ -36,7 +38,8 @@ export const defaultWorkbenchMenuItems: readonly MenuItem[] = [
     icon: "file-text",
     group: "10_file",
     order: 40,
-    compactHidden: true
+    compactHidden: true,
+    when: ContextKeyExpr.equals("fileSystem.available", true)
   },
   {
     id: "titlebar.file.exportHtml",
@@ -96,7 +99,8 @@ export const defaultWorkbenchMenuItems: readonly MenuItem[] = [
     title: "Files",
     icon: "file-text",
     order: 10,
-    toggled: { context: "sideView", value: "files" }
+    toggled: { context: "sideView", value: "files" },
+    when: ContextKeyExpr.equals("fileSystem.available", true)
   },
   {
     id: "activitybar.primary.search",
@@ -123,7 +127,8 @@ export const defaultWorkbenchMenuItems: readonly MenuItem[] = [
     title: "Backlinks",
     icon: "link",
     order: 40,
-    toggled: { context: "sideView", value: "backlinks" }
+    toggled: { context: "sideView", value: "backlinks" },
+    when: ContextKeyExpr.equals("workspace.open", true)
   },
   {
     id: "activitybar.primary.tags",
@@ -132,7 +137,8 @@ export const defaultWorkbenchMenuItems: readonly MenuItem[] = [
     title: "Tags",
     icon: "hash",
     order: 50,
-    toggled: { context: "sideView", value: "tags" }
+    toggled: { context: "sideView", value: "tags" },
+    when: ContextKeyExpr.equals("workspace.open", true)
   },
   {
     id: "activitybar.secondary.settings",

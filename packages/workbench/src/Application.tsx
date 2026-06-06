@@ -142,6 +142,21 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
   useEffect(() => services.indexService.onDidChangeStatus(setIndexStatus).dispose, [services]);
 
   useEffect(() => {
+    services.contextKeyService.setValue("activeResource.scheme", model.uri.scheme);
+    services.contextKeyService.setValue("editor.focusMode", configuration.editor.focusMode);
+    services.contextKeyService.setValue("editor.typewriterMode", configuration.editor.typewriterMode);
+    services.contextKeyService.setValue("sideView", sideView);
+    services.contextKeyService.setValue("workspace.open", workspace.files ? true : false);
+  }, [
+    configuration.editor.focusMode,
+    configuration.editor.typewriterMode,
+    model.uri.scheme,
+    services,
+    sideView,
+    workspace.files
+  ]);
+
+  useEffect(() => {
     if (tags.length === 0) {
       setSelectedTag(undefined);
       return;
