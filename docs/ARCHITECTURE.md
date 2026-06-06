@@ -71,8 +71,8 @@ Current features:
 - code fence block styling with visible-range-aware fence state tracking and inactive language/copy widgets
 - table block styling with code-fence-aware table detection, inactive previews, row/column insert tools, and column alignment controls
 - standalone image preview cards with workspace-backed local image resolution and direct inline/blob rendering
-- KaTeX-backed display math preview blocks with TeX copy controls
-- KaTeX-backed inline math previews for inactive lines
+- KaTeX-backed display math preview blocks with TeX copy controls and render diagnostics
+- KaTeX-backed inline math previews with render diagnostics for inactive lines
 - focus mode dimming
 - typewriter mode top spacing
 - imperative line scrolling for outline and search
@@ -80,7 +80,7 @@ Current features:
 Next editor work:
 
 - table cell-level editing affordances
-- richer math editing affordances
+- richer math editing controls
 - parser-backed position mapping
 
 ## Extension Direction

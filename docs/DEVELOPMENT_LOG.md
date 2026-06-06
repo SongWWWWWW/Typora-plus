@@ -627,3 +627,35 @@ Known limitations:
 - Alignment controls cycle state by clicking each header button; there is no expanded alignment menu yet.
 - Row/column deletion and direct cell editing remain future work.
 - Escaped pipe parsing still depends on the planned parser-backed position mapping pass.
+
+## 2026-06-06 - P2 Math Render Diagnostics
+
+Completed:
+
+- Added a pure `renderMarkdownMathExpression` helper around KaTeX rendering.
+- Classified math render output as valid, empty, or error before widget rendering.
+- Added display math error feedback with a `TeX error` toolbar label and visible invalid TeX message.
+- Added inline math error feedback while preserving the original source text.
+- Added focused tests for valid MathML output, empty expressions, and invalid TeX.
+
+Quality gate:
+
+- `npm run verify`: passed
+- `npm test`: passed, 70 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- Production browser preview: passed at `http://127.0.0.1:4173`
+- Browser interaction check: valid math rendered as MathML; invalid display and inline math showed error states
+- Desktop 1280px and mobile 390px checks: passed without horizontal overflow or console errors
+
+Review:
+
+- KaTeX rendering remains inside `packages/editor`; Workbench and platform services remain unaware of math syntax.
+- Widget code now consumes a testable render result instead of directly owning parse/error branching.
+- The Markdown text model remains unchanged; diagnostics are presentation-only decorations.
+- No new visual token family was needed; diagnostics reuse the existing math preview styles.
+
+Known limitations:
+
+- Error feedback is inline text and tooltip-based; no dedicated diagnostics panel exists yet.
+- KaTeX is still rendered as MathML without the full KaTeX CSS layer.
+- Parser-backed position mapping remains planned for more complex inline math cases.
