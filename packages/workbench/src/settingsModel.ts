@@ -1,8 +1,11 @@
-export interface NumberSettingConstraint {
-  readonly min: number;
-  readonly max: number;
-  readonly step: number;
-}
+import {
+  clampConfigurationNumber,
+  configurationBytesPerMegabyte,
+  configurationNumberConstraints,
+  type ConfigurationNumberConstraint
+} from "@typora-plus/platform";
+
+export type NumberSettingConstraint = ConfigurationNumberConstraint;
 
 export type SettingsSectionId = "appearance" | "editor" | "workspace" | "keybindings";
 export type SettingsEntryId =
@@ -62,34 +65,31 @@ export const settingsEntries = [
 ] as const satisfies readonly SettingsEntryDefinition[];
 
 export const settingsNumberConstraints = {
-  editorFontSize: { min: 13, max: 24, step: 1 },
-  editorLineHeight: { min: 1.2, max: 2.2, step: 0.05 },
-  editorMaxWidth: { min: 560, max: 1120, step: 20 },
-  editorAutoSaveDelayMs: { min: 250, max: 5000, step: 250 },
-  workspaceSearchMaxFileSizeMegabytes: { min: 1, max: 20, step: 1 },
-  workspaceSearchMaxResults: { min: 20, max: 500, step: 10 }
+  editorFontSize: configurationNumberConstraints.editorFontSize,
+  editorLineHeight: configurationNumberConstraints.editorLineHeight,
+  editorMaxWidth: configurationNumberConstraints.editorMaxWidth,
+  editorAutoSaveDelayMs: configurationNumberConstraints.editorAutoSaveDelayMs,
+  workspaceSearchMaxFileSizeMegabytes: {
+    min: configurationNumberConstraints.workspaceSearchMaxFileSizeBytes.min / configurationBytesPerMegabyte,
+    max: configurationNumberConstraints.workspaceSearchMaxFileSizeBytes.max / configurationBytesPerMegabyte,
+    step: configurationNumberConstraints.workspaceSearchMaxFileSizeBytes.step / configurationBytesPerMegabyte
+  },
+  workspaceSearchMaxResults: configurationNumberConstraints.workspaceSearchMaxResults
 } as const satisfies Record<string, NumberSettingConstraint>;
 
-const bytesPerMegabyte = 1024 * 1024;
-
 export function clampSettingNumber(value: number, constraint: NumberSettingConstraint): number {
-  if (!Number.isFinite(value)) {
-    return constraint.min;
-  }
-
-  const clamped = Math.min(Math.max(value, constraint.min), constraint.max);
-  return Number(clamped.toFixed(stepPrecision(constraint.step)));
+  return clampConfigurationNumber(value, constraint);
 }
 
 export function megabytesToBytes(value: number): number {
   return Math.round(
-    clampSettingNumber(value, settingsNumberConstraints.workspaceSearchMaxFileSizeMegabytes) * bytesPerMegabyte
+    clampSettingNumber(value, settingsNumberConstraints.workspaceSearchMaxFileSizeMegabytes) * configurationBytesPerMegabyte
   );
 }
 
 export function bytesToMegabytes(value: number): number {
   return clampSettingNumber(
-    value / bytesPerMegabyte,
+    value / configurationBytesPerMegabyte,
     settingsNumberConstraints.workspaceSearchMaxFileSizeMegabytes
   );
 }
@@ -156,9 +156,4 @@ function matchesSettingsEntry(entry: SettingsEntryDefinition, terms: readonly st
 function matchesTerms(haystack: string, terms: readonly string[]): boolean {
   const normalizedHaystack = haystack.toLowerCase();
   return terms.every((term) => normalizedHaystack.includes(term));
-}
-
-function stepPrecision(step: number): number {
-  const decimal = step.toString().split(".")[1];
-  return decimal?.length ?? 0;
 }

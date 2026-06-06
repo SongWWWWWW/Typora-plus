@@ -4,6 +4,12 @@ import type { UserKeybindingRule } from "./keybindings";
 
 export type ColorSchemePreference = "light" | "dark" | "system";
 
+export interface ConfigurationNumberConstraint {
+  readonly min: number;
+  readonly max: number;
+  readonly step: number;
+}
+
 export interface TyporaPlusConfiguration {
   readonly appearance: {
     readonly colorScheme: ColorSchemePreference;
@@ -63,6 +69,21 @@ export const defaultConfigurationServiceOptions: ConfigurationServiceOptions = {
   storageKey: "typora-plus.configuration"
 };
 
+export const configurationBytesPerMegabyte = 1024 * 1024;
+
+export const configurationNumberConstraints = {
+  editorFontSize: { min: 13, max: 24, step: 1 },
+  editorLineHeight: { min: 1.2, max: 2.2, step: 0.05 },
+  editorMaxWidth: { min: 560, max: 1120, step: 20 },
+  editorAutoSaveDelayMs: { min: 250, max: 5000, step: 250 },
+  workspaceSearchMaxFileSizeBytes: {
+    min: configurationBytesPerMegabyte,
+    max: 20 * configurationBytesPerMegabyte,
+    step: configurationBytesPerMegabyte
+  },
+  workspaceSearchMaxResults: { min: 20, max: 500, step: 10 }
+} as const satisfies Record<string, ConfigurationNumberConstraint>;
+
 export const defaultConfiguration: TyporaPlusConfiguration = {
   appearance: {
     colorScheme: "system",
@@ -79,7 +100,7 @@ export const defaultConfiguration: TyporaPlusConfiguration = {
   },
   workspace: {
     defaultAssetFolder: "assets",
-    searchMaxFileSizeBytes: 2 * 1024 * 1024,
+    searchMaxFileSizeBytes: 2 * configurationBytesPerMegabyte,
     searchMaxResults: 120
   },
   keybindings: {
@@ -175,21 +196,25 @@ function sanitizeAppearanceConfiguration(value: Record<string, unknown>): Partia
 
 function sanitizeEditorConfiguration(value: Record<string, unknown>): Partial<TyporaPlusConfiguration["editor"]> {
   return {
-    ...(isPositiveFiniteNumber(value.fontSize) ? { fontSize: value.fontSize } : {}),
-    ...(isPositiveFiniteNumber(value.lineHeight) ? { lineHeight: value.lineHeight } : {}),
-    ...(isPositiveFiniteNumber(value.maxWidth) ? { maxWidth: value.maxWidth } : {}),
+    ...sanitizeNumberProperty("fontSize", value.fontSize, configurationNumberConstraints.editorFontSize),
+    ...sanitizeNumberProperty("lineHeight", value.lineHeight, configurationNumberConstraints.editorLineHeight),
+    ...sanitizeNumberProperty("maxWidth", value.maxWidth, configurationNumberConstraints.editorMaxWidth),
     ...(typeof value.focusMode === "boolean" ? { focusMode: value.focusMode } : {}),
     ...(typeof value.typewriterMode === "boolean" ? { typewriterMode: value.typewriterMode } : {}),
     ...(typeof value.autoSave === "boolean" ? { autoSave: value.autoSave } : {}),
-    ...(isPositiveFiniteNumber(value.autoSaveDelayMs) ? { autoSaveDelayMs: value.autoSaveDelayMs } : {})
+    ...sanitizeNumberProperty("autoSaveDelayMs", value.autoSaveDelayMs, configurationNumberConstraints.editorAutoSaveDelayMs)
   };
 }
 
 function sanitizeWorkspaceConfiguration(value: Record<string, unknown>): Partial<TyporaPlusConfiguration["workspace"]> {
   return {
     ...(isNonEmptyString(value.defaultAssetFolder) ? { defaultAssetFolder: value.defaultAssetFolder } : {}),
-    ...(isPositiveFiniteNumber(value.searchMaxFileSizeBytes) ? { searchMaxFileSizeBytes: value.searchMaxFileSizeBytes } : {}),
-    ...(isPositiveFiniteNumber(value.searchMaxResults) ? { searchMaxResults: value.searchMaxResults } : {})
+    ...sanitizeNumberProperty(
+      "searchMaxFileSizeBytes",
+      value.searchMaxFileSizeBytes,
+      configurationNumberConstraints.workspaceSearchMaxFileSizeBytes
+    ),
+    ...sanitizeNumberProperty("searchMaxResults", value.searchMaxResults, configurationNumberConstraints.workspaceSearchMaxResults)
   };
 }
 
@@ -213,6 +238,34 @@ function isColorSchemePreference(value: unknown): value is ColorSchemePreference
 
 function isPositiveFiniteNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value) && value > 0;
+}
+
+export function clampConfigurationNumber(value: number, constraint: ConfigurationNumberConstraint): number {
+  if (!Number.isFinite(value)) {
+    return constraint.min;
+  }
+
+  const clamped = Math.min(Math.max(value, constraint.min), constraint.max);
+  return Number(clamped.toFixed(stepPrecision(constraint.step)));
+}
+
+function sanitizeNumberProperty<Key extends string>(
+  key: Key,
+  value: unknown,
+  constraint: ConfigurationNumberConstraint
+): Partial<Record<Key, number>> {
+  if (!isPositiveFiniteNumber(value)) {
+    return {};
+  }
+
+  return {
+    [key]: clampConfigurationNumber(value, constraint)
+  } as Partial<Record<Key, number>>;
+}
+
+function stepPrecision(step: number): number {
+  const decimal = step.toString().split(".")[1];
+  return decimal?.length ?? 0;
 }
 
 function isNonEmptyString(value: unknown): value is string {

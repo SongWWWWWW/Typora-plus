@@ -14,6 +14,7 @@ import {
   flattenFileTree,
   keybindingFromEvent,
   mergeConfiguration,
+  configurationNumberConstraints,
   ServiceCollection,
   type FileTreeEntry,
   type NativeFileSystemHost,
@@ -96,6 +97,36 @@ describe("configuration", () => {
     expect(service.getValue().editor.fontSize).toBe(17);
     expect(service.getValue().editor.typewriterMode).toBe(true);
     expect(service.getValue().workspace.searchMaxResults).toBe(120);
+  });
+
+  it("clamps out-of-range stored numeric configuration values", () => {
+    const storage = createMemoryStorage();
+    storage.write("configuration", JSON.stringify({
+      editor: {
+        autoSaveDelayMs: 120000,
+        fontSize: 999,
+        lineHeight: 9,
+        maxWidth: 99999
+      },
+      workspace: {
+        searchMaxFileSizeBytes: 999 * 1024 * 1024,
+        searchMaxResults: 9999
+      }
+    }));
+
+    const service = new ConfigurationService({
+      storageKey: "configuration",
+      storage
+    });
+
+    expect(service.getValue().editor.autoSaveDelayMs).toBe(configurationNumberConstraints.editorAutoSaveDelayMs.max);
+    expect(service.getValue().editor.fontSize).toBe(configurationNumberConstraints.editorFontSize.max);
+    expect(service.getValue().editor.lineHeight).toBe(configurationNumberConstraints.editorLineHeight.max);
+    expect(service.getValue().editor.maxWidth).toBe(configurationNumberConstraints.editorMaxWidth.max);
+    expect(service.getValue().workspace.searchMaxFileSizeBytes).toBe(
+      configurationNumberConstraints.workspaceSearchMaxFileSizeBytes.max
+    );
+    expect(service.getValue().workspace.searchMaxResults).toBe(configurationNumberConstraints.workspaceSearchMaxResults.max);
   });
 
   it("persists and validates keybinding overrides", () => {

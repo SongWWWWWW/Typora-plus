@@ -1,4 +1,5 @@
 import { Emitter, type Event, type URI as URIType } from "@typora-plus/base";
+import { defaultConfiguration } from "./configuration";
 import type { FileTreeEntry, IFileService, WorkspaceFileTree } from "./files";
 import { createServiceIdentifier } from "./instantiation";
 
@@ -76,8 +77,8 @@ export interface WorkspaceIndexQueryOptions {
 }
 
 export const defaultWorkspaceIndexServiceOptions: WorkspaceIndexServiceOptions = {
-  maxFileSizeBytes: 2 * 1024 * 1024,
-  maxResults: 120,
+  maxFileSizeBytes: defaultConfiguration.workspace.searchMaxFileSizeBytes,
+  maxResults: defaultConfiguration.workspace.searchMaxResults,
   maxPreviewLength: 160,
   yieldEveryFiles: 12
 };
