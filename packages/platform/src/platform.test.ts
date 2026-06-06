@@ -319,6 +319,35 @@ describe("workspace index", () => {
     expect(service.query("searchable")).toEqual([]);
   });
 
+  it("updates a saved workspace file in the index without a full reindex", async () => {
+    const host = createMemoryHost([
+      ["file://C:/Notes/a.md", "# Alpha\n#old\n[Beta](b.md)"],
+      ["file://C:/Notes/b.md", "# Beta"]
+    ]);
+    const service = new WorkspaceIndexService(new NativeFileService(host), {
+      maxResults: 10
+    });
+    const alphaFile = createFileEntry("C:/Notes/a.md", "a.md", "a.md");
+    const betaFile = createFileEntry("C:/Notes/b.md", "b.md", "b.md");
+
+    await service.indexWorkspace(createWorkspaceFileTree([
+      alphaFile,
+      betaFile
+    ]));
+
+    expect(service.query("Alpha").map((result) => result.relativePath)).toEqual(["a.md"]);
+    expect(service.getTaggedResources("old").map((tag) => tag.relativePath)).toEqual(["a.md"]);
+    expect(service.getBacklinks(URI.file("C:/Notes/b.md")).map((link) => link.relativePath)).toEqual(["a.md"]);
+
+    await service.indexFile(alphaFile, "# Revised\n#fresh");
+
+    expect(service.query("Alpha")).toEqual([]);
+    expect(service.query("Revised").map((result) => result.relativePath)).toEqual(["a.md"]);
+    expect(service.getTaggedResources("old")).toEqual([]);
+    expect(service.getTaggedResources("fresh").map((tag) => tag.relativePath)).toEqual(["a.md"]);
+    expect(service.getBacklinks(URI.file("C:/Notes/b.md"))).toEqual([]);
+  });
+
   it("collects headings, tags, and links as workspace metadata", async () => {
     const host = createMemoryHost([
       ["file://C:/Notes/a.md", [

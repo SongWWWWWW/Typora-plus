@@ -76,6 +76,7 @@ export interface IIndexService {
   readonly onDidChangeStatus: Event<WorkspaceIndexStatus>;
   getStatus(): WorkspaceIndexStatus;
   indexWorkspace(workspace: WorkspaceFileTree): Promise<void>;
+  indexFile(file: FileTreeEntry, value?: string): Promise<void>;
   query(value: string): readonly WorkspaceSearchResult[];
   getMetadata(): WorkspaceIndexMetadata;
   getTags(): readonly WorkspaceIndexedTagSummary[];
@@ -159,6 +160,45 @@ export class WorkspaceIndexService implements IIndexService {
     }
 
     this.updateStatus("ready", indexedFiles, files.length, skippedFiles);
+  }
+
+  async indexFile(file: FileTreeEntry, value?: string): Promise<void> {
+    const generation = this.generation;
+
+    if (file.kind !== "file") {
+      return;
+    }
+
+    if (value === undefined && shouldSkipFile(file, this.options.maxFileSizeBytes)) {
+      this.removeDocument(file.uri);
+      this.emitIndexChanged();
+      return;
+    }
+
+    let content = value;
+
+    if (content === undefined) {
+      try {
+        content = (await this.fileService.openFile(file.uri)).value;
+      } catch {
+        this.removeDocument(file.uri);
+        this.emitIndexChanged();
+        return;
+      }
+    }
+
+    if (generation !== this.generation) {
+      return;
+    }
+
+    if (content.length > this.options.maxFileSizeBytes) {
+      this.removeDocument(file.uri);
+      this.emitIndexChanged();
+      return;
+    }
+
+    this.upsertDocument(indexDocument(file, content));
+    this.emitIndexChanged();
   }
 
   query(value: string): readonly WorkspaceSearchResult[] {
@@ -277,6 +317,35 @@ export class WorkspaceIndexService implements IIndexService {
       updatedAt: this.now(),
       ...(message ? { message } : {})
     };
+  }
+
+  private upsertDocument(document: IndexedDocument): void {
+    const index = this.documents.findIndex((entry) => entry.uri.toString() === document.uri.toString());
+
+    if (index === -1) {
+      this.documents = [...this.documents, document];
+      return;
+    }
+
+    this.documents = [
+      ...this.documents.slice(0, index),
+      document,
+      ...this.documents.slice(index + 1)
+    ];
+  }
+
+  private removeDocument(uri: URIType): void {
+    this.documents = this.documents.filter((document) => document.uri.toString() !== uri.toString());
+  }
+
+  private emitIndexChanged(): void {
+    this.updateStatus(
+      this.status.state === "indexing" ? "indexing" : "ready",
+      this.documents.length,
+      Math.max(this.status.totalFiles, this.documents.length),
+      this.status.skippedFiles,
+      this.status.message
+    );
   }
 }
 

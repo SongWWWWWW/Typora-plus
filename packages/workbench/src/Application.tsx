@@ -149,10 +149,14 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
     }
 
     const handle = window.setTimeout(() => {
-      void runWorkbenchAction(() => services.textFileService.save(), setOperationError, setSaveConflict);
+      void runWorkbenchAction(async () => {
+        const saved = await services.textFileService.save();
+        await updateIndexedFile(services.indexService, workspace.files, saved);
+        return saved;
+      }, setOperationError, setSaveConflict);
     }, autoSaveDelayMs);
     return () => window.clearTimeout(handle);
-  }, [configuration.editor.autoSave, model.dirty, model.uri, model.value, saveConflict, services]);
+  }, [configuration.editor.autoSave, model.dirty, model.uri, model.value, saveConflict, services, workspace.files]);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -273,6 +277,7 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
           services.recentService.addRecentFile(saved.uri, saved.name);
         }
 
+        await updateIndexedFile(services.indexService, workspace.files, saved);
         return saved;
       }, setOperationError, setSaveConflict)
     }));
@@ -285,6 +290,7 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
 
         if (saved) {
           services.recentService.addRecentFile(saved.uri, saved.name);
+          await updateIndexedFile(services.indexService, workspace.files, saved);
         }
 
         return saved;
@@ -322,7 +328,7 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
     }));
 
     return () => disposables.dispose();
-  }, [configuration, services, sideView]);
+  }, [configuration, services, sideView, workspace.files]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -494,6 +500,7 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
                 services.recentService.addRecentFile(saved.uri, saved.name);
               }
 
+              await updateIndexedFile(services.indexService, workspace.files, saved);
               setSaveConflict(undefined);
               return saved;
             }, setOperationError, setSaveConflict);
@@ -1421,6 +1428,24 @@ function workspaceStateFromFiles(workspaceFiles: NonNullable<WorkspaceState["fil
     rootUri: workspaceFiles.root.uri,
     files: workspaceFiles
   };
+}
+
+async function updateIndexedFile(
+  indexService: WorkbenchServices["indexService"],
+  workspaceFiles: WorkspaceState["files"],
+  model: TextFileModel
+): Promise<void> {
+  if (model.uri.scheme !== "file" || !workspaceFiles) {
+    return;
+  }
+
+  const file = workspaceFiles.files.find((entry) => entry.uri.toString() === model.uri.toString());
+
+  if (!file) {
+    return;
+  }
+
+  await indexService.indexFile(file, model.value);
 }
 
 async function runWorkbenchAction<T>(
