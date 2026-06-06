@@ -5,6 +5,7 @@ export * from "./contextKeys";
 export * from "./extensions";
 export * from "./extensionHosts";
 export * from "./extensionHostProtocol";
+export * from "./extensionHostRuntimeBroker";
 export * from "./exports";
 export * from "./files";
 export * from "./indexing";
