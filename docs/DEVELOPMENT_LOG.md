@@ -2895,3 +2895,39 @@ Known limitations:
 - External extension package loading is still not implemented.
 - Extension host transport and IPC are still not implemented.
 - A future protocol runtime facade should use these unregister messages when remote extension code disposes registered commands, export providers, or renderers.
+
+## 2026-06-07 - P2 Extension Host Protocol Runtime Facade
+
+Completed:
+
+- Added `ExtensionHostProtocolRuntime` as the protocol peer for a future remote extension runtime.
+- Created a constrained proxy `ExtensionContext` from activation messages and invoked an injected activation handler.
+- Sent command, context-key, export-provider, and Markdown-renderer registration messages from remote context APIs through the transport boundary.
+- Sent unregister messages when remote command/export/renderer disposables are disposed.
+- Handled main-side callback requests for registered remote commands, export providers, and Markdown renderer providers.
+- Converted callback failures into API error responses so main-side pending requests do not hang.
+- Added request correlation and API error handling for remote `executeCommand()` calls and fire-and-forget registration failures.
+- Added focused tests for activation, proxy context state, runtime contribution registration, main-side callbacks, remote command execution, unregister disposal, activation failure cleanup, and protocol error reporting.
+
+Quality gate:
+
+- `npm run typecheck`: passed
+- `npx vitest run packages/platform/src/extensionHostProtocolRuntime.test.ts packages/platform/src/extensionHostProtocolHost.test.ts packages/platform/src/extensionHostProtocolSession.test.ts packages/platform/src/extensionHostRuntimeBroker.test.ts`: passed, 23 tests
+- `npm run verify`: passed, 293 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Browser smoke check: not run because this stage only changes platform protocol runtime code and documentation.
+
+Review:
+
+- The runtime facade remains platform-only and uses only transport-shaped `send`/`onMessage` messaging; it does not load extension packages or bind to Electron IPC.
+- Main-side host/session/broker responsibilities and remote-side runtime facade responsibilities are now separated, matching the intended VS Code-style split.
+- Remote runtime contribution lifecycle is explicit through register/unregister messages and local disposable tracking.
+- Synchronous context readers currently expose local runtime state only; cross-boundary reads remain future API design work if needed.
+- No new dependency, storage path, visual token, extra documentation file, DOM access, or unrestricted Node access was introduced.
+
+Known limitations:
+
+- External extension package loading is still not implemented.
+- Extension host transport and IPC are still not implemented.
+- The runtime facade is not wired to a worker/process transport yet.
