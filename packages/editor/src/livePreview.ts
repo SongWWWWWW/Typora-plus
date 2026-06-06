@@ -120,6 +120,8 @@ const tablePreviewCellMinWidthPx = 88;
 const tablePreviewHeaderEstimatedHeight = 42;
 const tablePreviewRowEstimatedHeight = 34;
 const tablePreviewToolbarEstimatedHeight = 36;
+const tableAlignmentButtonHeightPx = 22;
+const tableAlignmentButtonMinWidthPx = 28;
 const tableToolButtonHeightPx = 24;
 const tableToolButtonMinWidthPx = 52;
 
@@ -269,8 +271,31 @@ export interface MarkdownTableColumnInsertionOptions {
   readonly columnIndex?: number;
 }
 
+export interface MarkdownTableColumnAlignmentOptions {
+  readonly alignment: MarkdownTableColumnAlignment;
+  readonly columnIndex: number;
+}
+
 export function createMarkdownTableEmptyBodyRow(columnCount: number): string {
   return serializeMarkdownTableRow(Array.from({ length: Math.max(1, columnCount) }, () => ""));
+}
+
+export function getNextMarkdownTableColumnAlignment(
+  alignment: MarkdownTableColumnAlignment | undefined
+): MarkdownTableColumnAlignment {
+  if (alignment === undefined || alignment === "default") {
+    return "left";
+  }
+
+  if (alignment === "left") {
+    return "center";
+  }
+
+  if (alignment === "center") {
+    return "right";
+  }
+
+  return "default";
 }
 
 export function createMarkdownTableWithInsertedColumn(
@@ -295,6 +320,26 @@ export function createMarkdownTableWithInsertedColumn(
     ...tableBlock.bodyRows.map((row) =>
       serializeMarkdownTableRow(insertTableArrayItem(normalizeTableCells(row, columnCount), columnIndex, ""))
     )
+  ];
+}
+
+export function createMarkdownTableWithUpdatedColumnAlignment(
+  tableBlock: MarkdownTableBlockState,
+  options: MarkdownTableColumnAlignmentOptions
+): readonly string[] {
+  const columnCount = Math.max(1, tableBlock.headerCells.length);
+  const columnIndex = clampTableColumnIndex(options.columnIndex, columnCount);
+  const headerCells = normalizeTableCells(tableBlock.headerCells, columnCount);
+  const alignments = replaceTableArrayItem(
+    normalizeTableAlignments(tableBlock.alignments, columnCount),
+    columnIndex,
+    options.alignment
+  );
+
+  return [
+    serializeMarkdownTableRow(headerCells),
+    serializeMarkdownTableDelimiterRow(alignments),
+    ...tableBlock.bodyRows.map((row) => serializeMarkdownTableRow(normalizeTableCells(row, columnCount)))
   ];
 }
 
@@ -1157,6 +1202,14 @@ function clampTableColumnInsertionIndex(columnIndex: number, columnCount: number
   return Math.max(0, Math.min(Math.trunc(columnIndex), columnCount));
 }
 
+function clampTableColumnIndex(columnIndex: number, columnCount: number): number {
+  if (!Number.isFinite(columnIndex)) {
+    return 0;
+  }
+
+  return Math.max(0, Math.min(Math.trunc(columnIndex), Math.max(0, columnCount - 1)));
+}
+
 function normalizeTableCells(cells: readonly string[], columnCount: number): readonly string[] {
   return Array.from({ length: columnCount }, (_, index) => cells[index] ?? "");
 }
@@ -1170,6 +1223,10 @@ function normalizeTableAlignments(
 
 function insertTableArrayItem<T>(items: readonly T[], index: number, item: T): readonly T[] {
   return [...items.slice(0, index), item, ...items.slice(index)];
+}
+
+function replaceTableArrayItem<T>(items: readonly T[], index: number, item: T): readonly T[] {
+  return items.map((current, currentIndex) => currentIndex === index ? item : current);
 }
 
 function readCurrentMarkdownTableBlock(view: EditorView, startLine: number): MarkdownTableBlockState | undefined {
@@ -1199,21 +1256,46 @@ function insertMarkdownTableRowBelow(view: EditorView, tableBlock: MarkdownTable
   view.focus();
 }
 
+function replaceMarkdownTableBlock(
+  view: EditorView,
+  tableBlock: MarkdownTableBlockState,
+  replacementLines: readonly string[]
+): void {
+  const startLine = view.state.doc.line(tableBlock.blockStart);
+  const endLine = view.state.doc.line(tableBlock.blockEnd);
+
+  view.dispatch({
+    changes: { from: startLine.from, to: endLine.to, insert: replacementLines.join("\n") },
+    selection: { anchor: startLine.from }
+  });
+  view.focus();
+}
+
 function insertMarkdownTableColumnRight(view: EditorView, tableBlock: MarkdownTableBlockState): void {
   const currentTableBlock = readCurrentMarkdownTableBlock(view, tableBlock.blockStart);
   if (!currentTableBlock) {
     return;
   }
 
-  const startLine = view.state.doc.line(currentTableBlock.blockStart);
-  const endLine = view.state.doc.line(currentTableBlock.blockEnd);
-  const replacement = createMarkdownTableWithInsertedColumn(currentTableBlock).join("\n");
+  replaceMarkdownTableBlock(view, currentTableBlock, createMarkdownTableWithInsertedColumn(currentTableBlock));
+}
 
-  view.dispatch({
-    changes: { from: startLine.from, to: endLine.to, insert: replacement },
-    selection: { anchor: startLine.from }
-  });
-  view.focus();
+function updateMarkdownTableColumnAlignment(
+  view: EditorView,
+  tableBlock: MarkdownTableBlockState,
+  columnIndex: number,
+  alignment: MarkdownTableColumnAlignment
+): void {
+  const currentTableBlock = readCurrentMarkdownTableBlock(view, tableBlock.blockStart);
+  if (!currentTableBlock) {
+    return;
+  }
+
+  replaceMarkdownTableBlock(
+    view,
+    currentTableBlock,
+    createMarkdownTableWithUpdatedColumnAlignment(currentTableBlock, { alignment, columnIndex })
+  );
 }
 
 class MarkdownTableBlockWidget extends WidgetType {
@@ -1268,8 +1350,21 @@ class MarkdownTableBlockWidget extends WidgetType {
     this.tableBlock.headerCells.forEach((cell, index) => {
       const headerCell = document.createElement("th");
       headerCell.scope = "col";
-      headerCell.textContent = cell;
       setTableCellAlignment(headerCell, this.tableBlock.alignments[index]);
+
+      const content = document.createElement("span");
+      content.className = "tp-editor-table-header-content";
+
+      const label = document.createElement("span");
+      label.className = "tp-editor-table-header-label";
+      label.textContent = cell;
+
+      content.append(label, createTableAlignmentButton({
+        alignment: this.tableBlock.alignments[index] ?? "default",
+        columnIndex: index,
+        onClick: (alignment) => updateMarkdownTableColumnAlignment(view, this.tableBlock, index, alignment)
+      }));
+      headerCell.append(content);
       headerRow.append(headerCell);
     });
 
@@ -1335,6 +1430,59 @@ function createTableToolButton(options: TableToolButtonOptions): HTMLButtonEleme
   });
 
   return button;
+}
+
+interface TableAlignmentButtonOptions {
+  readonly alignment: MarkdownTableColumnAlignment;
+  readonly columnIndex: number;
+  readonly onClick: (alignment: MarkdownTableColumnAlignment) => void;
+}
+
+function createTableAlignmentButton(options: TableAlignmentButtonOptions): HTMLButtonElement {
+  const nextAlignment = getNextMarkdownTableColumnAlignment(options.alignment);
+  const title = `Set column ${options.columnIndex + 1} alignment to ${readTableAlignmentLabel(nextAlignment)}`;
+  const button = document.createElement("button");
+  button.className = "tp-editor-table-align";
+  button.type = "button";
+  button.textContent = readTableAlignmentButtonText(options.alignment);
+  button.title = title;
+  button.dataset.align = options.alignment;
+  button.setAttribute("aria-label", title);
+  button.addEventListener("mousedown", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+  });
+  button.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    options.onClick(nextAlignment);
+  });
+
+  return button;
+}
+
+function readTableAlignmentButtonText(alignment: MarkdownTableColumnAlignment): string {
+  if (alignment === "left") {
+    return "L";
+  }
+
+  if (alignment === "center") {
+    return "C";
+  }
+
+  if (alignment === "right") {
+    return "R";
+  }
+
+  return "A";
+}
+
+function readTableAlignmentLabel(alignment: MarkdownTableColumnAlignment): string {
+  if (alignment === "default") {
+    return "Auto";
+  }
+
+  return alignment.charAt(0).toUpperCase() + alignment.slice(1);
 }
 
 function setTableCellAlignment(cell: HTMLTableCellElement, alignment: MarkdownTableColumnAlignment | undefined): void {
@@ -2005,6 +2153,41 @@ function markdownEditorTheme(configuration: MarkdownEditorConfiguration): Extens
     ".tp-editor-table-preview th": {
       backgroundColor: "var(--tp-color-table-header)",
       fontWeight: "650"
+    },
+    ".tp-editor-table-header-content": {
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: "6px",
+      minWidth: "0"
+    },
+    ".tp-editor-table-header-label": {
+      minWidth: "0",
+      overflow: "hidden",
+      textOverflow: "ellipsis",
+      whiteSpace: "nowrap",
+      textAlign: "inherit"
+    },
+    ".tp-editor-table-align": {
+      flex: "0 0 auto",
+      minWidth: `${tableAlignmentButtonMinWidthPx}px`,
+      height: `${tableAlignmentButtonHeightPx}px`,
+      padding: "0 6px",
+      border: "1px solid var(--tp-color-table-border)",
+      borderRadius: "6px",
+      backgroundColor: "var(--tp-color-surface-raised)",
+      color: "var(--tp-color-text-muted)",
+      font: "inherit",
+      fontSize: "11px",
+      fontWeight: "700",
+      lineHeight: "1",
+      letterSpacing: "0",
+      cursor: "pointer",
+      transition: "background-color var(--tp-motion-fast) ease, color var(--tp-motion-fast) ease"
+    },
+    ".tp-editor-table-align:hover": {
+      color: "var(--tp-color-accent-strong)",
+      backgroundColor: "var(--tp-color-surface)"
     },
     ".tp-editor-table-preview td": {
       color: "var(--tp-color-text-muted)"

@@ -9,8 +9,10 @@ import {
   classifyMarkdownLine,
   createMarkdownTableEmptyBodyRow,
   createMarkdownTableWithInsertedColumn,
+  createMarkdownTableWithUpdatedColumnAlignment,
   findInactiveMarkdownInlineMathRanges,
   findInactiveMarkdownSyntaxMarkers,
+  getNextMarkdownTableColumnAlignment,
   shouldReplaceInactiveCodeFenceLine,
   shouldIgnorePreviewEventTarget,
   shouldReplaceInactiveTableLine
@@ -536,6 +538,14 @@ describe("analyzeMarkdownTableLines", () => {
 });
 
 describe("Markdown table editing helpers", () => {
+  it("cycles column alignments in a stable order", () => {
+    expect(getNextMarkdownTableColumnAlignment(undefined)).toBe("left");
+    expect(getNextMarkdownTableColumnAlignment("default")).toBe("left");
+    expect(getNextMarkdownTableColumnAlignment("left")).toBe("center");
+    expect(getNextMarkdownTableColumnAlignment("center")).toBe("right");
+    expect(getNextMarkdownTableColumnAlignment("right")).toBe("default");
+  });
+
   it("creates an empty body row for the current table width", () => {
     expect(createMarkdownTableEmptyBodyRow(3)).toBe("|  |  |  |");
   });
@@ -569,6 +579,44 @@ describe("Markdown table editing helpers", () => {
       "| Name |  | Count | Status |",
       "| :--- | --- | ---: | :---: |",
       "| Alpha |  | 1 | Ready |"
+    ]);
+  });
+
+  it("updates a column alignment while preserving table content", () => {
+    const tableBlock = analyzeMarkdownLineBlocks([
+      "| Name | Count | Status |",
+      "| :--- | ---: | :---: |",
+      "| Alpha | 1 | Ready |",
+      "| Beta | 2 | Hold |"
+    ]).find((state) => state.tableBlock)?.tableBlock;
+
+    expect(tableBlock).toBeDefined();
+    expect(createMarkdownTableWithUpdatedColumnAlignment(tableBlock!, {
+      alignment: "default",
+      columnIndex: 1
+    })).toEqual([
+      "| Name | Count | Status |",
+      "| :--- | --- | :---: |",
+      "| Alpha | 1 | Ready |",
+      "| Beta | 2 | Hold |"
+    ]);
+  });
+
+  it("clamps requested alignment updates to a valid table column", () => {
+    const tableBlock = analyzeMarkdownLineBlocks([
+      "| Name | Count |",
+      "| --- | --- |",
+      "| Alpha | 1 |"
+    ]).find((state) => state.tableBlock)?.tableBlock;
+
+    expect(tableBlock).toBeDefined();
+    expect(createMarkdownTableWithUpdatedColumnAlignment(tableBlock!, {
+      alignment: "right",
+      columnIndex: 99
+    })).toEqual([
+      "| Name | Count |",
+      "| --- | ---: |",
+      "| Alpha | 1 |"
     ]);
   });
 });
