@@ -40,7 +40,7 @@ Current services:
 - `IConfigurationService`: centralized and persisted appearance, editor, and workspace defaults
 - `IContextKeyService`: structured context values and expression evaluation for conditional contributions
 - `ICommandService`: command metadata registration, command handler registration, and execution
-- `IExtensionService`: static extension manifest registration for commands, menus, and keybindings
+- `IExtensionService`: static extension manifest registration for commands, menus, keybindings, and activation events
 - `IKeybindingService`: keybinding registration, keyboard event resolution, and command dispatch
 - `IMenuService`: menu/action contribution registration for Workbench surfaces such as titlebar and activitybar
 - `ITextFileService`: active Markdown model, dirty state, conflict-aware save lifecycle
@@ -66,7 +66,7 @@ Keyboard shortcuts are resolved through `IKeybindingService` instead of hard-cod
 
 Titlebar and activitybar actions are resolved through `IMenuService` instead of fixed button lists inside React components. Workbench default actions live in `workbenchContributions.ts` with stable menu ids, command ids, icon ids, order metadata, compact visibility, toggle context, and optional `when` expressions. `IContextKeyService` owns structured context values and expression evaluation, and `MenuService` filters contributed items when context changes. The platform also exposes a constrained `when` parser for manifest-style strings with keys, `!`, `==`, `!=`, `&&`, `||`, parentheses, and primitive values; it creates structured expressions rather than executing code. `Application.tsx` synchronizes Workbench state such as active resource scheme, side view, editor modes, workspace availability, and native file-system availability into context keys, then renders the filtered contributions and maps icon ids to React icons locally. This mirrors VS Code-style contribution registration: commands, keybindings, menus, and context keys are separate contribution points that can later be fed by extensions without rewriting the shell.
 
-`IExtensionService` is the current static manifest boundary. It accepts extension manifests with command, menu, and keybinding contributions, validates required ids and primitive fields, parses menu `when` strings into structured context expressions, registers contributions through the existing command/menu/keybinding services, and returns one disposable that unregisters the whole extension. Registration failures roll back partial contributions. Manifest commands register command metadata only because there is not yet an extension runtime or activation host. Workbench default menus and shortcuts are supplied through a built-in extension manifest, while Workbench command handlers remain registered by `Application.tsx`; a future extension host can attach runtime handlers to contributed command ids without replacing their manifest metadata.
+`IExtensionService` is the current static manifest boundary. It accepts extension manifests with command, menu, keybinding, and activation-event contributions, validates required ids and primitive fields, parses menu `when` strings into structured context expressions, registers contributions through the existing command/menu/keybinding services, and returns one disposable that unregisters the whole extension. Registration failures roll back partial contributions. Manifest commands register command metadata and derive `onCommand:<command>` activation events because there is not yet an extension runtime host. `activateByEvent()` indexes matching extensions, tracks inactive/activating/activated/failed states, and delegates actual activation to an injected handler. Workbench default menus and shortcuts are supplied through a built-in extension manifest, while Workbench command handlers remain registered by `Application.tsx`; a future extension host can attach runtime handlers to contributed command ids without replacing their manifest metadata.
 
 User preferences are owned by `IConfigurationService`. The service reads and writes validated configuration through an injected storage boundary, so Workbench commands update preferences through the service without accessing storage directly. Editor behavior defaults, including auto-save timing, live in configuration rather than Workbench constants. Numeric configuration bounds are platform-owned and persisted numeric values are clamped by the configuration layer before consumers read them. Workspace preference changes are synchronized into the affected platform services, including index limits and attachment asset folders. In Electron, the preload bridge routes configuration storage to a main-process file under the app data directory; browser builds fall back to browser storage.
 
@@ -79,7 +79,7 @@ Export is a provider-backed platform service. `IExportService` owns provider reg
 Planned services:
 
 - SQLite-backed index provider for `IIndexService`: durable search, metadata, link graph queries, and tag queries beyond the current snapshot cache
-- out-of-process extension host for activation events, extension code execution, and runtime APIs
+- out-of-process extension host for extension code execution, activation handlers, and runtime APIs
 
 ## Editor Model
 
@@ -113,6 +113,7 @@ Extensions should run out of process once runtime execution is implemented. The 
 - commands
 - menus
 - keybindings
+- activation events
 
 Future manifest contribution points should add:
 

@@ -2061,3 +2061,37 @@ Known limitations:
 
 - Metadata-only extension commands still cannot execute until an out-of-process extension host registers real handlers.
 - Command activation events and extension-owned context mutation remain future extension runtime work.
+
+## 2026-06-07 - P2 Extension Activation Events
+
+Completed:
+
+- Added manifest-level `activationEvents` support to `IExtensionService`.
+- Derived `onCommand:<command>` activation events from manifest command contributions.
+- Added an activation-event index that is removed with the extension disposable.
+- Added `activateByEvent()` with inactive, activating, activated, and failed state tracking.
+- Added an injected activation handler boundary so the platform can test activation flow without executing extension code.
+- Preserved static contribution registration when activation fails, matching the separation between manifest contributions and runtime handlers.
+- Added platform coverage for explicit activation events, command-derived activation events, duplicate event normalization, no-handler protection, unregister cleanup, and failed activation state.
+
+Quality gate:
+
+- `npm run test -- --run packages/platform/src/platform.test.ts`: passed, 62 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 180 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Browser smoke check: not required for this stage because only platform extension service and platform tests changed.
+
+Review:
+
+- Activation events are now a platform registration and dispatch boundary, not extension code execution.
+- The implementation follows the VS Code-style split between manifest-declared activation events and a later extension host that performs runtime activation.
+- Command-contributed activation is derived from command metadata, so future command execution can trigger activation without duplicating manifest declarations.
+- No dynamic code execution, new package, UI surface, storage path, visual token, or extra documentation file was introduced.
+
+Known limitations:
+
+- There is still no out-of-process extension host, extension code execution, or runtime API surface.
+- Command dispatch does not yet auto-activate metadata-only extension commands; it needs a future command activation bridge to call `activateByEvent("onCommand:<id>")` before retrying execution.
+- Extension-owned context mutation remains future extension runtime work.
