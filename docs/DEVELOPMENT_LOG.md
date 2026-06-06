@@ -2128,3 +2128,36 @@ Known limitations:
 
 - Activation still delegates to an injected handler; there is no out-of-process extension host, runtime API surface, or extension code loading yet.
 - Extension-owned context mutation remains future extension runtime work.
+
+## 2026-06-07 - P2 Extension Runtime Command Context
+
+Completed:
+
+- Added `ExtensionContext` to activation requests.
+- Added a constrained extension command API for runtime command registration, command execution, and command metadata reads.
+- Added extension-owned subscriptions so runtime registrations are tied to extension lifecycle instead of external closures.
+- Made runtime command registration reuse manifest command metadata when available.
+- Required explicit titles for runtime commands that were not contributed through the manifest.
+- Disposed runtime registrations when extension activation fails and when an extension is unregistered.
+- Updated platform tests to activate extension commands through the context API instead of directly touching the command service.
+
+Quality gate:
+
+- `npm run test -- --run packages/platform/src/platform.test.ts`: passed, 68 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 186 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Browser smoke check: not required for this stage because only platform extension API boundaries and platform tests changed.
+
+Review:
+
+- Extension activation code now receives a narrow API surface rather than relying on direct service closures, moving closer to a VS Code-style extension host boundary.
+- Runtime command handlers can attach to manifest metadata without replacing titles/categories or installing placeholder handlers.
+- Runtime registrations are lifecycle-owned by the extension record, so unload and failed activation do not leak command handlers.
+- The implementation still does not load external extension code, expose DOM access, expose unrestricted Node access, add packages, add storage paths, or introduce new documentation files.
+
+Known limitations:
+
+- The activation handler is still injected in-process; an out-of-process extension host is still needed before third-party extension code can run safely.
+- Extension-owned context keys, themes, Markdown renderers, and export-provider contributions remain future extension runtime work.
