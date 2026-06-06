@@ -67,7 +67,7 @@ The settings UI is a Workbench contribution, not a storage owner. `SettingsDialo
 
 Keyboard-driven list surfaces share a small Workbench navigation model. Command Palette and Quick Open keep local active-row state, but bounds normalization and Arrow/Home/End movement live in `listNavigationModel.ts`, so new palette-like surfaces can reuse the same behavior without copying key handling into JSX.
 
-Export is a provider-backed platform service. `IExportService` owns provider registration and save routing; the Markdown package contributes the current HTML provider using `marked`, while the Electron main process owns the save dialog and bounded file write. Workbench registers an `Export HTML` command and toolbar action but does not render Markdown or write exported files directly. Browser builds use a download fallback when the native export bridge is unavailable.
+Export is a provider-backed platform service. `IExportService` owns provider registration and save routing; the Markdown package contributes the current HTML provider using `marked`, while the Electron main process owns the save dialog and bounded file write. The HTML provider uses a safe renderer that escapes raw HTML and drops unsafe link/image targets before generating a complete document. Workbench registers an `Export HTML` command and toolbar action but does not render Markdown or write exported files directly. Browser builds use a download fallback when the native export bridge is unavailable.
 
 Planned services:
 

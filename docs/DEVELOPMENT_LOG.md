@@ -1794,3 +1794,32 @@ Review:
 Known limitations:
 
 - HTML is the first export provider; PDF and DOCX remain future providers on the same `IExportService` boundary.
+
+## 2026-06-07 - P2 Hardened HTML Export Rendering
+
+Completed:
+
+- Replaced default HTML passthrough in the Markdown HTML export provider with a safe `marked` renderer.
+- Escaped raw Markdown HTML before it enters exported documents.
+- Dropped unsafe link targets such as script protocols while preserving visible link text.
+- Dropped unsafe image sources while preserving visible image alt text.
+- Added tests for raw HTML escaping, safe links, unsafe links, safe image sources, and unsafe image sources.
+
+Quality gate:
+
+- `npm run test -- --run packages/markdown/src/exportHtml.test.ts`: passed, 4 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 147 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+
+Review:
+
+- The hardening stays inside the Markdown export provider; platform export service and Workbench command wiring did not change.
+- Markdown rendering still uses `marked`, but provider-owned renderer rules enforce the export security policy.
+- Exported HTML keeps the restrictive content security policy added in the previous stage and now also avoids embedding raw user HTML.
+- No new packages, UI surface, storage backend, or documentation file was introduced.
+
+Known limitations:
+
+- HTML export still preserves allowed relative image paths rather than embedding workspace images; richer asset handling remains future export-provider work.
