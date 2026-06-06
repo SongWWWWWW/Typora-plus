@@ -22,6 +22,36 @@ export interface WorkspaceSearchResult {
   readonly score: number;
 }
 
+export interface WorkspaceIndexedResource {
+  readonly uri: URIType;
+  readonly name: string;
+  readonly relativePath: string;
+  readonly line: number;
+}
+
+export interface WorkspaceIndexedHeading extends WorkspaceIndexedResource {
+  readonly level: number;
+  readonly text: string;
+}
+
+export interface WorkspaceIndexedTag extends WorkspaceIndexedResource {
+  readonly tag: string;
+}
+
+export type WorkspaceIndexedLinkKind = "markdown" | "wiki";
+
+export interface WorkspaceIndexedLink extends WorkspaceIndexedResource {
+  readonly kind: WorkspaceIndexedLinkKind;
+  readonly label: string;
+  readonly target: string;
+}
+
+export interface WorkspaceIndexMetadata {
+  readonly headings: readonly WorkspaceIndexedHeading[];
+  readonly links: readonly WorkspaceIndexedLink[];
+  readonly tags: readonly WorkspaceIndexedTag[];
+}
+
 export interface WorkspaceIndexServiceOptions {
   readonly maxFileSizeBytes: number;
   readonly maxResults: number;
@@ -42,6 +72,7 @@ export interface IIndexService {
   getStatus(): WorkspaceIndexStatus;
   indexWorkspace(workspace: WorkspaceFileTree): Promise<void>;
   query(value: string): readonly WorkspaceSearchResult[];
+  getMetadata(): WorkspaceIndexMetadata;
   clear(): void;
 }
 
@@ -155,6 +186,14 @@ export class WorkspaceIndexService implements IIndexService {
     return sortResults(results);
   }
 
+  getMetadata(): WorkspaceIndexMetadata {
+    return {
+      headings: this.documents.flatMap((document) => document.metadata.headings),
+      links: this.documents.flatMap((document) => document.metadata.links),
+      tags: this.documents.flatMap((document) => document.metadata.tags)
+    };
+  }
+
   clear(): void {
     this.generation += 1;
     this.documents = [];
@@ -196,6 +235,7 @@ interface IndexedDocument {
   readonly relativePath: string;
   readonly normalizedPath: string;
   readonly lines: readonly IndexedLine[];
+  readonly metadata: WorkspaceIndexMetadata;
 }
 
 interface IndexedLine {
@@ -209,17 +249,148 @@ function shouldSkipFile(file: FileTreeEntry, maxFileSizeBytes: number): boolean 
 }
 
 function indexDocument(file: FileTreeEntry, value: string): IndexedDocument {
+  const lines = value.split(/\r?\n/).map((line, index) => ({
+    line: index + 1,
+    value: line,
+    normalized: line.toLowerCase()
+  }));
+
   return {
     uri: file.uri,
     name: file.name,
     relativePath: file.relativePath,
     normalizedPath: `${file.relativePath} ${file.name}`.toLowerCase(),
-    lines: value.split(/\r?\n/).map((line, index) => ({
-      line: index + 1,
-      value: line,
-      normalized: line.toLowerCase()
-    }))
+    lines,
+    metadata: indexDocumentMetadata(file, lines)
   };
+}
+
+function indexDocumentMetadata(
+  file: FileTreeEntry,
+  lines: readonly IndexedLine[]
+): WorkspaceIndexMetadata {
+  const headings: WorkspaceIndexedHeading[] = [];
+  const links: WorkspaceIndexedLink[] = [];
+  const tags: WorkspaceIndexedTag[] = [];
+  let fence: string | undefined;
+
+  for (const line of lines) {
+    const fenceMarker = readFenceMarker(line.value);
+
+    if (fenceMarker) {
+      fence = fence ? undefined : fenceMarker;
+      continue;
+    }
+
+    if (fence) {
+      continue;
+    }
+
+    const heading = readHeading(line.value);
+    if (heading) {
+      headings.push({
+        ...createIndexedResource(file, line.line),
+        level: heading.level,
+        text: heading.text
+      });
+    }
+
+    const searchableLine = maskInlineCodeSpans(line.value);
+    for (const link of readMarkdownLinks(searchableLine)) {
+      links.push({
+        ...createIndexedResource(file, line.line),
+        ...link
+      });
+    }
+
+    for (const tag of readMarkdownTags(searchableLine)) {
+      tags.push({
+        ...createIndexedResource(file, line.line),
+        tag
+      });
+    }
+  }
+
+  return { headings, links, tags };
+}
+
+function createIndexedResource(file: FileTreeEntry, line: number): WorkspaceIndexedResource {
+  return {
+    line,
+    name: file.name,
+    relativePath: file.relativePath,
+    uri: file.uri
+  };
+}
+
+function readFenceMarker(line: string): string | undefined {
+  const match = /^\s*(`{3,}|~{3,})/.exec(line);
+  return match?.[1];
+}
+
+function readHeading(line: string): { readonly level: number; readonly text: string } | undefined {
+  const match = /^(#{1,6})\s+(.+?)\s*$/.exec(line);
+  const marker = match?.[1];
+  const rawText = match?.[2];
+
+  if (!marker || !rawText) {
+    return undefined;
+  }
+
+  const text = rawText.replace(/\s+#+\s*$/, "").trim();
+
+  return text ? { level: marker.length, text } : undefined;
+}
+
+function maskInlineCodeSpans(line: string): string {
+  return line.replace(/`[^`]*`/g, (value) => " ".repeat(value.length));
+}
+
+function readMarkdownLinks(line: string): readonly Omit<WorkspaceIndexedLink, keyof WorkspaceIndexedResource>[] {
+  const links: Array<Omit<WorkspaceIndexedLink, keyof WorkspaceIndexedResource>> = [];
+  const markdownLinkPattern = /\[([^\]]+)]\(([^)\s]+)(?:\s+["'][^"']*["'])?\)/g;
+  const wikiLinkPattern = /\[\[([^\]|]+)(?:\|([^\]]+))?]]/g;
+
+  for (const match of line.matchAll(markdownLinkPattern)) {
+    if ((match.index ?? 0) > 0 && line[(match.index ?? 0) - 1] === "!") {
+      continue;
+    }
+
+    const label = match[1]?.trim();
+    const target = match[2]?.trim();
+
+    if (label && target) {
+      links.push({ kind: "markdown", label, target });
+    }
+  }
+
+  for (const match of line.matchAll(wikiLinkPattern)) {
+    const target = match[1]?.trim();
+    const label = match[2]?.trim() || target;
+
+    if (label && target) {
+      links.push({ kind: "wiki", label, target });
+    }
+  }
+
+  return links;
+}
+
+function readMarkdownTags(line: string): readonly string[] {
+  const tags: string[] = [];
+  const seen = new Set<string>();
+  const tagPattern = /(^|[\s([{])#([\p{Letter}\p{Number}_][\p{Letter}\p{Number}_/-]*)/gu;
+
+  for (const match of line.matchAll(tagPattern)) {
+    const tag = match[2];
+
+    if (tag && !seen.has(tag)) {
+      seen.add(tag);
+      tags.push(tag);
+    }
+  }
+
+  return tags;
 }
 
 function normalizeQuery(value: string): readonly string[] {

@@ -318,6 +318,71 @@ describe("workspace index", () => {
     expect(service.getStatus().skippedFiles).toBe(1);
     expect(service.query("searchable")).toEqual([]);
   });
+
+  it("collects headings, tags, and links as workspace metadata", async () => {
+    const host = createMemoryHost([
+      ["file://C:/Notes/a.md", [
+        "# Alpha",
+        "See [Beta](folder/b.md) and [[Daily Note|Daily]] #topic #topic/nested",
+        "`#ignored` `[Ignored](ignored.md)` ![Image](image.png)",
+        "```",
+        "# Ignored",
+        "[Ignored](ignored.md) #ignored",
+        "```"
+      ].join("\n")]
+    ]);
+    const service = new WorkspaceIndexService(new NativeFileService(host), {
+      maxResults: 10
+    });
+
+    await service.indexWorkspace(createWorkspaceFileTree([
+      createFileEntry("C:/Notes/a.md", "a.md", "a.md")
+    ]));
+
+    const metadata = service.getMetadata();
+
+    expect(metadata.headings.map((heading) => ({
+      line: heading.line,
+      level: heading.level,
+      relativePath: heading.relativePath,
+      text: heading.text
+    }))).toEqual([
+      { line: 1, level: 1, relativePath: "a.md", text: "Alpha" }
+    ]);
+    expect(metadata.tags.map((tag) => ({
+      line: tag.line,
+      relativePath: tag.relativePath,
+      tag: tag.tag
+    }))).toEqual([
+      { line: 2, relativePath: "a.md", tag: "topic" },
+      { line: 2, relativePath: "a.md", tag: "topic/nested" }
+    ]);
+    expect(metadata.links.map((link) => ({
+      kind: link.kind,
+      label: link.label,
+      line: link.line,
+      relativePath: link.relativePath,
+      target: link.target
+    }))).toEqual([
+      { kind: "markdown", label: "Beta", line: 2, relativePath: "a.md", target: "folder/b.md" },
+      { kind: "wiki", label: "Daily", line: 2, relativePath: "a.md", target: "Daily Note" }
+    ]);
+  });
+
+  it("clears indexed workspace metadata", async () => {
+    const host = createMemoryHost([["file://C:/Notes/a.md", "# Alpha\n#topic"]]);
+    const service = new WorkspaceIndexService(new NativeFileService(host), {
+      maxResults: 10
+    });
+
+    await service.indexWorkspace(createWorkspaceFileTree([
+      createFileEntry("C:/Notes/a.md", "a.md", "a.md")
+    ]));
+    service.clear();
+
+    expect(service.getStatus().state).toBe("idle");
+    expect(service.getMetadata()).toEqual({ headings: [], links: [], tags: [] });
+  });
 });
 
 describe("attachments", () => {
