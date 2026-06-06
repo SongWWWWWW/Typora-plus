@@ -42,6 +42,11 @@ import {
   type ExtensionHostProtocolMessage
 } from "./extensionHostProtocol";
 import type { ExtensionHostProtocolTransport } from "./extensionHostProtocolSession";
+import {
+  defaultExtensionHostProtocolRequestTimer,
+  readExtensionHostProtocolRequestTimeoutMs,
+  type ExtensionHostProtocolRequestTimer
+} from "./extensionHostProtocolRequestTimer";
 
 export type ExtensionHostProtocolRuntimeRequestKind =
   | "commandExecute"
@@ -57,10 +62,13 @@ export interface ExtensionHostProtocolRuntimeOptions {
   readonly activate: ExtensionActivationHandler;
   readonly createRequestId?: (kind: ExtensionHostProtocolRuntimeRequestKind) => string;
   readonly onError?: (error: Error, message?: ExtensionHostProtocolMessage) => void;
+  readonly requestTimer?: ExtensionHostProtocolRequestTimer;
+  readonly requestTimeoutMs?: number;
 }
 
 interface PendingRuntimeRequest {
   readonly extensionId: string;
+  timeout?: IDisposable;
   resolve(message: ExtensionHostProtocolMessage): void;
   reject(error: Error): void;
 }
@@ -88,6 +96,8 @@ interface RuntimeMarkdownRendererRegistration {
 export class ExtensionHostProtocolRuntime extends Disposable {
   private readonly pendingRequests = new Map<string, PendingRuntimeRequest>();
   private readonly extensions = new Map<string, RuntimeExtensionRecord>();
+  private readonly requestTimer: ExtensionHostProtocolRequestTimer;
+  private readonly requestTimeoutMs: number | undefined;
   private requestCounter = 0;
   private disposed = false;
 
@@ -101,6 +111,11 @@ export class ExtensionHostProtocolRuntime extends Disposable {
       throw new Error("Extension host protocol runtime must provide an activation handler");
     }
 
+    this.requestTimer = options.requestTimer ?? defaultExtensionHostProtocolRequestTimer;
+    this.requestTimeoutMs = readExtensionHostProtocolRequestTimeoutMs(
+      options.requestTimeoutMs,
+      "Extension host protocol runtime request timeout"
+    );
     this.store.add(transport.onMessage((message) => {
       void this.handleIncomingMessage(message);
     }));
@@ -502,16 +517,27 @@ export class ExtensionHostProtocolRuntime extends Disposable {
     }
 
     return await new Promise<ExtensionHostProtocolMessage>((resolve, reject) => {
-      this.pendingRequests.set(requestId, {
+      const pending: PendingRuntimeRequest = {
         extensionId: getMessageExtensionId(normalizedMessage),
         resolve,
         reject
-      });
+      };
 
-      Promise.resolve(this.transport.send(normalizedMessage)).catch((error: unknown) => {
-        this.pendingRequests.delete(requestId);
+      this.pendingRequests.set(requestId, pending);
+
+      try {
+        this.armPendingRequestTimeout(requestId, pending);
+        Promise.resolve(this.transport.send(normalizedMessage)).catch((error: unknown) => {
+          if (!this.deletePendingRequest(requestId, pending)) {
+            return;
+          }
+
+          reject(toErrorLike(error));
+        });
+      } catch (error) {
+        this.deletePendingRequest(requestId, pending);
         reject(toErrorLike(error));
-      });
+      }
     });
   }
 
@@ -526,7 +552,7 @@ export class ExtensionHostProtocolRuntime extends Disposable {
   }
 
   private resolvePendingRequest(message: ExtensionHostProtocolMessage, pending: PendingRuntimeRequest): void {
-    this.pendingRequests.delete(message.requestId);
+    this.deletePendingRequest(message.requestId, pending);
 
     try {
       assertResponseIdentity(message, message.requestId, pending.extensionId);
@@ -534,6 +560,32 @@ export class ExtensionHostProtocolRuntime extends Disposable {
     } catch (error) {
       pending.reject(toErrorLike(error));
     }
+  }
+
+  private armPendingRequestTimeout(requestId: string, pending: PendingRuntimeRequest): void {
+    if (this.requestTimeoutMs === undefined) {
+      return;
+    }
+
+    pending.timeout = this.requestTimer.schedule(() => {
+      if (!this.deletePendingRequest(requestId, pending)) {
+        return;
+      }
+
+      pending.reject(new Error(
+        `Extension host protocol runtime request timed out after ${this.requestTimeoutMs}ms: ${requestId} (${pending.extensionId})`
+      ));
+    }, this.requestTimeoutMs);
+  }
+
+  private deletePendingRequest(requestId: string, pending: PendingRuntimeRequest): boolean {
+    if (this.pendingRequests.get(requestId) !== pending) {
+      return false;
+    }
+
+    this.pendingRequests.delete(requestId);
+    pending.timeout?.dispose();
+    return true;
   }
 
   private async sendRuntimeApiResult(requestId: string, extensionId: string, value?: unknown): Promise<void> {
@@ -557,6 +609,7 @@ export class ExtensionHostProtocolRuntime extends Disposable {
     this.pendingRequests.clear();
 
     for (const pending of pendingRequests) {
+      pending.timeout?.dispose();
       pending.reject(error);
     }
   }

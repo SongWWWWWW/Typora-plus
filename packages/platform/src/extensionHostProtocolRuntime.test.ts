@@ -17,6 +17,7 @@ import {
   type ExtensionHostProtocolRuntimeRequestKind
 } from "./extensionHostProtocolRuntime";
 import type { ExtensionHostProtocolTransport } from "./extensionHostProtocolSession";
+import type { ExtensionHostProtocolRequestTimer } from "./extensionHostProtocolRequestTimer";
 
 describe("extension host protocol runtime", () => {
   it("activates with a proxy context and sends runtime contribution requests", async () => {
@@ -244,6 +245,100 @@ describe("extension host protocol runtime", () => {
     });
   });
 
+  it("rejects proxy context command executions that miss the configured timeout", async () => {
+    const transport = createMemoryTransport();
+    const timer = createManualRequestTimer();
+    const errors: string[] = [];
+    let execution: Promise<unknown> | undefined;
+    const runtime = new ExtensionHostProtocolRuntime(transport, {
+      createRequestId: createSequentialRequestId(),
+      onError: (error) => errors.push(error.message),
+      requestTimer: timer,
+      requestTimeoutMs: 60,
+      activate(request) {
+        execution = request.context.commands.executeCommand("workbench.open", "file://notes/a.md");
+      }
+    });
+
+    transport.receive(createActivationMessage("activate-timeout"));
+    await flushPromises();
+
+    expect(transport.sent[0]).toEqual(createExtensionHostCommandExecuteRequestMessage(
+      "commandExecute-1",
+      "notes.remote",
+      "workbench.open",
+      ["file://notes/a.md"]
+    ));
+    expect(timer.scheduled[0]?.delayMs).toBe(60);
+
+    timer.scheduled[0]?.fire();
+
+    await expect(execution).rejects.toThrow(
+      "Extension host protocol runtime request timed out after 60ms: commandExecute-1 (notes.remote)"
+    );
+    expect(timer.scheduled[0]?.disposed).toBe(true);
+
+    transport.receive(createExtensionHostApiResultMessage("commandExecute-1", "notes.remote", {
+      opened: true
+    }));
+    await flushPromises();
+
+    expect(errors).toEqual([
+      "Extension host protocol runtime received unhandled message: extensionHost/api/result"
+    ]);
+    runtime.dispose();
+  });
+
+  it("reports fire-and-forget registration request timeouts", async () => {
+    const transport = createMemoryTransport();
+    const timer = createManualRequestTimer();
+    const errors: string[] = [];
+    const runtime = new ExtensionHostProtocolRuntime(transport, {
+      createRequestId: createSequentialRequestId(),
+      onError: (error) => errors.push(error.message),
+      requestTimer: timer,
+      requestTimeoutMs: 35,
+      activate(request) {
+        request.context.commands.registerCommand("notes.remote.run", () => undefined, {
+          title: "Run"
+        });
+      }
+    });
+
+    transport.receive(createActivationMessage("activate-register-timeout"));
+    await flushPromises();
+
+    timer.scheduled[0]?.fire();
+    await flushPromises();
+
+    expect(errors).toEqual([
+      "Extension host protocol runtime request timed out after 35ms: commandRegister-1 (notes.remote)"
+    ]);
+    expect(timer.scheduled[0]?.disposed).toBe(true);
+    runtime.dispose();
+  });
+
+  it("rejects pending runtime requests on dispose and clears request timers", async () => {
+    const transport = createMemoryTransport();
+    const timer = createManualRequestTimer();
+    let execution: Promise<unknown> | undefined;
+    const runtime = new ExtensionHostProtocolRuntime(transport, {
+      createRequestId: createSequentialRequestId(),
+      requestTimer: timer,
+      requestTimeoutMs: 100,
+      activate(request) {
+        execution = request.context.commands.executeCommand("workbench.open", "file://notes/a.md");
+      }
+    });
+
+    transport.receive(createActivationMessage("activate-dispose"));
+    await flushPromises();
+    runtime.dispose();
+
+    await expect(execution).rejects.toThrow("runtime disposed");
+    expect(timer.scheduled[0]?.disposed).toBe(true);
+  });
+
   it("sends unregister messages when proxy context disposables are disposed", async () => {
     const transport = createMemoryTransport();
     const disposables: { dispose(): void }[] = [];
@@ -447,6 +542,42 @@ function createActivationMessage(requestId: string): ExtensionHostProtocolMessag
 function createSequentialRequestId(): (kind: ExtensionHostProtocolRuntimeRequestKind) => string {
   let count = 0;
   return (kind) => `${kind}-${++count}`;
+}
+
+interface ManualRequestTimer extends ExtensionHostProtocolRequestTimer {
+  readonly scheduled: ManualTimeout[];
+}
+
+interface ManualTimeout {
+  readonly delayMs: number;
+  disposed: boolean;
+  fire(): void;
+}
+
+function createManualRequestTimer(): ManualRequestTimer {
+  const scheduled: ManualTimeout[] = [];
+
+  return {
+    scheduled,
+    schedule(callback, delayMs) {
+      const timeout: ManualTimeout = {
+        delayMs,
+        disposed: false,
+        fire() {
+          if (timeout.disposed) {
+            return;
+          }
+
+          callback();
+        }
+      };
+      scheduled.push(timeout);
+
+      return toDisposable(() => {
+        timeout.disposed = true;
+      });
+    }
+  };
 }
 
 async function flushPromises(): Promise<void> {

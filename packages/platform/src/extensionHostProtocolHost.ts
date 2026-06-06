@@ -49,7 +49,9 @@ export class ExtensionHostProtocolHost extends Disposable implements ExtensionHo
     this.createTransport = options.createTransport;
     this.sessionOptions = {
       ...(options.createRequestId ? { createRequestId: options.createRequestId } : {}),
-      ...(options.onError ? { onError: options.onError } : {})
+      ...(options.onError ? { onError: options.onError } : {}),
+      ...(options.requestTimer ? { requestTimer: options.requestTimer } : {}),
+      ...(options.requestTimeoutMs !== undefined ? { requestTimeoutMs: options.requestTimeoutMs } : {})
     };
   }
 

@@ -19,6 +19,7 @@ import {
   type ExtensionHostProtocolSessionRequestKind,
   type ExtensionHostProtocolTransport
 } from "./extensionHostProtocolSession";
+import type { ExtensionHostProtocolRequestTimer } from "./extensionHostProtocolRequestTimer";
 
 describe("extension host protocol session", () => {
   it("sends activation requests and resolves activation responses", async () => {
@@ -78,6 +79,76 @@ describe("extension host protocol session", () => {
     await expect(mismatchedActivation).rejects.toThrow("extension id mismatch");
   });
 
+  it("rejects activation requests that miss the configured timeout", async () => {
+    const transport = createMemoryTransport();
+    const timer = createManualRequestTimer();
+    const { context } = createSessionTestContext();
+    const errors: string[] = [];
+    const session = new ExtensionHostProtocolSession(transport, context, {
+      createRequestId: createSequentialRequestId(),
+      onError: (error) => errors.push(error.message),
+      requestTimer: timer,
+      requestTimeoutMs: 50
+    });
+
+    const activation = session.activate({
+      activationEvent: "onStartup",
+      context,
+      extension: context.extension
+    });
+
+    expect(timer.scheduled).toHaveLength(1);
+    expect(timer.scheduled[0]?.delayMs).toBe(50);
+
+    timer.scheduled[0]?.fire();
+
+    await expect(activation).rejects.toThrow(
+      "Extension host protocol session request timed out after 50ms: activate-1 (notes.remote)"
+    );
+    expect(timer.scheduled[0]?.disposed).toBe(true);
+
+    transport.receive(createExtensionHostActivationResultMessage("activate-1", "notes.remote"));
+    await flushPromises();
+
+    expect(errors).toEqual([
+      "Extension host protocol session received unhandled message: extensionHost/activationResult"
+    ]);
+    session.dispose();
+  });
+
+  it("cleans timed out activation requests so request ids can be reused", async () => {
+    const transport = createMemoryTransport();
+    const timer = createManualRequestTimer();
+    const { context } = createSessionTestContext();
+    const session = new ExtensionHostProtocolSession(transport, context, {
+      createRequestId: () => "activate-fixed",
+      requestTimer: timer,
+      requestTimeoutMs: 25
+    });
+
+    const firstActivation = session.activate({
+      activationEvent: "onStartup",
+      context,
+      extension: context.extension
+    });
+    timer.scheduled[0]?.fire();
+
+    await expect(firstActivation).rejects.toThrow("activate-fixed");
+
+    const secondActivation = session.activate({
+      activationEvent: "onStartup",
+      context,
+      extension: context.extension
+    });
+
+    expect(transport.sent).toHaveLength(2);
+    transport.receive(createExtensionHostActivationResultMessage("activate-fixed", "notes.remote"));
+
+    await expect(secondActivation).resolves.toBeUndefined();
+    expect(timer.scheduled[1]?.disposed).toBe(true);
+    session.dispose();
+  });
+
   it("dispatches inbound runtime API messages through the broker", async () => {
     const transport = createMemoryTransport();
     const { context, controls } = createSessionTestContext();
@@ -109,6 +180,52 @@ describe("extension host protocol session", () => {
     }));
 
     await expect(commandExecution).resolves.toEqual({ ok: true });
+  });
+
+  it("rejects proxy callback requests that miss the configured timeout", async () => {
+    const transport = createMemoryTransport();
+    const timer = createManualRequestTimer();
+    const { context, controls } = createSessionTestContext();
+    const errors: string[] = [];
+    const session = new ExtensionHostProtocolSession(transport, context, {
+      createRequestId: createSequentialRequestId(),
+      onError: (error) => errors.push(error.message),
+      requestTimer: timer,
+      requestTimeoutMs: 40
+    });
+
+    transport.receive(createExtensionHostCommandRegisterRequestMessage("remote-1", "notes.remote", {
+      id: "notes.remote.run",
+      title: "Run Remote"
+    }));
+    await flushPromises();
+
+    const commandExecution = controls.commandRegistrations[0]?.handler("alpha");
+    await flushPromises();
+
+    expect(transport.sent[1]).toEqual(createExtensionHostCommandExecuteRequestMessage(
+      "commandExecute-1",
+      "notes.remote",
+      "notes.remote.run",
+      ["alpha"]
+    ));
+    expect(timer.scheduled[0]?.delayMs).toBe(40);
+
+    timer.scheduled[0]?.fire();
+
+    await expect(commandExecution).rejects.toThrow(
+      "Extension host protocol session request timed out after 40ms: commandExecute-1 (notes.remote)"
+    );
+
+    transport.receive(createExtensionHostApiResultMessage("commandExecute-1", "notes.remote", {
+      ok: true
+    }));
+    await flushPromises();
+
+    expect(errors).toEqual([
+      "Extension host protocol session received unhandled message: extensionHost/api/result"
+    ]);
+    session.dispose();
   });
 
   it("executes inbound main-thread command requests and returns API results", async () => {
@@ -217,11 +334,14 @@ describe("extension host protocol session", () => {
 
   it("reports unhandled inbound messages and rejects pending requests on dispose", async () => {
     const transport = createMemoryTransport();
+    const timer = createManualRequestTimer();
     const { context } = createSessionTestContext();
     const errors: string[] = [];
     const session = new ExtensionHostProtocolSession(transport, context, {
       createRequestId: createSequentialRequestId(),
-      onError: (error) => errors.push(error.message)
+      onError: (error) => errors.push(error.message),
+      requestTimer: timer,
+      requestTimeoutMs: 100
     });
 
     transport.receive(createExtensionHostApiResultMessage("missing", "notes.remote"));
@@ -242,6 +362,7 @@ describe("extension host protocol session", () => {
     session.dispose();
 
     await expect(activation).rejects.toThrow("session disposed");
+    expect(timer.scheduled[0]?.disposed).toBe(true);
   });
 });
 
@@ -337,6 +458,42 @@ function createSessionTestContext(): { readonly context: ExtensionContext; reado
 function createSequentialRequestId(): (kind: ExtensionHostProtocolSessionRequestKind) => string {
   let count = 0;
   return (kind) => `${kind}-${++count}`;
+}
+
+interface ManualRequestTimer extends ExtensionHostProtocolRequestTimer {
+  readonly scheduled: ManualTimeout[];
+}
+
+interface ManualTimeout {
+  readonly delayMs: number;
+  disposed: boolean;
+  fire(): void;
+}
+
+function createManualRequestTimer(): ManualRequestTimer {
+  const scheduled: ManualTimeout[] = [];
+
+  return {
+    scheduled,
+    schedule(callback, delayMs) {
+      const timeout: ManualTimeout = {
+        delayMs,
+        disposed: false,
+        fire() {
+          if (timeout.disposed) {
+            return;
+          }
+
+          callback();
+        }
+      };
+      scheduled.push(timeout);
+
+      return toDisposable(() => {
+        timeout.disposed = true;
+      });
+    }
+  };
 }
 
 async function flushPromises(): Promise<void> {

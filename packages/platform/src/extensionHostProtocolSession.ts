@@ -1,4 +1,4 @@
-import { Disposable, toDisposable, type Event } from "@typora-plus/base";
+import { Disposable, toDisposable, type Event, type IDisposable } from "@typora-plus/base";
 import type { ExtensionActivationRequest, ExtensionContext } from "./extensions";
 import {
   createExtensionHostActivationRequestMessage,
@@ -12,6 +12,11 @@ import {
   ExtensionHostRuntimeBroker,
   type ExtensionHostRuntimeBrokerRequestKind
 } from "./extensionHostRuntimeBroker";
+import {
+  defaultExtensionHostProtocolRequestTimer,
+  readExtensionHostProtocolRequestTimeoutMs,
+  type ExtensionHostProtocolRequestTimer
+} from "./extensionHostProtocolRequestTimer";
 
 export type ExtensionHostProtocolSessionRequestKind =
   | "activate"
@@ -25,10 +30,13 @@ export interface ExtensionHostProtocolTransport {
 export interface ExtensionHostProtocolSessionOptions {
   readonly createRequestId?: (kind: ExtensionHostProtocolSessionRequestKind) => string;
   readonly onError?: (error: Error, message?: ExtensionHostProtocolMessage) => void;
+  readonly requestTimer?: ExtensionHostProtocolRequestTimer;
+  readonly requestTimeoutMs?: number;
 }
 
 interface PendingProtocolRequest {
   readonly extensionId: string;
+  timeout?: IDisposable;
   resolve(message: ExtensionHostProtocolMessage): void;
   reject(error: Error): void;
 }
@@ -36,6 +44,8 @@ interface PendingProtocolRequest {
 export class ExtensionHostProtocolSession extends Disposable {
   private readonly broker: ExtensionHostRuntimeBroker;
   private readonly pendingRequests = new Map<string, PendingProtocolRequest>();
+  private readonly requestTimer: ExtensionHostProtocolRequestTimer;
+  private readonly requestTimeoutMs: number | undefined;
   private requestCounter = 0;
   private disposed = false;
 
@@ -46,6 +56,11 @@ export class ExtensionHostProtocolSession extends Disposable {
   ) {
     super();
 
+    this.requestTimer = options.requestTimer ?? defaultExtensionHostProtocolRequestTimer;
+    this.requestTimeoutMs = readExtensionHostProtocolRequestTimeoutMs(
+      options.requestTimeoutMs,
+      "Extension host protocol session request timeout"
+    );
     this.broker = this.store.add(new ExtensionHostRuntimeBroker(context, {
       createRequestId: (kind) => this.nextRequestId(kind),
       request: (message) => this.sendRequest(message)
@@ -122,7 +137,7 @@ export class ExtensionHostProtocolSession extends Disposable {
   }
 
   private resolvePendingRequest(message: ExtensionHostProtocolMessage, pending: PendingProtocolRequest): void {
-    this.pendingRequests.delete(message.requestId);
+    this.deletePendingRequest(message.requestId, pending);
 
     try {
       assertResponseIdentity(message, message.requestId, pending.extensionId);
@@ -145,17 +160,54 @@ export class ExtensionHostProtocolSession extends Disposable {
     }
 
     return await new Promise<ExtensionHostProtocolMessage>((resolve, reject) => {
-      this.pendingRequests.set(requestId, {
+      const pending: PendingProtocolRequest = {
         extensionId: getMessageExtensionId(normalizedMessage),
         resolve,
         reject
-      });
+      };
 
-      Promise.resolve(this.transport.send(normalizedMessage)).catch((error: unknown) => {
-        this.pendingRequests.delete(requestId);
+      this.pendingRequests.set(requestId, pending);
+
+      try {
+        this.armPendingRequestTimeout(requestId, pending);
+        Promise.resolve(this.transport.send(normalizedMessage)).catch((error: unknown) => {
+          if (!this.deletePendingRequest(requestId, pending)) {
+            return;
+          }
+
+          reject(toErrorLike(error));
+        });
+      } catch (error) {
+        this.deletePendingRequest(requestId, pending);
         reject(toErrorLike(error));
-      });
+      }
     });
+  }
+
+  private armPendingRequestTimeout(requestId: string, pending: PendingProtocolRequest): void {
+    if (this.requestTimeoutMs === undefined) {
+      return;
+    }
+
+    pending.timeout = this.requestTimer.schedule(() => {
+      if (!this.deletePendingRequest(requestId, pending)) {
+        return;
+      }
+
+      pending.reject(new Error(
+        `Extension host protocol session request timed out after ${this.requestTimeoutMs}ms: ${requestId} (${pending.extensionId})`
+      ));
+    }, this.requestTimeoutMs);
+  }
+
+  private deletePendingRequest(requestId: string, pending: PendingProtocolRequest): boolean {
+    if (this.pendingRequests.get(requestId) !== pending) {
+      return false;
+    }
+
+    this.pendingRequests.delete(requestId);
+    pending.timeout?.dispose();
+    return true;
   }
 
   private nextRequestId(kind: ExtensionHostProtocolSessionRequestKind): string {
@@ -167,6 +219,7 @@ export class ExtensionHostProtocolSession extends Disposable {
     this.pendingRequests.clear();
 
     for (const pending of pendingRequests) {
+      pending.timeout?.dispose();
       pending.reject(error);
     }
   }
