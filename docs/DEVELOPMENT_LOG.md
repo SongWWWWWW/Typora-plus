@@ -209,3 +209,32 @@ Known limitations:
 
 - The current provider is in-memory; SQLite persistence remains planned for durable search, links, tags, and headings.
 - Saved-file updates rely on workspace refresh/watch to trigger reindexing.
+
+## 2026-06-06 - P2 Live Preview Marker Refinement
+
+Completed:
+
+- Added inactive-line Markdown syntax marker soft hiding in the editor live preview layer.
+- Covered headings, quotes, lists, code fences, links, images, and strong emphasis delimiters.
+- Kept the active line fully source-visible for editing.
+- Moved marker and passive-line opacity values into theme tokens.
+- Added editor tests for marker range detection and active-line behavior.
+
+Quality gate:
+
+- `npm run verify`: passed
+- `npm test`: passed, 25 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- Production browser preview: passed at `http://127.0.0.1:4173`
+
+Review:
+
+- Marker detection lives in `packages/editor`; Workbench and platform services do not parse editor Markdown syntax.
+- Visual strength is controlled by theme tokens instead of local hard-coded opacity values.
+- The implementation uses CodeMirror decorations and preserves the plain Markdown document model.
+- Mobile titlebar secondary actions collapse so the editor shell does not overflow narrow viewports.
+
+Known limitations:
+
+- Marker hiding is regex-based for the initial live preview pass; parser-backed position mapping remains planned.
+- Rich block widgets for images, tables, math, and code fences remain future editor work.

@@ -63,6 +63,7 @@ Current features:
 - Markdown language support
 - history, search, selection, bracket matching
 - heading/quote/list/fence line styling
+- inactive Markdown marker soft hiding for headings, lists, quotes, fences, links, and strong emphasis
 - focus mode dimming
 - typewriter mode top spacing
 - imperative line scrolling for outline and search
@@ -70,7 +71,6 @@ Current features:
 Next editor work:
 
 - block widgets for images, tables, math, and code fences
-- syntax hiding for inactive Markdown markers
 - viewport-safe large document behavior tests
 - parser-backed position mapping
 

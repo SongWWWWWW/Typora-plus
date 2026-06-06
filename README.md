@@ -11,6 +11,7 @@ P0/P1 are implemented:
 - layered packages for base, platform, markdown, theme, editor, workbench, desktop
 - CodeMirror 6 Markdown editor
 - live-preview-oriented line styling
+- inactive Markdown marker soft hiding
 - focus mode and typewriter mode
 - command palette, sidebar, outline, current-note search
 - browser draft persistence
