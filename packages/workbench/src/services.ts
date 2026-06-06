@@ -3,11 +3,13 @@ import {
   CommandService,
   ConfigurationService,
   ContextKeyService,
+  ExtensionService,
   ExportService,
   IAttachmentService,
   IConfigurationService,
   IContextKeyService,
   ICommandService,
+  IExtensionService,
   IExportService,
   IFileService,
   IIndexService,
@@ -33,6 +35,7 @@ import {
   type IConfigurationService as ConfigurationServiceContract,
   type IContextKeyService as ContextKeyServiceContract,
   type ICommandService as CommandServiceContract,
+  type IExtensionService as ExtensionServiceContract,
   type IExportService as ExportServiceContract,
   type IFileService as FileServiceContract,
   type IIndexService as IndexServiceContract,
@@ -43,7 +46,7 @@ import {
   type ITextFileService as TextFileServiceContract,
   type IWorkspaceService as WorkspaceServiceContract
 } from "@typora-plus/platform";
-import { defaultWorkbenchKeybindings, defaultWorkbenchMenuItems } from "./workbenchContributions";
+import { defaultWorkbenchExtensionManifest } from "./workbenchContributions";
 
 export interface WorkbenchServices {
   readonly serviceCollection: ServiceCollection;
@@ -51,6 +54,7 @@ export interface WorkbenchServices {
   readonly attachmentService: AttachmentServiceContract;
   readonly configurationService: ConfigurationServiceContract;
   readonly contextKeyService: ContextKeyServiceContract;
+  readonly extensionService: ExtensionServiceContract;
   readonly exportService: ExportServiceContract;
   readonly fileService: FileServiceContract;
   readonly indexService: IndexServiceContract;
@@ -109,17 +113,13 @@ export function createWorkbenchServices(): WorkbenchServices {
 
   const commandService = new CommandService(serviceCollection);
   serviceCollection.set(ICommandService, commandService);
+  const extensionService = new ExtensionService(commandService, menuService, keybindingService);
+  serviceCollection.set(IExtensionService, extensionService);
   exportService.registerProvider(markdownHtmlExportProvider);
   contextKeyService.setValue("fileSystem.available", fileService.isAvailable());
   contextKeyService.setValue("attachment.available", attachmentService.isAvailable());
   contextKeyService.setValue("resource.available", resourceService.isAvailable());
-
-  for (const rule of defaultWorkbenchKeybindings) {
-    keybindingService.registerKeybinding(rule);
-  }
-  for (const item of defaultWorkbenchMenuItems) {
-    menuService.registerMenuItem(item);
-  }
+  extensionService.registerExtension(defaultWorkbenchExtensionManifest);
   keybindingService.setUserKeybindings(configurationService.getValue().keybindings.overrides);
 
   return {
@@ -128,6 +128,7 @@ export function createWorkbenchServices(): WorkbenchServices {
     attachmentService,
     configurationService,
     contextKeyService,
+    extensionService,
     exportService,
     fileService,
     indexService,

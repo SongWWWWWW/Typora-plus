@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { ContextKeyService, MenuService } from "@typora-plus/platform";
-import { defaultWorkbenchKeybindings, defaultWorkbenchMenuItems } from "./workbenchContributions";
+import {
+  defaultWorkbenchExtensionManifest,
+  defaultWorkbenchKeybindings,
+  defaultWorkbenchMenuItems
+} from "./workbenchContributions";
 
 describe("workbench contributions", () => {
   it("contributes titlebar actions in stable command order", () => {
@@ -50,6 +54,10 @@ describe("workbench contributions", () => {
     const pairs = defaultWorkbenchKeybindings.map((rule) => `${rule.command}:${JSON.stringify(rule.keybinding)}`);
 
     expect(new Set(pairs).size).toBe(pairs.length);
+  });
+
+  it("keeps built-in workbench command handlers outside the manifest", () => {
+    expect(Object.hasOwn(defaultWorkbenchExtensionManifest.contributes, "commands")).toBe(false);
   });
 
   it("hides unavailable native and workspace-only actions in browser context", () => {

@@ -2,6 +2,7 @@ export * from "./attachments";
 export * from "./commands";
 export * from "./configuration";
 export * from "./contextKeys";
+export * from "./extensions";
 export * from "./exports";
 export * from "./files";
 export * from "./indexing";

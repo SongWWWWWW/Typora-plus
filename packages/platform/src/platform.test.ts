@@ -5,6 +5,7 @@ import {
   ConfigurationService,
   ContextKeyExpr,
   ContextKeyService,
+  ExtensionService,
   FileSaveConflictError,
   ExportService,
   NativeFileService,
@@ -402,6 +403,166 @@ describe("menus", () => {
     contextKeyService.setValue("unrelated", true);
 
     expect(changedMenus).toEqual(["titlebar.primary", "activitybar.primary"]);
+  });
+});
+
+describe("extensions", () => {
+  it("registers manifest commands, menus, and keybindings", () => {
+    const { commandService, extensionService, keybindingService, menuService } = createExtensionServices();
+
+    extensionService.registerExtension({
+      id: "notes.tools",
+      displayName: "Notes Tools",
+      contributes: {
+        commands: [
+          {
+            command: "notes.insertDate",
+            title: "Insert Date",
+            category: "Notes"
+          }
+        ],
+        menus: [
+          {
+            id: "titlebar.notes.insertDate",
+            menu: "titlebar.primary",
+            command: "notes.insertDate",
+            title: "Insert Date",
+            icon: "calendar",
+            group: "20_notes",
+            order: 10
+          }
+        ],
+        keybindings: [
+          {
+            command: "notes.insertDate",
+            keybinding: { key: "d", primary: true },
+            weight: 20
+          }
+        ]
+      }
+    });
+
+    expect(extensionService.getExtensions().map((extension) => extension.id)).toEqual(["notes.tools"]);
+    expect(commandService.getCommands().map((command) => ({
+      id: command.id,
+      title: command.title,
+      category: command.category
+    }))).toEqual([
+      { id: "notes.insertDate", title: "Insert Date", category: "Notes" }
+    ]);
+    expect(menuService.getMenuItems("titlebar.primary").map((item) => item.command)).toEqual(["notes.insertDate"]);
+    expect(keybindingService.resolve({ key: "d", ctrlKey: true })).toBe("notes.insertDate");
+    expect(() => commandService.executeCommand("notes.insertDate")).toThrow("No handler registered");
+  });
+
+  it("parses manifest menu when clauses through context keys", () => {
+    const { contextKeyService, extensionService, menuService } = createExtensionServices();
+
+    extensionService.registerExtension({
+      id: "notes.workspace",
+      contributes: {
+        menus: [
+          {
+            id: "activitybar.notes.workspace",
+            menu: "activitybar.primary",
+            command: "notes.workspace",
+            title: "Workspace Notes",
+            when: "workspace.open && activeResource.scheme == file"
+          }
+        ]
+      }
+    });
+
+    expect(menuService.getMenuItems("activitybar.primary")).toEqual([]);
+
+    contextKeyService.setValue("workspace.open", true);
+    contextKeyService.setValue("activeResource.scheme", "file");
+
+    expect(menuService.getMenuItems("activitybar.primary").map((item) => item.command)).toEqual(["notes.workspace"]);
+  });
+
+  it("unregisters all manifest contributions through the returned disposable", () => {
+    const { commandService, extensionService, keybindingService, menuService } = createExtensionServices();
+    const disposable = extensionService.registerExtension({
+      id: "notes.cleanup",
+      contributes: {
+        commands: [
+          {
+            command: "notes.cleanup",
+            title: "Cleanup Notes"
+          }
+        ],
+        menus: [
+          {
+            id: "titlebar.notes.cleanup",
+            menu: "titlebar.primary",
+            command: "notes.cleanup"
+          }
+        ],
+        keybindings: [
+          {
+            command: "notes.cleanup",
+            keybinding: { key: "x", primary: true }
+          }
+        ]
+      }
+    });
+
+    disposable.dispose();
+
+    expect(extensionService.getExtensions()).toEqual([]);
+    expect(commandService.getCommands()).toEqual([]);
+    expect(menuService.getMenuItems("titlebar.primary")).toEqual([]);
+    expect(keybindingService.resolve({ key: "x", ctrlKey: true })).toBeUndefined();
+    expect(() => commandService.executeCommand("notes.cleanup")).toThrow("Unknown command");
+  });
+
+  it("rejects duplicate extension ids", () => {
+    const { extensionService } = createExtensionServices();
+
+    extensionService.registerExtension({ id: "notes.duplicate" });
+
+    expect(() => extensionService.registerExtension({ id: "notes.duplicate" }))
+      .toThrow("Extension already registered");
+    expect(extensionService.getExtensions().map((extension) => extension.id)).toEqual(["notes.duplicate"]);
+  });
+
+  it("rejects invalid manifest contributions without partial registration", () => {
+    const { commandService, extensionService } = createExtensionServices();
+
+    expect(() => extensionService.registerExtension({
+      id: "notes.invalid",
+      contributes: {
+        commands: [
+          {
+            command: "notes.partial",
+            title: "Partial"
+          }
+        ],
+        menus: [
+          {
+            id: "titlebar.notes.invalid",
+            menu: "titlebar.primary",
+            command: "notes.partial",
+            when: "workspace.open &&"
+          }
+        ]
+      }
+    })).toThrow("Invalid menu when clause");
+    expect(commandService.getCommands()).toEqual([]);
+    expect(extensionService.getExtensions()).toEqual([]);
+
+    expect(() => extensionService.registerExtension({
+      id: "notes.invalid-command",
+      contributes: {
+        commands: [
+          {
+            command: "",
+            title: "Missing Command"
+          }
+        ]
+      }
+    })).toThrow("Command contribution id");
   });
 });
 
@@ -1596,6 +1757,23 @@ function createFileEntry(path: string, name: string, relativePath: string): File
     name,
     relativePath,
     kind: "file"
+  };
+}
+
+function createExtensionServices() {
+  const serviceCollection = new ServiceCollection();
+  const commandService = new CommandService(serviceCollection);
+  const contextKeyService = new ContextKeyService();
+  const menuService = new MenuService(contextKeyService);
+  const keybindingService = new KeybindingService();
+  const extensionService = new ExtensionService(commandService, menuService, keybindingService);
+
+  return {
+    commandService,
+    contextKeyService,
+    extensionService,
+    keybindingService,
+    menuService
   };
 }
 
