@@ -76,13 +76,10 @@ export class ExtensionService extends Disposable implements IExtensionService {
 
     try {
       for (const command of normalizedManifest.contributes.commands) {
-        disposables.add(this.commandService.registerCommand({
+        disposables.add(this.commandService.registerCommandMetadata({
           id: command.command,
           title: command.title,
-          ...(command.category ? { category: command.category } : {}),
-          run: () => {
-            throw new Error(`No handler registered for extension command: ${command.command}`);
-          }
+          ...(command.category ? { category: command.category } : {})
         }));
       }
 

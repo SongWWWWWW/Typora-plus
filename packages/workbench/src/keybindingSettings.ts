@@ -1,4 +1,4 @@
-import { keybindingEquals, type Command, type Keybinding, type UserKeybindingRule } from "@typora-plus/platform";
+import { keybindingEquals, type CommandMetadata, type Keybinding, type UserKeybindingRule } from "@typora-plus/platform";
 
 export function upsertKeybindingOverride(
   overrides: readonly UserKeybindingRule[],
@@ -25,15 +25,15 @@ export function isRecordableKeybinding(keybinding: Keybinding): boolean {
 }
 
 export function filterKeybindingCommands(
-  commands: readonly Command[],
+  commands: readonly CommandMetadata[],
   query: string,
   options: {
-    readonly modifiedOnly?: boolean;
-    readonly getLabel?: (command: Command) => string | undefined;
+    readonly getLabel?: (command: CommandMetadata) => string | undefined;
     readonly overrides?: readonly UserKeybindingRule[];
+    readonly modifiedOnly?: boolean;
     readonly unassignedLabel?: string;
   } = {}
-): readonly Command[] {
+): readonly CommandMetadata[] {
   const queryTerms = normalizeSearchTerms(query);
   const modifiedCommands = new Set((options.overrides ?? []).map((override) => override.command));
   const unassignedLabel = options.unassignedLabel ?? "Unassigned";

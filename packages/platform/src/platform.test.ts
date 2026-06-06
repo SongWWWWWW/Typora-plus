@@ -223,6 +223,75 @@ describe("commands", () => {
     });
 
     expect(commandService.executeCommand("test.echo", "ok")).toBe("ok");
+    expect(commandService.getCommands()).toEqual([
+      { id: "test.echo", title: "Echo" }
+    ]);
+  });
+
+  it("separates command metadata from command handlers", () => {
+    const services = new ServiceCollection();
+    const commandService = new CommandService(services);
+
+    const metadataDisposable = commandService.registerCommandMetadata({
+      id: "test.metadata",
+      title: "Metadata Command",
+      category: "Tests"
+    });
+
+    expect(commandService.getCommands()).toEqual([
+      { id: "test.metadata", title: "Metadata Command", category: "Tests" }
+    ]);
+    expect(() => commandService.executeCommand("test.metadata")).toThrow("No command handler registered");
+
+    const handlerDisposable = commandService.registerCommand({
+      id: "test.metadata",
+      title: "Runtime Title",
+      run: () => "handled"
+    });
+
+    expect(commandService.getCommands()).toEqual([
+      { id: "test.metadata", title: "Metadata Command", category: "Tests" }
+    ]);
+    expect(commandService.executeCommand("test.metadata")).toBe("handled");
+
+    handlerDisposable.dispose();
+
+    expect(commandService.getCommands()).toEqual([
+      { id: "test.metadata", title: "Metadata Command", category: "Tests" }
+    ]);
+    expect(() => commandService.executeCommand("test.metadata")).toThrow("No command handler registered");
+
+    metadataDisposable.dispose();
+
+    expect(commandService.getCommands()).toEqual([]);
+    expect(() => commandService.executeCommand("test.metadata")).toThrow("Unknown command");
+  });
+
+  it("rejects duplicate command metadata and handlers independently", () => {
+    const services = new ServiceCollection();
+    const commandService = new CommandService(services);
+
+    commandService.registerCommandMetadata({
+      id: "test.duplicate",
+      title: "Duplicate"
+    });
+
+    expect(() => commandService.registerCommandMetadata({
+      id: "test.duplicate",
+      title: "Duplicate Again"
+    })).toThrow("Command metadata already registered");
+
+    commandService.registerCommand({
+      id: "test.duplicate",
+      title: "Duplicate Handler",
+      run: () => undefined
+    });
+
+    expect(() => commandService.registerCommand({
+      id: "test.duplicate",
+      title: "Second Handler",
+      run: () => undefined
+    })).toThrow("Command already registered");
   });
 });
 
@@ -407,7 +476,7 @@ describe("menus", () => {
 });
 
 describe("extensions", () => {
-  it("registers manifest commands, menus, and keybindings", () => {
+  it("registers manifest command metadata, menus, and keybindings", () => {
     const { commandService, extensionService, keybindingService, menuService } = createExtensionServices();
 
     extensionService.registerExtension({
@@ -452,7 +521,7 @@ describe("extensions", () => {
     ]);
     expect(menuService.getMenuItems("titlebar.primary").map((item) => item.command)).toEqual(["notes.insertDate"]);
     expect(keybindingService.resolve({ key: "d", ctrlKey: true })).toBe("notes.insertDate");
-    expect(() => commandService.executeCommand("notes.insertDate")).toThrow("No handler registered");
+    expect(() => commandService.executeCommand("notes.insertDate")).toThrow("No command handler registered");
   });
 
   it("parses manifest menu when clauses through context keys", () => {

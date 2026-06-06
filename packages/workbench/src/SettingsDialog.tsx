@@ -1,5 +1,5 @@
 import { keybindingFromEvent } from "@typora-plus/platform";
-import type { Command, Keybinding, PartialConfiguration, TyporaPlusConfiguration } from "@typora-plus/platform";
+import type { CommandMetadata, Keybinding, PartialConfiguration, TyporaPlusConfiguration } from "@typora-plus/platform";
 import { Search, Settings as SettingsIcon, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
@@ -35,7 +35,7 @@ export function SettingsDialog({
 }: {
   readonly open: boolean;
   readonly configuration: TyporaPlusConfiguration;
-  readonly commands: readonly Command[];
+  readonly commands: readonly CommandMetadata[];
   readonly getCommandForKeybinding: (keybinding: Keybinding) => string | undefined;
   readonly getKeybindingLabel: (command: string) => string | undefined;
   readonly getKeybindingLabelForKeybinding: (keybinding: Keybinding) => string;
@@ -563,7 +563,7 @@ function applyKeybindingOverride(
   });
 }
 
-function commandTitle(commands: readonly Command[], id: string): string {
+function commandTitle(commands: readonly CommandMetadata[], id: string): string {
   return commands.find((command) => command.id === id)?.title ?? id;
 }
 
