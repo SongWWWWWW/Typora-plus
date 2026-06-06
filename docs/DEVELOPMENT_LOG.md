@@ -595,3 +595,35 @@ Known limitations:
 - Table editing is limited to inserting a row below and inserting a column to the right.
 - Alignment menus, row/column deletion, and cell-level editing remain future work.
 - Escaped pipe parsing still depends on the planned parser-backed position mapping pass.
+
+## 2026-06-06 - P2 Table Alignment Controls
+
+Completed:
+
+- Added per-column alignment controls to inactive table preview headers.
+- Added a stable alignment cycle: auto, left, center, right.
+- Added pure Markdown table transformation helpers for updating delimiter alignment cells.
+- Reused the full-table re-read and replacement path so alignment changes do not depend on the current visible range.
+- Added focused tests for alignment cycling, delimiter rewriting, content preservation, and out-of-range column clamping.
+
+Quality gate:
+
+- `npm run verify`: passed
+- `npm test`: passed, 67 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- Production browser preview: passed at `http://127.0.0.1:4173`
+- Browser interaction check: first-column alignment button rewrote `---` to `:---`
+- Desktop 1280px and mobile 390px checks: passed without horizontal overflow or console errors
+
+Review:
+
+- Alignment behavior remains a pure editor-layer Markdown transformation.
+- Workbench, platform, and file services still do not parse or mutate table syntax.
+- The plain Markdown table remains the source of truth; controls dispatch CodeMirror text edits only.
+- Visual values use named editor constants and existing theme tokens.
+
+Known limitations:
+
+- Alignment controls cycle state by clicking each header button; there is no expanded alignment menu yet.
+- Row/column deletion and direct cell editing remain future work.
+- Escaped pipe parsing still depends on the planned parser-backed position mapping pass.
