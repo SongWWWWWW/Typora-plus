@@ -119,3 +119,35 @@ Known limitations:
 
 - Recent workspaces are not directly reopenable until trusted recent paths move to the main process.
 - File watcher and conflict prompts remain pending.
+
+## 2026-06-06 - P2 Watcher and Save Conflict Handling
+
+Completed:
+
+- Added workspace file watcher events in the Electron main process.
+- Added a safe preload subscription for workspace file tree changes.
+- Updated `IFileService` so native workspace changes flow through the existing service event.
+- Updated Workbench workspace state to refresh from file service events.
+- Added mtime-based save conflict detection in the native write path.
+- Added text-file model disk mtime tracking for conflict-aware saves.
+- Added a compact save conflict dialog with reload and overwrite actions.
+- Added platform tests for native workspace change events and conflict-aware save behavior.
+
+Quality gate:
+
+- `npm run verify`: passed
+- `npm test`: passed, 18 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- Production browser preview: passed at `http://127.0.0.1:4173`
+
+Review:
+
+- File watching remains in the Electron main process; renderer code still receives only serialized workspace trees.
+- Save conflict checks happen in the restricted native write channel, not in Workbench UI code.
+- Conflict handling preserves dirty editor content until the user explicitly reloads or overwrites.
+- UI additions use existing theme tokens and stable modal dimensions.
+
+Known limitations:
+
+- Recent workspaces are still displayed as history only; trusted reopen remains a future native-main flow.
+- Automated native dialog interaction is still not covered by browser verification.

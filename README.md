@@ -26,6 +26,8 @@ P2 main progress is implemented:
 - pasted image attachment bridge and editor insertion path
 - persisted recent files and workspaces
 - active workspace refresh
+- workspace file watcher refresh events
+- save conflict detection with reload/overwrite handling
 
 ## Commands
 

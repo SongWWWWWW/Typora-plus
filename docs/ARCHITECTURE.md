@@ -39,9 +39,9 @@ Current services:
 
 - `IConfigurationService`: centralized appearance, editor, workspace defaults
 - `ICommandService`: command registration and execution
-- `ITextFileService`: active Markdown model, dirty state, save lifecycle
+- `ITextFileService`: active Markdown model, dirty state, conflict-aware save lifecycle
 - `IWorkspaceService`: workspace identity
-- `IFileService`: native workspace file tree, file open, save, save-as
+- `IFileService`: native workspace file tree, workspace change events, file open, save, save-as
 - `IAttachmentService`: pasted image persistence through a native bridge
 - `IRecentService`: persisted recent files and workspaces
 
