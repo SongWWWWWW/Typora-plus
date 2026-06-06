@@ -1569,3 +1569,34 @@ Review:
 Known limitations:
 
 - Quick Open non-empty file-row navigation still needs a browser regression with a mounted native workspace fixture.
+
+## 2026-06-06 - P2 Configurable Auto Save Delay
+
+Completed:
+
+- Added `editor.autoSaveDelayMs` to the persisted configuration model with a centralized default.
+- Removed the Workbench-level fixed auto-save delay and wired the save timer to configuration state.
+- Added an Auto Save Delay numeric setting with Settings search metadata and bounded UI constraints.
+- Added platform coverage for persisting and rejecting invalid auto-save delay values.
+- Added Workbench settings model coverage for delay search and numeric bounds.
+
+Quality gate:
+
+- `npm run test -- --run packages/platform/src/platform.test.ts packages/workbench/src/settingsModel.test.ts`: passed, 38 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 134 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed
+- Browser regression: Settings search for `save delay` showed only Auto Save Delay, changing 800 ms to 1250 ms updated the UI, reload preserved 1250 ms, and the value was restored to 800 ms afterward.
+- Desktop 1280px and mobile 390px viewport checks: the filtered Settings dialog fit within the viewport, had no horizontal overflow, and reported no console errors.
+
+Review:
+
+- Auto-save timing now belongs to `IConfigurationService`, matching the rule that behavior defaults should not sit in Workbench component constants.
+- `SettingsDialog` stays a coordinator; labels, search metadata, and numeric constraints are still in `settingsModel.ts`.
+- The timer effect includes the configured delay in its dependency list, so changing the setting reschedules pending auto-save work.
+- No new platform paths, theme colors, or documentation files were introduced.
+
+Known limitations:
+
+- Configuration sanitization accepts any positive stored delay; the Settings UI clamps normal user edits to 250-5000 ms.
