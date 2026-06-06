@@ -1414,3 +1414,34 @@ Known limitations:
 
 - The keybinding editor still records single-stroke shortcuts only; multi-step chord shortcuts remain future work.
 - Modified filtering is exact to persisted override commands; richer auditing such as showing shadowed defaults can be added later if the keybinding surface expands.
+
+## 2026-06-06 - P2 Settings Section Navigation
+
+Completed:
+
+- Added section navigation to the Settings dialog for Appearance, Editor, Workspace, and Keybindings.
+- Moved settings section metadata and stable anchors into `settingsModel.ts` so navigation and content use the same model.
+- Added scroll-to-section behavior and active-section synchronization when the settings content is scrolled manually.
+- Updated desktop layout to use a compact navigation rail and mobile layout to use a two-column section switcher without hidden horizontal scrolling.
+- Added focused Workbench model coverage for stable section definitions and unique section anchors.
+
+Quality gate:
+
+- `npm run test -- --run packages/workbench/src/settingsModel.test.ts`: passed, 5 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 124 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed
+- Browser regression: Settings rendered the section navigation, clicking Keybindings scrolled to the keybinding section, manual scroll synchronized the active navigation item, and no console errors were reported.
+- Desktop 1280px and mobile 390px viewport checks: dialog, navigation, content, keybinding search, and toolbar had no horizontal overflow.
+
+Review:
+
+- Section names and anchor IDs are centralized in the settings model instead of duplicated between navigation and content.
+- The dialog still writes preferences only through `IConfigurationService`; the new navigation is local UI state and does not touch persistence.
+- The layout keeps settings as one dialog contribution while making future sections easier to add without a long unstructured surface.
+- Mobile navigation keeps all four sections visible at once, avoiding hidden horizontal scroll and preserving the simple settings experience.
+
+Known limitations:
+
+- Section navigation is limited to the current top-level settings sections; nested settings groups can be introduced later if the settings surface grows.
