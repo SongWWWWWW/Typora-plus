@@ -22,6 +22,20 @@ export interface MarkdownCodeFenceLineState {
   readonly role: MarkdownCodeFenceLineRole;
 }
 
+export type MarkdownTableLineRole = "header" | "delimiter" | "body";
+
+export interface MarkdownTableLineState {
+  readonly first: boolean;
+  readonly last: boolean;
+  readonly line: number;
+  readonly role: MarkdownTableLineRole;
+}
+
+export interface MarkdownLineClassificationState {
+  readonly codeFenceRole?: MarkdownCodeFenceLineRole;
+  readonly tableState?: MarkdownTableLineState;
+}
+
 const syntaxMarkerDecoration = Decoration.mark({ class: "tp-editor-markdown-marker" });
 
 export function livePreviewExtension(configuration: MarkdownEditorConfiguration): Extension {
@@ -52,9 +66,10 @@ export function classifyMarkdownLine(
   text: string,
   active: boolean,
   focusMode: boolean,
-  codeFenceRole?: MarkdownCodeFenceLineRole
+  state: MarkdownLineClassificationState = {}
 ): string[] {
   const classes = ["tp-editor-line"];
+  const { codeFenceRole, tableState } = state;
 
   const heading = /^(#{1,6})\s+/.exec(text);
   if (heading?.[1]) {
@@ -71,6 +86,18 @@ export function classifyMarkdownLine(
 
   if (codeFenceRole) {
     classes.push("tp-editor-code-block", `tp-editor-code-block-${codeFenceRole}`);
+  }
+
+  if (tableState) {
+    classes.push("tp-editor-table-row", `tp-editor-table-${tableState.role}`);
+
+    if (tableState.first) {
+      classes.push("tp-editor-table-first");
+    }
+
+    if (tableState.last) {
+      classes.push("tp-editor-table-last");
+    }
   }
 
   if (active) {
@@ -111,6 +138,39 @@ export function analyzeMarkdownCodeFenceLines(lines: readonly string[]): readonl
   return states;
 }
 
+export function analyzeMarkdownTableLines(lines: readonly string[]): readonly MarkdownTableLineState[] {
+  const states: MarkdownTableLineState[] = [];
+  let activeFence: string | undefined;
+  let lineNumber = 1;
+
+  while (lineNumber <= lines.length) {
+    const text = lines[lineNumber - 1] ?? "";
+
+    if (activeFence) {
+      activeFence = nextFenceState(text, activeFence);
+      lineNumber += 1;
+      continue;
+    }
+
+    activeFence = nextFenceState(text, activeFence);
+    if (activeFence) {
+      lineNumber += 1;
+      continue;
+    }
+
+    const table = readMarkdownTable(lines, lineNumber);
+    if (!table) {
+      lineNumber += 1;
+      continue;
+    }
+
+    states.push(...table.states);
+    lineNumber = table.nextLine;
+  }
+
+  return states;
+}
+
 export function findInactiveMarkdownSyntaxMarkers(text: string, active: boolean): readonly MarkdownSyntaxMarkerRange[] {
   if (active) {
     return [];
@@ -129,17 +189,23 @@ function buildDecorations(view: EditorView, configuration: MarkdownEditorConfigu
   const builder = new RangeSetBuilder<Decoration>();
   const activeLine = view.state.doc.lineAt(view.state.selection.main.head).number;
   const codeFenceLineRoles = analyzeVisibleCodeFenceLines(view);
+  const tableLineStates = analyzeVisibleTableLines(view);
 
   for (const range of view.visibleRanges) {
     let position = range.from;
 
     while (position <= range.to) {
       const line = view.state.doc.lineAt(position);
+      const codeFenceRole = codeFenceLineRoles.get(line.number);
+      const tableState = tableLineStates.get(line.number);
       const classes = classifyMarkdownLine(
         line.text,
         line.number === activeLine,
         configuration.focusMode,
-        codeFenceLineRoles.get(line.number)
+        {
+          ...(codeFenceRole ? { codeFenceRole } : {}),
+          ...(tableState ? { tableState } : {})
+        }
       );
 
       builder.add(line.from, line.from, Decoration.line({ class: classes.join(" ") }));
@@ -196,6 +262,52 @@ function analyzeVisibleCodeFenceLines(view: EditorView): ReadonlyMap<number, Mar
   return roles;
 }
 
+function analyzeVisibleTableLines(view: EditorView): ReadonlyMap<number, MarkdownTableLineState> {
+  const states = new Map<number, MarkdownTableLineState>();
+  const visibleLineRanges = view.visibleRanges.map((range) => ({
+    first: view.state.doc.lineAt(range.from).number,
+    last: view.state.doc.lineAt(range.to).number
+  }));
+  const lastVisibleLine = Math.max(...visibleLineRanges.map((range) => range.last));
+  const isVisible = (lineNumber: number): boolean =>
+    visibleLineRanges.some((range) => lineNumber >= range.first && lineNumber <= range.last);
+
+  let activeFence: string | undefined;
+  let lineNumber = 1;
+
+  while (lineNumber <= lastVisibleLine) {
+    const text = view.state.doc.line(lineNumber).text;
+
+    if (activeFence) {
+      activeFence = nextFenceState(text, activeFence);
+      lineNumber += 1;
+      continue;
+    }
+
+    activeFence = nextFenceState(text, activeFence);
+    if (activeFence) {
+      lineNumber += 1;
+      continue;
+    }
+
+    const table = readMarkdownTableFromDocument(view, lineNumber, lastVisibleLine + 1);
+    if (!table) {
+      lineNumber += 1;
+      continue;
+    }
+
+    for (const state of table.states) {
+      if (isVisible(state.line)) {
+        states.set(state.line, state);
+      }
+    }
+
+    lineNumber = table.nextLine;
+  }
+
+  return states;
+}
+
 function nextFenceState(text: string, activeFence: string | undefined): string | undefined {
   const marker = readOpeningFenceMarker(text);
 
@@ -219,6 +331,114 @@ function readOpeningFenceMarker(text: string): string | undefined {
 function readClosingFenceMarker(text: string): string | undefined {
   const match = /^\s{0,3}(`{3,}|~{3,})\s*$/.exec(text);
   return match?.[1];
+}
+
+interface MarkdownTableReadResult {
+  readonly nextLine: number;
+  readonly states: readonly MarkdownTableLineState[];
+}
+
+function readMarkdownTable(lines: readonly string[], lineNumber: number): MarkdownTableReadResult | undefined {
+  return readMarkdownTableFromSource({
+    lineCount: lines.length,
+    readLine: (currentLine) => lines[currentLine - 1] ?? "",
+    startLine: lineNumber
+  });
+}
+
+function readMarkdownTableFromDocument(
+  view: EditorView,
+  lineNumber: number,
+  lookaheadLimit: number
+): MarkdownTableReadResult | undefined {
+  return readMarkdownTableFromSource({
+    lineCount: view.state.doc.lines,
+    lookaheadLimit,
+    readLine: (currentLine) => view.state.doc.line(currentLine).text,
+    startLine: lineNumber
+  });
+}
+
+function readMarkdownTableFromSource(source: {
+  readonly lineCount: number;
+  readonly lookaheadLimit?: number;
+  readonly readLine: (lineNumber: number) => string;
+  readonly startLine: number;
+}): MarkdownTableReadResult | undefined {
+  if (source.startLine + 1 > source.lineCount) {
+    return undefined;
+  }
+
+  const headerCells = readMarkdownTableCells(source.readLine(source.startLine));
+  const delimiterCells = readMarkdownTableDelimiterCells(source.readLine(source.startLine + 1));
+
+  if (
+    !headerCells ||
+    !delimiterCells ||
+    headerCells.length !== delimiterCells.length ||
+    !headerCells.some((cell) => cell.length > 0)
+  ) {
+    return undefined;
+  }
+
+  const rows: Array<Pick<MarkdownTableLineState, "line" | "role">> = [
+    { line: source.startLine, role: "header" },
+    { line: source.startLine + 1, role: "delimiter" }
+  ];
+  let nextLine = source.startLine + 2;
+  let tableContinuesAfterLookahead = false;
+
+  while (nextLine <= source.lineCount) {
+    if (source.lookaheadLimit !== undefined && nextLine > source.lookaheadLimit) {
+      tableContinuesAfterLookahead = isMarkdownTableBodyRow(source.readLine(nextLine), delimiterCells.length);
+      break;
+    }
+
+    if (!isMarkdownTableBodyRow(source.readLine(nextLine), delimiterCells.length)) {
+      break;
+    }
+
+    rows.push({ line: nextLine, role: "body" });
+    nextLine += 1;
+  }
+
+  return {
+    nextLine,
+    states: rows.map((row, index) => ({
+      ...row,
+      first: index === 0,
+      last: index === rows.length - 1 && !tableContinuesAfterLookahead
+    }))
+  };
+}
+
+function isMarkdownTableBodyRow(text: string, columnCount: number): boolean {
+  const cells = readMarkdownTableCells(text);
+  return Boolean(cells && cells.length === columnCount && !readMarkdownTableDelimiterCells(text));
+}
+
+function readMarkdownTableDelimiterCells(text: string): readonly string[] | undefined {
+  const cells = readMarkdownTableCells(text);
+
+  if (!cells || !cells.every((cell) => /^:?-{3,}:?$/.test(cell))) {
+    return undefined;
+  }
+
+  return cells;
+}
+
+function readMarkdownTableCells(text: string): readonly string[] | undefined {
+  const trimmed = text.trim();
+
+  if (!trimmed.includes("|")) {
+    return undefined;
+  }
+
+  const withoutLeadingPipe = trimmed.startsWith("|") ? trimmed.slice(1) : trimmed;
+  const normalized = withoutLeadingPipe.endsWith("|") ? withoutLeadingPipe.slice(0, -1) : withoutLeadingPipe;
+  const cells = normalized.split("|").map((cell) => cell.trim());
+
+  return cells.length >= 2 ? cells : undefined;
 }
 
 function collectBlockMarkers(text: string, ranges: MarkdownSyntaxMarkerRange[]): void {
@@ -397,6 +617,34 @@ function markdownEditorTheme(configuration: MarkdownEditorConfiguration): Extens
     },
     ".tp-editor-code-block-content": {
       color: "var(--tp-color-text-muted)"
+    },
+    ".tp-editor-table-row": {
+      backgroundColor: "var(--tp-color-table-row)",
+      borderLeft: "3px solid var(--tp-color-table-border)",
+      paddingLeft: "12px",
+      paddingRight: "12px"
+    },
+    ".tp-editor-table-header": {
+      backgroundColor: "var(--tp-color-table-header)",
+      color: "var(--tp-color-text)",
+      fontWeight: "650"
+    },
+    ".tp-editor-table-delimiter": {
+      color: "var(--tp-color-text-soft)",
+      fontSize: "0.92em"
+    },
+    ".tp-editor-table-body": {
+      color: "var(--tp-color-text-muted)"
+    },
+    ".tp-editor-table-first": {
+      borderTopLeftRadius: "var(--tp-radius-control)",
+      borderTopRightRadius: "var(--tp-radius-control)",
+      paddingTop: "4px"
+    },
+    ".tp-editor-table-last": {
+      borderBottomLeftRadius: "var(--tp-radius-control)",
+      borderBottomRightRadius: "var(--tp-radius-control)",
+      paddingBottom: "4px"
     },
     ".tp-editor-markdown-marker": {
       color: "var(--tp-color-text-soft)",

@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { analyzeMarkdownCodeFenceLines, classifyMarkdownLine, findInactiveMarkdownSyntaxMarkers } from "./index";
+import {
+  analyzeMarkdownCodeFenceLines,
+  analyzeMarkdownTableLines,
+  classifyMarkdownLine,
+  findInactiveMarkdownSyntaxMarkers
+} from "./index";
 
 describe("classifyMarkdownLine", () => {
   it("classifies headings by level", () => {
@@ -15,7 +20,19 @@ describe("classifyMarkdownLine", () => {
   });
 
   it("adds code block role classes when a fence state is present", () => {
-    expect(classifyMarkdownLine("const value = 1", false, false, "content")).toContain("tp-editor-code-block-content");
+    expect(classifyMarkdownLine("const value = 1", false, false, { codeFenceRole: "content" })).toContain(
+      "tp-editor-code-block-content"
+    );
+  });
+
+  it("adds table role and edge classes when a table state is present", () => {
+    expect(classifyMarkdownLine("| A | B |", false, false, {
+      tableState: { first: true, last: false, line: 1, role: "header" }
+    })).toEqual(expect.arrayContaining([
+      "tp-editor-table-row",
+      "tp-editor-table-header",
+      "tp-editor-table-first"
+    ]));
   });
 });
 
@@ -54,6 +71,45 @@ describe("analyzeMarkdownCodeFenceLines", () => {
       { line: 2, role: "content" },
       { line: 3, role: "close" }
     ]);
+  });
+});
+
+describe("analyzeMarkdownTableLines", () => {
+  it("marks header, delimiter, and body rows with block edges", () => {
+    expect(analyzeMarkdownTableLines([
+      "before",
+      "| Name | Value |",
+      "| --- | ---: |",
+      "| Alpha | 1 |",
+      "| Beta | 2 |",
+      "after"
+    ])).toEqual([
+      { first: true, last: false, line: 2, role: "header" },
+      { first: false, last: false, line: 3, role: "delimiter" },
+      { first: false, last: false, line: 4, role: "body" },
+      { first: false, last: true, line: 5, role: "body" }
+    ]);
+  });
+
+  it("supports tables without outer pipes", () => {
+    expect(analyzeMarkdownTableLines([
+      "Name | Value",
+      "--- | ---",
+      "Alpha | 1"
+    ])).toEqual([
+      { first: true, last: false, line: 1, role: "header" },
+      { first: false, last: false, line: 2, role: "delimiter" },
+      { first: false, last: true, line: 3, role: "body" }
+    ]);
+  });
+
+  it("does not mark table-like lines inside code fences", () => {
+    expect(analyzeMarkdownTableLines([
+      "```",
+      "| Name | Value |",
+      "| --- | --- |",
+      "```"
+    ])).toEqual([]);
   });
 });
 

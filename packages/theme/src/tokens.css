@@ -13,6 +13,9 @@
   --tp-color-accent-strong: #12615a;
   --tp-color-code-block: #eef1ec;
   --tp-color-code-block-border: #c8d0c2;
+  --tp-color-table-row: #f4f6f1;
+  --tp-color-table-header: #e9eee5;
+  --tp-color-table-border: #cbd5c2;
   --tp-color-selection: #cde9e4;
   --tp-color-warning: #9a6a10;
   --tp-color-danger: #a43e42;
@@ -41,6 +44,9 @@
   --tp-color-accent-strong: #8cd3c7;
   --tp-color-code-block: #242821;
   --tp-color-code-block-border: #46503f;
+  --tp-color-table-row: #22261f;
+  --tp-color-table-header: #2b3028;
+  --tp-color-table-border: #4a5544;
   --tp-color-selection: #264e49;
   --tp-color-warning: #d8ad4d;
   --tp-color-danger: #e07d80;
