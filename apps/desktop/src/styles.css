@@ -946,6 +946,7 @@ button {
 }
 
 .tp-settings-text-input,
+.tp-settings-select,
 .tp-settings-number-input {
   width: 100%;
   min-width: 0;
@@ -957,7 +958,8 @@ button {
   color: var(--tp-color-text);
 }
 
-.tp-settings-text-input {
+.tp-settings-text-input,
+.tp-settings-select {
   padding: 0 9px;
 }
 
@@ -988,6 +990,7 @@ button {
 }
 
 .tp-settings-text-input:focus,
+.tp-settings-select:focus,
 .tp-settings-number-input:focus {
   border-color: var(--tp-color-accent);
 }

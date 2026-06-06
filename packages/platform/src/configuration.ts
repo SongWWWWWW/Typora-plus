@@ -14,6 +14,7 @@ export interface TyporaPlusConfiguration {
   readonly appearance: {
     readonly colorScheme: ColorSchemePreference;
     readonly density: "comfortable" | "compact";
+    readonly themeId?: string;
   };
   readonly editor: {
     readonly fontSize: number;
@@ -33,6 +34,11 @@ export interface TyporaPlusConfiguration {
     readonly overrides: readonly UserKeybindingRule[];
   };
 }
+
+export type PartialAppearanceConfiguration =
+  Omit<Partial<TyporaPlusConfiguration["appearance"]>, "themeId"> & {
+    readonly themeId?: string | undefined;
+  };
 
 export interface ConfigurationStorage {
   read(key: string): string | undefined;
@@ -57,7 +63,7 @@ export interface IConfigurationService {
 }
 
 export type PartialConfiguration = {
-  readonly appearance?: Partial<TyporaPlusConfiguration["appearance"]>;
+  readonly appearance?: PartialAppearanceConfiguration;
   readonly editor?: Partial<TyporaPlusConfiguration["editor"]>;
   readonly workspace?: Partial<TyporaPlusConfiguration["workspace"]>;
   readonly keybindings?: Partial<TyporaPlusConfiguration["keybindings"]>;
@@ -155,10 +161,7 @@ export function mergeConfiguration(
   value: PartialConfiguration
 ): TyporaPlusConfiguration {
   return {
-    appearance: {
-      ...base.appearance,
-      ...value.appearance
-    },
+    appearance: mergeAppearanceConfiguration(base.appearance, value.appearance),
     editor: {
       ...base.editor,
       ...value.editor
@@ -174,6 +177,41 @@ export function mergeConfiguration(
   };
 }
 
+function mergeAppearanceConfiguration(
+  base: TyporaPlusConfiguration["appearance"],
+  value: PartialAppearanceConfiguration | undefined
+): TyporaPlusConfiguration["appearance"] {
+  if (!value) {
+    return base;
+  }
+
+  const next: {
+    colorScheme: ColorSchemePreference;
+    density: "comfortable" | "compact";
+    themeId?: string;
+  } = {
+    ...base
+  };
+
+  if (value.colorScheme) {
+    next.colorScheme = value.colorScheme;
+  }
+
+  if (value.density) {
+    next.density = value.density;
+  }
+
+  if ("themeId" in value) {
+    if (value.themeId) {
+      next.themeId = value.themeId;
+    } else {
+      delete next.themeId;
+    }
+  }
+
+  return next;
+}
+
 function sanitizePartialConfiguration(value: unknown): PartialConfiguration {
   if (!isRecord(value)) {
     return {};
@@ -187,11 +225,21 @@ function sanitizePartialConfiguration(value: unknown): PartialConfiguration {
   };
 }
 
-function sanitizeAppearanceConfiguration(value: Record<string, unknown>): Partial<TyporaPlusConfiguration["appearance"]> {
-  return {
+function sanitizeAppearanceConfiguration(value: Record<string, unknown>): PartialAppearanceConfiguration {
+  const appearance: {
+    colorScheme?: ColorSchemePreference;
+    density?: "comfortable" | "compact";
+    themeId?: string | undefined;
+  } = {
     ...(isColorSchemePreference(value.colorScheme) ? { colorScheme: value.colorScheme } : {}),
     ...(value.density === "comfortable" || value.density === "compact" ? { density: value.density } : {})
   };
+
+  if ("themeId" in value) {
+    appearance.themeId = isNonEmptyString(value.themeId) ? value.themeId.trim() : undefined;
+  }
+
+  return appearance;
 }
 
 function sanitizeEditorConfiguration(value: Record<string, unknown>): Partial<TyporaPlusConfiguration["editor"]> {

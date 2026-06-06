@@ -17,7 +17,7 @@ import type {
   WorkspaceState
 } from "@typora-plus/platform";
 import { isFileSaveConflictError } from "@typora-plus/platform";
-import { applyTheme, resolveThemeName } from "@typora-plus/theme";
+import { applyTheme, applyThemeTokens, resolveThemeName } from "@typora-plus/theme";
 import {
   AlertTriangle,
   Command as CommandIcon,
@@ -76,6 +76,7 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
   const [model, setModel] = useState<TextFileModel>(() => services.textFileService.openDefault());
   const [workspace, setWorkspace] = useState<WorkspaceState>(() => services.workspaceService.getWorkspace());
   const [recents, setRecents] = useState<readonly RecentResource[]>(() => services.recentService.getRecents());
+  const [themes, setThemes] = useState(() => services.themeService.getThemes());
   const [sideView, setSideView] = useState<SideView | null>("outline");
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [quickOpen, setQuickOpen] = useState(false);
@@ -141,6 +142,10 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
   }).dispose, [services]);
 
   useEffect(() => services.recentService.onDidChangeRecents(setRecents).dispose, [services]);
+
+  useEffect(() => services.themeService.onDidChangeThemes(() => {
+    setThemes(services.themeService.getThemes());
+  }).dispose, [services]);
 
   useEffect(() => services.indexService.onDidChangeStatus(setIndexStatus).dispose, [services]);
 
@@ -215,16 +220,21 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
 
     const media = window.matchMedia("(prefers-color-scheme: dark)");
     const syncTheme = () => {
+      const selectedTheme = configuration.appearance.themeId
+        ? services.themeService.getTheme(configuration.appearance.themeId)
+        : undefined;
+
       applyTheme(
         document.documentElement,
-        resolveThemeName(configuration.appearance.colorScheme, media.matches)
+        selectedTheme?.colorScheme ?? resolveThemeName(configuration.appearance.colorScheme, media.matches)
       );
+      applyThemeTokens(document.documentElement, selectedTheme?.tokens);
     };
 
     syncTheme();
     media.addEventListener("change", syncTheme);
     return () => media.removeEventListener("change", syncTheme);
-  }, [configuration.appearance.colorScheme]);
+  }, [configuration.appearance.colorScheme, configuration.appearance.themeId, services, themes]);
 
   useEffect(() => {
     const disposables = new DisposableStore();
@@ -602,6 +612,7 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
         open={settingsOpen}
         configuration={configuration}
         commands={services.commandService.getCommands()}
+        themes={themes}
         getCommandForKeybinding={(keybinding) => services.keybindingService.getCommandForKeybinding(keybinding)}
         getKeybindingLabel={(id) => services.keybindingService.getKeybindingLabel(id)}
         getKeybindingLabelForKeybinding={(keybinding) => services.keybindingService.getKeybindingLabelForKeybinding(keybinding)}

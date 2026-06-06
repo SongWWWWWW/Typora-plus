@@ -10,6 +10,7 @@ export type NumberSettingConstraint = ConfigurationNumberConstraint;
 export type SettingsSectionId = "appearance" | "editor" | "workspace" | "keybindings";
 export type SettingsEntryId =
   | "appearance.theme"
+  | "appearance.customTheme"
   | "appearance.density"
   | "editor.autoSave"
   | "editor.autoSaveDelay"
@@ -50,6 +51,7 @@ export const settingsSections = [
 
 export const settingsEntries = [
   { id: "appearance.theme", sectionId: "appearance", label: "Theme", keywords: ["color scheme", "system", "light", "dark"] },
+  { id: "appearance.customTheme", sectionId: "appearance", label: "Custom Theme", keywords: ["theme", "extension", "custom", "tokens"] },
   { id: "appearance.density", sectionId: "appearance", label: "Density", keywords: ["comfortable", "compact"] },
   { id: "editor.autoSave", sectionId: "editor", label: "Auto Save", keywords: ["autosave", "save"] },
   { id: "editor.autoSaveDelay", sectionId: "editor", label: "Auto Save Delay", keywords: ["autosave", "save", "delay", "debounce", "milliseconds"] },

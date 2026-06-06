@@ -1,5 +1,11 @@
 import { keybindingFromEvent } from "@typora-plus/platform";
-import type { CommandMetadata, Keybinding, PartialConfiguration, TyporaPlusConfiguration } from "@typora-plus/platform";
+import type {
+  CommandMetadata,
+  Keybinding,
+  PartialConfiguration,
+  RegisteredTheme,
+  TyporaPlusConfiguration
+} from "@typora-plus/platform";
 import { Search, Settings as SettingsIcon, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
@@ -27,6 +33,7 @@ export function SettingsDialog({
   open,
   configuration,
   commands,
+  themes,
   getCommandForKeybinding,
   getKeybindingLabel,
   getKeybindingLabelForKeybinding,
@@ -36,6 +43,7 @@ export function SettingsDialog({
   readonly open: boolean;
   readonly configuration: TyporaPlusConfiguration;
   readonly commands: readonly CommandMetadata[];
+  readonly themes: readonly RegisteredTheme[];
   readonly getCommandForKeybinding: (keybinding: Keybinding) => string | undefined;
   readonly getKeybindingLabel: (command: string) => string | undefined;
   readonly getKeybindingLabelForKeybinding: (keybinding: Keybinding) => string;
@@ -51,6 +59,9 @@ export function SettingsDialog({
   const [activeSettingsSection, setActiveSettingsSection] = useState<SettingsSectionId>("appearance");
   const settingsContentRef = useRef<HTMLDivElement | null>(null);
   const hasKeybindingOverrides = configuration.keybindings.overrides.length > 0;
+  const selectedThemeId = configuration.appearance.themeId && themes.some((theme) => theme.id === configuration.appearance.themeId)
+    ? configuration.appearance.themeId
+    : "";
   const searchMaxFileSizeMegabytes = bytesToMegabytes(configuration.workspace.searchMaxFileSizeBytes);
   const settingsSearchResult = useMemo(() => createSettingsSearchResult(settingsQuery), [settingsQuery]);
   const visibleSettingsSectionIds = useMemo(
@@ -292,6 +303,27 @@ export function SettingsDialog({
                       ]}
                       onChange={(colorScheme) => onUpdate({ appearance: { colorScheme } })}
                     />
+                  </SettingsField>
+                ) : null}
+                {isSettingsEntryVisible("appearance.customTheme") ? (
+                  <SettingsField label="Custom Theme">
+                    <select
+                      className="tp-settings-select"
+                      value={selectedThemeId}
+                      aria-label="Custom Theme"
+                      onChange={(event) => onUpdate({
+                        appearance: {
+                          themeId: event.target.value || undefined
+                        }
+                      })}
+                    >
+                      <option value="">Default</option>
+                      {themes.map((theme) => (
+                        <option key={theme.id} value={theme.id}>
+                          {formatThemeOptionLabel(theme)}
+                        </option>
+                      ))}
+                    </select>
                   </SettingsField>
                 ) : null}
                 {isSettingsEntryVisible("appearance.density") ? (
@@ -565,6 +597,10 @@ function applyKeybindingOverride(
 
 function commandTitle(commands: readonly CommandMetadata[], id: string): string {
   return commands.find((command) => command.id === id)?.title ?? id;
+}
+
+function formatThemeOptionLabel(theme: RegisteredTheme): string {
+  return theme.colorScheme ? `${theme.label} (${theme.colorScheme})` : theme.label;
 }
 
 function SettingsSection({

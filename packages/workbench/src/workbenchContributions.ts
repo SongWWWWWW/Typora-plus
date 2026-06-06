@@ -192,6 +192,44 @@ export const defaultWorkbenchExtensionManifest = {
         command: "file.exportHtml",
         keybinding: { key: "e", primary: true, shift: true }
       }
+    ],
+    themes: [
+      {
+        id: "typora-plus.theme.ink",
+        label: "Ink",
+        colorScheme: "dark",
+        tokens: {
+          "--tp-color-canvas": "#151611",
+          "--tp-color-surface": "#20231d",
+          "--tp-color-surface-muted": "#292e25",
+          "--tp-color-surface-raised": "#262a22",
+          "--tp-color-border": "#424a3a",
+          "--tp-color-border-strong": "#6e7a60",
+          "--tp-color-text": "#f1eee3",
+          "--tp-color-text-muted": "#beb9a6",
+          "--tp-color-text-soft": "#8d927e",
+          "--tp-color-accent": "#7cc6a4",
+          "--tp-color-accent-strong": "#a5dfc4",
+          "--tp-color-code-block": "#1a1d18",
+          "--tp-color-code-block-border": "#485240",
+          "--tp-color-code-toolbar": "#242a20",
+          "--tp-color-table-row": "#1c211b",
+          "--tp-color-table-header": "#262d23",
+          "--tp-color-table-border": "#4c5944",
+          "--tp-color-image-block": "#1b2222",
+          "--tp-color-image-block-border": "#445b57",
+          "--tp-color-image-preview": "#101716",
+          "--tp-color-math-block": "#1b2026",
+          "--tp-color-math-block-border": "#465665",
+          "--tp-color-math-inline": "#202d31",
+          "--tp-color-selection": "#2f5f50",
+          "--tp-color-warning": "#e0b65a",
+          "--tp-color-danger": "#e1787c",
+          "--tp-color-shadow": "rgba(0,0,0,0.36)",
+          "--tp-opacity-markdown-marker": "0.32",
+          "--tp-opacity-passive-line": "0.44"
+        }
+      }
     ]
   }
 } satisfies ExtensionManifest;

@@ -48,6 +48,7 @@ describe("settings model", () => {
       "workspace.searchMaxResults"
     ]);
     expect(createSettingsSearchResult("font").visibleEntries).toEqual(["editor.fontSize"]);
+    expect(createSettingsSearchResult("custom theme").visibleEntries).toEqual(["appearance.customTheme"]);
     expect(createSettingsSearchResult("save delay").visibleEntries).toEqual(["editor.autoSaveDelay"]);
     expect(createSettingsSearchResult("shortcut").visibleEntries).toEqual(["keybindings.editor"]);
     expect(createSettingsSearchResult("search limit").visibleEntries).toEqual([

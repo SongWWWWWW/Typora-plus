@@ -56,6 +56,14 @@ describe("workbench contributions", () => {
     expect(new Set(pairs).size).toBe(pairs.length);
   });
 
+  it("contributes built-in themes through Typora Plus tokens", () => {
+    const themes = defaultWorkbenchExtensionManifest.contributes.themes;
+
+    expect(themes.map((theme) => theme.id)).toEqual(["typora-plus.theme.ink"]);
+    expect(new Set(themes.map((theme) => theme.id)).size).toBe(themes.length);
+    expect(Object.keys(themes[0]?.tokens ?? {}).every((token) => token.startsWith("--tp-"))).toBe(true);
+  });
+
   it("keeps built-in workbench command handlers outside the manifest", () => {
     expect(Object.hasOwn(defaultWorkbenchExtensionManifest.contributes, "commands")).toBe(false);
   });

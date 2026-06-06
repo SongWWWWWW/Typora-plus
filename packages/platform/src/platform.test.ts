@@ -62,7 +62,8 @@ describe("configuration", () => {
 
     service.updateValue({
       appearance: {
-        colorScheme: "dark"
+        colorScheme: "dark",
+        themeId: "notes.focus"
       },
       editor: {
         focusMode: true,
@@ -76,9 +77,33 @@ describe("configuration", () => {
     });
 
     expect(restored.getValue().appearance.colorScheme).toBe("dark");
+    expect(restored.getValue().appearance.themeId).toBe("notes.focus");
     expect(restored.getValue().editor.focusMode).toBe(true);
     expect(restored.getValue().editor.autoSave).toBe(true);
     expect(restored.getValue().editor.autoSaveDelayMs).toBe(1250);
+  });
+
+  it("clears optional appearance theme ids", () => {
+    const service = new ConfigurationService({
+      storageKey: "configuration",
+      storage: createMemoryStorage()
+    });
+
+    service.updateValue({
+      appearance: {
+        themeId: "notes.focus"
+      }
+    });
+
+    expect(service.getValue().appearance.themeId).toBe("notes.focus");
+
+    service.updateValue({
+      appearance: {
+        themeId: undefined
+      }
+    });
+
+    expect(service.getValue().appearance.themeId).toBeUndefined();
   });
 
   it("ignores invalid stored configuration values", () => {
@@ -503,6 +528,10 @@ describe("menus", () => {
 describe("themes", () => {
   it("registers normalized themes and removes them through disposables", () => {
     const service = new ThemeService();
+    let changeCount = 0;
+    service.onDidChangeThemes(() => {
+      changeCount += 1;
+    });
     const disposable = service.registerTheme({
       id: " notes.focus ",
       label: " Focus Light ",
@@ -513,6 +542,7 @@ describe("themes", () => {
       }
     });
 
+    expect(changeCount).toBe(1);
     expect(service.getThemes()).toEqual([
       {
         id: "notes.focus",
@@ -537,6 +567,7 @@ describe("themes", () => {
 
     disposable.dispose();
 
+    expect(changeCount).toBe(2);
     expect(service.getThemes()).toEqual([]);
     expect(service.getTheme("notes.focus")).toBeUndefined();
   });

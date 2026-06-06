@@ -1,4 +1,4 @@
-import { toDisposable, type IDisposable } from "@typora-plus/base";
+import { Emitter, toDisposable, type Event, type IDisposable } from "@typora-plus/base";
 import { createServiceIdentifier } from "./instantiation";
 
 export type ThemeColorScheme = "light" | "dark";
@@ -13,6 +13,7 @@ export interface ThemeContribution {
 export interface RegisteredTheme extends ThemeContribution {}
 
 export interface IThemeService {
+  readonly onDidChangeThemes: Event<void>;
   registerTheme(theme: ThemeContribution): IDisposable;
   getThemes(): readonly RegisteredTheme[];
   getTheme(id: string): RegisteredTheme | undefined;
@@ -22,6 +23,9 @@ export const IThemeService = createServiceIdentifier<IThemeService>("theme");
 
 export class ThemeService implements IThemeService {
   private readonly themes = new Map<string, RegisteredTheme>();
+  private readonly onDidChangeThemesEmitter = new Emitter<void>();
+
+  readonly onDidChangeThemes = this.onDidChangeThemesEmitter.event;
 
   registerTheme(theme: ThemeContribution): IDisposable {
     const normalizedTheme = normalizeThemeContribution(theme);
@@ -31,10 +35,12 @@ export class ThemeService implements IThemeService {
     }
 
     this.themes.set(normalizedTheme.id, normalizedTheme);
+    this.onDidChangeThemesEmitter.fire();
 
     return toDisposable(() => {
       if (this.themes.get(normalizedTheme.id) === normalizedTheme) {
         this.themes.delete(normalizedTheme.id);
+        this.onDidChangeThemesEmitter.fire();
       }
     });
   }
