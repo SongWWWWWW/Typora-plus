@@ -827,4 +827,35 @@ Review:
 Known limitations:
 
 - Cell clicks select source text rather than editing inline inside the preview.
-- More complex Markdown table cases, such as inline code spans containing pipes, still depend on parser-backed position mapping.
+- More complex Markdown table cases beyond escaped pipes and inline code spans still depend on parser-backed position mapping.
+
+## 2026-06-06 - P2 Inline-Code-Aware Table Parsing
+
+Completed:
+
+- Made the shared Markdown table cell scanner ignore `|` separators inside inline code spans.
+- Reused the same range membership helper for inline math and table parsing to avoid duplicate boundary checks.
+- Preserved inline code cells containing pipes through table preview, source-cell navigation, column insertion, and column deletion.
+- Added focused tests for inline-code-aware table detection, non-table code-span pipes, source ranges, and column edits.
+
+Quality gate:
+
+- `npm run test -- --run packages/editor/src/livePreview.test.ts`: passed, 70 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 90 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed
+- Production browser preview: passed at `http://127.0.0.1:4173`
+- Browser interaction check: inline code cells such as `` `left | right` `` remained one table cell, source navigation selected the full code span, and column insertion preserved source text.
+- Desktop default viewport and mobile 390px checks: passed without page horizontal overflow or console errors.
+
+Review:
+
+- Table parsing remains isolated in `packages/editor`; no Workbench, platform, or Electron dependency was added.
+- The single scanner still feeds preview rendering, source navigation, and pure table transforms, keeping behavior consistent.
+- The Markdown source model remains unchanged; parsing improvements only affect editor decorations and transform helpers.
+- No new visual tokens, platform paths, or hard-coded behavior constants were introduced.
+
+Known limitations:
+
+- The scanner handles escaped pipes and inline code spans, but a full Markdown parser-backed mapping is still planned for deeper inline syntax cases.
