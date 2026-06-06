@@ -46,3 +46,9 @@ Known limitations:
 Next stage:
 
 - P2: native file workspace, file tree, quick open, real save/open flow, attachment/image paste service.
+
+Repository handoff:
+
+- Connected local project to `https://github.com/SongWWWWWW/Typora-plus.git`.
+- Pushed P0/P1 stage work to `main` as separate feature commits.
+- Future non-mainline work should use topic branches and pull requests after the main-stage milestone is complete.

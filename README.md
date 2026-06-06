@@ -46,3 +46,10 @@ Every stage must pass:
 - `npm audit --audit-level=moderate`
 
 Do not add user-facing behavior through scattered constants. Defaults belong in configuration, visual values belong in theme tokens, and platform behavior belongs behind services.
+
+## Git Workflow
+
+- Commit each completed feature or process milestone separately.
+- Keep `main` for reviewed stage progress.
+- After a main-stage milestone is complete, continue new work on topic branches such as `feature/native-workspace`.
+- Submit topic branch work through pull requests, review the changes before merge, and record meaningful stage outcomes in `docs/DEVELOPMENT_LOG.md`.
