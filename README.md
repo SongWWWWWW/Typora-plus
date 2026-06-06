@@ -47,6 +47,7 @@ P2 main progress is implemented:
 - persisted configuration service for appearance, editor, including auto-save delay, and workspace preferences, with platform-owned numeric constraints, stored-value clamping, Electron native storage, and browser fallback
 - workspace search and attachment settings are applied to platform services when preferences change
 - Settings preferences dialog with setting search and section navigation for appearance, editor, auto-save delay, workspace, and searchable keybinding options by command or shortcut label, including modified-only filtering, reset-all cleanup, and numeric controls derived from platform configuration bounds, opened from the activity bar, command palette, or `Ctrl+,`
+- HTML export embeds resolved workspace-relative images as data URLs through the platform resource service, while preserving safe fallback behavior when a resource cannot be resolved
 
 ## Commands
 

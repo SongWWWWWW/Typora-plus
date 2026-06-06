@@ -1823,3 +1823,35 @@ Review:
 Known limitations:
 
 - HTML export still preserves allowed relative image paths rather than embedding workspace images; richer asset handling remains future export-provider work.
+
+## 2026-06-07 - P2 HTML Export Workspace Images
+
+Completed:
+
+- Added an export image source resolver context to `IExportService` provider input.
+- Wired `ExportService` to inject the existing `IResourceService` resolver into export providers when available.
+- Updated the Markdown HTML export provider to pre-collect safe relative image tokens and embed resolved workspace images as data URLs.
+- Kept unsafe image targets dropped and unresolved local image sources on the previous safe fallback path.
+- Added platform and Markdown tests for resolver injection, data URL embedding, deduplicated image resolution, remote image non-resolution, and failed-resource fallback.
+
+Quality gate:
+
+- `npm run test -- --run packages/markdown/src/exportHtml.test.ts`: passed, 6 tests
+- `npm run test -- --run packages/platform/src/platform.test.ts`: passed, 40 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 150 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+
+Review:
+
+- Workbench still only triggers export; it does not parse Markdown, resolve image paths, or read local files.
+- Local resource reads remain behind `IResourceService` and the existing Electron main-process path, extension, traversal, and size checks.
+- The Markdown provider owns export rendering policy and caches resolved image sources per export, avoiding repeated reads for duplicate image references.
+- Missing or unreadable images do not block exporting the note, preserving a smooth fallback path.
+- No new documentation files, packages, UI surface, or hard-coded filesystem paths were introduced.
+
+Known limitations:
+
+- HTML export embeds images as data URLs, which is portable but not ideal for very large assets; a future export asset pipeline can add copied asset folders or streamed resource packaging behind the same provider boundary.
+- Native dialog export behavior remains covered by build and IPC contract tests rather than automated desktop dialog interaction.
