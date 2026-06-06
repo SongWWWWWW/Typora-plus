@@ -8,6 +8,8 @@ import {
   analyzeMarkdownTableLines,
   classifyMarkdownLine,
   createMarkdownTableEmptyBodyRow,
+  createMarkdownTableWithDeletedBodyRow,
+  createMarkdownTableWithDeletedColumn,
   createMarkdownTableWithInsertedColumn,
   createMarkdownTableWithUpdatedColumnAlignment,
   findInactiveMarkdownInlineMathRanges,
@@ -639,6 +641,100 @@ describe("Markdown table editing helpers", () => {
       alignment: "right",
       columnIndex: 99
     })).toEqual([
+      "| Name | Count |",
+      "| --- | ---: |",
+      "| Alpha | 1 |"
+    ]);
+  });
+
+  it("deletes the last body row while preserving table structure", () => {
+    const tableBlock = analyzeMarkdownLineBlocks([
+      "| Name | Count | Status |",
+      "| --- | ---: | :---: |",
+      "| Alpha | 1 | Ready |",
+      "| Beta | 2 | Hold |"
+    ]).find((state) => state.tableBlock)?.tableBlock;
+
+    expect(tableBlock).toBeDefined();
+    expect(createMarkdownTableWithDeletedBodyRow(tableBlock!)).toEqual([
+      "| Name | Count | Status |",
+      "| --- | ---: | :---: |",
+      "| Alpha | 1 | Ready |"
+    ]);
+  });
+
+  it("deletes a requested body row with a clamped row index", () => {
+    const tableBlock = analyzeMarkdownLineBlocks([
+      "| Name | Count |",
+      "| --- | ---: |",
+      "| Alpha | 1 |",
+      "| Beta | 2 |",
+      "| Gamma | 3 |"
+    ]).find((state) => state.tableBlock)?.tableBlock;
+
+    expect(tableBlock).toBeDefined();
+    expect(createMarkdownTableWithDeletedBodyRow(tableBlock!, { rowIndex: 99 })).toEqual([
+      "| Name | Count |",
+      "| --- | ---: |",
+      "| Alpha | 1 |",
+      "| Beta | 2 |"
+    ]);
+  });
+
+  it("keeps header and delimiter lines when deleting from a table without body rows", () => {
+    const tableBlock = analyzeMarkdownLineBlocks([
+      "| Name | Count |",
+      "| --- | ---: |"
+    ]).find((state) => state.tableBlock)?.tableBlock;
+
+    expect(tableBlock).toBeDefined();
+    expect(createMarkdownTableWithDeletedBodyRow(tableBlock!)).toEqual([
+      "| Name | Count |",
+      "| --- | ---: |"
+    ]);
+  });
+
+  it("deletes the last column while preserving remaining alignments and body cells", () => {
+    const tableBlock = analyzeMarkdownLineBlocks([
+      "| Name | Count | Status |",
+      "| :--- | ---: | :---: |",
+      "| Alpha | 1 | Ready |",
+      "| Beta | 2 | Hold |"
+    ]).find((state) => state.tableBlock)?.tableBlock;
+
+    expect(tableBlock).toBeDefined();
+    expect(createMarkdownTableWithDeletedColumn(tableBlock!)).toEqual([
+      "| Name | Count |",
+      "| :--- | ---: |",
+      "| Alpha | 1 |",
+      "| Beta | 2 |"
+    ]);
+  });
+
+  it("deletes a requested column index", () => {
+    const tableBlock = analyzeMarkdownLineBlocks([
+      "| Name | Count | Status |",
+      "| :--- | ---: | :---: |",
+      "| Alpha | 1 | Ready |"
+    ]).find((state) => state.tableBlock)?.tableBlock;
+
+    expect(tableBlock).toBeDefined();
+    expect(createMarkdownTableWithDeletedColumn(tableBlock!, { columnIndex: 1 })).toEqual([
+      "| Name | Status |",
+      "| :--- | :---: |",
+      "| Alpha | Ready |"
+    ]);
+  });
+
+  it("does not delete columns below the default minimum table width", () => {
+    const tableBlock = analyzeMarkdownLineBlocks([
+      "| Name | Count |",
+      "| --- | ---: |",
+      "| Alpha | 1 |"
+    ]).find((state) => state.tableBlock)?.tableBlock;
+
+    expect(tableBlock).toBeDefined();
+    expect(createMarkdownTableWithDeletedColumn(tableBlock!)).toEqual([
       "| Name | Count |",
       "| --- | ---: |",
       "| Alpha | 1 |"

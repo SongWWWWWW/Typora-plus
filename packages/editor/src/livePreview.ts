@@ -120,6 +120,7 @@ const syntaxMarkerDecoration = Decoration.mark({ class: "tp-editor-markdown-mark
 const previewCopyFeedbackDurationMs = 1200;
 const previewCopyButtonHeightPx = 24;
 const previewCopyButtonMinWidthPx = 54;
+const markdownTableMinimumColumnCount = 2;
 const mathPreviewBodyMinHeightPx = 38;
 const mathPreviewEstimatedHeight = 92;
 const mathPreviewMinHeightPx = 66;
@@ -132,7 +133,7 @@ const tablePreviewToolbarEstimatedHeight = 36;
 const tableAlignmentButtonHeightPx = 22;
 const tableAlignmentButtonMinWidthPx = 28;
 const tableToolButtonHeightPx = 24;
-const tableToolButtonMinWidthPx = 52;
+const tableToolButtonMinWidthPx = 38;
 
 export function livePreviewExtension(
   configuration: MarkdownEditorConfiguration,
@@ -280,9 +281,18 @@ export interface MarkdownTableColumnInsertionOptions {
   readonly columnIndex?: number;
 }
 
+export interface MarkdownTableBodyRowDeletionOptions {
+  readonly rowIndex?: number;
+}
+
 export interface MarkdownTableColumnAlignmentOptions {
   readonly alignment: MarkdownTableColumnAlignment;
   readonly columnIndex: number;
+}
+
+export interface MarkdownTableColumnDeletionOptions {
+  readonly columnIndex?: number;
+  readonly minimumColumnCount?: number;
 }
 
 export function createMarkdownTableEmptyBodyRow(columnCount: number): string {
@@ -323,13 +333,11 @@ export function createMarkdownTableWithInsertedColumn(
     "default"
   );
 
-  return [
-    serializeMarkdownTableRow(insertTableArrayItem(headerCells, columnIndex, "")),
-    serializeMarkdownTableDelimiterRow(alignments),
-    ...tableBlock.bodyRows.map((row) =>
-      serializeMarkdownTableRow(insertTableArrayItem(normalizeTableCells(row, columnCount), columnIndex, ""))
-    )
-  ];
+  return createMarkdownTableLines(
+    insertTableArrayItem(headerCells, columnIndex, ""),
+    alignments,
+    tableBlock.bodyRows.map((row) => insertTableArrayItem(normalizeTableCells(row, columnCount), columnIndex, ""))
+  );
 }
 
 export function createMarkdownTableWithUpdatedColumnAlignment(
@@ -345,11 +353,58 @@ export function createMarkdownTableWithUpdatedColumnAlignment(
     options.alignment
   );
 
-  return [
-    serializeMarkdownTableRow(headerCells),
-    serializeMarkdownTableDelimiterRow(alignments),
-    ...tableBlock.bodyRows.map((row) => serializeMarkdownTableRow(normalizeTableCells(row, columnCount)))
-  ];
+  return createMarkdownTableLines(
+    headerCells,
+    alignments,
+    tableBlock.bodyRows.map((row) => normalizeTableCells(row, columnCount))
+  );
+}
+
+export function createMarkdownTableWithDeletedBodyRow(
+  tableBlock: MarkdownTableBlockState,
+  options: MarkdownTableBodyRowDeletionOptions = {}
+): readonly string[] {
+  const columnCount = Math.max(1, tableBlock.headerCells.length);
+  const bodyRows = tableBlock.bodyRows.map((row) => normalizeTableCells(row, columnCount));
+
+  if (bodyRows.length === 0) {
+    return createMarkdownTableLines(
+      normalizeTableCells(tableBlock.headerCells, columnCount),
+      normalizeTableAlignments(tableBlock.alignments, columnCount),
+      bodyRows
+    );
+  }
+
+  const rowIndex = clampTableBodyRowIndex(options.rowIndex ?? bodyRows.length - 1, bodyRows.length);
+
+  return createMarkdownTableLines(
+    normalizeTableCells(tableBlock.headerCells, columnCount),
+    normalizeTableAlignments(tableBlock.alignments, columnCount),
+    bodyRows.filter((_, index) => index !== rowIndex)
+  );
+}
+
+export function createMarkdownTableWithDeletedColumn(
+  tableBlock: MarkdownTableBlockState,
+  options: MarkdownTableColumnDeletionOptions = {}
+): readonly string[] {
+  const columnCount = Math.max(1, tableBlock.headerCells.length);
+  const minimumColumnCount = Math.max(1, options.minimumColumnCount ?? markdownTableMinimumColumnCount);
+  const headerCells = normalizeTableCells(tableBlock.headerCells, columnCount);
+  const alignments = normalizeTableAlignments(tableBlock.alignments, columnCount);
+  const bodyRows = tableBlock.bodyRows.map((row) => normalizeTableCells(row, columnCount));
+
+  if (columnCount <= minimumColumnCount) {
+    return createMarkdownTableLines(headerCells, alignments, bodyRows);
+  }
+
+  const columnIndex = clampTableColumnIndex(options.columnIndex ?? columnCount - 1, columnCount);
+
+  return createMarkdownTableLines(
+    removeTableArrayItem(headerCells, columnIndex),
+    removeTableArrayItem(alignments, columnIndex),
+    bodyRows.map((row) => removeTableArrayItem(row, columnIndex))
+  );
 }
 
 export function shouldIgnorePreviewEventTarget(tagName: string | undefined): boolean {
@@ -1212,6 +1267,18 @@ function serializeMarkdownTableRow(cells: readonly string[]): string {
   return `| ${cells.map((cell) => cell.trim()).join(" | ")} |`;
 }
 
+function createMarkdownTableLines(
+  headerCells: readonly string[],
+  alignments: readonly MarkdownTableColumnAlignment[],
+  bodyRows: readonly (readonly string[])[]
+): readonly string[] {
+  return [
+    serializeMarkdownTableRow(headerCells),
+    serializeMarkdownTableDelimiterRow(alignments),
+    ...bodyRows.map(serializeMarkdownTableRow)
+  ];
+}
+
 function serializeMarkdownTableDelimiterRow(alignments: readonly MarkdownTableColumnAlignment[]): string {
   return serializeMarkdownTableRow(alignments.map(serializeMarkdownTableDelimiterCell));
 }
@@ -1248,6 +1315,14 @@ function clampTableColumnIndex(columnIndex: number, columnCount: number): number
   return Math.max(0, Math.min(Math.trunc(columnIndex), Math.max(0, columnCount - 1)));
 }
 
+function clampTableBodyRowIndex(rowIndex: number, rowCount: number): number {
+  if (!Number.isFinite(rowIndex)) {
+    return Math.max(0, rowCount - 1);
+  }
+
+  return Math.max(0, Math.min(Math.trunc(rowIndex), Math.max(0, rowCount - 1)));
+}
+
 function normalizeTableCells(cells: readonly string[], columnCount: number): readonly string[] {
   return Array.from({ length: columnCount }, (_, index) => cells[index] ?? "");
 }
@@ -1265,6 +1340,10 @@ function insertTableArrayItem<T>(items: readonly T[], index: number, item: T): r
 
 function replaceTableArrayItem<T>(items: readonly T[], index: number, item: T): readonly T[] {
   return items.map((current, currentIndex) => currentIndex === index ? item : current);
+}
+
+function removeTableArrayItem<T>(items: readonly T[], index: number): readonly T[] {
+  return items.filter((_, currentIndex) => currentIndex !== index);
 }
 
 function readCurrentMarkdownTableBlock(view: EditorView, startLine: number): MarkdownTableBlockState | undefined {
@@ -1294,6 +1373,15 @@ function insertMarkdownTableRowBelow(view: EditorView, tableBlock: MarkdownTable
   view.focus();
 }
 
+function deleteMarkdownTableBodyRow(view: EditorView, tableBlock: MarkdownTableBlockState): void {
+  const currentTableBlock = readCurrentMarkdownTableBlock(view, tableBlock.blockStart);
+  if (!currentTableBlock) {
+    return;
+  }
+
+  replaceMarkdownTableBlock(view, currentTableBlock, createMarkdownTableWithDeletedBodyRow(currentTableBlock));
+}
+
 function replaceMarkdownTableBlock(
   view: EditorView,
   tableBlock: MarkdownTableBlockState,
@@ -1316,6 +1404,15 @@ function insertMarkdownTableColumnRight(view: EditorView, tableBlock: MarkdownTa
   }
 
   replaceMarkdownTableBlock(view, currentTableBlock, createMarkdownTableWithInsertedColumn(currentTableBlock));
+}
+
+function deleteMarkdownTableColumn(view: EditorView, tableBlock: MarkdownTableBlockState): void {
+  const currentTableBlock = readCurrentMarkdownTableBlock(view, tableBlock.blockStart);
+  if (!currentTableBlock) {
+    return;
+  }
+
+  replaceMarkdownTableBlock(view, currentTableBlock, createMarkdownTableWithDeletedColumn(currentTableBlock));
 }
 
 function updateMarkdownTableColumnAlignment(
@@ -1369,10 +1466,24 @@ class MarkdownTableBlockWidget extends WidgetType {
         onClick: () => insertMarkdownTableRowBelow(view, this.tableBlock)
       }),
       createTableToolButton({
+        className: "tp-editor-table-delete-row",
+        disabled: this.tableBlock.bodyRows.length === 0,
+        text: "Row -",
+        title: "Delete last row",
+        onClick: () => deleteMarkdownTableBodyRow(view, this.tableBlock)
+      }),
+      createTableToolButton({
         className: "tp-editor-table-insert-column",
         text: "Col +",
         title: "Insert column right",
         onClick: () => insertMarkdownTableColumnRight(view, this.tableBlock)
+      }),
+      createTableToolButton({
+        className: "tp-editor-table-delete-column",
+        disabled: this.tableBlock.headerCells.length <= markdownTableMinimumColumnCount,
+        text: "Col -",
+        title: "Delete last column",
+        onClick: () => deleteMarkdownTableColumn(view, this.tableBlock)
       })
     );
 
@@ -1445,6 +1556,7 @@ class MarkdownTableBlockWidget extends WidgetType {
 
 interface TableToolButtonOptions {
   readonly className: string;
+  readonly disabled?: boolean;
   readonly onClick: () => void;
   readonly text: string;
   readonly title: string;
@@ -1454,6 +1566,7 @@ function createTableToolButton(options: TableToolButtonOptions): HTMLButtonEleme
   const button = document.createElement("button");
   button.className = `tp-editor-table-tool ${options.className}`;
   button.type = "button";
+  button.disabled = options.disabled ?? false;
   button.textContent = options.text;
   button.title = options.title;
   button.setAttribute("aria-label", options.title);
@@ -2163,6 +2276,7 @@ function markdownEditorTheme(configuration: MarkdownEditorConfiguration): Extens
       minWidth: `${tableToolButtonMinWidthPx}px`,
       height: `${tableToolButtonHeightPx}px`,
       padding: "0 8px",
+      boxSizing: "border-box",
       border: "1px solid var(--tp-color-table-border)",
       borderRadius: "6px",
       backgroundColor: "var(--tp-color-surface-raised)",
@@ -2176,6 +2290,12 @@ function markdownEditorTheme(configuration: MarkdownEditorConfiguration): Extens
     ".tp-editor-table-tool:hover": {
       color: "var(--tp-color-accent-strong)",
       backgroundColor: "var(--tp-color-surface)"
+    },
+    ".tp-editor-table-tool:disabled, .tp-editor-table-tool:disabled:hover": {
+      color: "var(--tp-color-text-subtle)",
+      backgroundColor: "var(--tp-color-table-row)",
+      cursor: "default",
+      opacity: "0.72"
     },
     ".tp-editor-table-scroll": {
       display: "block",
