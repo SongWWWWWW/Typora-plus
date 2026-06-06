@@ -23,6 +23,12 @@ export interface MarkdownSyntaxMarkerRange {
   readonly to: number;
 }
 
+export interface MarkdownInlineMathRange {
+  readonly expression: string;
+  readonly from: number;
+  readonly to: number;
+}
+
 export type MarkdownCodeFenceLineRole = "open" | "content" | "close";
 
 export interface MarkdownCodeFenceLineState {
@@ -194,6 +200,60 @@ export function findInactiveMarkdownSyntaxMarkers(text: string, active: boolean)
   return normalizeRanges(ranges);
 }
 
+export function findInactiveMarkdownInlineMathRanges(text: string, active: boolean): readonly MarkdownInlineMathRange[] {
+  if (active) {
+    return [];
+  }
+
+  const codeSpanRanges = readMarkdownCodeSpanRanges(text);
+  const ranges: MarkdownInlineMathRange[] = [];
+  let cursor = 0;
+
+  while (cursor < text.length) {
+    const start = findNextInlineMathDelimiter(text, cursor, codeSpanRanges);
+
+    if (start === -1) {
+      return ranges;
+    }
+
+    if (!canOpenInlineMath(text, start)) {
+      cursor = start + 1;
+      continue;
+    }
+
+    let endCursor = start + 1;
+    let end = -1;
+
+    while (endCursor < text.length) {
+      const candidate = findNextInlineMathDelimiter(text, endCursor, codeSpanRanges);
+
+      if (candidate === -1) {
+        break;
+      }
+
+      if (canCloseInlineMath(text, candidate)) {
+        end = candidate;
+        break;
+      }
+
+      endCursor = candidate + 1;
+    }
+
+    if (end === -1) {
+      return ranges;
+    }
+
+    const expression = text.slice(start + 1, end).trim();
+    if (expression) {
+      ranges.push({ expression, from: start, to: end + 1 });
+    }
+
+    cursor = end + 1;
+  }
+
+  return ranges;
+}
+
 function buildDecorations(
   view: EditorView,
   configuration: MarkdownEditorConfiguration,
@@ -233,8 +293,24 @@ function buildDecorations(
           widget: new MarkdownImageBlockWidget(imageBlock, resolveImageSource)
         }));
       } else {
-        for (const marker of findInactiveMarkdownSyntaxMarkers(line.text, lineIsActive)) {
-          builder.add(line.from + marker.from, line.from + marker.to, syntaxMarkerDecoration);
+        const inlineMathRanges = lineBlockState?.codeFenceRole || lineBlockState?.mathBlock
+          ? []
+          : findInactiveMarkdownInlineMathRanges(line.text, lineIsActive);
+        const inlineDecorations = inlineMathRanges.map((inlineMath) => ({
+          decoration: Decoration.replace({ widget: new MarkdownInlineMathWidget(inlineMath) }),
+          from: line.from + inlineMath.from,
+          to: line.from + inlineMath.to
+        }));
+        const markerDecorations = findInactiveMarkdownSyntaxMarkers(line.text, lineIsActive)
+          .filter((marker) => !inlineMathRanges.some((inlineMath) => rangesOverlap(marker, inlineMath)))
+          .map((marker) => ({
+            decoration: syntaxMarkerDecoration,
+            from: line.from + marker.from,
+            to: line.from + marker.to
+          }));
+
+        for (const decoration of [...markerDecorations, ...inlineDecorations].sort(compareLineDecorations)) {
+          builder.add(decoration.from, decoration.to, decoration.decoration);
         }
       }
 
@@ -248,6 +324,13 @@ function buildDecorations(
   }
 
   return builder.finish();
+}
+
+function compareLineDecorations(
+  first: { readonly from: number; readonly to: number },
+  second: { readonly from: number; readonly to: number }
+): number {
+  return first.from - second.from || first.to - second.to;
 }
 
 function analyzeVisibleMarkdownLineBlocks(view: EditorView): ReadonlyMap<number, MarkdownLineBlockState> {
@@ -535,6 +618,122 @@ function isMarkdownMathFence(text: string): boolean {
   return /^\s*\$\$\s*$/.test(text);
 }
 
+function findNextInlineMathDelimiter(
+  text: string,
+  from: number,
+  codeSpanRanges: readonly MarkdownSyntaxMarkerRange[]
+): number {
+  for (let index = from; index < text.length; index += 1) {
+    if (
+      text[index] === "$" &&
+      !isEscaped(text, index) &&
+      text[index - 1] !== "$" &&
+      text[index + 1] !== "$" &&
+      !codeSpanRanges.some((range) => index >= range.from && index < range.to)
+    ) {
+      return index;
+    }
+  }
+
+  return -1;
+}
+
+function canOpenInlineMath(text: string, index: number): boolean {
+  const previous = text[index - 1];
+  const next = text[index + 1];
+  return Boolean(next && !/\s/.test(next) && !(/\d/.test(next) && (!previous || /\s/.test(previous))));
+}
+
+function canCloseInlineMath(text: string, index: number): boolean {
+  const previous = text[index - 1];
+  return Boolean(previous && !/\s/.test(previous));
+}
+
+function readMarkdownCodeSpanRanges(text: string): readonly MarkdownSyntaxMarkerRange[] {
+  const ranges: MarkdownSyntaxMarkerRange[] = [];
+  let cursor = 0;
+
+  while (cursor < text.length) {
+    const open = findNextBacktickRun(text, cursor);
+
+    if (!open) {
+      break;
+    }
+
+    const close = findClosingBacktickRun(text, open.to, open.marker);
+
+    if (!close) {
+      break;
+    }
+
+    ranges.push({ from: open.from, to: close.to });
+    cursor = close.to;
+  }
+
+  return ranges;
+}
+
+function findNextBacktickRun(
+  text: string,
+  from: number
+): { readonly from: number; readonly marker: string; readonly to: number } | undefined {
+  for (let index = from; index < text.length; index += 1) {
+    if (text[index] !== "`" || isEscaped(text, index)) {
+      continue;
+    }
+
+    let to = index + 1;
+    while (text[to] === "`") {
+      to += 1;
+    }
+
+    return { from: index, marker: text.slice(index, to), to };
+  }
+
+  return undefined;
+}
+
+function findClosingBacktickRun(
+  text: string,
+  from: number,
+  marker: string
+): { readonly from: number; readonly to: number } | undefined {
+  let cursor = from;
+
+  while (cursor < text.length) {
+    const close = findNextBacktickRun(text, cursor);
+
+    if (!close) {
+      return undefined;
+    }
+
+    if (close.marker === marker) {
+      return close;
+    }
+
+    cursor = close.to;
+  }
+
+  return undefined;
+}
+
+function isEscaped(text: string, index: number): boolean {
+  let slashCount = 0;
+
+  for (let cursor = index - 1; cursor >= 0 && text[cursor] === "\\"; cursor -= 1) {
+    slashCount += 1;
+  }
+
+  return slashCount % 2 === 1;
+}
+
+function rangesOverlap(
+  first: Pick<MarkdownSyntaxMarkerRange, "from" | "to">,
+  second: Pick<MarkdownSyntaxMarkerRange, "from" | "to">
+): boolean {
+  return first.from < second.to && second.from < first.to;
+}
+
 interface MarkdownTableReadResult {
   readonly nextLine: number;
   readonly states: readonly MarkdownTableLineState[];
@@ -755,6 +954,35 @@ class MarkdownMathBlockWidget extends WidgetType {
 
   override get estimatedHeight(): number {
     return 74;
+  }
+}
+
+class MarkdownInlineMathWidget extends WidgetType {
+  constructor(private readonly math: MarkdownInlineMathRange) {
+    super();
+  }
+
+  override eq(widget: WidgetType): boolean {
+    return widget instanceof MarkdownInlineMathWidget && widget.math.expression === this.math.expression;
+  }
+
+  override toDOM(): HTMLElement {
+    const inline = document.createElement("span");
+    inline.className = "tp-editor-inline-math-preview";
+    inline.setAttribute("aria-label", "Inline math preview");
+
+    try {
+      inline.innerHTML = renderKatexToString(this.math.expression, {
+        displayMode: false,
+        output: "mathml",
+        throwOnError: false
+      });
+    } catch {
+      inline.textContent = this.math.expression;
+      inline.classList.add("tp-editor-inline-math-preview-error");
+    }
+
+    return inline;
   }
 }
 
@@ -1062,6 +1290,25 @@ function markdownEditorTheme(configuration: MarkdownEditorConfiguration): Extens
     },
     ".tp-editor-math-preview math": {
       maxWidth: "100%"
+    },
+    ".tp-editor-inline-math-preview": {
+      display: "inline-flex",
+      alignItems: "center",
+      maxWidth: "100%",
+      overflowX: "auto",
+      verticalAlign: "-0.14em",
+      padding: "0 3px",
+      borderRadius: "4px",
+      backgroundColor: "var(--tp-color-math-inline)",
+      color: "var(--tp-color-text)"
+    },
+    ".tp-editor-inline-math-preview math": {
+      maxWidth: "100%"
+    },
+    ".tp-editor-inline-math-preview-error": {
+      color: "var(--tp-color-text-muted)",
+      fontFamily: "ui-monospace, SFMono-Regular, Consolas, monospace",
+      fontSize: "0.92em"
     },
     ".tp-editor-math-preview-empty, .tp-editor-math-preview-error": {
       justifyContent: "flex-start",

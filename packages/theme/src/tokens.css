@@ -21,6 +21,7 @@
   --tp-color-image-preview: #e5ecee;
   --tp-color-math-block: #f2f5f8;
   --tp-color-math-block-border: #c6d5df;
+  --tp-color-math-inline: #e8f1f5;
   --tp-color-selection: #cde9e4;
   --tp-color-warning: #9a6a10;
   --tp-color-danger: #a43e42;
@@ -57,6 +58,7 @@
   --tp-color-image-preview: #1a1f22;
   --tp-color-math-block: #222832;
   --tp-color-math-block-border: #435768;
+  --tp-color-math-inline: #26313a;
   --tp-color-selection: #264e49;
   --tp-color-warning: #d8ad4d;
   --tp-color-danger: #e07d80;

@@ -6,6 +6,7 @@ import {
   analyzeMarkdownMathBlocks,
   analyzeMarkdownTableLines,
   classifyMarkdownLine,
+  findInactiveMarkdownInlineMathRanges,
   findInactiveMarkdownSyntaxMarkers
 } from "./index";
 
@@ -186,6 +187,34 @@ describe("analyzeMarkdownMathBlocks", () => {
     ]);
 
     expect(states.every((state) => state.mathBlock && !state.imageBlock && !state.tableState)).toBe(true);
+  });
+});
+
+describe("findInactiveMarkdownInlineMathRanges", () => {
+  it("finds inline math ranges on inactive lines", () => {
+    expect(findInactiveMarkdownInlineMathRanges("A $x+y$ note", false)).toEqual([
+      { expression: "x+y", from: 2, to: 7 }
+    ]);
+  });
+
+  it("keeps inline math source visible on the active line", () => {
+    expect(findInactiveMarkdownInlineMathRanges("A $x+y$ note", true)).toEqual([]);
+  });
+
+  it("ignores display math delimiters, unclosed math, and escaped dollars", () => {
+    expect(findInactiveMarkdownInlineMathRanges("Inline $$x+y$$ stays source", false)).toEqual([]);
+    expect(findInactiveMarkdownInlineMathRanges("Inline $x+y stays source", false)).toEqual([]);
+    expect(findInactiveMarkdownInlineMathRanges("Price \\$5 stays source", false)).toEqual([]);
+  });
+
+  it("does not treat common currency text as math", () => {
+    expect(findInactiveMarkdownInlineMathRanges("Price $5 and $10 stay source", false)).toEqual([]);
+  });
+
+  it("ignores math-like text inside inline code spans", () => {
+    expect(findInactiveMarkdownInlineMathRanges("`$x$` and $y$", false)).toEqual([
+      { expression: "y", from: 10, to: 13 }
+    ]);
   });
 });
 
