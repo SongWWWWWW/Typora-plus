@@ -1662,3 +1662,38 @@ Review:
 Known limitations:
 
 - Numeric constraints are static platform metadata for now; a future extension or policy layer could expose contributed setting schemas if the settings system grows.
+
+## 2026-06-07 - P2 Workspace Index Snapshot Persistence
+
+Completed:
+
+- Added a versioned workspace index snapshot format for indexed documents.
+- Added `PersistedWorkspaceIndexProvider` with injected storage, snapshot size limits, and safe fallback when storage writes fail.
+- Added provider batch hooks so full workspace scans persist once per batch instead of once per indexed file.
+- Restored index service status to `ready` when a provider starts with restored documents.
+- Tightened workspace indexing generation checks so canceled scans cannot write stale documents after a newer scan starts.
+- Wired Workbench service creation to use a persisted snapshot provider when browser storage is available.
+- Avoided clearing restored index snapshots during the initial no-workspace render path.
+
+Quality gate:
+
+- `npm run test -- --run packages/platform/src/platform.test.ts`: passed, 35 tests
+- `npm run test -- --run packages/platform/src/platform.test.ts packages/workbench/src/savedFileIndexing.test.ts`: passed, 37 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 139 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Browser smoke check at `http://127.0.0.1:5173`: Workbench rendered, no horizontal overflow, and no console errors were reported.
+
+Review:
+
+- Query and storage behavior remain behind `WorkspaceIndexProvider`; Workbench still consumes only `IIndexService`.
+- Snapshot persistence is explicitly a cache boundary, not a source-of-truth data model; Markdown files remain the source of truth.
+- Storage keys and snapshot size limits are centralized in platform index options rather than embedded in Workbench UI.
+- The cancellation fix reduces stale index risk during rapid workspace refreshes or reconfiguration-triggered reindexing.
+- No new documentation files, visual tokens, or direct filesystem assumptions were introduced.
+
+Known limitations:
+
+- The snapshot cache is still browser/local storage backed in the renderer; the planned SQLite provider remains the durable desktop index backend.
+- Workspace identity is not yet part of the snapshot key, so opening a workspace still performs a normal scan that replaces the cached index.

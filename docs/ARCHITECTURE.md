@@ -56,7 +56,7 @@ Workbench navigation surfaces, including search, outline, files, backlinks, and 
 
 Successful workspace saves refresh the saved file's index record through `IIndexService.indexFile(file, value?)`. Workbench maps the saved model to the current workspace file entry and passes saved content; when save-as creates a file that is not listed yet, Workbench refreshes the workspace tree once and retries the index update. Markdown search, tag, and backlink extraction remain owned by the platform index provider.
 
-`WorkspaceIndexService` owns scan orchestration and status updates. Indexed storage and query behavior sit behind `WorkspaceIndexProvider`; `InMemoryWorkspaceIndexProvider` is the default provider for the current stage, and a future SQLite provider should implement the same storage/query contract without changing Workbench consumers. Workspace search limits are applied through the index service configuration boundary so Settings changes affect query limits immediately and file-size changes trigger Workbench to reindex the current workspace.
+`WorkspaceIndexService` owns scan orchestration and status updates. Indexed storage and query behavior sit behind `WorkspaceIndexProvider`; `InMemoryWorkspaceIndexProvider` owns query behavior, while `PersistedWorkspaceIndexProvider` adds a versioned snapshot cache through an injected storage boundary without changing Workbench consumers. Batch hooks keep full workspace scans from writing a snapshot for every indexed file, and generation checks prevent canceled scans from writing stale documents after a newer scan has started. A future SQLite provider should implement the same storage/query contract. Workspace search limits are applied through the index service configuration boundary so Settings changes affect query limits immediately and file-size changes trigger Workbench to reindex the current workspace.
 
 Keyboard shortcuts are resolved through `IKeybindingService` instead of hard-coded Workbench key checks. Workbench registers its default shortcuts as keybinding rules and dispatches resolved commands through `ICommandService`; command palette rows can read and search active labels from the same service through a focused command palette model. User keybinding overrides are persisted as validated configuration and applied as higher-priority keybinding rules, keeping the VS Code-like split between default contributions and user preferences. A shortcut label is only returned when that binding is currently effective for the command, so shadowed defaults do not mislead the UI.
 
@@ -68,7 +68,7 @@ Keyboard-driven list surfaces share a small Workbench navigation model. Command 
 
 Planned services:
 
-- SQLite-backed index provider for `IIndexService`: persisted search, metadata, link graph queries, and tag queries
+- SQLite-backed index provider for `IIndexService`: durable search, metadata, link graph queries, and tag queries beyond the current snapshot cache
 - `IExportService`: PDF/HTML/DOCX export providers
 - `IExtensionService`: manifest, activation events, contribution points
 
