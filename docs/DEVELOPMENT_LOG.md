@@ -2632,3 +2632,35 @@ Known limitations:
 - The Settings UI does not yet expose a dedicated Status badge vocabulary editor; the validated configuration path is ready for a future compact settings surface or extension contribution schema.
 - The renderer preview cache is still in-memory only; previews are recomputed after app reload.
 - Mermaid remains isolated behind lazy loading, but its lazy chunk still needs future lower-end machine measurement.
+
+## 2026-06-07 - P2 Extension Host Routing Boundary
+
+Completed:
+
+- Added `IExtensionHostService` and `ExtensionHostService` for registering extension hosts and dispatching activation requests.
+- Added explicit duplicate-host, missing-host, and ambiguous-host rejection so runtime activation routing remains deterministic.
+- Moved the built-in Workbench runtime from a direct activation handler into a registered in-process Workbench extension host.
+- Wired Workbench service creation so `IExtensionService` delegates activation through `IExtensionHostService` while command and Markdown renderer activation events keep their existing flow.
+- Kept the built-in Mermaid and Status providers on the same constrained `ExtensionContext.markdown` API that future hosts will broker.
+- Added platform tests for host registration, disposal, duplicate ids, missing hosts, and ambiguous matches, plus Workbench tests for built-in host activation.
+
+Quality gate:
+
+- `npm run verify`: passed, 257 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Browser smoke check at `http://127.0.0.1:5173/`: Workbench and editor loaded, no horizontal overflow, and no console errors.
+
+Review:
+
+- `IExtensionService` still owns manifest registration, activation state, lifecycle cleanup, and runtime context creation.
+- `IExtensionHostService` now owns only host selection and dispatch; it does not load code, expose DOM, expose Node, or own extension contributions.
+- Workbench's built-in host is exact-match scoped to the built-in extension id, so external extension activation cannot be silently handled by the wrong runtime.
+- The platform/editor/workbench dependency direction remains unchanged and is still covered by the architecture boundary tests inside `npm run verify`.
+- No new dependency, storage path, visual token, extra documentation file, or direct DOM access by extension runtimes was introduced.
+
+Known limitations:
+
+- External extension package loading is still not implemented.
+- The current Workbench host is still in-process; an out-of-process host implementation should plug into the same host service before third-party code can run.
+- Extension host IPC/protocol serialization is not implemented yet.
