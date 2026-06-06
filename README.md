@@ -11,6 +11,7 @@ P0/P1 are implemented:
 - layered packages for base, platform, markdown, theme, editor, workbench, desktop
 - CodeMirror 6 Markdown editor
 - live-preview-oriented line styling
+- unified live preview block-state analysis
 - inactive Markdown marker soft hiding
 - code fence block styling
 - Markdown table block styling

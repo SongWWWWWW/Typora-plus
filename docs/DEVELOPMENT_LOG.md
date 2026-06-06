@@ -355,3 +355,32 @@ Known limitations:
 
 - Native workspace image resolution is covered by service and build verification; full Electron visual verification remains future desktop QA.
 - Images are still represented by inline data URLs; a streaming or custom-protocol resource provider is planned for larger previews.
+
+## 2026-06-06 - P2 Unified Live Preview Block Analysis
+
+Completed:
+
+- Added `analyzeMarkdownLineBlocks` as the shared block-state analysis entry point.
+- Reused the unified analyzer for code fence, image, and table public analysis helpers.
+- Replaced separate visible-range scans for code fences, images, and tables with one visible block-state pass.
+- Removed obsolete live preview scanner helpers.
+- Added tests for mixed block ordering and code-fence exclusion behavior.
+
+Quality gate:
+
+- `npm run typecheck`: passed
+- `npm test`: passed, 43 tests
+- `npm run verify`: passed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- Production browser preview: passed at `http://127.0.0.1:4173`
+
+Review:
+
+- This stage is a maintainability pass rather than a new visual feature.
+- Future math, richer code fences, and table editing affordances can share one analysis contract.
+- The editor package remains the only layer that understands Markdown live preview block state.
+
+Known limitations:
+
+- The analyzer is still regex-based; parser-backed position mapping remains planned.
+- Visible-range analysis still scans preceding lines to recover fence/table context.

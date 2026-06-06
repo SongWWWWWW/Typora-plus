@@ -65,6 +65,7 @@ Current features:
 
 - Markdown language support
 - history, search, selection, bracket matching
+- unified live preview block-state analysis for visible editor ranges
 - heading/quote/list/fence line styling
 - inactive Markdown marker soft hiding for headings, lists, quotes, fences, links, and strong emphasis
 - code fence block styling with visible-range-aware fence state tracking
