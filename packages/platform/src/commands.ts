@@ -11,10 +11,16 @@ export interface Command extends CommandMetadata {
   run(accessor: ServicesAccessor, ...args: unknown[]): unknown;
 }
 
+export type CommandActivationHandler = (command: string) => void | Promise<void>;
+
+export interface CommandServiceOptions {
+  readonly activationHandler?: CommandActivationHandler;
+}
+
 export interface ICommandService {
   registerCommand(command: Command): IDisposable;
   registerCommandMetadata(metadata: CommandMetadata): IDisposable;
-  executeCommand<T = unknown>(id: string, ...args: unknown[]): T;
+  executeCommand<T = unknown>(id: string, ...args: unknown[]): Promise<T>;
   getCommands(): readonly CommandMetadata[];
 }
 
@@ -24,7 +30,10 @@ export class CommandService extends Disposable implements ICommandService {
   private readonly handlers = new Map<string, Command>();
   private readonly metadata = new Map<string, CommandMetadata>();
 
-  constructor(private readonly accessor: ServicesAccessor) {
+  constructor(
+    private readonly accessor: ServicesAccessor,
+    private readonly options: CommandServiceOptions = {}
+  ) {
     super();
   }
 
@@ -73,18 +82,33 @@ export class CommandService extends Disposable implements ICommandService {
     });
   }
 
-  executeCommand<T = unknown>(id: string, ...args: unknown[]): T {
+  async executeCommand<T = unknown>(id: string, ...args: unknown[]): Promise<T> {
+    const command = await this.resolveCommandHandler(id);
+    return await command.run(this.accessor, ...args) as T;
+  }
+
+  private async resolveCommandHandler(id: string): Promise<Command> {
     const command = this.handlers.get(id);
 
-    if (!command) {
-      if (this.metadata.has(id)) {
-        throw new Error(`No command handler registered: ${id}`);
-      }
+    if (command) {
+      return command;
+    }
 
+    if (!this.metadata.has(id)) {
       throw new Error(`Unknown command: ${id}`);
     }
 
-    return command.run(this.accessor, ...args) as T;
+    if (this.options.activationHandler) {
+      await this.options.activationHandler(id);
+    }
+
+    const activatedCommand = this.handlers.get(id);
+
+    if (!activatedCommand) {
+      throw new Error(`No command handler registered: ${id}`);
+    }
+
+    return activatedCommand;
   }
 
   getCommands(): readonly CommandMetadata[] {

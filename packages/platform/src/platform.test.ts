@@ -213,7 +213,7 @@ describe("configuration", () => {
 });
 
 describe("commands", () => {
-  it("executes registered commands through the service accessor", () => {
+  it("executes registered commands through the service accessor", async () => {
     const services = new ServiceCollection();
     const commandService = new CommandService(services);
 
@@ -223,13 +223,13 @@ describe("commands", () => {
       run: (_accessor, value) => value
     });
 
-    expect(commandService.executeCommand("test.echo", "ok")).toBe("ok");
+    await expect(commandService.executeCommand("test.echo", "ok")).resolves.toBe("ok");
     expect(commandService.getCommands()).toEqual([
       { id: "test.echo", title: "Echo" }
     ]);
   });
 
-  it("separates command metadata from command handlers", () => {
+  it("separates command metadata from command handlers", async () => {
     const services = new ServiceCollection();
     const commandService = new CommandService(services);
 
@@ -242,7 +242,7 @@ describe("commands", () => {
     expect(commandService.getCommands()).toEqual([
       { id: "test.metadata", title: "Metadata Command", category: "Tests" }
     ]);
-    expect(() => commandService.executeCommand("test.metadata")).toThrow("No command handler registered");
+    await expect(commandService.executeCommand("test.metadata")).rejects.toThrow("No command handler registered");
 
     const handlerDisposable = commandService.registerCommand({
       id: "test.metadata",
@@ -253,19 +253,19 @@ describe("commands", () => {
     expect(commandService.getCommands()).toEqual([
       { id: "test.metadata", title: "Metadata Command", category: "Tests" }
     ]);
-    expect(commandService.executeCommand("test.metadata")).toBe("handled");
+    await expect(commandService.executeCommand("test.metadata")).resolves.toBe("handled");
 
     handlerDisposable.dispose();
 
     expect(commandService.getCommands()).toEqual([
       { id: "test.metadata", title: "Metadata Command", category: "Tests" }
     ]);
-    expect(() => commandService.executeCommand("test.metadata")).toThrow("No command handler registered");
+    await expect(commandService.executeCommand("test.metadata")).rejects.toThrow("No command handler registered");
 
     metadataDisposable.dispose();
 
     expect(commandService.getCommands()).toEqual([]);
-    expect(() => commandService.executeCommand("test.metadata")).toThrow("Unknown command");
+    await expect(commandService.executeCommand("test.metadata")).rejects.toThrow("Unknown command");
   });
 
   it("rejects duplicate command metadata and handlers independently", () => {
@@ -293,6 +293,29 @@ describe("commands", () => {
       title: "Second Handler",
       run: () => undefined
     })).toThrow("Command already registered");
+  });
+
+  it("activates metadata-only commands before execution", async () => {
+    const services = new ServiceCollection();
+    const activatedCommands: string[] = [];
+    const commandService = new CommandService(services, {
+      activationHandler: (command) => {
+        activatedCommands.push(command);
+        commandService.registerCommand({
+          id: command,
+          title: "Activated Command",
+          run: () => "activated"
+        });
+      }
+    });
+
+    commandService.registerCommandMetadata({
+      id: "test.activate",
+      title: "Activate"
+    });
+
+    await expect(commandService.executeCommand("test.activate")).resolves.toBe("activated");
+    expect(activatedCommands).toEqual(["test.activate"]);
   });
 });
 
@@ -477,7 +500,7 @@ describe("menus", () => {
 });
 
 describe("extensions", () => {
-  it("registers manifest command metadata, menus, and keybindings", () => {
+  it("registers manifest command metadata, menus, and keybindings", async () => {
     const { commandService, extensionService, keybindingService, menuService } = createExtensionServices();
 
     extensionService.registerExtension({
@@ -522,7 +545,7 @@ describe("extensions", () => {
     ]);
     expect(menuService.getMenuItems("titlebar.primary").map((item) => item.command)).toEqual(["notes.insertDate"]);
     expect(keybindingService.resolve({ key: "d", ctrlKey: true })).toBe("notes.insertDate");
-    expect(() => commandService.executeCommand("notes.insertDate")).toThrow("No command handler registered");
+    await expect(commandService.executeCommand("notes.insertDate")).rejects.toThrow("No extension activation handler registered");
   });
 
   it("indexes explicit and command-derived activation events", async () => {
@@ -573,6 +596,34 @@ describe("extensions", () => {
     await expect(extensionService.activateByEvent("onStartupFinished")).resolves.toEqual([]);
     await expect(extensionService.activateByEvent("onCommand:missing")).resolves.toEqual([]);
     expect(activationCalls).toEqual(["onCommand:notes.insertDate:notes.activation:activating"]);
+  });
+
+  it("activates extension command contributions before command execution", async () => {
+    const activationCalls: string[] = [];
+    const services = createExtensionServices((request) => {
+      activationCalls.push(`${request.activationEvent}:${request.extension.id}`);
+      services.commandService.registerCommand({
+        id: "notes.runCommand",
+        title: "Run Command",
+        run: () => "activated command"
+      });
+    });
+
+    services.extensionService.registerExtension({
+      id: "notes.commandActivation",
+      contributes: {
+        commands: [
+          {
+            command: "notes.runCommand",
+            title: "Run Command"
+          }
+        ]
+      }
+    });
+
+    await expect(services.commandService.executeCommand("notes.runCommand")).resolves.toBe("activated command");
+    await expect(services.commandService.executeCommand("notes.runCommand")).resolves.toBe("activated command");
+    expect(activationCalls).toEqual(["onCommand:notes.runCommand:notes.commandActivation"]);
   });
 
   it("rejects matching activation events when no activation handler is registered", async () => {
@@ -661,7 +712,7 @@ describe("extensions", () => {
     expect(menuService.getMenuItems("activitybar.primary").map((item) => item.command)).toEqual(["notes.workspace"]);
   });
 
-  it("unregisters all manifest contributions through the returned disposable", () => {
+  it("unregisters all manifest contributions through the returned disposable", async () => {
     const { commandService, extensionService, keybindingService, menuService } = createExtensionServices();
     const disposable = extensionService.registerExtension({
       id: "notes.cleanup",
@@ -694,7 +745,7 @@ describe("extensions", () => {
     expect(commandService.getCommands()).toEqual([]);
     expect(menuService.getMenuItems("titlebar.primary")).toEqual([]);
     expect(keybindingService.resolve({ key: "x", ctrlKey: true })).toBeUndefined();
-    expect(() => commandService.executeCommand("notes.cleanup")).toThrow("Unknown command");
+    await expect(commandService.executeCommand("notes.cleanup")).rejects.toThrow("Unknown command");
   });
 
   it("rejects duplicate extension ids", () => {
@@ -950,7 +1001,7 @@ describe("keybindings", () => {
     expect(service.getKeybindingLabel("file.save")).toBeUndefined();
   });
 
-  it("dispatches resolved keybindings through the command service", () => {
+  it("dispatches resolved keybindings through the command service", async () => {
     const services = new ServiceCollection();
     const commandService = new CommandService(services);
     const keybindingService = new KeybindingService();
@@ -968,8 +1019,8 @@ describe("keybindings", () => {
       keybinding: { key: "s", primary: true }
     });
 
-    expect(keybindingService.dispatch({ key: "s" }, commandService)).toBe(false);
-    expect(keybindingService.dispatch({ key: "s", ctrlKey: true }, commandService)).toBe(true);
+    await expect(keybindingService.dispatch({ key: "s" }, commandService)).resolves.toBe(false);
+    await expect(keybindingService.dispatch({ key: "s", ctrlKey: true }, commandService)).resolves.toBe(true);
     expect(saved).toBe(true);
   });
 
@@ -1947,11 +1998,16 @@ function createFileEntry(path: string, name: string, relativePath: string): File
 
 function createExtensionServices(activationHandler?: ExtensionActivationHandler) {
   const serviceCollection = new ServiceCollection();
-  const commandService = new CommandService(serviceCollection);
+  let extensionService: ExtensionService | undefined;
+  const commandService = new CommandService(serviceCollection, {
+    activationHandler: async (command) => {
+      await extensionService?.activateByEvent(`onCommand:${command}`);
+    }
+  });
   const contextKeyService = new ContextKeyService();
   const menuService = new MenuService(contextKeyService);
   const keybindingService = new KeybindingService();
-  const extensionService = new ExtensionService(
+  extensionService = new ExtensionService(
     commandService,
     menuService,
     keybindingService,

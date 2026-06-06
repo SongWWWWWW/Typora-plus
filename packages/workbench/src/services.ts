@@ -111,9 +111,14 @@ export function createWorkbenchServices(): WorkbenchServices {
   serviceCollection.set(IWorkspaceService, workspaceService);
   serviceCollection.set(ITextFileService, textFileService);
 
-  const commandService = new CommandService(serviceCollection);
+  let extensionService: ExtensionServiceContract | undefined;
+  const commandService = new CommandService(serviceCollection, {
+    activationHandler: async (command) => {
+      await extensionService?.activateByEvent(`onCommand:${command}`);
+    }
+  });
   serviceCollection.set(ICommandService, commandService);
-  const extensionService = new ExtensionService(commandService, menuService, keybindingService);
+  extensionService = new ExtensionService(commandService, menuService, keybindingService);
   serviceCollection.set(IExtensionService, extensionService);
   exportService.registerProvider(markdownHtmlExportProvider);
   contextKeyService.setValue("fileSystem.available", fileService.isAvailable());

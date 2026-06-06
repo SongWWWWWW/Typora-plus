@@ -42,7 +42,7 @@ export interface IKeybindingService {
   registerKeybinding(rule: KeybindingRule): IDisposable;
   setUserKeybindings(rules: readonly UserKeybindingRule[]): void;
   resolve(event: KeybindingEvent): string | undefined;
-  dispatch(event: KeybindingEvent, commandService: ICommandService): boolean;
+  dispatch(event: KeybindingEvent, commandService: ICommandService): Promise<boolean>;
   getKeybindings(): readonly ResolvedKeybinding[];
   getKeybindingLabel(command: string): string | undefined;
   getKeybindingLabelForKeybinding(keybinding: Keybinding): string;
@@ -97,14 +97,14 @@ export class KeybindingService implements IKeybindingService {
       ?.command;
   }
 
-  dispatch(event: KeybindingEvent, commandService: ICommandService): boolean {
+  async dispatch(event: KeybindingEvent, commandService: ICommandService): Promise<boolean> {
     const command = this.resolve(event);
 
     if (!command) {
       return false;
     }
 
-    commandService.executeCommand(command);
+    await commandService.executeCommand(command);
     return true;
   }
 

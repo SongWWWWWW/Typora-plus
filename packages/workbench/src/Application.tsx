@@ -89,6 +89,9 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
   const titlebarMenuItems = useMenuItems(services, "titlebar.primary");
   const activitybarPrimaryMenuItems = useMenuItems(services, "activitybar.primary");
   const activitybarSecondaryMenuItems = useMenuItems(services, "activitybar.secondary");
+  const executeCommand = (id: string) => {
+    executeWorkbenchCommand(services, id, setOperationError, setSaveConflict);
+  };
 
   const outline = useMemo(() => extractOutline(model.value), [model.value]);
   const stats = useMemo(() => calculateMarkdownStats(model.value), [model.value]);
@@ -399,9 +402,14 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (services.keybindingService.dispatch(event, services.commandService)) {
-        event.preventDefault();
+      const command = services.keybindingService.resolve(event);
+
+      if (!command) {
+        return;
       }
+
+      event.preventDefault();
+      executeWorkbenchCommand(services, command, setOperationError, setSaveConflict);
     };
 
     window.addEventListener("keydown", handleKeyDown);
@@ -433,7 +441,7 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
         configuration={configuration}
         menuItems={titlebarMenuItems}
         getCommandTitle={(id) => commandTitle(services.commandService.getCommands(), id)}
-        onCommand={(id) => services.commandService.executeCommand(id)}
+        onCommand={executeCommand}
       />
       <div className="tp-body">
         <ActivityBar
@@ -442,7 +450,7 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
           primaryMenuItems={activitybarPrimaryMenuItems}
           secondaryMenuItems={activitybarSecondaryMenuItems}
           getCommandTitle={(id) => commandTitle(services.commandService.getCommands(), id)}
-          onCommand={(id) => services.commandService.executeCommand(id)}
+          onCommand={executeCommand}
         />
         {sideView ? (
           <Sidebar
@@ -492,7 +500,7 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
                 window.setTimeout(() => editorRef.current?.scrollToLine(tag.line), 0);
               }, setOperationError, setSaveConflict);
             }}
-            onOpenWorkspace={() => services.commandService.executeCommand("file.openWorkspace")}
+            onOpenWorkspace={() => executeCommand("file.openWorkspace")}
             onOpenRecentWorkspace={(recent) => {
               void runWorkbenchAction(async () => {
                 const workspaceFiles = await services.fileService.openRecentWorkspace(recent.uri);
@@ -512,7 +520,7 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
                 }
               }, setOperationError, setSaveConflict);
             }}
-            onRefreshWorkspace={() => services.commandService.executeCommand("file.refreshWorkspace")}
+            onRefreshWorkspace={() => executeCommand("file.refreshWorkspace")}
             onOpenFile={(entry) => {
               void runWorkbenchAction(async () => {
                 setSaveConflict(undefined);
@@ -573,7 +581,7 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
         getKeybindingLabel={(id) => services.keybindingService.getKeybindingLabel(id)}
         onClose={() => setPaletteOpen(false)}
         onExecute={(id) => {
-          services.commandService.executeCommand(id);
+          executeCommand(id);
           setPaletteOpen(false);
         }}
       />
@@ -1629,6 +1637,19 @@ async function updateSavedFileIndexAndWorkspace(
   }
 
   services.workspaceService.setWorkspace(workspaceStateFromFiles(refreshedWorkspace));
+}
+
+function executeWorkbenchCommand(
+  services: WorkbenchServices,
+  command: string,
+  setOperationError: (value: string | undefined) => void,
+  setSaveConflict?: (value: FileSaveConflict | undefined) => void
+): void {
+  void runWorkbenchAction(
+    () => services.commandService.executeCommand(command),
+    setOperationError,
+    setSaveConflict
+  );
 }
 
 async function runWorkbenchAction<T>(
