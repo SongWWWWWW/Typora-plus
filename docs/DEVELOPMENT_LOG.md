@@ -1760,3 +1760,37 @@ Review:
 Known limitations:
 
 - Native snapshot files are still a cache of Markdown-derived index data; SQLite remains the planned backend for durable, query-optimized indexing at larger scale.
+
+## 2026-06-07 - P2 HTML Export Service
+
+Completed:
+
+- Added `IExportService` with provider registration, exported document generation, native save routing, and browser download fallback.
+- Added a Markdown HTML export provider using `marked` instead of a hand-rolled Markdown renderer.
+- Added complete HTML document generation with safe title escaping, normalized output filenames, and a restrictive content security policy.
+- Added an Electron export IPC bridge that writes exported files only through a user-selected save dialog with centralized size and format limits.
+- Registered the HTML export provider in Workbench services.
+- Added an `Export HTML` command, `Ctrl+Shift+E` default shortcut, and titlebar icon action.
+- Added platform and Markdown coverage for export provider behavior, native save routing, provider disposal, HTML rendering, and filename normalization.
+
+Quality gate:
+
+- `npm run test -- --run packages/platform/src/platform.test.ts packages/markdown/src/exportHtml.test.ts packages/markdown/src/outline.test.ts`: passed, 44 tests
+- `npm run typecheck`: passed
+- `npm run build -w @typora-plus/desktop`: passed
+- `npm run verify`: passed, 145 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Browser smoke check at `http://127.0.0.1:5173`: `Export HTML` was visible in the titlebar, Workbench rendered without horizontal overflow, and no console errors were reported.
+
+Review:
+
+- Export behavior now sits behind a platform service and provider contract, matching the VS Code-style contribution boundary.
+- Markdown rendering remains in the Markdown package; Workbench only wires commands and UI entry points.
+- Native file writes stay in Electron main process IPC and require a save dialog-selected destination.
+- Export size and supported format metadata live in shell configuration rather than Workbench UI.
+- The new dependency is limited to `@typora-plus/markdown`, where Markdown rendering belongs.
+
+Known limitations:
+
+- HTML is the first export provider; PDF and DOCX remain future providers on the same `IExportService` boundary.

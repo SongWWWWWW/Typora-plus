@@ -47,6 +47,7 @@ Current services:
 - `IRecentService`: persisted recent files and workspaces
 - `IIndexService`: asynchronous workspace indexing, cross-file search, Markdown metadata collection, backlink/link graph queries, and tag queries through a replaceable index provider
 - `IResourceService`: workspace-backed preview resource resolution through a native bridge
+- `IExportService`: registered export providers, exported document generation, and native/browser save routing
 
 Native workspace trust is owned by the Electron main process. The renderer may request a recent workspace by URI, but the main process only opens paths previously selected through the native directory picker and recorded in the main-process trust store.
 
@@ -66,10 +67,11 @@ The settings UI is a Workbench contribution, not a storage owner. `SettingsDialo
 
 Keyboard-driven list surfaces share a small Workbench navigation model. Command Palette and Quick Open keep local active-row state, but bounds normalization and Arrow/Home/End movement live in `listNavigationModel.ts`, so new palette-like surfaces can reuse the same behavior without copying key handling into JSX.
 
+Export is a provider-backed platform service. `IExportService` owns provider registration and save routing; the Markdown package contributes the current HTML provider using `marked`, while the Electron main process owns the save dialog and bounded file write. Workbench registers an `Export HTML` command and toolbar action but does not render Markdown or write exported files directly. Browser builds use a download fallback when the native export bridge is unavailable.
+
 Planned services:
 
 - SQLite-backed index provider for `IIndexService`: durable search, metadata, link graph queries, and tag queries beyond the current snapshot cache
-- `IExportService`: PDF/HTML/DOCX export providers
 - `IExtensionService`: manifest, activation events, contribution points
 
 ## Editor Model
