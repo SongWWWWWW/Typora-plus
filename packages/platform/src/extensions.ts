@@ -9,6 +9,14 @@ import {
 import type { ExportProvider, IExportService } from "./exports";
 import { createServiceIdentifier } from "./instantiation";
 import type { IKeybindingService, Keybinding } from "./keybindings";
+import type {
+  IMarkdownRendererService,
+  MarkdownRendererContribution,
+  MarkdownRendererKind,
+  MarkdownRendererProvider,
+  MarkdownRendererRuntimeMetadata,
+  RegisteredMarkdownRenderer
+} from "./markdownRenderers";
 import type { IMenuService, MenuIconId, MenuId, MenuItemToggle } from "./menus";
 import type { IThemeService, ThemeColorScheme, ThemeContribution } from "./themes";
 
@@ -24,6 +32,7 @@ export interface ExtensionContributions {
   readonly menus?: readonly ExtensionMenuContribution[];
   readonly keybindings?: readonly ExtensionKeybindingContribution[];
   readonly themes?: readonly ExtensionThemeContribution[];
+  readonly markdownRenderers?: readonly ExtensionMarkdownRendererContribution[];
 }
 
 export interface ExtensionCommandContribution {
@@ -58,6 +67,14 @@ export interface ExtensionThemeContribution {
   readonly tokens: Readonly<Record<string, string>>;
 }
 
+export interface ExtensionMarkdownRendererContribution {
+  readonly id: string;
+  readonly label: string;
+  readonly kind: MarkdownRendererKind;
+  readonly language?: string;
+  readonly priority?: number;
+}
+
 export interface RegisteredExtension {
   readonly id: string;
   readonly displayName?: string;
@@ -79,6 +96,7 @@ export interface ExtensionServiceOptions {
   readonly activationHandler?: ExtensionActivationHandler;
   readonly contextKeyService?: IContextKeyService;
   readonly exportService?: IExportService;
+  readonly markdownRendererService?: IMarkdownRendererService;
   readonly themeService?: IThemeService;
 }
 
@@ -94,6 +112,7 @@ export interface ExtensionContext {
   readonly commands: ExtensionCommandApi;
   readonly contextKeys: ExtensionContextKeyApi;
   readonly exports: ExtensionExportApi;
+  readonly markdown: ExtensionMarkdownApi;
 }
 
 export interface ExtensionSubscriptionStore {
@@ -114,6 +133,14 @@ export interface ExtensionContextKeyApi {
 export interface ExtensionExportApi {
   registerProvider(provider: ExportProvider): IDisposable;
   getProviders(): readonly ExportProvider[];
+}
+
+export interface ExtensionMarkdownApi {
+  registerRendererProvider(
+    provider: MarkdownRendererProvider,
+    metadata?: MarkdownRendererRuntimeMetadata
+  ): IDisposable;
+  getRenderers(): readonly RegisteredMarkdownRenderer[];
 }
 
 export type ExtensionCommandHandler = (...args: unknown[]) => unknown;
@@ -187,6 +214,18 @@ export class ExtensionService extends Disposable implements IExtensionService {
         }
       }
 
+      if (normalizedManifest.contributes.markdownRenderers.length > 0) {
+        const markdownRendererService = this.options.markdownRendererService;
+
+        if (!markdownRendererService) {
+          throw new Error(`No extension Markdown renderer service registered: ${normalizedManifest.id}`);
+        }
+
+        for (const renderer of normalizedManifest.contributes.markdownRenderers) {
+          disposables.add(markdownRendererService.registerRendererContribution(renderer));
+        }
+      }
+
       const record: RegisteredExtensionRecord = {
         manifest: normalizedManifest,
         disposables,
@@ -242,7 +281,8 @@ export class ExtensionService extends Disposable implements IExtensionService {
             registeredExtension,
             this.commandService,
             this.options.contextKeyService,
-            this.options.exportService
+            this.options.exportService,
+            this.options.markdownRendererService
           )
         });
       }).then(() => {
@@ -327,6 +367,7 @@ interface NormalizedExtensionManifest {
     readonly commands: readonly ExtensionCommandContribution[];
     readonly menus: readonly NormalizedExtensionMenuContribution[];
     readonly keybindings: readonly ExtensionKeybindingContribution[];
+    readonly markdownRenderers: readonly MarkdownRendererContribution[];
     readonly themes: readonly ThemeContribution[];
   };
 }
@@ -352,14 +393,18 @@ function normalizeExtensionManifest(manifest: ExtensionManifest): NormalizedExte
     .map((contribution, index) => normalizeKeybindingContribution(contribution, id, index));
   const themes = readOptionalArray(contributes.themes, `Theme contributions for ${id}`)
     .map((contribution, index) => normalizeThemeContribution(contribution, id, index));
+  const markdownRenderers = readOptionalArray(contributes.markdownRenderers, `Markdown renderer contributions for ${id}`)
+    .map((contribution, index) => normalizeMarkdownRendererContribution(contribution, id, index));
   const activationEvents = uniqueValues([
     ...readOptionalArray(record.activationEvents, `Activation events for ${id}`)
       .map((activationEvent, index) => normalizeActivationEvent(activationEvent, id, index)),
-    ...commands.map((command) => commandActivationEvent(command.command))
+    ...commands.map((command) => commandActivationEvent(command.command)),
+    ...markdownRenderers.map((renderer) => markdownRendererActivationEvent(renderer.id))
   ]);
 
   assertUnique(commands.map((command) => command.command), `Command contribution ids for ${id}`);
   assertUnique(menus.map((menu) => menu.id), `Menu contribution ids for ${id}`);
+  assertUnique(markdownRenderers.map((renderer) => renderer.id), `Markdown renderer contribution ids for ${id}`);
   assertUnique(themes.map((theme) => theme.id), `Theme contribution ids for ${id}`);
 
   return {
@@ -370,6 +415,7 @@ function normalizeExtensionManifest(manifest: ExtensionManifest): NormalizedExte
       commands,
       menus,
       keybindings,
+      markdownRenderers,
       themes
     }
   };
@@ -463,6 +509,27 @@ function normalizeThemeContribution(
   };
 }
 
+function normalizeMarkdownRendererContribution(
+  contribution: unknown,
+  extensionId: string,
+  index: number
+): MarkdownRendererContribution {
+  const record = expectRecord(contribution, `Markdown renderer contribution ${index + 1} for ${extensionId}`);
+  const id = readRequiredString(record.id, `Markdown renderer contribution id for ${extensionId}`);
+  const label = readRequiredString(record.label, `Markdown renderer contribution label for ${id}`);
+  const kind = normalizeMarkdownRendererKind(record.kind, id);
+  const language = normalizeOptionalMarkdownRendererLanguage(record.language, id);
+  const priority = readOptionalNumber(record.priority, `Markdown renderer contribution priority for ${id}`);
+
+  return {
+    id,
+    label,
+    kind,
+    ...(language ? { language } : {}),
+    ...(priority !== undefined ? { priority } : {})
+  };
+}
+
 function normalizeOptionalThemeColorScheme(value: unknown, themeId: string): ThemeColorScheme | undefined {
   if (value === undefined) {
     return undefined;
@@ -473,6 +540,28 @@ function normalizeOptionalThemeColorScheme(value: unknown, themeId: string): The
   }
 
   return value;
+}
+
+function normalizeMarkdownRendererKind(value: unknown, rendererId: string): MarkdownRendererKind {
+  if (value !== "block" && value !== "inline") {
+    throw new Error(`Markdown renderer kind for ${rendererId} must be block or inline`);
+  }
+
+  return value;
+}
+
+function normalizeOptionalMarkdownRendererLanguage(value: unknown, rendererId: string): string | undefined {
+  const language = readOptionalString(value, `Markdown renderer language for ${rendererId}`);
+
+  if (language === undefined) {
+    return undefined;
+  }
+
+  if (!/^[A-Za-z0-9][A-Za-z0-9_.+-]*$/.test(language)) {
+    throw new Error(`Markdown renderer language for ${rendererId} is invalid: ${language}`);
+  }
+
+  return language.toLowerCase();
 }
 
 function normalizeKeybinding(value: unknown, command: string): Keybinding {
@@ -616,6 +705,10 @@ function commandActivationEvent(command: string): string {
   return `onCommand:${command}`;
 }
 
+function markdownRendererActivationEvent(rendererId: string): string {
+  return `onMarkdownRenderer:${rendererId}`;
+}
+
 function toRegisteredExtension(record: RegisteredExtensionRecord): RegisteredExtension {
   return {
     id: record.manifest.id,
@@ -630,7 +723,8 @@ function createExtensionContext(
   extension: RegisteredExtension,
   commandService: ICommandService,
   contextKeyService: IContextKeyService | undefined,
-  exportService: IExportService | undefined
+  exportService: IExportService | undefined,
+  markdownRendererService: IMarkdownRendererService | undefined
 ): ExtensionContext {
   return {
     extension,
@@ -686,6 +780,17 @@ function createExtensionContext(
         return record.runtimeDisposables.add(disposable);
       },
       getProviders: () => exportService?.getProviders() ?? []
+    },
+    markdown: {
+      registerRendererProvider(provider, metadata) {
+        if (!markdownRendererService) {
+          throw new Error(`No extension Markdown renderer service registered: ${record.manifest.id}`);
+        }
+
+        const disposable = markdownRendererService.registerRendererProvider(provider, metadata);
+        return record.runtimeDisposables.add(disposable);
+      },
+      getRenderers: () => markdownRendererService?.getRenderers() ?? []
     }
   };
 }

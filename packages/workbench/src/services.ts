@@ -14,6 +14,7 @@ import {
   IFileService,
   IIndexService,
   IKeybindingService,
+  IMarkdownRendererService,
   IMenuService,
   IRecentService,
   IResourceService,
@@ -21,6 +22,7 @@ import {
   IThemeService,
   IWorkspaceService,
   KeybindingService,
+  MarkdownRendererService,
   MenuService,
   NativeAttachmentService,
   NativeFileService,
@@ -42,6 +44,7 @@ import {
   type IFileService as FileServiceContract,
   type IIndexService as IndexServiceContract,
   type IKeybindingService as KeybindingServiceContract,
+  type IMarkdownRendererService as MarkdownRendererServiceContract,
   type IMenuService as MenuServiceContract,
   type IRecentService as RecentServiceContract,
   type IResourceService as ResourceServiceContract,
@@ -62,6 +65,7 @@ export interface WorkbenchServices {
   readonly fileService: FileServiceContract;
   readonly indexService: IndexServiceContract;
   readonly keybindingService: KeybindingServiceContract;
+  readonly markdownRendererService: MarkdownRendererServiceContract;
   readonly menuService: MenuServiceContract;
   readonly recentService: RecentServiceContract;
   readonly resourceService: ResourceServiceContract;
@@ -82,6 +86,7 @@ export function createWorkbenchServices(): WorkbenchServices {
   const exportService = new ExportService({ resourceService });
   const contextKeyService = new ContextKeyService();
   const themeService = new ThemeService();
+  const markdownRendererService = new MarkdownRendererService();
   const indexSnapshotStorage = createDefaultWorkspaceIndexSnapshotStorage();
   const indexService = new WorkspaceIndexService(fileService, {
     maxFileSizeBytes: configurationService.getValue().workspace.searchMaxFileSizeBytes,
@@ -110,6 +115,7 @@ export function createWorkbenchServices(): WorkbenchServices {
   serviceCollection.set(IFileService, fileService);
   serviceCollection.set(IIndexService, indexService);
   serviceCollection.set(IKeybindingService, keybindingService);
+  serviceCollection.set(IMarkdownRendererService, markdownRendererService);
   serviceCollection.set(IMenuService, menuService);
   serviceCollection.set(IRecentService, recentService);
   serviceCollection.set(IResourceService, resourceService);
@@ -127,6 +133,7 @@ export function createWorkbenchServices(): WorkbenchServices {
   extensionService = new ExtensionService(commandService, menuService, keybindingService, {
     contextKeyService,
     exportService,
+    markdownRendererService,
     themeService
   });
   serviceCollection.set(IExtensionService, extensionService);
@@ -148,6 +155,7 @@ export function createWorkbenchServices(): WorkbenchServices {
     fileService,
     indexService,
     keybindingService,
+    markdownRendererService,
     menuService,
     recentService,
     resourceService,

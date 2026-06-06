@@ -13,6 +13,7 @@ import {
   WorkspaceTextFileService,
   WorkspaceIndexService,
   KeybindingService,
+  MarkdownRendererService,
   MenuService,
   PersistedWorkspaceIndexProvider,
   RecentService,
@@ -609,6 +610,124 @@ describe("themes", () => {
   });
 });
 
+describe("markdown renderers", () => {
+  it("registers renderer contributions and providers through disposables", async () => {
+    const service = new MarkdownRendererService();
+    let changeCount = 0;
+    service.onDidChangeMarkdownRenderers(() => {
+      changeCount += 1;
+    });
+    const contributionDisposable = service.registerRendererContribution({
+      id: " notes.mermaid ",
+      label: " Mermaid ",
+      kind: "block",
+      language: "Mermaid",
+      priority: 20
+    });
+
+    expect(changeCount).toBe(1);
+    expect(service.getRenderers()).toEqual([
+      {
+        id: "notes.mermaid",
+        label: "Mermaid",
+        kind: "block",
+        language: "mermaid",
+        priority: 20,
+        hasProvider: false
+      }
+    ]);
+
+    const providerDisposable = service.registerRendererProvider({
+      id: " notes.mermaid ",
+      render(input) {
+        return {
+          html: `<figure>${input.language}:${input.value}</figure>`
+        };
+      }
+    });
+
+    expect(changeCount).toBe(2);
+    expect(service.getRenderer("notes.mermaid")?.hasProvider).toBe(true);
+    await expect(service.render({
+      value: "graph TD",
+      language: "MERMAID"
+    }, "notes.mermaid")).resolves.toEqual({
+      html: "<figure>mermaid:graph TD</figure>"
+    });
+
+    providerDisposable.dispose();
+
+    expect(changeCount).toBe(3);
+    expect(service.getRenderer("notes.mermaid")?.hasProvider).toBe(false);
+
+    contributionDisposable.dispose();
+
+    expect(changeCount).toBe(4);
+    expect(service.getRenderers()).toEqual([]);
+  });
+
+  it("registers uncontributed runtime renderers with metadata", async () => {
+    const service = new MarkdownRendererService();
+    const disposable = service.registerRendererProvider({
+      id: "notes.emoji",
+      render() {
+        return { html: "" };
+      }
+    }, {
+      label: "Emoji",
+      kind: "inline",
+      priority: 5
+    });
+
+    expect(service.getRenderers()).toEqual([
+      {
+        id: "notes.emoji",
+        label: "Emoji",
+        kind: "inline",
+        priority: 5,
+        hasProvider: true
+      }
+    ]);
+    await expect(service.render({ value: "" }, "notes.emoji")).resolves.toEqual({ html: "" });
+
+    disposable.dispose();
+
+    expect(service.getRenderers()).toEqual([]);
+  });
+
+  it("rejects duplicate and invalid Markdown renderer registrations", () => {
+    const service = new MarkdownRendererService();
+
+    service.registerRendererContribution({
+      id: "notes.mermaid",
+      label: "Mermaid",
+      kind: "block",
+      language: "mermaid"
+    });
+
+    expect(() => service.registerRendererContribution({
+      id: "notes.mermaid",
+      label: "Duplicate Mermaid",
+      kind: "block",
+      language: "mermaid"
+    })).toThrow("Markdown renderer already registered");
+
+    expect(() => service.registerRendererProvider({
+      id: "notes.uncontributed",
+      render() {
+        return { html: "" };
+      }
+    })).toThrow("Runtime Markdown renderer metadata must be provided");
+
+    expect(() => service.registerRendererContribution({
+      id: "notes.invalid",
+      label: "Invalid",
+      kind: "block",
+      language: "bad language"
+    })).toThrow("Markdown renderer language");
+  });
+});
+
 describe("extensions", () => {
   it("registers manifest command metadata, menus, and keybindings", async () => {
     const { commandService, extensionService, keybindingService, menuService } = createExtensionServices();
@@ -694,6 +813,46 @@ describe("extensions", () => {
     expect(themeService.getThemes()).toEqual([]);
   });
 
+  it("registers manifest Markdown renderer contributions", () => {
+    const { extensionService, markdownRendererService } = createExtensionServices();
+    const disposable = extensionService.registerExtension({
+      id: "notes.renderers",
+      contributes: {
+        markdownRenderers: [
+          {
+            id: "notes.renderers.mermaid",
+            label: "Mermaid",
+            kind: "block",
+            language: "Mermaid",
+            priority: 10
+          }
+        ]
+      }
+    });
+
+    expect(extensionService.getExtensions()).toEqual([
+      {
+        id: "notes.renderers",
+        activationEvents: ["onMarkdownRenderer:notes.renderers.mermaid"],
+        activationState: "inactive"
+      }
+    ]);
+    expect(markdownRendererService.getRenderers()).toEqual([
+      {
+        id: "notes.renderers.mermaid",
+        label: "Mermaid",
+        kind: "block",
+        language: "mermaid",
+        priority: 10,
+        hasProvider: false
+      }
+    ]);
+
+    disposable.dispose();
+
+    expect(markdownRendererService.getRenderers()).toEqual([]);
+  });
+
   it("rolls back extension contributions when theme registration fails", () => {
     const { commandService, extensionService, themeService } = createExtensionServices();
 
@@ -722,6 +881,38 @@ describe("extensions", () => {
     expect(themeService.getThemes()).toEqual([]);
   });
 
+  it("rolls back extension contributions when Markdown renderer registration fails", () => {
+    const { commandService, extensionService, markdownRendererService } = createExtensionServices();
+
+    markdownRendererService.registerRendererContribution({
+      id: "notes.duplicateRenderer",
+      label: "Existing Renderer",
+      kind: "block"
+    });
+
+    expect(() => extensionService.registerExtension({
+      id: "notes.invalidRenderer",
+      contributes: {
+        commands: [
+          {
+            command: "notes.invalidRenderer.command",
+            title: "Invalid Renderer Command"
+          }
+        ],
+        markdownRenderers: [
+          {
+            id: "notes.duplicateRenderer",
+            label: "Duplicate Renderer",
+            kind: "block"
+          }
+        ]
+      }
+    })).toThrow("Markdown renderer already registered");
+
+    expect(commandService.getCommands()).toEqual([]);
+    expect(markdownRendererService.getRenderers().map((renderer) => renderer.id)).toEqual(["notes.duplicateRenderer"]);
+  });
+
   it("requires a theme service for manifest theme contributions", () => {
     const serviceCollection = new ServiceCollection();
     const commandService = new CommandService(serviceCollection);
@@ -746,6 +937,30 @@ describe("extensions", () => {
         ]
       }
     })).toThrow("No extension theme service registered");
+  });
+
+  it("requires a Markdown renderer service for manifest Markdown renderer contributions", () => {
+    const serviceCollection = new ServiceCollection();
+    const commandService = new CommandService(serviceCollection);
+    const contextKeyService = new ContextKeyService();
+    const extensionService = new ExtensionService(
+      commandService,
+      new MenuService(contextKeyService),
+      new KeybindingService()
+    );
+
+    expect(() => extensionService.registerExtension({
+      id: "notes.noMarkdownRendererService",
+      contributes: {
+        markdownRenderers: [
+          {
+            id: "notes.noMarkdownRendererService.renderer",
+            label: "Missing Renderer Service",
+            kind: "block"
+          }
+        ]
+      }
+    })).toThrow("No extension Markdown renderer service registered");
   });
 
   it("indexes explicit and command-derived activation events", async () => {
@@ -1066,6 +1281,47 @@ describe("extensions", () => {
     }, "notes-html")).rejects.toThrow("No export provider");
   });
 
+  it("registers Markdown renderer providers through the extension context", async () => {
+    const services = createExtensionServices((request) => {
+      expect(request.context.markdown.getRenderers().map((renderer) => renderer.id)).toEqual(["notes.mermaid"]);
+      request.context.markdown.registerRendererProvider({
+        id: "notes.mermaid",
+        render(input) {
+          return {
+            html: `<figure>${input.value}</figure>`
+          };
+        }
+      });
+    });
+
+    const disposable = services.extensionService.registerExtension({
+      id: "notes.markdownRuntime",
+      contributes: {
+        markdownRenderers: [
+          {
+            id: "notes.mermaid",
+            label: "Mermaid",
+            kind: "block",
+            language: "mermaid"
+          }
+        ]
+      }
+    });
+
+    await services.extensionService.activateByEvent("onMarkdownRenderer:notes.mermaid");
+
+    expect(services.markdownRendererService.getRenderer("notes.mermaid")?.hasProvider).toBe(true);
+    await expect(services.markdownRendererService.render({
+      value: "graph TD"
+    }, "notes.mermaid")).resolves.toEqual({
+      html: "<figure>graph TD</figure>"
+    });
+
+    disposable.dispose();
+
+    expect(services.markdownRendererService.getRenderers()).toEqual([]);
+  });
+
   it("cleans up extension export providers when activation fails", async () => {
     const services = createExtensionServices((request) => {
       request.context.exports.registerProvider({
@@ -1090,6 +1346,29 @@ describe("extensions", () => {
 
     await expect(services.extensionService.activateByEvent("onStartupFinished")).rejects.toThrow("Activation failed");
     expect(services.exportService.getProviders()).toEqual([]);
+  });
+
+  it("cleans up extension Markdown renderer providers when activation fails", async () => {
+    const services = createExtensionServices((request) => {
+      request.context.markdown.registerRendererProvider({
+        id: "notes.failedRenderer",
+        render() {
+          return { html: "<p>failed</p>" };
+        }
+      }, {
+        label: "Failed Renderer",
+        kind: "block"
+      });
+      throw new Error("Activation failed");
+    });
+
+    services.extensionService.registerExtension({
+      id: "notes.failedMarkdownRuntime",
+      activationEvents: ["onStartupFinished"]
+    });
+
+    await expect(services.extensionService.activateByEvent("onStartupFinished")).rejects.toThrow("Activation failed");
+    expect(services.markdownRendererService.getRenderers()).toEqual([]);
   });
 
   it("rejects matching activation events when no activation handler is registered", async () => {
@@ -2508,6 +2787,7 @@ function createExtensionServices(activationHandler?: ExtensionActivationHandler)
     browserSave: () => true
   });
   const themeService = new ThemeService();
+  const markdownRendererService = new MarkdownRendererService();
   extensionService = new ExtensionService(
     commandService,
     menuService,
@@ -2515,6 +2795,7 @@ function createExtensionServices(activationHandler?: ExtensionActivationHandler)
     {
       contextKeyService,
       exportService,
+      markdownRendererService,
       themeService,
       ...(activationHandler ? { activationHandler } : {})
     }
@@ -2526,6 +2807,7 @@ function createExtensionServices(activationHandler?: ExtensionActivationHandler)
     extensionService,
     exportService,
     keybindingService,
+    markdownRendererService,
     menuService,
     themeService
   };
