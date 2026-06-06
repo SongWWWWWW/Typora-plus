@@ -2760,3 +2760,37 @@ Known limitations:
 - External extension package loading is still not implemented.
 - Extension host transport and IPC are still not implemented.
 - Out-of-process export providers will need a future resource-resolution broker if they must resolve workspace-relative images during export.
+
+## 2026-06-07 - P2 Extension Host Runtime Broker Boundary
+
+Completed:
+
+- Added `ExtensionHostRuntimeBroker` as a platform-level bridge from validated runtime API protocol messages to one activated `ExtensionContext`.
+- Mapped command registration, command execution, command listing, extension-owned context key set/clear/get, export provider registration, and Markdown renderer provider registration messages onto the existing constrained context APIs.
+- Registered proxy command handlers, export providers, and Markdown renderer providers that call an injected request function for future host-side callbacks.
+- Added request id generation injection so tests and future transports can control correlation without hard-coded transport behavior.
+- Added lifecycle cleanup so disposing the broker unregisters its proxy runtime contributions.
+- Added focused tests for command/context broker handling, remote command callback forwarding, export provider proxy forwarding, Markdown renderer proxy forwarding, extension-id mismatch errors, remote API error propagation, and broker disposal cleanup.
+
+Quality gate:
+
+- `npm run typecheck`: passed
+- `npx vitest run packages/platform/src/extensionHostRuntimeBroker.test.ts packages/platform/src/extensionHostProtocol.test.ts`: passed, 17 tests
+- `npm run verify`: passed, 274 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Browser smoke check: not run because this stage only changes platform broker/protocol code and documentation.
+
+Review:
+
+- The broker remains platform-only and does not depend on Workbench, Electron, DOM, Node, dynamic imports, or external extension package loading.
+- Protocol validation, service invocation, and future transport request correlation are separated: protocol messages stay in `extensionHostProtocol`, platform API mapping stays in `ExtensionHostRuntimeBroker`, and IPC remains future work.
+- Remote provider callbacks receive only serializable document/render inputs; provider functions and resource resolver functions are not serialized.
+- Runtime proxy contributions are disposable, avoiding stale commands/providers if a future host session is torn down.
+- No new dependency, storage path, visual token, extra documentation file, or direct DOM access by extension runtimes was introduced.
+
+Known limitations:
+
+- External extension package loading is still not implemented.
+- Extension host transport and IPC are still not implemented.
+- The broker is not wired into an extension host implementation yet; the next step is a transport/session adapter that owns message correlation and broker lifetime.
