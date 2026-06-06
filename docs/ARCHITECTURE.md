@@ -45,8 +45,11 @@ Current services:
 - `IAttachmentService`: pasted image persistence through a native bridge
 - `IRecentService`: persisted recent files and workspaces
 - `IIndexService`: asynchronous workspace indexing and cross-file search
+- `IResourceService`: workspace-backed preview resource resolution through a native bridge
 
 Native workspace trust is owned by the Electron main process. The renderer may request a recent workspace by URI, but the main process only opens paths previously selected through the native directory picker and recorded in the main-process trust store.
+
+Preview resources are also resolved by the platform layer. The renderer passes the active note URI and Markdown image source through `IResourceService`; the Electron main process rejects protocols, absolute paths, path traversal, unsupported extensions, and oversized images before returning a renderer-safe data URL.
 
 Planned services:
 
@@ -66,14 +69,13 @@ Current features:
 - inactive Markdown marker soft hiding for headings, lists, quotes, fences, links, and strong emphasis
 - code fence block styling with visible-range-aware fence state tracking
 - table block styling with code-fence-aware table detection
-- standalone image preview cards with direct rendering limited to safe inline/blob sources
+- standalone image preview cards with workspace-backed local image resolution and direct inline/blob rendering
 - focus mode dimming
 - typewriter mode top spacing
 - imperative line scrolling for outline and search
 
 Next editor work:
 
-- workspace-backed image resource resolution
 - block widgets for math and richer code fences
 - richer table editing affordances
 - viewport-safe large document behavior tests

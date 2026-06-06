@@ -326,3 +326,32 @@ Known limitations:
 
 - Workspace-relative image files are not yet resolved into safe renderer URLs.
 - Remote image loading remains deferred until privacy controls and resource policy are defined.
+
+## 2026-06-06 - P2 Workspace Image Resource Resolution
+
+Completed:
+
+- Added `IResourceService` and `NativeResourceService` for preview resource resolution.
+- Exposed an Electron resource bridge that resolves Markdown image sources relative to the active note.
+- Added main-process checks for protocol sources, absolute paths, path traversal, supported image extensions, and maximum preview size.
+- Connected workbench and editor image cards so workspace images can resolve asynchronously without changing the Markdown text model.
+- Kept browser builds safe: without a native bridge, relative images remain compact placeholders.
+
+Quality gate:
+
+- `npm run typecheck`: passed
+- `npm test`: passed, 41 tests
+- `npm run verify`: passed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- Production browser preview: passed at `http://127.0.0.1:4173`
+
+Review:
+
+- File-system access remains in Electron main and platform services; the editor only receives an optional source resolver.
+- Resource constraints are centralized in shell configuration instead of being hard-coded in the editor.
+- Remote image loading is still intentionally disabled.
+
+Known limitations:
+
+- Native workspace image resolution is covered by service and build verification; full Electron visual verification remains future desktop QA.
+- Images are still represented by inline data URLs; a streaming or custom-protocol resource provider is planned for larger previews.

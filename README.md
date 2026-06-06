@@ -34,6 +34,7 @@ P2 main progress is implemented:
 - save conflict detection with reload/overwrite handling
 - trusted recent workspace reopening
 - workspace-wide search through an index service boundary
+- workspace-backed image preview resource resolution
 
 ## Commands
 
