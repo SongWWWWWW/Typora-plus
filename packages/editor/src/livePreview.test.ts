@@ -18,9 +18,11 @@ import {
   findMarkdownTableCellSourceRange,
   findMarkdownMathBlockSourceRange,
   findInactiveMarkdownInlineMathRanges,
+  findInactiveMarkdownInlineRendererRanges,
   findInactiveMarkdownSyntaxMarkers,
   getNextMarkdownTableColumnAlignment,
   renderMarkdownMathExpression,
+  sanitizeMarkdownInlineRendererHtml,
   sanitizeMarkdownRendererHtml,
   shouldReplaceInactiveCodeFenceLine,
   shouldIgnorePreviewEventTarget,
@@ -468,6 +470,44 @@ describe("findInactiveMarkdownInlineMathRanges", () => {
     expect(findInactiveMarkdownInlineMathRanges("`$x$` and $y$", false)).toEqual([
       { expression: "y", from: 10, to: 13 }
     ]);
+  });
+});
+
+describe("findInactiveMarkdownInlineRendererRanges", () => {
+  it("finds language-qualified inline code renderer ranges", () => {
+    expect(findInactiveMarkdownInlineRendererRanges("Status `badge: done` now", false)).toEqual([
+      {
+        from: 7,
+        language: "badge",
+        source: "badge: done",
+        to: 20,
+        value: "done",
+        valueFrom: 15,
+        valueTo: 19
+      }
+    ]);
+  });
+
+  it("normalizes renderer languages and trims rendered values", () => {
+    expect(findInactiveMarkdownInlineRendererRanges("Use `Badge.Success:  shipped  `", false)).toEqual([
+      {
+        from: 4,
+        language: "badge.success",
+        source: "Badge.Success:  shipped",
+        to: 31,
+        value: "shipped",
+        valueFrom: 21,
+        valueTo: 28
+      }
+    ]);
+  });
+
+  it("does not render ordinary inline code or empty renderer values", () => {
+    expect(findInactiveMarkdownInlineRendererRanges("Use `plain code` and `badge:`", false)).toEqual([]);
+  });
+
+  it("keeps inline renderer source visible on the active line", () => {
+    expect(findInactiveMarkdownInlineRendererRanges("Status `badge: done`", true)).toEqual([]);
   });
 });
 
@@ -1066,9 +1106,42 @@ describe("sanitizeMarkdownRendererHtml", () => {
   });
 });
 
+describe("sanitizeMarkdownInlineRendererHtml", () => {
+  it("keeps inline-safe renderer HTML and data images", () => {
+    withDom(() => {
+      const html = [
+        "<span class=\"tp-renderer-badge unsafe\" onclick=\"run()\">Done</span>",
+        "<img class=\"tp-renderer-icon\" src=\"data:image/png;base64,AA==\" alt=\"ok\">"
+      ].join("");
+
+      expect(renderSanitizedInlineHtml(html)).toBe(
+        "<span class=\"tp-renderer-badge\">Done</span><img class=\"tp-renderer-icon\" src=\"data:image/png;base64,AA==\" alt=\"ok\">"
+      );
+    });
+  });
+
+  it("unwraps block elements from inline renderer output", () => {
+    withDom(() => {
+      const html = [
+        "<figure class=\"tp-renderer-card\"><figcaption>Card</figcaption></figure>",
+        "<table><tbody><tr><td>Cell</td></tr></tbody></table>"
+      ].join("");
+
+      expect(renderSanitizedInlineHtml(html)).toBe("CardCell");
+    });
+  });
+});
+
 function renderSanitizedHtml(html: string): string {
   const container = document.createElement("div");
   container.append(sanitizeMarkdownRendererHtml(html));
+
+  return container.innerHTML;
+}
+
+function renderSanitizedInlineHtml(html: string): string {
+  const container = document.createElement("div");
+  container.append(sanitizeMarkdownInlineRendererHtml(html));
 
   return container.innerHTML;
 }

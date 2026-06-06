@@ -2,7 +2,10 @@ import type { URI } from "@typora-plus/base";
 import type {
   MarkdownCodeFenceRenderInput,
   MarkdownCodeFenceRenderResult,
-  MarkdownCodeFenceRenderer
+  MarkdownCodeFenceRenderer,
+  MarkdownInlineRenderInput,
+  MarkdownInlineRenderResult,
+  MarkdownInlineRenderer
 } from "@typora-plus/editor";
 import {
   defaultConfiguration,
@@ -14,6 +17,12 @@ export const defaultMarkdownCodeFenceRendererCacheEntryLimit =
   defaultConfiguration.editor.rendererPreviewCacheEntries;
 
 export interface MarkdownCodeFenceRendererOptions {
+  readonly cacheEntryLimit?: number;
+  readonly getUri: () => URI | undefined;
+  readonly markdownRendererService: IMarkdownRendererService;
+}
+
+export interface MarkdownInlineRendererOptions {
   readonly cacheEntryLimit?: number;
   readonly getUri: () => URI | undefined;
   readonly markdownRendererService: IMarkdownRendererService;
@@ -42,7 +51,7 @@ export function createMarkdownCodeFenceRenderer(
         return undefined;
       }
 
-      const language = normalizeMarkdownCodeFenceLanguage(input.language);
+      const language = normalizeMarkdownRendererLanguage(input.language);
       const uri = options.getUri();
       const cacheKey = createMarkdownCodeFenceRenderCacheKey(input, renderer.id, uri);
 
@@ -50,7 +59,7 @@ export function createMarkdownCodeFenceRenderer(
         return renderMarkdownCodeFencePreview(options.markdownRendererService, input, renderer, language, uri);
       }
 
-      const cached = readMarkdownCodeFenceRenderCache(cache, cacheKey);
+      const cached = readMarkdownRenderCache(cache, cacheKey);
       if (cached) {
         return cached;
       }
@@ -63,7 +72,56 @@ export function createMarkdownCodeFenceRenderer(
         uri
       );
 
-      return writeMarkdownCodeFenceRenderCache(cache, cacheKey, output, cacheEntryLimit);
+      return writeMarkdownRenderCache(cache, cacheKey, output, cacheEntryLimit);
+    }
+  };
+}
+
+export function createMarkdownInlineRenderer(
+  options: MarkdownInlineRendererOptions
+): MarkdownInlineRenderer {
+  const cache = new Map<string, Promise<MarkdownInlineRenderResult | undefined>>();
+  const cacheEntryLimit = normalizeCacheEntryLimit(options.cacheEntryLimit);
+
+  return {
+    canRender(input) {
+      return selectMarkdownInlineRenderer(
+        options.markdownRendererService.getRenderers(),
+        input.language
+      ) !== undefined;
+    },
+    async render(input) {
+      const renderer = selectMarkdownInlineRenderer(
+        options.markdownRendererService.getRenderers(),
+        input.language
+      );
+
+      if (!renderer) {
+        return undefined;
+      }
+
+      const language = normalizeMarkdownRendererLanguage(input.language);
+      const uri = options.getUri();
+      const cacheKey = createMarkdownInlineRenderCacheKey(input, renderer.id, uri);
+
+      if (cacheEntryLimit <= 0) {
+        return renderMarkdownInlinePreview(options.markdownRendererService, input, renderer, language, uri);
+      }
+
+      const cached = readMarkdownRenderCache(cache, cacheKey);
+      if (cached) {
+        return cached;
+      }
+
+      const output = renderMarkdownInlinePreview(
+        options.markdownRendererService,
+        input,
+        renderer,
+        language,
+        uri
+      );
+
+      return writeMarkdownRenderCache(cache, cacheKey, output, cacheEntryLimit);
     }
   };
 }
@@ -72,7 +130,7 @@ export function selectMarkdownCodeFenceRenderer(
   renderers: readonly RegisteredMarkdownRenderer[],
   language: string
 ): RegisteredMarkdownRenderer | undefined {
-  const normalizedLanguage = normalizeMarkdownCodeFenceLanguage(language);
+  const normalizedLanguage = normalizeMarkdownRendererLanguage(language);
 
   if (!normalizedLanguage) {
     return undefined;
@@ -84,6 +142,22 @@ export function selectMarkdownCodeFenceRenderer(
   );
 }
 
+export function selectMarkdownInlineRenderer(
+  renderers: readonly RegisteredMarkdownRenderer[],
+  language: string
+): RegisteredMarkdownRenderer | undefined {
+  const normalizedLanguage = normalizeMarkdownRendererLanguage(language);
+
+  if (!normalizedLanguage) {
+    return undefined;
+  }
+
+  return renderers.find((renderer) =>
+    renderer.kind === "inline" &&
+    renderer.language?.toLowerCase() === normalizedLanguage
+  );
+}
+
 async function renderMarkdownCodeFencePreview(
   markdownRendererService: IMarkdownRendererService,
   input: MarkdownCodeFenceRenderInput,
@@ -91,6 +165,26 @@ async function renderMarkdownCodeFencePreview(
   language: string | undefined,
   uri: URI | undefined
 ): Promise<MarkdownCodeFenceRenderResult> {
+  const output = await markdownRendererService.render({
+    value: input.value,
+    ...(language ? { language } : {}),
+    ...(uri ? { uri } : {})
+  }, renderer.id);
+
+  return {
+    html: output.html,
+    label: renderer.label,
+    rendererId: renderer.id
+  };
+}
+
+async function renderMarkdownInlinePreview(
+  markdownRendererService: IMarkdownRendererService,
+  input: MarkdownInlineRenderInput,
+  renderer: RegisteredMarkdownRenderer,
+  language: string | undefined,
+  uri: URI | undefined
+): Promise<MarkdownInlineRenderResult> {
   const output = await markdownRendererService.render({
     value: input.value,
     ...(language ? { language } : {}),
@@ -118,10 +212,23 @@ function createMarkdownCodeFenceRenderCacheKey(
   ]);
 }
 
-function readMarkdownCodeFenceRenderCache(
-  cache: Map<string, Promise<MarkdownCodeFenceRenderResult | undefined>>,
+function createMarkdownInlineRenderCacheKey(
+  input: MarkdownInlineRenderInput,
+  rendererId: string,
+  uri: URI | undefined
+): string {
+  return JSON.stringify([
+    rendererId,
+    uri?.toString() ?? "",
+    input.language,
+    input.value
+  ]);
+}
+
+function readMarkdownRenderCache<TResult>(
+  cache: Map<string, Promise<TResult | undefined>>,
   cacheKey: string
-): Promise<MarkdownCodeFenceRenderResult | undefined> | undefined {
+): Promise<TResult | undefined> | undefined {
   const cached = cache.get(cacheKey);
 
   if (!cached) {
@@ -133,12 +240,12 @@ function readMarkdownCodeFenceRenderCache(
   return cached;
 }
 
-function writeMarkdownCodeFenceRenderCache(
-  cache: Map<string, Promise<MarkdownCodeFenceRenderResult | undefined>>,
+function writeMarkdownRenderCache<TResult>(
+  cache: Map<string, Promise<TResult | undefined>>,
   cacheKey: string,
-  output: Promise<MarkdownCodeFenceRenderResult | undefined>,
+  output: Promise<TResult | undefined>,
   cacheEntryLimit: number
-): Promise<MarkdownCodeFenceRenderResult | undefined> {
+): Promise<TResult | undefined> {
   const cachedOutput = output.catch((error: unknown) => {
     cache.delete(cacheKey);
     throw error;
@@ -168,7 +275,7 @@ function normalizeCacheEntryLimit(value: number | undefined): number {
   return Math.max(0, Math.trunc(candidate));
 }
 
-function normalizeMarkdownCodeFenceLanguage(language: string): string | undefined {
+function normalizeMarkdownRendererLanguage(language: string): string | undefined {
   const normalized = language.trim().toLowerCase();
   return normalized ? normalized : undefined;
 }

@@ -29,6 +29,16 @@ export interface MarkdownInlineMathRange {
   readonly to: number;
 }
 
+export interface MarkdownInlineRendererRange {
+  readonly from: number;
+  readonly language: string;
+  readonly source: string;
+  readonly to: number;
+  readonly value: string;
+  readonly valueFrom: number;
+  readonly valueTo: number;
+}
+
 export interface MarkdownTableCellSourceRange {
   readonly from: number;
   readonly to: number;
@@ -147,6 +157,24 @@ export interface MarkdownCodeFenceRenderer {
     undefined;
 }
 
+export interface MarkdownInlineRenderInput {
+  readonly language: string;
+  readonly value: string;
+}
+
+export interface MarkdownInlineRenderResult {
+  readonly html: string;
+  readonly label?: string;
+  readonly rendererId: string;
+}
+
+export interface MarkdownInlineRenderer {
+  canRender?(input: MarkdownInlineRenderInput): boolean;
+  render(input: MarkdownInlineRenderInput): Promise<MarkdownInlineRenderResult | undefined> |
+    MarkdownInlineRenderResult |
+    undefined;
+}
+
 export interface MarkdownCodeFenceSourceRange {
   readonly fromColumn: number;
   readonly fromLine: number;
@@ -179,7 +207,8 @@ const tableToolButtonMinWidthPx = 38;
 export function livePreviewExtension(
   configuration: MarkdownEditorConfiguration,
   resolveImageSource?: MarkdownImageSourceResolver,
-  renderCodeFence?: MarkdownCodeFenceRenderer
+  renderCodeFence?: MarkdownCodeFenceRenderer,
+  renderInline?: MarkdownInlineRenderer
 ): Extension {
   return [
     markdownEditorTheme(configuration),
@@ -188,12 +217,18 @@ export function livePreviewExtension(
         decorations: DecorationSet;
 
         constructor(view: EditorView) {
-          this.decorations = buildDecorations(view, configuration, resolveImageSource, renderCodeFence);
+          this.decorations = buildDecorations(view, configuration, resolveImageSource, renderCodeFence, renderInline);
         }
 
         update(update: ViewUpdate): void {
           if (update.docChanged || update.viewportChanged || update.selectionSet) {
-            this.decorations = buildDecorations(update.view, configuration, resolveImageSource, renderCodeFence);
+            this.decorations = buildDecorations(
+              update.view,
+              configuration,
+              resolveImageSource,
+              renderCodeFence,
+              renderInline
+            );
           }
         }
       },
@@ -561,6 +596,19 @@ export function findInactiveMarkdownInlineMathRanges(text: string, active: boole
   return ranges;
 }
 
+export function findInactiveMarkdownInlineRendererRanges(
+  text: string,
+  active: boolean
+): readonly MarkdownInlineRendererRange[] {
+  if (active) {
+    return [];
+  }
+
+  return readMarkdownCodeSpanRanges(text)
+    .map((codeSpan) => readMarkdownInlineRendererRange(text, codeSpan))
+    .filter((range): range is MarkdownInlineRendererRange => range !== undefined);
+}
+
 export function renderMarkdownMathExpression(
   expression: string,
   displayMode: boolean
@@ -686,7 +734,8 @@ function buildDecorations(
   view: EditorView,
   configuration: MarkdownEditorConfiguration,
   resolveImageSource: MarkdownImageSourceResolver | undefined,
-  renderCodeFence: MarkdownCodeFenceRenderer | undefined
+  renderCodeFence: MarkdownCodeFenceRenderer | undefined,
+  renderInline: MarkdownInlineRenderer | undefined
 ): DecorationSet {
   const builder = new RangeSetBuilder<Decoration>();
   const activeLine = view.state.doc.lineAt(view.state.selection.main.head).number;
@@ -746,9 +795,13 @@ function buildDecorations(
           widget: new MarkdownImageBlockWidget(imageBlock, resolveImageSource)
         }));
       } else {
+        const inlineRenderer = renderInline;
         const inlineMathRanges = lineBlockState?.codeFenceRole || lineBlockState?.mathBlock || tableBlockIsActive
           ? []
           : findInactiveMarkdownInlineMathRanges(line.text, lineIsActive);
+        const inlineRendererRanges = lineBlockState?.codeFenceRole || lineBlockState?.mathBlock || tableBlockIsActive
+          ? []
+          : findRenderableMarkdownInlineRendererRanges(line.text, lineIsActive, inlineRenderer);
         const inlineDecorations = inlineMathRanges.map((inlineMath) => ({
           decoration: Decoration.replace({
             widget: new MarkdownInlineMathWidget(
@@ -760,16 +813,37 @@ function buildDecorations(
           from: line.from + inlineMath.from,
           to: line.from + inlineMath.to
         }));
+        const inlineRendererDecorations = inlineRenderer ? inlineRendererRanges.map((range) => ({
+          decoration: Decoration.replace({
+            widget: new MarkdownInlineRendererWidget(
+              range,
+              line.from + range.from,
+              line.from + range.to,
+              line.from + range.valueFrom,
+              line.from + range.valueTo,
+              inlineRenderer
+            )
+          }),
+          from: line.from + range.from,
+          to: line.from + range.to
+        })) : [];
         const sourceLineIsActive = lineIsActive || codeFenceIsActive || tableBlockIsActive;
         const markerDecorations = findInactiveMarkdownSyntaxMarkers(line.text, sourceLineIsActive)
-          .filter((marker) => !inlineMathRanges.some((inlineMath) => rangesOverlap(marker, inlineMath)))
+          .filter((marker) =>
+            !inlineMathRanges.some((inlineMath) => rangesOverlap(marker, inlineMath)) &&
+            !inlineRendererRanges.some((inlineRenderer) => rangesOverlap(marker, inlineRenderer))
+          )
           .map((marker) => ({
             decoration: syntaxMarkerDecoration,
             from: line.from + marker.from,
             to: line.from + marker.to
           }));
 
-        for (const decoration of [...markerDecorations, ...inlineDecorations].sort(compareLineDecorations)) {
+        for (const decoration of [
+          ...markerDecorations,
+          ...inlineDecorations,
+          ...inlineRendererDecorations
+        ].sort(compareLineDecorations)) {
           builder.add(decoration.from, decoration.to, decoration.decoration);
         }
       }
@@ -1228,8 +1302,13 @@ function canCloseInlineMath(text: string, index: number): boolean {
   return Boolean(previous && !/\s/.test(previous));
 }
 
-function readMarkdownCodeSpanRanges(text: string): readonly MarkdownSyntaxMarkerRange[] {
-  const ranges: MarkdownSyntaxMarkerRange[] = [];
+interface MarkdownCodeSpanRange extends MarkdownSyntaxMarkerRange {
+  readonly contentFrom: number;
+  readonly contentTo: number;
+}
+
+function readMarkdownCodeSpanRanges(text: string): readonly MarkdownCodeSpanRange[] {
+  const ranges: MarkdownCodeSpanRange[] = [];
   let cursor = 0;
 
   while (cursor < text.length) {
@@ -1245,11 +1324,57 @@ function readMarkdownCodeSpanRanges(text: string): readonly MarkdownSyntaxMarker
       break;
     }
 
-    ranges.push({ from: open.from, to: close.to });
+    ranges.push({
+      contentFrom: open.to,
+      contentTo: close.from,
+      from: open.from,
+      to: close.to
+    });
     cursor = close.to;
   }
 
   return ranges;
+}
+
+function readMarkdownInlineRendererRange(
+  text: string,
+  codeSpan: MarkdownCodeSpanRange
+): MarkdownInlineRendererRange | undefined {
+  const rawContent = text.slice(codeSpan.contentFrom, codeSpan.contentTo);
+  const leadingWhitespaceLength = rawContent.match(/^\s*/)?.[0].length ?? 0;
+  const trailingWhitespaceLength = rawContent.match(/\s*$/)?.[0].length ?? 0;
+  const contentFrom = codeSpan.contentFrom + leadingWhitespaceLength;
+  const contentTo = Math.max(contentFrom, codeSpan.contentTo - trailingWhitespaceLength);
+  const content = text.slice(contentFrom, contentTo);
+  const match = /^([A-Za-z0-9][A-Za-z0-9_.+-]*):(.*)$/s.exec(content);
+
+  if (!match?.[1]) {
+    return undefined;
+  }
+
+  const rawValue = match[2] ?? "";
+  const valueLeadingWhitespaceLength = rawValue.match(/^\s*/)?.[0].length ?? 0;
+  const valueTrailingWhitespaceLength = rawValue.match(/\s*$/)?.[0].length ?? 0;
+  const value = rawValue.slice(
+    valueLeadingWhitespaceLength,
+    rawValue.length - valueTrailingWhitespaceLength
+  );
+
+  if (!value) {
+    return undefined;
+  }
+
+  const valueFrom = contentFrom + match[1].length + 1 + valueLeadingWhitespaceLength;
+
+  return {
+    from: codeSpan.from,
+    language: match[1].toLowerCase(),
+    source: content,
+    to: codeSpan.to,
+    value,
+    valueFrom,
+    valueTo: valueFrom + value.length
+  };
 }
 
 function findNextBacktickRun(
@@ -2276,6 +2401,31 @@ function canRenderCodeFence(
     : true;
 }
 
+function findRenderableMarkdownInlineRendererRanges(
+  text: string,
+  active: boolean,
+  renderer: MarkdownInlineRenderer | undefined
+): readonly MarkdownInlineRendererRange[] {
+  if (!renderer) {
+    return [];
+  }
+
+  return findInactiveMarkdownInlineRendererRanges(text, active)
+    .filter((range) => canRenderInline(renderer, range));
+}
+
+function canRenderInline(
+  renderer: MarkdownInlineRenderer,
+  inline: Pick<MarkdownInlineRendererRange, "language" | "value">
+): boolean {
+  return renderer.canRender
+    ? renderer.canRender({
+      language: inline.language,
+      value: inline.value
+    })
+    : true;
+}
+
 function renderExternalCodeFenceLoading(body: HTMLElement): void {
   body.className = "tp-editor-renderer-body tp-editor-renderer-placeholder";
   body.textContent = "Rendering preview...";
@@ -2304,12 +2454,23 @@ function renderSanitizedMarkdownRendererHtml(body: HTMLElement, html: string): v
 }
 
 export function sanitizeMarkdownRendererHtml(html: string): DocumentFragment {
+  return sanitizeMarkdownRendererHtmlWithAllowedTags(html, allowedRendererHtmlTags);
+}
+
+export function sanitizeMarkdownInlineRendererHtml(html: string): DocumentFragment {
+  return sanitizeMarkdownRendererHtmlWithAllowedTags(html, allowedInlineRendererHtmlTags);
+}
+
+function sanitizeMarkdownRendererHtmlWithAllowedTags(
+  html: string,
+  allowedTags: ReadonlySet<string>
+): DocumentFragment {
   const fragment = document.createDocumentFragment();
   const parserDocument = document.implementation.createHTMLDocument("markdown-renderer");
   parserDocument.body.innerHTML = html;
 
   for (const child of Array.from(parserDocument.body.childNodes)) {
-    const sanitized = sanitizeMarkdownRendererNode(child);
+    const sanitized = sanitizeMarkdownRendererNode(child, allowedTags);
 
     if (sanitized) {
       fragment.append(sanitized);
@@ -2319,7 +2480,7 @@ export function sanitizeMarkdownRendererHtml(html: string): DocumentFragment {
   return fragment;
 }
 
-function sanitizeMarkdownRendererNode(node: Node): Node | undefined {
+function sanitizeMarkdownRendererNode(node: Node, allowedTags: ReadonlySet<string>): Node | undefined {
   if (node.nodeType === Node.TEXT_NODE) {
     return document.createTextNode(node.textContent ?? "");
   }
@@ -2334,11 +2495,11 @@ function sanitizeMarkdownRendererNode(node: Node): Node | undefined {
     return undefined;
   }
 
-  if (!allowedRendererHtmlTags.has(tagName)) {
+  if (!allowedTags.has(tagName)) {
     const fragment = document.createDocumentFragment();
 
     for (const child of Array.from(node.childNodes)) {
-      const sanitized = sanitizeMarkdownRendererNode(child);
+      const sanitized = sanitizeMarkdownRendererNode(child, allowedTags);
 
       if (sanitized) {
         fragment.append(sanitized);
@@ -2356,7 +2517,7 @@ function sanitizeMarkdownRendererNode(node: Node): Node | undefined {
   }
 
   for (const child of Array.from(node.childNodes)) {
-    const sanitized = sanitizeMarkdownRendererNode(child);
+    const sanitized = sanitizeMarkdownRendererNode(child, allowedTags);
 
     if (sanitized) {
       element.append(sanitized);
@@ -2398,6 +2559,18 @@ const allowedRendererHtmlTags = new Set([
   "thead",
   "tr",
   "ul"
+]);
+
+const allowedInlineRendererHtmlTags = new Set([
+  "b",
+  "br",
+  "code",
+  "em",
+  "i",
+  "img",
+  "small",
+  "span",
+  "strong"
 ]);
 
 const blockedRendererHtmlTags = new Set([
@@ -2895,6 +3068,146 @@ function focusMarkdownInlineMathSource(view: EditorView, sourceFrom: number, sou
 
 function isInlineMathSourceNavigationEvent(event: Event): boolean {
   return event.target instanceof Element && Boolean(event.target.closest("[data-inline-math-source='true']"));
+}
+
+class MarkdownInlineRendererWidget extends WidgetType {
+  private disposed = false;
+
+  constructor(
+    private readonly inline: MarkdownInlineRendererRange,
+    private readonly sourceFrom: number,
+    private readonly sourceTo: number,
+    private readonly valueFrom: number,
+    private readonly valueTo: number,
+    private readonly renderer: MarkdownInlineRenderer
+  ) {
+    super();
+  }
+
+  override eq(widget: WidgetType): boolean {
+    return widget instanceof MarkdownInlineRendererWidget &&
+      widget.inline.language === this.inline.language &&
+      widget.inline.source === this.inline.source &&
+      widget.inline.value === this.inline.value &&
+      widget.sourceFrom === this.sourceFrom &&
+      widget.sourceTo === this.sourceTo &&
+      widget.valueFrom === this.valueFrom &&
+      widget.valueTo === this.valueTo &&
+      widget.renderer === this.renderer;
+  }
+
+  override toDOM(view: EditorView): HTMLElement {
+    this.disposed = false;
+    const inline = document.createElement("span");
+    inline.className = "tp-editor-inline-renderer-preview tp-editor-inline-renderer-loading";
+    inline.dataset.inlineRendererSource = "true";
+    inline.setAttribute("aria-label", `${this.inline.language} inline preview`);
+    inline.title = "Edit inline renderer source";
+    inline.textContent = this.inline.value;
+    inline.addEventListener("mousedown", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+    });
+    inline.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      focusMarkdownInlineRendererSource(view, this.valueFrom, this.valueTo, this.sourceFrom, this.sourceTo);
+    });
+
+    void this.renderExternalPreview(inline, view);
+    return inline;
+  }
+
+  override destroy(): void {
+    this.disposed = true;
+  }
+
+  override ignoreEvent(event: Event): boolean {
+    return isInlineRendererSourceNavigationEvent(event);
+  }
+
+  private async renderExternalPreview(inline: HTMLElement, view: EditorView): Promise<void> {
+    try {
+      const result = await this.renderer.render({
+        language: this.inline.language,
+        value: this.inline.value
+      });
+
+      if (this.disposed) {
+        return;
+      }
+
+      if (!result) {
+        renderInlineRendererFallback(inline, this.inline.value);
+        view.requestMeasure();
+        return;
+      }
+
+      renderSanitizedMarkdownInlineRendererHtml(inline, result.html, this.inline.value);
+      inline.classList.remove("tp-editor-inline-renderer-loading", "tp-editor-inline-renderer-error");
+      inline.classList.add("tp-editor-inline-renderer-ready");
+      view.requestMeasure();
+    } catch (error) {
+      if (this.disposed) {
+        return;
+      }
+
+      inline.classList.remove("tp-editor-inline-renderer-loading", "tp-editor-inline-renderer-ready");
+      inline.classList.add("tp-editor-inline-renderer-error");
+      inline.textContent = this.inline.value;
+      inline.title = `Renderer unavailable: ${readRendererErrorMessage(error)}`;
+      view.requestMeasure();
+    }
+  }
+}
+
+function renderInlineRendererFallback(inline: HTMLElement, value: string): void {
+  inline.classList.remove("tp-editor-inline-renderer-loading", "tp-editor-inline-renderer-error");
+  inline.classList.add("tp-editor-inline-renderer-fallback");
+  inline.textContent = value;
+}
+
+function renderSanitizedMarkdownInlineRendererHtml(
+  inline: HTMLElement,
+  html: string,
+  fallback: string
+): void {
+  const fragment = sanitizeMarkdownInlineRendererHtml(html);
+
+  inline.textContent = "";
+
+  if (fragment.childNodes.length === 0) {
+    inline.textContent = fallback;
+    inline.classList.add("tp-editor-inline-renderer-fallback");
+    return;
+  }
+
+  inline.append(fragment);
+}
+
+function focusMarkdownInlineRendererSource(
+  view: EditorView,
+  valueFrom: number,
+  valueTo: number,
+  sourceFrom: number,
+  sourceTo: number
+): void {
+  const from = valueFrom < valueTo ? valueFrom : sourceFrom;
+  const to = valueFrom < valueTo ? valueTo : sourceTo;
+
+  if (from < 0 || to > view.state.doc.length || from >= to) {
+    return;
+  }
+
+  view.dispatch({
+    selection: { anchor: from, head: to },
+    scrollIntoView: true
+  });
+  view.focus();
+}
+
+function isInlineRendererSourceNavigationEvent(event: Event): boolean {
+  return event.target instanceof Element && Boolean(event.target.closest("[data-inline-renderer-source='true']"));
 }
 
 function readMathPreviewLabel(status: MarkdownMathRenderStatus): string {
@@ -3649,6 +3962,38 @@ function markdownEditorTheme(configuration: MarkdownEditorConfiguration): Extens
       color: "var(--tp-color-text-muted)",
       fontFamily: "ui-monospace, SFMono-Regular, Consolas, monospace",
       fontSize: "0.92em"
+    },
+    ".tp-editor-inline-renderer-preview": {
+      display: "inline-flex",
+      alignItems: "center",
+      maxWidth: "100%",
+      minHeight: "1.35em",
+      boxSizing: "border-box",
+      overflow: "hidden",
+      verticalAlign: "-0.12em",
+      padding: "0 5px",
+      border: "1px solid var(--tp-color-code-block-border)",
+      borderRadius: "4px",
+      backgroundColor: "var(--tp-color-code-block)",
+      color: "var(--tp-color-text)",
+      cursor: "text",
+      fontFamily: "var(--tp-font-ui)",
+      fontSize: "0.9em",
+      lineHeight: "1.35"
+    },
+    ".tp-editor-inline-renderer-loading, .tp-editor-inline-renderer-fallback, .tp-editor-inline-renderer-error": {
+      color: "var(--tp-color-text-muted)",
+      fontFamily: "ui-monospace, SFMono-Regular, Consolas, monospace"
+    },
+    ".tp-editor-inline-renderer-error": {
+      borderColor: "var(--tp-color-danger)"
+    },
+    ".tp-editor-inline-renderer-preview img": {
+      display: "inline-block",
+      maxWidth: "1.2em",
+      maxHeight: "1.2em",
+      objectFit: "contain",
+      verticalAlign: "-0.18em"
     },
     ".tp-editor-math-preview-empty, .tp-editor-math-preview-error": {
       justifyContent: "flex-start",

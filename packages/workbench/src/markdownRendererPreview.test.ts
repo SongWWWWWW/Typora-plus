@@ -8,8 +8,10 @@ import {
 } from "@typora-plus/platform";
 import {
   createMarkdownCodeFenceRenderer,
+  createMarkdownInlineRenderer,
   defaultMarkdownCodeFenceRendererCacheEntryLimit,
-  selectMarkdownCodeFenceRenderer
+  selectMarkdownCodeFenceRenderer,
+  selectMarkdownInlineRenderer
 } from "./markdownRendererPreview";
 
 describe("markdown renderer preview", () => {
@@ -53,6 +55,30 @@ describe("markdown renderer preview", () => {
 
     expect(selectMarkdownCodeFenceRenderer(renderers, "mermaid")).toBeUndefined();
     expect(selectMarkdownCodeFenceRenderer(renderers, "")).toBeUndefined();
+  });
+
+  it("selects only inline renderers for inline renderer languages", () => {
+    const renderers = [
+      {
+        hasProvider: true,
+        id: "notes.blockBadge",
+        kind: "block",
+        label: "Block Badge",
+        language: "badge",
+        priority: 20
+      },
+      {
+        hasProvider: true,
+        id: "notes.inlineBadge",
+        kind: "inline",
+        label: "Inline Badge",
+        language: "badge",
+        priority: 1
+      }
+    ] satisfies readonly RegisteredMarkdownRenderer[];
+
+    expect(selectMarkdownInlineRenderer(renderers, "Badge")?.id).toBe("notes.inlineBadge");
+    expect(selectMarkdownInlineRenderer(renderers, "")).toBeUndefined();
   });
 
   it("renders through the platform service and preserves active document context", async () => {
@@ -101,6 +127,51 @@ describe("markdown renderer preview", () => {
     expect(renderedUri).toBe("file://docs/note.md");
   });
 
+  it("renders inline previews through the platform service and preserves active document context", async () => {
+    let renderedLanguage: string | undefined;
+    let renderedUri: string | undefined;
+    let activationCount = 0;
+    let service!: MarkdownRendererService;
+
+    service = new MarkdownRendererService({
+      activationHandler: async (rendererId) => {
+        activationCount += 1;
+        service.registerRendererProvider({
+          id: rendererId,
+          render(input) {
+            renderedLanguage = input.language;
+            renderedUri = input.uri?.toString();
+            return { html: `<span>${input.value}</span>` };
+          }
+        });
+      }
+    });
+    service.registerRendererContribution({
+      id: "notes.badge",
+      kind: "inline",
+      label: "Badge",
+      language: "badge"
+    });
+
+    const renderer = createMarkdownInlineRenderer({
+      getUri: () => URI.file("docs/note.md"),
+      markdownRendererService: service
+    });
+
+    expect(renderer.canRender?.({ language: "Badge", value: "done" })).toBe(true);
+    await expect(renderer.render({
+      language: "Badge",
+      value: "done"
+    })).resolves.toEqual({
+      html: "<span>done</span>",
+      label: "Badge",
+      rendererId: "notes.badge"
+    });
+    expect(activationCount).toBe(1);
+    expect(renderedLanguage).toBe("badge");
+    expect(renderedUri).toBe("file://docs/note.md");
+  });
+
   it("reuses render output for identical code fences", async () => {
     let renderCount = 0;
     const service = new MarkdownRendererService();
@@ -137,6 +208,44 @@ describe("markdown renderer preview", () => {
       html: "<div>graph TD:1</div>",
       label: "Mermaid",
       rendererId: "notes.mermaid"
+    });
+    expect(renderCount).toBe(1);
+  });
+
+  it("reuses render output for identical inline previews", async () => {
+    let renderCount = 0;
+    const service = new MarkdownRendererService();
+    service.registerRendererProvider({
+      id: "notes.badge",
+      render(input) {
+        renderCount += 1;
+        return { html: `<span>${input.value}:${renderCount}</span>` };
+      }
+    }, {
+      kind: "inline",
+      label: "Badge",
+      language: "badge"
+    });
+    const renderer = createMarkdownInlineRenderer({
+      getUri: () => URI.file("docs/note.md"),
+      markdownRendererService: service
+    });
+
+    await expect(renderer.render({
+      language: "badge",
+      value: "done"
+    })).resolves.toEqual({
+      html: "<span>done:1</span>",
+      label: "Badge",
+      rendererId: "notes.badge"
+    });
+    await expect(renderer.render({
+      language: "badge",
+      value: "done"
+    })).resolves.toEqual({
+      html: "<span>done:1</span>",
+      label: "Badge",
+      rendererId: "notes.badge"
     });
     expect(renderCount).toBe(1);
   });

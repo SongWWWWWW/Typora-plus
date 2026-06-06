@@ -18,7 +18,8 @@ import {
   livePreviewExtension,
   type MarkdownCodeFenceRenderer,
   type MarkdownEditorConfiguration,
-  type MarkdownImageSourceResolver
+  type MarkdownImageSourceResolver,
+  type MarkdownInlineRenderer
 } from "./livePreview";
 
 export interface PastedEditorImage {
@@ -39,12 +40,13 @@ export interface MarkdownEditorProps {
   readonly onPasteImage?: ((image: PastedEditorImage) => Promise<string | undefined>) | undefined;
   readonly resolveImageSource?: MarkdownImageSourceResolver | undefined;
   readonly renderCodeFence?: MarkdownCodeFenceRenderer | undefined;
+  readonly renderInline?: MarkdownInlineRenderer | undefined;
 }
 
 const editorPlaceholder = " ";
 
 export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorProps>(
-  ({ value, configuration, onChange, onPasteImage, resolveImageSource, renderCodeFence }, ref) => {
+  ({ value, configuration, onChange, onPasteImage, resolveImageSource, renderCodeFence, renderInline }, ref) => {
     const containerRef = useRef<HTMLDivElement | null>(null);
     const viewRef = useRef<EditorView | null>(null);
     const onChangeRef = useRef(onChange);
@@ -97,7 +99,9 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
         extensions: [
           ...baseEditorExtensions(),
           imagePasteExtension(() => onPasteImageRef.current),
-          previewCompartmentRef.current.of(livePreviewExtension(configuration, resolveImageSource, renderCodeFence)),
+          previewCompartmentRef.current.of(
+            livePreviewExtension(configuration, resolveImageSource, renderCodeFence, renderInline)
+          ),
           updateListener
         ]
       });
@@ -123,10 +127,10 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
 
       view.dispatch({
         effects: previewCompartmentRef.current.reconfigure(
-          livePreviewExtension(configuration, resolveImageSource, renderCodeFence)
+          livePreviewExtension(configuration, resolveImageSource, renderCodeFence, renderInline)
         )
       });
-    }, [configuration, resolveImageSource, renderCodeFence]);
+    }, [configuration, resolveImageSource, renderCodeFence, renderInline]);
 
     useEffect(() => {
       const view = viewRef.current;

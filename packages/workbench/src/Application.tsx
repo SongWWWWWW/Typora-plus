@@ -48,7 +48,10 @@ import {
   moveListSelection,
   normalizeListSelection
 } from "./listNavigationModel";
-import { createMarkdownCodeFenceRenderer } from "./markdownRendererPreview";
+import {
+  createMarkdownCodeFenceRenderer,
+  createMarkdownInlineRenderer
+} from "./markdownRendererPreview";
 import { updateSavedFileIndex } from "./savedFileIndexing";
 import { SettingsDialog } from "./SettingsDialog";
 import type { WorkbenchServices } from "./services";
@@ -453,6 +456,14 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
     }),
     [configuration.editor.rendererPreviewCacheEntries, markdownRendererRevision, model.uri, services]
   );
+  const renderInline = useMemo(
+    () => createMarkdownInlineRenderer({
+      cacheEntryLimit: configuration.editor.rendererPreviewCacheEntries,
+      getUri: () => model.uri,
+      markdownRendererService: services.markdownRendererService
+    }),
+    [configuration.editor.rendererPreviewCacheEntries, markdownRendererRevision, model.uri, services]
+  );
 
   return (
     <main className={[
@@ -562,6 +573,7 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
             onChange={(value) => services.textFileService.updateContent(value)}
             resolveImageSource={resolveImageSource}
             renderCodeFence={renderCodeFence}
+            renderInline={renderInline}
             onPasteImage={services.attachmentService.isAvailable()
               ? async (image) => {
                 const saved = await services.attachmentService.saveImage(model.uri, image);
