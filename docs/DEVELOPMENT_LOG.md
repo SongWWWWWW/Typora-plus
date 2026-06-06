@@ -2228,3 +2228,37 @@ Known limitations:
 - The activation handler is still injected in-process; a future out-of-process extension host must broker the same export-provider API.
 - Native save dialogs only support formats listed in the desktop export configuration; extension formats need shell support before native save can handle them.
 - Themes and Markdown renderer contributions remain future extension runtime work.
+
+## 2026-06-07 - P2 Extension Theme Contributions
+
+Completed:
+
+- Added platform `IThemeService` and `ThemeService` for registering theme contributions.
+- Added theme contribution support to extension manifests.
+- Wired Workbench service creation so extension manifests register themes through the platform theme service.
+- Added duplicate theme id rejection, normalized theme metadata, cloned query results, and disposable cleanup.
+- Restricted theme token names to Typora Plus CSS tokens and rejected unsafe CSS declaration syntax in token values.
+- Added rollback behavior when theme registration fails after earlier extension contributions were registered.
+- Added platform tests for theme service registration/disposal, duplicate and unsafe token rejection, extension theme registration, missing theme service errors, and rollback.
+
+Quality gate:
+
+- `npm run test -- --run packages/platform/src/platform.test.ts`: passed, 80 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 198 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Browser smoke check: not required for this stage because theme application UI did not change; Workbench service composition is covered by type/build verification.
+
+Review:
+
+- Theme contributions now have a platform registration boundary instead of future ad hoc Workbench constants.
+- Theme token validation keeps contributed values aligned with the existing `--tp-*` design token system.
+- Extension registration rollback covers theme failures, so command/menu/keybinding metadata does not leak after invalid theme manifests.
+- No theme application UI, dynamic code loading, unrestricted Node access, direct DOM access, new package, storage path, visual token file, or extra documentation file was introduced.
+
+Known limitations:
+
+- Registered extension themes are not yet selectable or applied to the document; a future stage needs a theme selection model and safe CSS variable application path.
+- The activation handler is still injected in-process; a future out-of-process extension host must broker the same manifest contribution boundary.
+- Markdown renderer contributions remain future extension runtime work.
