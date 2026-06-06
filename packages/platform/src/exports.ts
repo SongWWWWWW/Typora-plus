@@ -1,7 +1,7 @@
 import { toDisposable, type IDisposable, type URI as URIType } from "@typora-plus/base";
 import { createServiceIdentifier } from "./instantiation";
 
-export type ExportFormat = "html";
+export type ExportFormat = string;
 export type ExportImageSourceResolver = (source: string) => Promise<string | undefined>;
 export type ExportAssetMode = "inline" | "file";
 
@@ -80,10 +80,16 @@ export class ExportService implements IExportService {
   }
 
   registerProvider(provider: ExportProvider): IDisposable {
-    this.providers.set(provider.format, provider);
+    const normalizedProvider = normalizeExportProvider(provider);
+
+    if (this.providers.has(normalizedProvider.format)) {
+      throw new Error(`Export provider already registered for ${normalizedProvider.format}`);
+    }
+
+    this.providers.set(normalizedProvider.format, normalizedProvider);
     return toDisposable(() => {
-      if (this.providers.get(provider.format) === provider) {
-        this.providers.delete(provider.format);
+      if (this.providers.get(normalizedProvider.format) === normalizedProvider) {
+        this.providers.delete(normalizedProvider.format);
       }
     });
   }
@@ -133,6 +139,35 @@ export class ExportService implements IExportService {
 
     return { ...input, assetMode };
   }
+}
+
+function normalizeExportProvider(provider: ExportProvider): ExportProvider {
+  const format = readRequiredString(provider.format, "Export provider format");
+  const title = readRequiredString(provider.title, `Export provider title for ${format}`);
+
+  if (typeof provider.exportDocument !== "function") {
+    throw new Error(`Export provider for ${format} must provide exportDocument`);
+  }
+
+  return {
+    format,
+    title,
+    exportDocument: (input) => provider.exportDocument(input)
+  };
+}
+
+function readRequiredString(value: unknown, label: string): string {
+  if (typeof value !== "string") {
+    throw new Error(`${label} must be a string`);
+  }
+
+  const normalized = value.trim();
+
+  if (!normalized) {
+    throw new Error(`${label} must not be empty`);
+  }
+
+  return normalized;
 }
 
 function saveExportedDocumentInBrowser(document: ExportedDocument): boolean {

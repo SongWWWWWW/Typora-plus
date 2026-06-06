@@ -6,6 +6,7 @@ import {
   type ContextKeyValue,
   type IContextKeyService
 } from "./contextKeys";
+import type { ExportProvider, IExportService } from "./exports";
 import { createServiceIdentifier } from "./instantiation";
 import type { IKeybindingService, Keybinding } from "./keybindings";
 import type { IMenuService, MenuIconId, MenuId, MenuItemToggle } from "./menus";
@@ -68,6 +69,7 @@ export type ExtensionActivationHandler = (request: ExtensionActivationRequest) =
 export interface ExtensionServiceOptions {
   readonly activationHandler?: ExtensionActivationHandler;
   readonly contextKeyService?: IContextKeyService;
+  readonly exportService?: IExportService;
 }
 
 export interface IExtensionService {
@@ -81,6 +83,7 @@ export interface ExtensionContext {
   readonly subscriptions: ExtensionSubscriptionStore;
   readonly commands: ExtensionCommandApi;
   readonly contextKeys: ExtensionContextKeyApi;
+  readonly exports: ExtensionExportApi;
 }
 
 export interface ExtensionSubscriptionStore {
@@ -96,6 +99,11 @@ export interface ExtensionCommandApi {
 export interface ExtensionContextKeyApi {
   setValue(key: string, value: ContextKeyValue | undefined): void;
   getValue(key: string): ContextKeyValue | undefined;
+}
+
+export interface ExtensionExportApi {
+  registerProvider(provider: ExportProvider): IDisposable;
+  getProviders(): readonly ExportProvider[];
 }
 
 export type ExtensionCommandHandler = (...args: unknown[]) => unknown;
@@ -207,7 +215,13 @@ export class ExtensionService extends Disposable implements IExtensionService {
         return activationHandler({
           activationEvent: normalizedActivationEvent,
           extension: registeredExtension,
-          context: createExtensionContext(record, registeredExtension, this.commandService, this.options.contextKeyService)
+          context: createExtensionContext(
+            record,
+            registeredExtension,
+            this.commandService,
+            this.options.contextKeyService,
+            this.options.exportService
+          )
         });
       }).then(() => {
         record.activationState = "activated";
@@ -557,7 +571,8 @@ function createExtensionContext(
   record: RegisteredExtensionRecord,
   extension: RegisteredExtension,
   commandService: ICommandService,
-  contextKeyService: IContextKeyService | undefined
+  contextKeyService: IContextKeyService | undefined,
+  exportService: IExportService | undefined
 ): ExtensionContext {
   return {
     extension,
@@ -602,6 +617,17 @@ function createExtensionContext(
 
         return contextKeyService.getValue(normalizeExtensionContextKey(record.manifest.id, key));
       }
+    },
+    exports: {
+      registerProvider(provider) {
+        if (!exportService) {
+          throw new Error(`No extension export service registered: ${record.manifest.id}`);
+        }
+
+        const disposable = exportService.registerProvider(provider);
+        return record.runtimeDisposables.add(disposable);
+      },
+      getProviders: () => exportService?.getProviders() ?? []
     }
   };
 }

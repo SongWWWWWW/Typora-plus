@@ -821,6 +821,77 @@ describe("extensions", () => {
     expect(services.contextKeyService.getValue("workspace.open")).toBeUndefined();
   });
 
+  it("registers export providers through the extension context", async () => {
+    const services = createExtensionServices((request) => {
+      request.context.exports.registerProvider({
+        format: "notes-html",
+        title: "Notes HTML",
+        exportDocument(input) {
+          return {
+            format: "notes-html",
+            defaultFileName: `${input.name}.notes.html`,
+            mimeType: "text/html",
+            value: `<article>${input.value}</article>`
+          };
+        }
+      });
+    });
+
+    const disposable = services.extensionService.registerExtension({
+      id: "notes.export",
+      activationEvents: ["onStartupFinished"]
+    });
+
+    await services.extensionService.activateByEvent("onStartupFinished");
+
+    expect(services.exportService.getProviders().map((provider) => provider.format)).toEqual(["notes-html"]);
+    await expect(services.exportService.exportDocument({
+      uri: URI.untitled("Draft.md"),
+      name: "Draft",
+      value: "Hello"
+    }, "notes-html")).resolves.toEqual({
+      format: "notes-html",
+      defaultFileName: "Draft.notes.html",
+      mimeType: "text/html",
+      value: "<article>Hello</article>"
+    });
+
+    disposable.dispose();
+
+    expect(services.exportService.getProviders()).toEqual([]);
+    await expect(services.exportService.exportDocument({
+      uri: URI.untitled("Draft.md"),
+      name: "Draft",
+      value: "Hello"
+    }, "notes-html")).rejects.toThrow("No export provider");
+  });
+
+  it("cleans up extension export providers when activation fails", async () => {
+    const services = createExtensionServices((request) => {
+      request.context.exports.registerProvider({
+        format: "notes-failed",
+        title: "Failed Export",
+        exportDocument(input) {
+          return {
+            format: "notes-failed",
+            defaultFileName: input.name,
+            mimeType: "text/plain",
+            value: input.value
+          };
+        }
+      });
+      throw new Error("Activation failed");
+    });
+
+    services.extensionService.registerExtension({
+      id: "notes.failedExport",
+      activationEvents: ["onStartupFinished"]
+    });
+
+    await expect(services.extensionService.activateByEvent("onStartupFinished")).rejects.toThrow("Activation failed");
+    expect(services.exportService.getProviders()).toEqual([]);
+  });
+
   it("rejects matching activation events when no activation handler is registered", async () => {
     const { extensionService } = createExtensionServices();
 
@@ -1058,6 +1129,37 @@ describe("exports", () => {
       name: "Draft.md",
       value: "Draft"
     }, "html")).rejects.toThrow("No export provider");
+  });
+
+  it("rejects duplicate export providers for one format", () => {
+    const service = new ExportService({
+      browserSave: () => true
+    });
+    service.registerProvider({
+      format: "html",
+      title: "HTML",
+      exportDocument(input) {
+        return {
+          format: "html",
+          defaultFileName: input.name,
+          mimeType: "text/html",
+          value: input.value
+        };
+      }
+    });
+
+    expect(() => service.registerProvider({
+      format: "html",
+      title: "HTML Duplicate",
+      exportDocument(input) {
+        return {
+          format: "html",
+          defaultFileName: input.name,
+          mimeType: "text/html",
+          value: input.value
+        };
+      }
+    })).toThrow("Export provider already registered");
   });
 
   it("adds a resource resolver context to export provider input", async () => {
@@ -2202,12 +2304,16 @@ function createExtensionServices(activationHandler?: ExtensionActivationHandler)
   const contextKeyService = new ContextKeyService();
   const menuService = new MenuService(contextKeyService);
   const keybindingService = new KeybindingService();
+  const exportService = new ExportService({
+    browserSave: () => true
+  });
   extensionService = new ExtensionService(
     commandService,
     menuService,
     keybindingService,
     {
       contextKeyService,
+      exportService,
       ...(activationHandler ? { activationHandler } : {})
     }
   );
@@ -2216,6 +2322,7 @@ function createExtensionServices(activationHandler?: ExtensionActivationHandler)
     commandService,
     contextKeyService,
     extensionService,
+    exportService,
     keybindingService,
     menuService
   };
