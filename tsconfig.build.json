@@ -1,0 +1,13 @@
+{
+  "files": [],
+  "references": [
+    { "path": "./packages/base" },
+    { "path": "./packages/markdown" },
+    { "path": "./packages/theme" },
+    { "path": "./packages/platform" },
+    { "path": "./packages/editor" },
+    { "path": "./packages/workbench" },
+    { "path": "./apps/desktop" },
+    { "path": "./apps/desktop/tsconfig.electron.json" }
+  ]
+}

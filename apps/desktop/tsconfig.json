@@ -1,0 +1,17 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "composite": true,
+    "noEmit": true,
+    "tsBuildInfoFile": "dist/.tsbuildinfo"
+  },
+  "references": [
+    { "path": "../../packages/base" },
+    { "path": "../../packages/markdown" },
+    { "path": "../../packages/platform" },
+    { "path": "../../packages/theme" },
+    { "path": "../../packages/editor" },
+    { "path": "../../packages/workbench" }
+  ],
+  "include": ["src", "vite.config.ts"]
+}

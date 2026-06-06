@@ -1,0 +1,40 @@
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { app, BrowserWindow } from "electron";
+import { desktopShellConfig } from "./shellConfig.js";
+
+const currentDir = path.dirname(fileURLToPath(import.meta.url));
+
+async function createWindow(): Promise<void> {
+  const window = new BrowserWindow({
+    ...desktopShellConfig.window,
+    webPreferences: {
+      preload: path.join(currentDir, "preload.js"),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true
+    }
+  });
+
+  if (app.isPackaged) {
+    await window.loadFile(path.resolve(currentDir, "../dist/renderer/index.html"));
+  } else {
+    await window.loadURL(desktopShellConfig.devServerUrl);
+  }
+}
+
+app.whenReady().then(async () => {
+  await createWindow();
+
+  app.on("activate", () => {
+    if (BrowserWindow.getAllWindows().length === 0) {
+      void createWindow();
+    }
+  });
+});
+
+app.on("window-all-closed", () => {
+  if (process.platform !== "darwin") {
+    app.quit();
+  }
+});

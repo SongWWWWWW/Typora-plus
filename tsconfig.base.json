@@ -1,0 +1,29 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "useDefineForClassFields": true,
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "resolveJsonModule": true,
+    "allowImportingTsExtensions": false,
+    "isolatedModules": true,
+    "verbatimModuleSyntax": true,
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "skipLibCheck": true,
+    "jsx": "react-jsx",
+    "baseUrl": ".",
+    "paths": {
+      "@typora-plus/base": ["packages/base/src/index.ts"],
+      "@typora-plus/platform": ["packages/platform/src/index.ts"],
+      "@typora-plus/markdown": ["packages/markdown/src/index.ts"],
+      "@typora-plus/theme": ["packages/theme/src/index.ts"],
+      "@typora-plus/editor": ["packages/editor/src/index.ts"],
+      "@typora-plus/workbench": ["packages/workbench/src/index.ts"]
+    }
+  }
+}

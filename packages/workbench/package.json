@@ -1,0 +1,29 @@
+{
+  "name": "@typora-plus/workbench",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@typora-plus/base": "0.1.0",
+    "@typora-plus/editor": "0.1.0",
+    "@typora-plus/markdown": "0.1.0",
+    "@typora-plus/platform": "0.1.0",
+    "@typora-plus/theme": "0.1.0",
+    "lucide-react": "^0.511.0",
+    "react": "^19.0.0"
+  },
+  "peerDependencies": {
+    "react": ">=19"
+  }
+}

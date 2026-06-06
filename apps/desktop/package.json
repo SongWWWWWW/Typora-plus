@@ -1,0 +1,25 @@
+{
+  "name": "@typora-plus/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist-electron/main.js",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1 --port 5173",
+    "build": "vite build && tsc -p tsconfig.electron.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@typora-plus/editor": "0.1.0",
+    "@typora-plus/markdown": "0.1.0",
+    "@typora-plus/platform": "0.1.0",
+    "@typora-plus/theme": "0.1.0",
+    "@typora-plus/workbench": "0.1.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0"
+  }
+}
