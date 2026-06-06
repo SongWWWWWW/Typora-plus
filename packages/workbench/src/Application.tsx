@@ -1,11 +1,14 @@
 import { DisposableStore } from "@typora-plus/base";
 import { MarkdownEditor, type MarkdownEditorHandle } from "@typora-plus/editor";
 import { calculateMarkdownStats, extractOutline, type OutlineEntry } from "@typora-plus/markdown";
-import type { TextFileModel, TyporaPlusConfiguration } from "@typora-plus/platform";
+import type { FileTreeEntry, TextFileModel, TyporaPlusConfiguration, WorkspaceState } from "@typora-plus/platform";
 import { applyTheme, resolveThemeName } from "@typora-plus/theme";
 import {
   Command as CommandIcon,
   FileText,
+  FilePlus,
+  Folder,
+  FolderOpen,
   ListTree,
   Moon,
   PanelLeft,
@@ -17,7 +20,7 @@ import {
   X
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import type { WorkbenchServices } from "./services";
 
 type SideView = "files" | "search" | "outline";
@@ -31,6 +34,10 @@ interface SearchResult {
   readonly preview: string;
 }
 
+type TreeStyle = CSSProperties & {
+  readonly "--tp-tree-depth": number;
+};
+
 const autoSaveDelayMs = 800;
 
 export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
@@ -38,26 +45,31 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
     services.configurationService.getValue()
   );
   const [model, setModel] = useState<TextFileModel>(() => services.textFileService.openDefault());
+  const [workspace, setWorkspace] = useState<WorkspaceState>(() => services.workspaceService.getWorkspace());
   const [sideView, setSideView] = useState<SideView | null>("outline");
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [operationError, setOperationError] = useState<string | undefined>();
   const editorRef = useRef<MarkdownEditorHandle | null>(null);
 
   const outline = useMemo(() => extractOutline(model.value), [model.value]);
   const stats = useMemo(() => calculateMarkdownStats(model.value), [model.value]);
   const searchResults = useMemo(() => searchDocument(model.value, searchQuery), [model.value, searchQuery]);
-  const workspace = services.workspaceService.getWorkspace();
 
   useEffect(() => services.configurationService.onDidChangeConfiguration(setConfiguration).dispose, [services]);
 
   useEffect(() => services.textFileService.onDidChangeModel(setModel).dispose, [services]);
+
+  useEffect(() => services.workspaceService.onDidChangeWorkspace(setWorkspace).dispose, [services]);
 
   useEffect(() => {
     if (!configuration.editor.autoSave || !model.dirty) {
       return;
     }
 
-    const handle = window.setTimeout(() => services.textFileService.save(), autoSaveDelayMs);
+    const handle = window.setTimeout(() => {
+      void runWorkbenchAction(() => services.textFileService.save(), setOperationError);
+    }, autoSaveDelayMs);
     return () => window.clearTimeout(handle);
   }, [configuration.editor.autoSave, model.dirty, model.value, services]);
 
@@ -82,6 +94,35 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
   useEffect(() => {
     const disposables = new DisposableStore();
 
+    disposables.add(services.commandService.registerCommand({
+      id: "file.newUntitled",
+      title: "New Note",
+      category: "File",
+      run: () => services.textFileService.newUntitled()
+    }));
+    disposables.add(services.commandService.registerCommand({
+      id: "file.openWorkspace",
+      title: "Open Workspace",
+      category: "File",
+      run: () => runWorkbenchAction(async () => {
+        const workspaceFiles = await services.fileService.openWorkspace();
+
+        if (!workspaceFiles) {
+          return;
+        }
+
+        services.workspaceService.setWorkspace({
+          name: workspaceFiles.root.name,
+          rootUri: workspaceFiles.root.uri,
+          files: workspaceFiles
+        });
+        setSideView("files");
+
+        if (workspaceFiles.files[0]) {
+          await services.textFileService.openFile(workspaceFiles.files[0].uri);
+        }
+      }, setOperationError)
+    }));
     disposables.add(services.commandService.registerCommand({
       id: "workbench.commandPalette.open",
       title: "Command Palette",
@@ -110,7 +151,13 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
       id: "file.save",
       title: "Save",
       category: "File",
-      run: () => services.textFileService.save()
+      run: () => runWorkbenchAction(() => services.textFileService.save(), setOperationError)
+    }));
+    disposables.add(services.commandService.registerCommand({
+      id: "file.saveAs",
+      title: "Save As",
+      category: "File",
+      run: () => runWorkbenchAction(() => services.textFileService.saveAs(), setOperationError)
     }));
     disposables.add(services.commandService.registerCommand({
       id: "editor.focusMode.toggle",
@@ -158,7 +205,7 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
 
       if (modifier && event.key.toLowerCase() === "s") {
         event.preventDefault();
-        services.textFileService.save();
+        void runWorkbenchAction(() => services.textFileService.save(), setOperationError);
       }
     };
 
@@ -192,12 +239,18 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
           <Sidebar
             view={sideView}
             model={model}
+            workspace={workspace}
+            fileServiceAvailable={services.fileService.isAvailable()}
             outline={outline}
             searchQuery={searchQuery}
             searchResults={searchResults}
             onSearchQueryChange={setSearchQuery}
             onClose={() => setSideView(null)}
             onSelectLine={(line) => editorRef.current?.scrollToLine(line)}
+            onOpenWorkspace={() => services.commandService.executeCommand("file.openWorkspace")}
+            onOpenFile={(entry) => {
+              void runWorkbenchAction(() => services.textFileService.openFile(entry.uri), setOperationError);
+            }}
           />
         ) : null}
         <section className="tp-editor-pane" aria-label="Editor">
@@ -209,7 +262,7 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
           />
         </section>
       </div>
-      <Statusbar model={model} stats={stats} />
+      <Statusbar model={model} stats={stats} operationError={operationError} />
       <CommandPalette
         open={paletteOpen}
         commands={services.commandService.getCommands()}
@@ -244,8 +297,17 @@ function Titlebar({
         {model.dirty ? <span className="tp-dirty-dot" aria-label="Unsaved changes" /> : null}
       </div>
       <div className="tp-titlebar-actions">
+        <IconButton title="New Note" onClick={() => onCommand("file.newUntitled")}>
+          <FilePlus size={17} />
+        </IconButton>
+        <IconButton title="Open Workspace" onClick={() => onCommand("file.openWorkspace")}>
+          <FolderOpen size={17} />
+        </IconButton>
         <IconButton title="Save" onClick={() => onCommand("file.save")}>
           <Save size={17} />
+        </IconButton>
+        <IconButton title="Save As" onClick={() => onCommand("file.saveAs")}>
+          <FileText size={17} />
         </IconButton>
         <IconButton
           title="Focus Mode"
@@ -303,21 +365,29 @@ function ActivityBar({
 function Sidebar({
   view,
   model,
+  workspace,
+  fileServiceAvailable,
   outline,
   searchQuery,
   searchResults,
   onSearchQueryChange,
   onClose,
-  onSelectLine
+  onSelectLine,
+  onOpenWorkspace,
+  onOpenFile
 }: {
   readonly view: SideView;
   readonly model: TextFileModel;
+  readonly workspace: WorkspaceState;
+  readonly fileServiceAvailable: boolean;
   readonly outline: readonly OutlineEntry[];
   readonly searchQuery: string;
   readonly searchResults: readonly SearchResult[];
   readonly onSearchQueryChange: (value: string) => void;
   readonly onClose: () => void;
   readonly onSelectLine: (line: number) => void;
+  readonly onOpenWorkspace: () => void;
+  readonly onOpenFile: (entry: FileTreeEntry) => void;
 }) {
   return (
     <aside className="tp-sidebar">
@@ -327,7 +397,15 @@ function Sidebar({
           <PanelLeft size={17} />
         </IconButton>
       </div>
-      {view === "files" ? <FilesPanel model={model} /> : null}
+      {view === "files" ? (
+        <FilesPanel
+          model={model}
+          workspace={workspace}
+          fileServiceAvailable={fileServiceAvailable}
+          onOpenWorkspace={onOpenWorkspace}
+          onOpenFile={onOpenFile}
+        />
+      ) : null}
       {view === "search" ? (
         <SearchPanel
           query={searchQuery}
@@ -341,15 +419,99 @@ function Sidebar({
   );
 }
 
-function FilesPanel({ model }: { readonly model: TextFileModel }) {
+function FilesPanel({
+  model,
+  workspace,
+  fileServiceAvailable,
+  onOpenWorkspace,
+  onOpenFile
+}: {
+  readonly model: TextFileModel;
+  readonly workspace: WorkspaceState;
+  readonly fileServiceAvailable: boolean;
+  readonly onOpenWorkspace: () => void;
+  readonly onOpenFile: (entry: FileTreeEntry) => void;
+}) {
+  const workspaceFiles = workspace.files;
+
   return (
     <div className="tp-sidebar-content">
-      <button className="tp-file-row" type="button">
-        <FileText size={16} />
-        <span>{model.name}</span>
-        {model.dirty ? <span className="tp-row-dot" /> : null}
+      <button
+        className="tp-sidebar-action"
+        type="button"
+        disabled={!fileServiceAvailable}
+        onClick={onOpenWorkspace}
+      >
+        <FolderOpen size={16} />
+        <span>Open workspace</span>
       </button>
+      {workspaceFiles ? (
+        <div className="tp-file-tree">
+          <FileTreeRows
+            entries={workspaceFiles.root.children ?? []}
+            activeUri={model.uri.toString()}
+            dirty={model.dirty}
+            depth={0}
+            onOpenFile={onOpenFile}
+          />
+        </div>
+      ) : (
+        <button className="tp-file-row tp-file-row-active" type="button">
+          <FileText size={16} />
+          <span>{model.name}</span>
+          {model.dirty ? <span className="tp-row-dot" /> : null}
+        </button>
+      )}
     </div>
+  );
+}
+
+function FileTreeRows({
+  entries,
+  activeUri,
+  dirty,
+  depth,
+  onOpenFile
+}: {
+  readonly entries: readonly FileTreeEntry[];
+  readonly activeUri: string;
+  readonly dirty: boolean;
+  readonly depth: number;
+  readonly onOpenFile: (entry: FileTreeEntry) => void;
+}) {
+  return (
+    <>
+      {entries.map((entry) => (
+        <div key={entry.uri.toString()}>
+          {entry.kind === "directory" ? (
+            <div className="tp-folder-row" style={{ "--tp-tree-depth": depth } as TreeStyle}>
+              <Folder size={16} />
+              <span>{entry.name}</span>
+            </div>
+          ) : (
+            <button
+              className={entry.uri.toString() === activeUri ? "tp-file-row tp-file-row-active" : "tp-file-row"}
+              style={{ "--tp-tree-depth": depth } as TreeStyle}
+              type="button"
+              onClick={() => onOpenFile(entry)}
+            >
+              <FileText size={16} />
+              <span>{entry.name}</span>
+              {entry.uri.toString() === activeUri && dirty ? <span className="tp-row-dot" /> : null}
+            </button>
+          )}
+          {entry.kind === "directory" && entry.children ? (
+            <FileTreeRows
+              entries={entry.children}
+              activeUri={activeUri}
+              dirty={dirty}
+              depth={depth + 1}
+              onOpenFile={onOpenFile}
+            />
+          ) : null}
+        </div>
+      ))}
+    </>
   );
 }
 
@@ -423,13 +585,16 @@ function OutlinePanel({
 
 function Statusbar({
   model,
-  stats
+  stats,
+  operationError
 }: {
   readonly model: TextFileModel;
   readonly stats: ReturnType<typeof calculateMarkdownStats>;
+  readonly operationError: string | undefined;
 }) {
   return (
     <footer className="tp-statusbar">
+      {operationError ? <span className="tp-status-error">{operationError}</span> : null}
       <span>{model.dirty ? "Saving" : "Saved"}</span>
       <span>{stats.words} words</span>
       <span>{stats.lines} lines</span>
@@ -570,5 +735,18 @@ function sidebarTitle(view: SideView): string {
       return "Search";
     case "outline":
       return "Outline";
+  }
+}
+
+async function runWorkbenchAction<T>(
+  action: () => Promise<T> | T,
+  setOperationError: (value: string | undefined) => void
+): Promise<T | undefined> {
+  try {
+    setOperationError(undefined);
+    return await action();
+  } catch (error) {
+    setOperationError(error instanceof Error ? error.message : "Operation failed");
+    return undefined;
   }
 }

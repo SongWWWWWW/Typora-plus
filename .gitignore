@@ -6,5 +6,6 @@ dist-electron/
 coverage/
 *.log
 .dev-server.pid
+.preview-server.pid
 .DS_Store
 Thumbs.db

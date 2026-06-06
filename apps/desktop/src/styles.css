@@ -169,7 +169,9 @@ button {
   padding: 10px;
 }
 
+.tp-sidebar-action,
 .tp-file-row,
+.tp-folder-row,
 .tp-outline-row,
 .tp-result-row,
 .tp-command-row {
@@ -189,11 +191,52 @@ button {
   align-items: center;
   gap: 8px;
   min-height: 34px;
-  padding: 7px 8px;
+  padding: 7px 8px 7px calc(8px + var(--tp-tree-depth, 0) * 14px);
   font-size: 13px;
 }
 
+.tp-sidebar-action,
+.tp-folder-row {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  padding: 7px 8px;
+  color: var(--tp-color-text-muted);
+  font-size: 13px;
+}
+
+.tp-sidebar-action {
+  border: 1px solid var(--tp-color-border);
+  background: var(--tp-color-canvas);
+}
+
+.tp-sidebar-action:disabled {
+  cursor: default;
+  opacity: 0.48;
+}
+
+.tp-folder-row {
+  padding-left: calc(8px + var(--tp-tree-depth, 0) * 14px);
+  cursor: default;
+}
+
+.tp-file-tree {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-height: 0;
+}
+
+.tp-file-row-active {
+  background: var(--tp-color-surface-muted);
+  color: var(--tp-color-accent-strong);
+}
+
 .tp-file-row span:nth-child(2),
+.tp-sidebar-action span,
+.tp-folder-row span,
 .tp-result-row span:last-child,
 .tp-command-row span {
   min-width: 0;
@@ -223,6 +266,7 @@ button {
   padding-left: 38px;
 }
 
+.tp-sidebar-action:not(:disabled):hover,
 .tp-file-row:hover,
 .tp-outline-row:hover,
 .tp-result-row:hover,
@@ -315,6 +359,15 @@ button {
   color: var(--tp-color-text-soft);
   font-size: 12px;
   font-variant-numeric: tabular-nums;
+}
+
+.tp-status-error {
+  min-width: 0;
+  max-width: min(420px, 42vw);
+  overflow: hidden;
+  color: var(--tp-color-danger);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .tp-command-overlay {
