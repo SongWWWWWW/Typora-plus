@@ -1922,5 +1922,42 @@ Review:
 
 Known limitations:
 
-- Menu item visibility only supports static contributions and simple toggle context; a future context-key service can add dynamic `when` clauses for extension menus.
+- Menu item visibility now supports Workbench-owned context keys; extension-owned context keys remain future extension-host work.
 - Extension-contributed menus are still architectural direction only until `IExtensionService` is implemented.
+
+## 2026-06-07 - P2 Menu Context Keys
+
+Completed:
+
+- Added `IContextKeyService` and `ContextKeyService` with structured context values, change events, and expression helpers for defined, equals, not-equals, not, and/or conditions.
+- Added context expression key extraction so menu refreshes can be scoped to affected menus.
+- Added optional `when` expressions to `MenuItem`.
+- Updated `MenuService` to filter contributed items through context keys and publish menu change events when relevant context values change.
+- Wired Workbench service creation to provide context keys to menu service.
+- Synced Workbench state into context keys for file-system availability, attachment/resource availability, active resource scheme, side view, editor focus/typewriter mode, and workspace-open state.
+- Added `when` clauses to hide native file actions when the file system bridge is unavailable and hide workspace-only backlinks/tags actions until a workspace is open.
+- Added platform tests for context expression evaluation, context change publishing, menu filtering, and context-driven menu refresh.
+- Added Workbench tests for native/full context ordering and browser-context hidden actions.
+
+Quality gate:
+
+- `npm run test -- --run packages/platform/src/platform.test.ts packages/workbench/src/workbenchContributions.test.ts`: passed, 53 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 165 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Browser desktop smoke check at `http://127.0.0.1:5173`: browser context hid native file entries and workspace-only actions, no horizontal overflow, and no console errors.
+- Browser 390px viewport smoke check: filtered titlebar/activitybar actions fit, compact titlebar actions hid as expected, no horizontal overflow, and no console errors.
+
+Review:
+
+- Context evaluation stays in the platform layer; Workbench only contributes expressions and synchronizes state values.
+- Menu visibility no longer requires ad hoc conditionals inside `Titlebar` or `ActivityBar`.
+- Browser builds now avoid exposing no-op native file actions while keeping New Note, Export HTML, Search, Outline, Settings, and Command Palette available.
+- The expression model is structured rather than a string parser, which keeps the first implementation testable and avoids hard-coded parsing rules.
+- No new packages, storage paths, or documentation files were introduced.
+
+Known limitations:
+
+- Context keys are owned by built-in Workbench services for now; extension-owned context mutation waits for `IExtensionService`.
+- Menu expressions do not yet support a user-authored string syntax; extension manifests can initially target the structured expression model or a later parser.
