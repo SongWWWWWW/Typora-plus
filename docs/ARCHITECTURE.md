@@ -69,7 +69,7 @@ Current features:
 - heading/quote/list/fence line styling
 - inactive Markdown marker soft hiding for headings, lists, quotes, fences, links, and strong emphasis
 - code fence block styling with visible-range-aware fence state tracking and inactive language/copy widgets
-- table block styling with code-fence-aware table detection, escaped-pipe-aware inactive previews, row/column insert tools, targeted deletion controls, and column alignment controls
+- table block styling with code-fence-aware table detection, escaped-pipe-aware inactive previews, targeted row/column insertion and deletion controls, and column alignment controls
 - standalone image preview cards with workspace-backed local image resolution and direct inline/blob rendering
 - KaTeX-backed display math preview blocks with TeX copy controls and render diagnostics
 - KaTeX-backed inline math previews with render diagnostics for inactive lines

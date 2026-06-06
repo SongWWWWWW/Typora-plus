@@ -763,3 +763,38 @@ Known limitations:
 - Direct table cell editing remains planned.
 - Row insertion and column insertion are still quick toolbar actions rather than targeted per-row/per-column insert controls.
 - More complex Markdown table cases still depend on the planned parser-backed source mapping pass.
+
+## 2026-06-06 - P2 Targeted Table Insertion Controls
+
+Completed:
+
+- Added per-column insert controls to inactive table preview headers.
+- Added per-row insert controls to inactive table preview body rows.
+- Added a pure `createMarkdownTableWithInsertedBodyRow` transform that mirrors the existing column insertion helper.
+- Reused explicit row and column insertion indexes so UI controls only choose targets and do not own Markdown rewrite logic.
+- Kept the existing toolbar actions for quick append-row and append-column workflows.
+- Added focused tests for appending a body row and inserting a body row at a requested index.
+
+Quality gate:
+
+- `npm run test -- --run packages/editor/src/livePreview.test.ts`: passed, 62 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 82 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed
+- Production browser preview: passed at `http://127.0.0.1:4173`
+- Browser interaction check: `Insert row below row 2` inserted a blank row between Beta and Gamma; `Insert column after column 2` inserted a blank column between Count and Status.
+- Desktop default viewport and mobile 390px checks: passed without page horizontal overflow or console errors; wide tables remained internally scrollable.
+
+Review:
+
+- Targeted insertion remains inside `packages/editor`; Workbench, platform, and file services remain unaware of Markdown table syntax.
+- The plain Markdown table remains the source of truth; preview controls dispatch CodeMirror text edits only.
+- Row and column insertion now share the same pure-transform pattern as deletion and alignment.
+- Visual additions reuse existing inline table control styling and theme tokens instead of adding a new visual system.
+
+Known limitations:
+
+- Direct table cell editing remains planned.
+- Wide tables expose later column controls through the internal table scroll area rather than fitting every column on narrow screens.
+- More complex Markdown table cases still depend on the planned parser-backed source mapping pass.
