@@ -12,6 +12,12 @@ import {
   createExtensionHostCommandRegisterRequestMessage,
   createExtensionHostContextKeyGetRequestMessage,
   createExtensionHostContextKeySetRequestMessage,
+  createExtensionHostExportDocumentRequestMessage,
+  createExtensionHostExportDocumentResultMessage,
+  createExtensionHostExportProviderRegisterRequestMessage,
+  createExtensionHostMarkdownRendererRegisterRequestMessage,
+  createExtensionHostMarkdownRendererRenderRequestMessage,
+  createExtensionHostMarkdownRendererRenderResultMessage,
   deserializeExtensionHostProtocolMessage,
   extensionHostProtocolLimits,
   extensionHostProtocolMessageTypes,
@@ -242,6 +248,218 @@ describe("extension host protocol", () => {
     expect(() => createExtensionHostApiResultMessage("request-22", "notes.main", new Date())).toThrow(
       "plain JSON object"
     );
+  });
+
+  it("serializes export provider broker messages", () => {
+    const provider = createExtensionHostExportProviderRegisterRequestMessage("request-23", "notes.export", {
+      format: " HTML ",
+      title: " HTML Export "
+    });
+    const request = createExtensionHostExportDocumentRequestMessage("request-24", "notes.export", " HTML ", {
+      assetMode: "file",
+      name: " A Note.md ",
+      uri: " file://notes/a.md ",
+      value: "# A\n\n![Image](image.png)"
+    });
+    const result = createExtensionHostExportDocumentResultMessage("request-25", "notes.export", {
+      assets: [{
+        base64: "aGVsbG8=",
+        mimeType: " image/png ",
+        relativePath: "A_assets/image.png"
+      }],
+      defaultFileName: " A Note.html ",
+      format: " HTML ",
+      mimeType: " text/html;charset=utf-8 ",
+      value: "<!doctype html>"
+    });
+
+    expect(provider).toEqual({
+      type: extensionHostProtocolMessageTypes.exportProviderRegister,
+      requestId: "request-23",
+      extensionId: "notes.export",
+      provider: {
+        format: "html",
+        title: "HTML Export"
+      }
+    });
+    expect(request).toEqual({
+      type: extensionHostProtocolMessageTypes.exportDocument,
+      requestId: "request-24",
+      extensionId: "notes.export",
+      format: "html",
+      input: {
+        assetMode: "file",
+        name: "A Note.md",
+        uri: "file://notes/a.md",
+        value: "# A\n\n![Image](image.png)"
+      }
+    });
+    expect("resolveImageSource" in request.input).toBe(false);
+    expect(result).toEqual({
+      type: extensionHostProtocolMessageTypes.exportDocumentResult,
+      requestId: "request-25",
+      extensionId: "notes.export",
+      document: {
+        assets: [{
+          base64: "aGVsbG8=",
+          mimeType: "image/png",
+          relativePath: "A_assets/image.png"
+        }],
+        defaultFileName: "A Note.html",
+        format: "html",
+        mimeType: "text/html;charset=utf-8",
+        value: "<!doctype html>"
+      }
+    });
+    expect(deserializeExtensionHostProtocolMessage(serializeExtensionHostProtocolMessage(provider))).toEqual(provider);
+    expect(deserializeExtensionHostProtocolMessage(serializeExtensionHostProtocolMessage(request))).toEqual(request);
+    expect(deserializeExtensionHostProtocolMessage(serializeExtensionHostProtocolMessage(result))).toEqual(result);
+  });
+
+  it("rejects invalid export broker payloads", () => {
+    expect(() => createExtensionHostExportDocumentResultMessage("request-26", "notes.export", {
+      assets: [{
+        base64: "aGVsbG8=",
+        mimeType: "image/png",
+        relativePath: "../secret.png"
+      }],
+      defaultFileName: "note.html",
+      format: "html",
+      mimeType: "text/html",
+      value: "<main></main>"
+    })).toThrow("relative path is invalid");
+    expect(() => createExtensionHostExportDocumentResultMessage("request-27", "notes.export", {
+      assets: [{
+        base64: "aGVsbG8=",
+        mimeType: "text/plain",
+        relativePath: "assets/a.txt"
+      }],
+      defaultFileName: "note.html",
+      format: "html",
+      mimeType: "text/html",
+      value: "<main></main>"
+    })).toThrow("image MIME type");
+    expect(() => createExtensionHostExportDocumentResultMessage("request-28", "notes.export", {
+      assets: [{
+        base64: "not base64!",
+        mimeType: "image/png",
+        relativePath: "assets/a.png"
+      }],
+      defaultFileName: "note.html",
+      format: "html",
+      mimeType: "text/html",
+      value: "<main></main>"
+    })).toThrow("valid base64");
+    expect(() => readExtensionHostProtocolMessage({
+      type: extensionHostProtocolMessageTypes.exportDocument,
+      requestId: "request-29",
+      extensionId: "notes.export",
+      format: "html",
+      input: {
+        assetMode: "remote",
+        name: "note.md",
+        uri: "file://notes/a.md",
+        value: ""
+      }
+    })).toThrow("inline or file");
+    expect(() => createExtensionHostExportDocumentResultMessage("request-30", "notes.export", {
+      assets: new Array(extensionHostProtocolLimits.exportAssetCount + 1).fill({
+        base64: "aGVsbG8=",
+        mimeType: "image/png",
+        relativePath: "assets/a.png"
+      }),
+      defaultFileName: "note.html",
+      format: "html",
+      mimeType: "text/html",
+      value: "<main></main>"
+    })).toThrow("must contain at most");
+  });
+
+  it("serializes Markdown renderer broker messages", () => {
+    const register = createExtensionHostMarkdownRendererRegisterRequestMessage("request-31", "notes.render", {
+      id: " notes.diagram ",
+      metadata: {
+        kind: "block",
+        label: " Diagram ",
+        language: " MERMAID ",
+        priority: 10
+      }
+    });
+    const request = createExtensionHostMarkdownRendererRenderRequestMessage("request-32", "notes.render", " notes.diagram ", {
+      language: " Mermaid ",
+      uri: " file://notes/a.md ",
+      value: "graph TD\nA-->B"
+    });
+    const result = createExtensionHostMarkdownRendererRenderResultMessage("request-33", "notes.render", " notes.diagram ", {
+      html: "<img src=\"data:image/svg+xml,%3Csvg%3E\" alt=\"Diagram\">"
+    });
+
+    expect(register).toEqual({
+      type: extensionHostProtocolMessageTypes.markdownRendererRegister,
+      requestId: "request-31",
+      extensionId: "notes.render",
+      renderer: {
+        id: "notes.diagram",
+        metadata: {
+          kind: "block",
+          label: "Diagram",
+          language: "mermaid",
+          priority: 10
+        }
+      }
+    });
+    expect(request).toEqual({
+      type: extensionHostProtocolMessageTypes.markdownRendererRender,
+      requestId: "request-32",
+      extensionId: "notes.render",
+      rendererId: "notes.diagram",
+      input: {
+        language: "mermaid",
+        uri: "file://notes/a.md",
+        value: "graph TD\nA-->B"
+      }
+    });
+    expect(result).toEqual({
+      type: extensionHostProtocolMessageTypes.markdownRendererRenderResult,
+      requestId: "request-33",
+      extensionId: "notes.render",
+      rendererId: "notes.diagram",
+      output: {
+        html: "<img src=\"data:image/svg+xml,%3Csvg%3E\" alt=\"Diagram\">"
+      }
+    });
+    expect(deserializeExtensionHostProtocolMessage(serializeExtensionHostProtocolMessage(register))).toEqual(register);
+    expect(deserializeExtensionHostProtocolMessage(serializeExtensionHostProtocolMessage(request))).toEqual(request);
+    expect(deserializeExtensionHostProtocolMessage(serializeExtensionHostProtocolMessage(result))).toEqual(result);
+  });
+
+  it("rejects invalid Markdown renderer broker payloads", () => {
+    expect(() => createExtensionHostMarkdownRendererRegisterRequestMessage("request-34", "notes.render", {
+      id: "notes.diagram",
+      metadata: {
+        kind: "widget" as "block",
+        label: "Diagram"
+      }
+    })).toThrow("block or inline");
+    expect(() => createExtensionHostMarkdownRendererRegisterRequestMessage("request-35", "notes.render", {
+      id: "notes.diagram",
+      metadata: {
+        kind: "block",
+        label: "Diagram",
+        language: "bad language"
+      }
+    })).toThrow("language");
+    expect(() => createExtensionHostMarkdownRendererRegisterRequestMessage("request-36", "notes.render", {
+      id: "notes.diagram",
+      metadata: {
+        kind: "block",
+        label: "Diagram",
+        priority: extensionHostProtocolLimits.markdownRendererPriorityMax + 1
+      }
+    })).toThrow("between");
+    expect(() => createExtensionHostMarkdownRendererRenderResultMessage("request-37", "notes.render", "notes.diagram", {
+      html: "x".repeat(extensionHostProtocolLimits.markdownRendererHtmlLength + 1)
+    })).toThrow("must be at most");
   });
 });
 

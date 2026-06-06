@@ -1,6 +1,13 @@
 import type { CommandMetadata } from "./commands";
 import type { ContextKeyValue } from "./contextKeys";
 import type { ExtensionActivationRequest, ExtensionActivationState, RegisteredExtension } from "./extensions";
+import type { ExportAssetMode, ExportedDocument, ExportedDocumentAsset, ExportProvider } from "./exports";
+import type {
+  MarkdownRendererInput,
+  MarkdownRendererKind,
+  MarkdownRendererOutput,
+  MarkdownRendererRuntimeMetadata
+} from "./markdownRenderers";
 
 export const extensionHostProtocolMessageTypes = {
   activate: "extensionHost/activate",
@@ -12,7 +19,13 @@ export const extensionHostProtocolMessageTypes = {
   commandList: "extensionHost/command/list",
   commandRegister: "extensionHost/command/register",
   contextKeyGet: "extensionHost/contextKey/get",
-  contextKeySet: "extensionHost/contextKey/set"
+  contextKeySet: "extensionHost/contextKey/set",
+  exportDocument: "extensionHost/export/document",
+  exportDocumentResult: "extensionHost/export/documentResult",
+  exportProviderRegister: "extensionHost/export/providerRegister",
+  markdownRendererRegister: "extensionHost/markdownRenderer/register",
+  markdownRendererRender: "extensionHost/markdownRenderer/render",
+  markdownRendererRenderResult: "extensionHost/markdownRenderer/renderResult"
 } as const;
 
 export const extensionHostProtocolLimits = {
@@ -26,12 +39,29 @@ export const extensionHostProtocolLimits = {
   errorMessageLength: 4000,
   errorNameLength: 120,
   errorStackLength: 20000,
+  exportAssetBase64Length: 10000000,
+  exportAssetCount: 500,
+  exportAssetRelativePathLength: 320,
+  exportDefaultFileNameLength: 240,
+  exportDocumentNameLength: 240,
+  exportDocumentUriLength: 2000,
+  exportDocumentValueLength: 5000000,
+  exportFormatLength: 80,
+  exportMimeTypeLength: 120,
+  exportTitleLength: 160,
   extensionIdLength: 256,
   jsonArrayItems: 100,
   jsonDepth: 8,
   jsonObjectProperties: 100,
   jsonPropertyNameLength: 120,
   jsonStringLength: 20000,
+  markdownRendererHtmlLength: 2000000,
+  markdownRendererIdLength: 256,
+  markdownRendererLabelLength: 160,
+  markdownRendererLanguageLength: 80,
+  markdownRendererPriorityMax: 100000,
+  markdownRendererPriorityMin: -100000,
+  markdownRendererValueLength: 1000000,
   requestIdLength: 120
 } as const;
 
@@ -45,7 +75,13 @@ export type ExtensionHostProtocolMessage =
   | ExtensionHostCommandListRequestMessage
   | ExtensionHostCommandRegisterRequestMessage
   | ExtensionHostContextKeyGetRequestMessage
-  | ExtensionHostContextKeySetRequestMessage;
+  | ExtensionHostContextKeySetRequestMessage
+  | ExtensionHostExportDocumentRequestMessage
+  | ExtensionHostExportDocumentResultMessage
+  | ExtensionHostExportProviderRegisterRequestMessage
+  | ExtensionHostMarkdownRendererRegisterRequestMessage
+  | ExtensionHostMarkdownRendererRenderRequestMessage
+  | ExtensionHostMarkdownRendererRenderResultMessage;
 
 export type ExtensionHostProtocolJsonValue =
   | null
@@ -126,10 +162,83 @@ export interface ExtensionHostContextKeyGetRequestMessage {
   readonly key: string;
 }
 
+export interface ExtensionHostExportProviderRegisterRequestMessage {
+  readonly type: typeof extensionHostProtocolMessageTypes.exportProviderRegister;
+  readonly requestId: string;
+  readonly extensionId: string;
+  readonly provider: ExtensionHostProtocolExportProviderRegistration;
+}
+
+export interface ExtensionHostExportDocumentRequestMessage {
+  readonly type: typeof extensionHostProtocolMessageTypes.exportDocument;
+  readonly requestId: string;
+  readonly extensionId: string;
+  readonly format: string;
+  readonly input: ExtensionHostProtocolExportDocumentInput;
+}
+
+export interface ExtensionHostExportDocumentResultMessage {
+  readonly type: typeof extensionHostProtocolMessageTypes.exportDocumentResult;
+  readonly requestId: string;
+  readonly extensionId: string;
+  readonly document: ExtensionHostProtocolExportedDocument;
+}
+
+export interface ExtensionHostMarkdownRendererRegisterRequestMessage {
+  readonly type: typeof extensionHostProtocolMessageTypes.markdownRendererRegister;
+  readonly requestId: string;
+  readonly extensionId: string;
+  readonly renderer: ExtensionHostProtocolMarkdownRendererRegistration;
+}
+
+export interface ExtensionHostMarkdownRendererRenderRequestMessage {
+  readonly type: typeof extensionHostProtocolMessageTypes.markdownRendererRender;
+  readonly requestId: string;
+  readonly extensionId: string;
+  readonly rendererId: string;
+  readonly input: ExtensionHostProtocolMarkdownRendererInput;
+}
+
+export interface ExtensionHostMarkdownRendererRenderResultMessage {
+  readonly type: typeof extensionHostProtocolMessageTypes.markdownRendererRenderResult;
+  readonly requestId: string;
+  readonly extensionId: string;
+  readonly rendererId: string;
+  readonly output: ExtensionHostProtocolMarkdownRendererOutput;
+}
+
 export interface ExtensionHostProtocolCommandRegistration extends Pick<CommandMetadata, "id"> {
   readonly title?: string;
   readonly category?: string;
 }
+
+export interface ExtensionHostProtocolExportProviderRegistration extends Pick<ExportProvider, "format" | "title"> {}
+
+export interface ExtensionHostProtocolExportDocumentInput {
+  readonly uri: string;
+  readonly name: string;
+  readonly value: string;
+  readonly assetMode?: ExportAssetMode;
+}
+
+export interface ExtensionHostProtocolExportedDocument extends Omit<ExportedDocument, "assets"> {
+  readonly assets?: readonly ExtensionHostProtocolExportedDocumentAsset[];
+}
+
+export interface ExtensionHostProtocolExportedDocumentAsset extends ExportedDocumentAsset {}
+
+export interface ExtensionHostProtocolMarkdownRendererRegistration {
+  readonly id: string;
+  readonly metadata?: ExtensionHostProtocolMarkdownRendererRuntimeMetadata;
+}
+
+export interface ExtensionHostProtocolMarkdownRendererRuntimeMetadata extends MarkdownRendererRuntimeMetadata {}
+
+export interface ExtensionHostProtocolMarkdownRendererInput extends Omit<MarkdownRendererInput, "uri"> {
+  readonly uri?: string;
+}
+
+export interface ExtensionHostProtocolMarkdownRendererOutput extends MarkdownRendererOutput {}
 
 export interface ExtensionHostProtocolExtension {
   readonly id: string;
@@ -309,6 +418,90 @@ export function createExtensionHostContextKeyGetRequestMessage(
   };
 }
 
+export function createExtensionHostExportProviderRegisterRequestMessage(
+  requestId: string,
+  extensionId: string,
+  provider: ExtensionHostProtocolExportProviderRegistration
+): ExtensionHostExportProviderRegisterRequestMessage {
+  return {
+    type: extensionHostProtocolMessageTypes.exportProviderRegister,
+    requestId: normalizeRequestId(requestId, "Extension host export provider registration request id"),
+    extensionId: normalizeExtensionId(extensionId, "Extension host export provider registration extension id"),
+    provider: normalizeProtocolExportProviderRegistration(provider)
+  };
+}
+
+export function createExtensionHostExportDocumentRequestMessage(
+  requestId: string,
+  extensionId: string,
+  format: string,
+  input: ExtensionHostProtocolExportDocumentInput
+): ExtensionHostExportDocumentRequestMessage {
+  return {
+    type: extensionHostProtocolMessageTypes.exportDocument,
+    requestId: normalizeRequestId(requestId, "Extension host export document request id"),
+    extensionId: normalizeExtensionId(extensionId, "Extension host export document extension id"),
+    format: normalizeExportFormat(format, "Extension host export document format"),
+    input: normalizeProtocolExportDocumentInput(input)
+  };
+}
+
+export function createExtensionHostExportDocumentResultMessage(
+  requestId: string,
+  extensionId: string,
+  document: ExtensionHostProtocolExportedDocument
+): ExtensionHostExportDocumentResultMessage {
+  return {
+    type: extensionHostProtocolMessageTypes.exportDocumentResult,
+    requestId: normalizeRequestId(requestId, "Extension host export document result request id"),
+    extensionId: normalizeExtensionId(extensionId, "Extension host export document result extension id"),
+    document: normalizeProtocolExportedDocument(document)
+  };
+}
+
+export function createExtensionHostMarkdownRendererRegisterRequestMessage(
+  requestId: string,
+  extensionId: string,
+  renderer: ExtensionHostProtocolMarkdownRendererRegistration
+): ExtensionHostMarkdownRendererRegisterRequestMessage {
+  return {
+    type: extensionHostProtocolMessageTypes.markdownRendererRegister,
+    requestId: normalizeRequestId(requestId, "Extension host Markdown renderer registration request id"),
+    extensionId: normalizeExtensionId(extensionId, "Extension host Markdown renderer registration extension id"),
+    renderer: normalizeProtocolMarkdownRendererRegistration(renderer)
+  };
+}
+
+export function createExtensionHostMarkdownRendererRenderRequestMessage(
+  requestId: string,
+  extensionId: string,
+  rendererId: string,
+  input: ExtensionHostProtocolMarkdownRendererInput
+): ExtensionHostMarkdownRendererRenderRequestMessage {
+  return {
+    type: extensionHostProtocolMessageTypes.markdownRendererRender,
+    requestId: normalizeRequestId(requestId, "Extension host Markdown renderer render request id"),
+    extensionId: normalizeExtensionId(extensionId, "Extension host Markdown renderer render extension id"),
+    rendererId: normalizeMarkdownRendererId(rendererId, "Extension host Markdown renderer render id"),
+    input: normalizeProtocolMarkdownRendererInput(input)
+  };
+}
+
+export function createExtensionHostMarkdownRendererRenderResultMessage(
+  requestId: string,
+  extensionId: string,
+  rendererId: string,
+  output: ExtensionHostProtocolMarkdownRendererOutput
+): ExtensionHostMarkdownRendererRenderResultMessage {
+  return {
+    type: extensionHostProtocolMessageTypes.markdownRendererRenderResult,
+    requestId: normalizeRequestId(requestId, "Extension host Markdown renderer render result request id"),
+    extensionId: normalizeExtensionId(extensionId, "Extension host Markdown renderer render result extension id"),
+    rendererId: normalizeMarkdownRendererId(rendererId, "Extension host Markdown renderer render result id"),
+    output: normalizeProtocolMarkdownRendererOutput(output)
+  };
+}
+
 export function serializeExtensionHostProtocolMessage(message: ExtensionHostProtocolMessage): string {
   return JSON.stringify(readExtensionHostProtocolMessage(message));
 }
@@ -342,6 +535,18 @@ export function readExtensionHostProtocolMessage(value: unknown): ExtensionHostP
       return readContextKeySetRequestMessage(record);
     case extensionHostProtocolMessageTypes.contextKeyGet:
       return readContextKeyGetRequestMessage(record);
+    case extensionHostProtocolMessageTypes.exportProviderRegister:
+      return readExportProviderRegisterRequestMessage(record);
+    case extensionHostProtocolMessageTypes.exportDocument:
+      return readExportDocumentRequestMessage(record);
+    case extensionHostProtocolMessageTypes.exportDocumentResult:
+      return readExportDocumentResultMessage(record);
+    case extensionHostProtocolMessageTypes.markdownRendererRegister:
+      return readMarkdownRendererRegisterRequestMessage(record);
+    case extensionHostProtocolMessageTypes.markdownRendererRender:
+      return readMarkdownRendererRenderRequestMessage(record);
+    case extensionHostProtocolMessageTypes.markdownRendererRenderResult:
+      return readMarkdownRendererRenderResultMessage(record);
     default:
       throw new Error(`Unknown extension host protocol message type: ${type}`);
   }
@@ -484,6 +689,69 @@ function readContextKeyGetRequestMessage(record: UnknownRecord): ExtensionHostCo
   };
 }
 
+function readExportProviderRegisterRequestMessage(record: UnknownRecord): ExtensionHostExportProviderRegisterRequestMessage {
+  return {
+    type: extensionHostProtocolMessageTypes.exportProviderRegister,
+    requestId: normalizeRequestId(record.requestId, "Extension host export provider registration request id"),
+    extensionId: normalizeExtensionId(record.extensionId, "Extension host export provider registration extension id"),
+    provider: normalizeProtocolExportProviderRegistration(record.provider)
+  };
+}
+
+function readExportDocumentRequestMessage(record: UnknownRecord): ExtensionHostExportDocumentRequestMessage {
+  return {
+    type: extensionHostProtocolMessageTypes.exportDocument,
+    requestId: normalizeRequestId(record.requestId, "Extension host export document request id"),
+    extensionId: normalizeExtensionId(record.extensionId, "Extension host export document extension id"),
+    format: normalizeExportFormat(record.format, "Extension host export document format"),
+    input: normalizeProtocolExportDocumentInput(record.input)
+  };
+}
+
+function readExportDocumentResultMessage(record: UnknownRecord): ExtensionHostExportDocumentResultMessage {
+  return {
+    type: extensionHostProtocolMessageTypes.exportDocumentResult,
+    requestId: normalizeRequestId(record.requestId, "Extension host export document result request id"),
+    extensionId: normalizeExtensionId(record.extensionId, "Extension host export document result extension id"),
+    document: normalizeProtocolExportedDocument(record.document)
+  };
+}
+
+function readMarkdownRendererRegisterRequestMessage(
+  record: UnknownRecord
+): ExtensionHostMarkdownRendererRegisterRequestMessage {
+  return {
+    type: extensionHostProtocolMessageTypes.markdownRendererRegister,
+    requestId: normalizeRequestId(record.requestId, "Extension host Markdown renderer registration request id"),
+    extensionId: normalizeExtensionId(record.extensionId, "Extension host Markdown renderer registration extension id"),
+    renderer: normalizeProtocolMarkdownRendererRegistration(record.renderer)
+  };
+}
+
+function readMarkdownRendererRenderRequestMessage(
+  record: UnknownRecord
+): ExtensionHostMarkdownRendererRenderRequestMessage {
+  return {
+    type: extensionHostProtocolMessageTypes.markdownRendererRender,
+    requestId: normalizeRequestId(record.requestId, "Extension host Markdown renderer render request id"),
+    extensionId: normalizeExtensionId(record.extensionId, "Extension host Markdown renderer render extension id"),
+    rendererId: normalizeMarkdownRendererId(record.rendererId, "Extension host Markdown renderer render id"),
+    input: normalizeProtocolMarkdownRendererInput(record.input)
+  };
+}
+
+function readMarkdownRendererRenderResultMessage(
+  record: UnknownRecord
+): ExtensionHostMarkdownRendererRenderResultMessage {
+  return {
+    type: extensionHostProtocolMessageTypes.markdownRendererRenderResult,
+    requestId: normalizeRequestId(record.requestId, "Extension host Markdown renderer render result request id"),
+    extensionId: normalizeExtensionId(record.extensionId, "Extension host Markdown renderer render result extension id"),
+    rendererId: normalizeMarkdownRendererId(record.rendererId, "Extension host Markdown renderer render result id"),
+    output: normalizeProtocolMarkdownRendererOutput(record.output)
+  };
+}
+
 function toProtocolExtension(extension: RegisteredExtension): ExtensionHostProtocolExtension {
   return {
     id: normalizeRequiredProtocolString(
@@ -596,6 +864,341 @@ function normalizeProtocolCommandRegistration(value: unknown): ExtensionHostProt
     ...(title ? { title } : {}),
     ...(category ? { category } : {})
   };
+}
+
+function normalizeProtocolExportProviderRegistration(
+  value: unknown
+): ExtensionHostProtocolExportProviderRegistration {
+  const record = expectRecord(value, "Extension host export provider registration");
+
+  return {
+    format: normalizeExportFormat(record.format, "Extension host export provider format"),
+    title: normalizeRequiredProtocolString(
+      record.title,
+      "Extension host export provider title",
+      extensionHostProtocolLimits.exportTitleLength
+    )
+  };
+}
+
+function normalizeProtocolExportDocumentInput(value: unknown): ExtensionHostProtocolExportDocumentInput {
+  const record = expectRecord(value, "Extension host export document input");
+  const assetMode = normalizeOptionalExportAssetMode(record.assetMode, "Extension host export document asset mode");
+
+  return {
+    uri: normalizeProtocolUri(record.uri, "Extension host export document URI"),
+    name: normalizeExportDocumentName(record.name, "Extension host export document name"),
+    value: normalizeProtocolText(
+      record.value,
+      "Extension host export document value",
+      extensionHostProtocolLimits.exportDocumentValueLength
+    ),
+    ...(assetMode ? { assetMode } : {})
+  };
+}
+
+function normalizeProtocolExportedDocument(value: unknown): ExtensionHostProtocolExportedDocument {
+  const record = expectRecord(value, "Extension host exported document");
+  const assets = normalizeOptionalProtocolExportedDocumentAssets(record.assets);
+
+  return {
+    format: normalizeExportFormat(record.format, "Extension host exported document format"),
+    defaultFileName: normalizeExportDefaultFileName(record.defaultFileName),
+    mimeType: normalizeExportMimeType(record.mimeType),
+    value: normalizeProtocolText(
+      record.value,
+      "Extension host exported document value",
+      extensionHostProtocolLimits.exportDocumentValueLength
+    ),
+    ...(assets.length > 0 ? { assets } : {})
+  };
+}
+
+function normalizeOptionalProtocolExportedDocumentAssets(
+  value: unknown
+): readonly ExtensionHostProtocolExportedDocumentAsset[] {
+  if (value === undefined) {
+    return [];
+  }
+
+  if (!Array.isArray(value)) {
+    throw new Error("Extension host exported document assets must be an array");
+  }
+
+  if (value.length > extensionHostProtocolLimits.exportAssetCount) {
+    throw new Error(
+      `Extension host exported document assets must contain at most ${extensionHostProtocolLimits.exportAssetCount} items`
+    );
+  }
+
+  return value.map((item, index) => normalizeProtocolExportedDocumentAsset(item, index));
+}
+
+function normalizeProtocolExportedDocumentAsset(
+  value: unknown,
+  index: number
+): ExtensionHostProtocolExportedDocumentAsset {
+  const record = expectRecord(value, `Extension host exported document asset ${index + 1}`);
+
+  return {
+    relativePath: normalizeExportAssetRelativePath(record.relativePath, index),
+    mimeType: normalizeImageMimeType(record.mimeType, `Extension host exported document asset ${index + 1} MIME type`),
+    base64: normalizeBase64(record.base64, `Extension host exported document asset ${index + 1} base64`)
+  };
+}
+
+function normalizeProtocolMarkdownRendererRegistration(
+  value: unknown
+): ExtensionHostProtocolMarkdownRendererRegistration {
+  const record = expectRecord(value, "Extension host Markdown renderer registration");
+  const id = normalizeMarkdownRendererId(record.id, "Extension host Markdown renderer registration id");
+  const metadata = normalizeOptionalProtocolMarkdownRendererRuntimeMetadata(record.metadata, id);
+
+  return {
+    id,
+    ...(metadata ? { metadata } : {})
+  };
+}
+
+function normalizeOptionalProtocolMarkdownRendererRuntimeMetadata(
+  value: unknown,
+  rendererId: string
+): ExtensionHostProtocolMarkdownRendererRuntimeMetadata | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  const record = expectRecord(value, `Extension host Markdown renderer metadata for ${rendererId}`);
+  const language = normalizeOptionalMarkdownRendererLanguage(record.language, rendererId);
+  const priority = normalizeOptionalProtocolNumber(
+    record.priority,
+    `Extension host Markdown renderer priority for ${rendererId}`,
+    extensionHostProtocolLimits.markdownRendererPriorityMin,
+    extensionHostProtocolLimits.markdownRendererPriorityMax
+  );
+
+  return {
+    label: normalizeRequiredProtocolString(
+      record.label,
+      `Extension host Markdown renderer label for ${rendererId}`,
+      extensionHostProtocolLimits.markdownRendererLabelLength
+    ),
+    kind: normalizeMarkdownRendererKind(record.kind, rendererId),
+    ...(language ? { language } : {}),
+    ...(priority !== undefined ? { priority } : {})
+  };
+}
+
+function normalizeProtocolMarkdownRendererInput(value: unknown): ExtensionHostProtocolMarkdownRendererInput {
+  const record = expectRecord(value, "Extension host Markdown renderer input");
+  const language = normalizeOptionalMarkdownRendererLanguage(record.language, "input");
+  const uri = normalizeOptionalProtocolUri(record.uri, "Extension host Markdown renderer input URI");
+
+  return {
+    value: normalizeProtocolText(
+      record.value,
+      "Extension host Markdown renderer input value",
+      extensionHostProtocolLimits.markdownRendererValueLength
+    ),
+    ...(language ? { language } : {}),
+    ...(uri ? { uri } : {})
+  };
+}
+
+function normalizeProtocolMarkdownRendererOutput(value: unknown): ExtensionHostProtocolMarkdownRendererOutput {
+  const record = expectRecord(value, "Extension host Markdown renderer output");
+
+  return {
+    html: normalizeProtocolText(
+      record.html,
+      "Extension host Markdown renderer output HTML",
+      extensionHostProtocolLimits.markdownRendererHtmlLength
+    )
+  };
+}
+
+function normalizeExportFormat(value: unknown, label: string): string {
+  const format = normalizeRequiredProtocolString(value, label, extensionHostProtocolLimits.exportFormatLength);
+
+  if (!/^[A-Za-z0-9][A-Za-z0-9_.+-]*$/.test(format)) {
+    throw new Error(`${label} is invalid: ${format}`);
+  }
+
+  return format.toLowerCase();
+}
+
+function normalizeExportDocumentName(value: unknown, label: string): string {
+  return normalizeRequiredProtocolString(value, label, extensionHostProtocolLimits.exportDocumentNameLength);
+}
+
+function normalizeExportDefaultFileName(value: unknown): string {
+  const fileName = normalizeRequiredProtocolString(
+    value,
+    "Extension host exported document default file name",
+    extensionHostProtocolLimits.exportDefaultFileNameLength
+  );
+
+  if (/[\\/<>:"|?*\u0000-\u001f]/.test(fileName) || fileName === "." || fileName === "..") {
+    throw new Error(`Extension host exported document default file name is invalid: ${fileName}`);
+  }
+
+  return fileName;
+}
+
+function normalizeExportMimeType(value: unknown): string {
+  return normalizeMimeType(value, "Extension host exported document MIME type");
+}
+
+function normalizeImageMimeType(value: unknown, label: string): string {
+  const mimeType = normalizeMimeType(value, label);
+
+  if (!/^image\//i.test(mimeType)) {
+    throw new Error(`${label} must be an image MIME type`);
+  }
+
+  return mimeType;
+}
+
+function normalizeMimeType(value: unknown, label: string): string {
+  const mimeType = normalizeRequiredProtocolString(value, label, extensionHostProtocolLimits.exportMimeTypeLength);
+
+  if (!/^[A-Za-z0-9][A-Za-z0-9.+-]*\/[A-Za-z0-9][A-Za-z0-9.+-]*(?:;[A-Za-z0-9_.-]+=[A-Za-z0-9_.+-]+)*$/.test(mimeType)) {
+    throw new Error(`${label} is invalid: ${mimeType}`);
+  }
+
+  return mimeType;
+}
+
+function normalizeExportAssetRelativePath(value: unknown, index: number): string {
+  const relativePath = normalizeRequiredProtocolString(
+    value,
+    `Extension host exported document asset ${index + 1} relative path`,
+    extensionHostProtocolLimits.exportAssetRelativePathLength
+  ).replaceAll("\\", "/");
+
+  if (
+    relativePath.startsWith("/") ||
+    /^[A-Za-z]:/.test(relativePath) ||
+    /^[A-Za-z][A-Za-z0-9+.-]*:/.test(relativePath) ||
+    /[<>:"|?*\u0000-\u001f]/.test(relativePath)
+  ) {
+    throw new Error(`Extension host exported document asset ${index + 1} relative path is invalid: ${relativePath}`);
+  }
+
+  const segments = relativePath.split("/");
+
+  if (segments.some((segment) => !segment || segment === "." || segment === "..")) {
+    throw new Error(`Extension host exported document asset ${index + 1} relative path is invalid: ${relativePath}`);
+  }
+
+  return relativePath;
+}
+
+function normalizeBase64(value: unknown, label: string): string {
+  const base64 = normalizeProtocolText(value, label, extensionHostProtocolLimits.exportAssetBase64Length).trim();
+
+  if (!base64) {
+    throw new Error(`${label} must not be empty`);
+  }
+
+  if (base64.length % 4 !== 0 || !/^[A-Za-z0-9+/]+={0,2}$/.test(base64)) {
+    throw new Error(`${label} must be valid base64`);
+  }
+
+  return base64;
+}
+
+function normalizeOptionalExportAssetMode(value: unknown, label: string): ExportAssetMode | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (value !== "inline" && value !== "file") {
+    throw new Error(`${label} must be inline or file`);
+  }
+
+  return value;
+}
+
+function normalizeMarkdownRendererId(value: unknown, label: string): string {
+  const id = normalizeRequiredProtocolString(value, label, extensionHostProtocolLimits.markdownRendererIdLength);
+
+  if (!/^[A-Za-z0-9][A-Za-z0-9_.:-]*$/.test(id)) {
+    throw new Error(`${label} is invalid: ${id}`);
+  }
+
+  return id;
+}
+
+function normalizeMarkdownRendererKind(value: unknown, rendererId: string): MarkdownRendererKind {
+  if (value !== "block" && value !== "inline") {
+    throw new Error(`Extension host Markdown renderer kind for ${rendererId} must be block or inline`);
+  }
+
+  return value;
+}
+
+function normalizeOptionalMarkdownRendererLanguage(value: unknown, rendererId: string): string | undefined {
+  const language = normalizeOptionalProtocolString(
+    value,
+    `Extension host Markdown renderer language for ${rendererId}`,
+    extensionHostProtocolLimits.markdownRendererLanguageLength
+  );
+
+  if (language === undefined) {
+    return undefined;
+  }
+
+  if (!/^[A-Za-z0-9][A-Za-z0-9_.+-]*$/.test(language)) {
+    throw new Error(`Extension host Markdown renderer language for ${rendererId} is invalid: ${language}`);
+  }
+
+  return language.toLowerCase();
+}
+
+function normalizeOptionalProtocolNumber(
+  value: unknown,
+  label: string,
+  min: number,
+  max: number
+): number | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    throw new Error(`${label} must be a finite number`);
+  }
+
+  if (value < min || value > max) {
+    throw new Error(`${label} must be between ${min} and ${max}`);
+  }
+
+  return value;
+}
+
+function normalizeProtocolUri(value: unknown, label: string): string {
+  return normalizeRequiredProtocolString(value, label, extensionHostProtocolLimits.exportDocumentUriLength);
+}
+
+function normalizeOptionalProtocolUri(value: unknown, label: string): string | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  return normalizeProtocolUri(value, label);
+}
+
+function normalizeProtocolText(value: unknown, label: string, maxLength: number): string {
+  if (typeof value !== "string") {
+    throw new Error(`${label} must be a string`);
+  }
+
+  if (value.length > maxLength) {
+    throw new Error(`${label} must be at most ${maxLength} characters`);
+  }
+
+  return value;
 }
 
 function normalizeCommandId(value: unknown, label: string): string {
