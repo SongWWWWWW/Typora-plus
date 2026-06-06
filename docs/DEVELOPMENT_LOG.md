@@ -2361,3 +2361,36 @@ Known limitations:
 
 - The guard enforces current package direction only; it does not validate runtime service usage inside allowed layers.
 - Future package-layer changes must update both `docs/ARCHITECTURE.md` and the boundary test together.
+
+## 2026-06-07 - P2 On-Demand Markdown Renderer Activation
+
+Completed:
+
+- Added an activation handler option to `MarkdownRendererService`.
+- Made renderer `render()` calls activate known metadata-only renderer contributions before retrying provider lookup.
+- Kept unknown renderer ids from triggering activation, preserving clear missing-contribution errors.
+- Wired Workbench service creation so Markdown renderer requests activate `onMarkdownRenderer:<id>` through `IExtensionService`.
+- Updated platform test helpers to match Workbench's renderer activation bridge.
+- Added platform tests for service-level lazy activation, unknown renderer errors, missing-provider errors after activation, and extension renderer activation before rendering.
+
+Quality gate:
+
+- `npm run test -- --run packages/platform/src/platform.test.ts`: passed, 93 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 217 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Browser smoke check at `http://127.0.0.1:5173/`: Workbench loaded with shell, titlebar, activitybar, and editor; no horizontal overflow; no console errors.
+
+Review:
+
+- Markdown renderer activation now mirrors command activation: metadata can be registered early, while executable providers are supplied lazily by activation.
+- Provider lookup remains platform-owned and lifecycle cleanup remains extension-record-owned.
+- Unknown renderer ids fail before activation, so renderer calls do not wake unrelated extensions.
+- No direct DOM insertion, dynamic extension loading, unrestricted Node access, visual token, storage path, or extra documentation file was introduced.
+
+Known limitations:
+
+- Registered Markdown renderer providers are still not connected to CodeMirror live-preview surfaces.
+- Future editor integration must sanitize provider output before any preview DOM insertion.
+- Third-party extension host code loading remains future work.
