@@ -3,11 +3,13 @@ import { fileURLToPath } from "node:url";
 import { app, BrowserWindow } from "electron";
 import { registerNativeConfigurationIpc } from "./nativeConfigurationIpc.js";
 import { registerNativeFileIpc } from "./nativeFileIpc.js";
+import { registerNativeIndexSnapshotIpc } from "./nativeIndexSnapshotIpc.js";
 import { desktopShellConfig } from "./shellConfig.js";
 
 const currentDir = path.dirname(fileURLToPath(import.meta.url));
 
 registerNativeConfigurationIpc(desktopShellConfig.configuration);
+registerNativeIndexSnapshotIpc(desktopShellConfig.indexSnapshots);
 registerNativeFileIpc(desktopShellConfig.workspace);
 
 async function createWindow(): Promise<void> {

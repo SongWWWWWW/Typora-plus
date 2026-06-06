@@ -12,6 +12,7 @@ import {
   PersistedWorkspaceIndexProvider,
   RecentService,
   NativeResourceService,
+  createDefaultWorkspaceIndexSnapshotStorage,
   flattenFileTree,
   keybindingFromEvent,
   mergeConfiguration,
@@ -569,6 +570,37 @@ describe("workspace text files", () => {
 });
 
 describe("workspace index", () => {
+  it("uses a native index snapshot bridge when available", () => {
+    const previousTyporaPlus = (globalThis as { typoraPlus?: unknown }).typoraPlus;
+    const values = new Map<string, string>();
+    (globalThis as {
+      typoraPlus?: {
+        readonly indexSnapshots: {
+          readonly isAvailable: boolean;
+          read(key: string): string | undefined;
+          write(key: string, value: string): void;
+        };
+      };
+    }).typoraPlus = {
+      indexSnapshots: {
+        isAvailable: true,
+        read: (key) => values.get(key),
+        write: (key, value) => values.set(key, value)
+      }
+    };
+
+    try {
+      const storage = createDefaultWorkspaceIndexSnapshotStorage();
+
+      storage?.write("typora-plus.workspaceIndex.snapshot", "snapshot");
+
+      expect(storage?.read("typora-plus.workspaceIndex.snapshot")).toBe("snapshot");
+      expect(values.get("typora-plus.workspaceIndex.snapshot")).toBe("snapshot");
+    } finally {
+      (globalThis as { typoraPlus?: unknown }).typoraPlus = previousTyporaPlus;
+    }
+  });
+
   it("indexes workspace files and returns cross-file search results", async () => {
     const host = createMemoryHost([
       ["file://C:/Notes/a.md", "# Alpha\nShared topic"],

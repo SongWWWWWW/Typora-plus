@@ -22,7 +22,7 @@ import {
   WorkspaceIndexService,
   WorkspaceTextFileService,
   WorkspaceService,
-  createBrowserWorkspaceIndexSnapshotStorage,
+  createDefaultWorkspaceIndexSnapshotStorage,
   type IAttachmentService as AttachmentServiceContract,
   type IConfigurationService as ConfigurationServiceContract,
   type ICommandService as CommandServiceContract,
@@ -58,7 +58,7 @@ export function createWorkbenchServices(): WorkbenchServices {
     name: "Typora Plus"
   });
   const fileService = new NativeFileService();
-  const indexSnapshotStorage = createBrowserWorkspaceIndexSnapshotStorage();
+  const indexSnapshotStorage = createDefaultWorkspaceIndexSnapshotStorage();
   const indexService = new WorkspaceIndexService(fileService, {
     maxFileSizeBytes: configurationService.getValue().workspace.searchMaxFileSizeBytes,
     maxResults: configurationService.getValue().workspace.searchMaxResults

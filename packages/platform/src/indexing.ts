@@ -134,6 +134,12 @@ export interface WorkspaceIndexSnapshotStorage {
   write(key: string, value: string): void;
 }
 
+export interface NativeWorkspaceIndexSnapshotBridge {
+  readonly isAvailable: boolean;
+  read(key: string): string | undefined;
+  write(key: string, value: string): void;
+}
+
 export interface PersistedWorkspaceIndexProviderOptions {
   readonly storage: WorkspaceIndexSnapshotStorage;
   readonly storageKey?: string;
@@ -972,6 +978,10 @@ function isWorkspaceIndexedDocumentSnapshot(value: unknown): value is WorkspaceI
     typeof value.content === "string";
 }
 
+export function createDefaultWorkspaceIndexSnapshotStorage(): WorkspaceIndexSnapshotStorage | undefined {
+  return createNativeWorkspaceIndexSnapshotStorage() ?? createBrowserWorkspaceIndexSnapshotStorage();
+}
+
 export function createBrowserWorkspaceIndexSnapshotStorage(): WorkspaceIndexSnapshotStorage | undefined {
   if (!hasLocalStorage()) {
     return undefined;
@@ -984,6 +994,24 @@ export function createBrowserWorkspaceIndexSnapshotStorage(): WorkspaceIndexSnap
     write(key, value) {
       window.localStorage.setItem(key, value);
     }
+  };
+}
+
+function createNativeWorkspaceIndexSnapshotStorage(): WorkspaceIndexSnapshotStorage | undefined {
+  const candidate = globalThis as {
+    readonly typoraPlus?: {
+      readonly indexSnapshots?: NativeWorkspaceIndexSnapshotBridge;
+    };
+  };
+  const bridge = candidate.typoraPlus?.indexSnapshots;
+
+  if (!bridge?.isAvailable) {
+    return undefined;
+  }
+
+  return {
+    read: (key) => bridge.read(key),
+    write: (key, value) => bridge.write(key, value)
   };
 }
 

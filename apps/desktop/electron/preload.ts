@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from "electron";
 import { nativeConfigurationIpcChannels } from "./nativeConfigurationIpc.js";
 import { nativeFileIpcChannels } from "./nativeFileIpc.js";
+import { nativeIndexSnapshotIpcChannels } from "./nativeIndexSnapshotIpc.js";
 
 contextBridge.exposeInMainWorld("typoraPlus", {
   platform: process.platform,
@@ -8,6 +9,11 @@ contextBridge.exposeInMainWorld("typoraPlus", {
     isAvailable: true,
     read: (key: string) => ipcRenderer.sendSync(nativeConfigurationIpcChannels.read, key),
     write: (key: string, value: string) => ipcRenderer.sendSync(nativeConfigurationIpcChannels.write, key, value)
+  },
+  indexSnapshots: {
+    isAvailable: true,
+    read: (key: string) => ipcRenderer.sendSync(nativeIndexSnapshotIpcChannels.read, key),
+    write: (key: string, value: string) => ipcRenderer.sendSync(nativeIndexSnapshotIpcChannels.write, key, value)
   },
   fileSystem: {
     isAvailable: true,

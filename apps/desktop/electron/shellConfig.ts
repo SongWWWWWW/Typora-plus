@@ -12,6 +12,10 @@ export const desktopShellConfig = {
     storageFile: "configuration.json",
     maxValueBytes: 256 * 1024
   },
+  indexSnapshots: {
+    storageDirectory: "workspace-index",
+    maxValueBytes: 5 * 1024 * 1024
+  },
   workspace: {
     maxDepth: 8,
     maxFiles: 5000,
