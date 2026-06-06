@@ -2463,3 +2463,35 @@ Known limitations:
 - Mermaid's dependency graph is large; it is isolated behind lazy loading, but the lazy chunk still needs future measurement on lower-end machines.
 - Inline renderer contributions are registered by the platform but are not connected to an editor preview surface yet.
 - Third-party extension host code loading remains future work.
+
+## 2026-06-07 - P2 Renderer Preview Cache
+
+Completed:
+
+- Added a bounded LRU cache to the Workbench Markdown code-fence renderer adapter.
+- Reused successful preview render results for identical renderer id, active document URI, code-fence info, language, and content.
+- Kept cache entries isolated by document URI so the same code fence in different notes can still receive document-aware provider output.
+- Evicted least-recently-used entries when the cache reaches its configured limit.
+- Removed failed render attempts from the cache so transient renderer failures can recover on the next render.
+- Added tests for cache reuse, document isolation, LRU eviction, failed render cleanup, and the bounded default limit.
+
+Quality gate:
+
+- `npm run test -- --run packages/workbench/src/markdownRendererPreview.test.ts`: passed, 8 tests
+- `npm run verify`: passed, 236 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Browser smoke check at `http://127.0.0.1:5173/`: Mermaid preview stayed ready after reload, loaded one preview image, and reported no renderer or console errors.
+
+Review:
+
+- The cache stays in the Workbench adapter, so the editor still only receives a narrow callback and the platform renderer service stays stateless.
+- Renderer and document changes rebuild the adapter through existing Workbench memoization and naturally clear stale preview cache state.
+- The cache is bounded and keyed on all provider-visible source inputs, avoiding unbounded growth and cross-document result reuse.
+- No new dependency, storage path, visual token, extra documentation file, or renderer-specific editor dependency was introduced.
+
+Known limitations:
+
+- The cache is in-memory only; previews are recomputed after app reload.
+- Cache size is an internal adapter default; there is no user-facing setting yet.
+- Inline renderer contributions are registered by the platform but are not connected to an editor preview surface yet.
