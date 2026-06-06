@@ -100,6 +100,11 @@ export interface MarkdownLineBlockState extends MarkdownLineClassificationState 
   readonly line: number;
 }
 
+export interface MarkdownVisibleLineRange {
+  readonly first: number;
+  readonly last: number;
+}
+
 export type MarkdownImageSourceResolver = (source: string) => Promise<string | undefined> | string | undefined;
 
 const syntaxMarkerDecoration = Decoration.mark({ class: "tp-editor-markdown-marker" });
@@ -219,6 +224,30 @@ export function analyzeMarkdownLineBlocks(lines: readonly string[]): readonly Ma
   return analyzeMarkdownLineBlocksFromSource({
     lineCount: lines.length,
     readLine: (lineNumber) => lines[lineNumber - 1] ?? ""
+  });
+}
+
+export function analyzeMarkdownLineBlocksForVisibleRanges(source: {
+  readonly lineCount: number;
+  readonly readLine: (lineNumber: number) => string;
+  readonly visibleRanges: readonly MarkdownVisibleLineRange[];
+}): readonly MarkdownLineBlockState[] {
+  const visibleRanges = normalizeMarkdownVisibleLineRanges(source.visibleRanges, source.lineCount);
+
+  if (visibleRanges.length === 0) {
+    return [];
+  }
+
+  const lastVisibleLine = visibleRanges[visibleRanges.length - 1]?.last ?? 0;
+  const isVisible = (lineNumber: number): boolean =>
+    visibleRanges.some((range) => lineNumber >= range.first && lineNumber <= range.last);
+
+  return analyzeMarkdownLineBlocksFromSource({
+    isVisible,
+    lineCount: source.lineCount,
+    lookaheadLimit: lastVisibleLine + 1,
+    readLine: source.readLine,
+    scanUntilLine: lastVisibleLine
   });
 }
 
@@ -402,21 +431,49 @@ function compareLineDecorations(
 }
 
 function analyzeVisibleMarkdownLineBlocks(view: EditorView): ReadonlyMap<number, MarkdownLineBlockState> {
-  const visibleLineRanges = view.visibleRanges.map((range) => ({
+  const visibleRanges = view.visibleRanges.map((range) => ({
     first: view.state.doc.lineAt(range.from).number,
     last: view.state.doc.lineAt(range.to).number
   }));
-  const lastVisibleLine = Math.max(1, ...visibleLineRanges.map((range) => range.last));
-  const isVisible = (lineNumber: number): boolean =>
-    visibleLineRanges.some((range) => lineNumber >= range.first && lineNumber <= range.last);
 
-  return new Map(analyzeMarkdownLineBlocksFromSource({
-    isVisible,
+  return new Map(analyzeMarkdownLineBlocksForVisibleRanges({
     lineCount: view.state.doc.lines,
-    lookaheadLimit: lastVisibleLine + 1,
     readLine: (lineNumber) => view.state.doc.line(lineNumber).text,
-    scanUntilLine: lastVisibleLine
+    visibleRanges
   }).map((state) => [state.line, state]));
+}
+
+function normalizeMarkdownVisibleLineRanges(
+  visibleRanges: readonly MarkdownVisibleLineRange[],
+  lineCount: number
+): readonly MarkdownVisibleLineRange[] {
+  if (lineCount <= 0) {
+    return [];
+  }
+
+  const normalized: MarkdownVisibleLineRange[] = [];
+
+  for (const range of visibleRanges
+    .map((candidate) => ({
+      first: Math.max(1, Math.min(candidate.first, lineCount)),
+      last: Math.max(1, Math.min(candidate.last, lineCount))
+    }))
+    .filter((candidate) => candidate.last >= candidate.first)
+    .sort((first, second) => first.first - second.first || first.last - second.last)
+  ) {
+    const previous = normalized.at(-1);
+    if (previous && range.first <= previous.last + 1) {
+      normalized[normalized.length - 1] = {
+        first: previous.first,
+        last: Math.max(previous.last, range.last)
+      };
+      continue;
+    }
+
+    normalized.push(range);
+  }
+
+  return normalized;
 }
 
 function analyzeMarkdownLineBlocksFromSource(source: {

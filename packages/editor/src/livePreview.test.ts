@@ -3,6 +3,7 @@ import {
   analyzeMarkdownCodeFenceLines,
   analyzeMarkdownImageBlocks,
   analyzeMarkdownLineBlocks,
+  analyzeMarkdownLineBlocksForVisibleRanges,
   analyzeMarkdownMathBlocks,
   analyzeMarkdownTableLines,
   classifyMarkdownLine,
@@ -233,6 +234,71 @@ describe("analyzeMarkdownLineBlocks", () => {
       [5, "close"]
     ]);
     expect(states.every((state) => state.codeFence && !state.imageBlock && !state.tableState)).toBe(true);
+  });
+});
+
+describe("analyzeMarkdownLineBlocksForVisibleRanges", () => {
+  it("normalizes unordered overlapping visible ranges and only returns visible line states", () => {
+    const states = analyzeMarkdownLineBlocksForVisibleRanges({
+      lineCount: 8,
+      readLine: (lineNumber) => [
+        "# Doc",
+        "```ts",
+        "const value = 1;",
+        "console.log(value);",
+        "```",
+        "plain",
+        "![Diagram](diagram.png)",
+        "done"
+      ][lineNumber - 1] ?? "",
+      visibleRanges: [
+        { first: 7, last: 7 },
+        { first: 4, last: 4 },
+        { first: 3, last: 4 }
+      ]
+    });
+
+    expect(states.map((state) => [
+      state.line,
+      state.codeFenceRole ?? state.imageBlock?.sourceLabel
+    ])).toEqual([
+      [3, "content"],
+      [4, "content"],
+      [7, "diagram.png"]
+    ]);
+  });
+
+  it("keeps a table preview line when the table header is outside the visible range", () => {
+    const lines = Array.from({ length: 140 }, (_, index) => `line ${index + 1}`);
+    lines[99] = "| Name | Value |";
+    lines[100] = "| --- | ---: |";
+    lines[101] = "| Alpha | 1 |";
+    lines[102] = "| Beta | 2 |";
+    lines[103] = "| Gamma | 3 |";
+
+    const states = analyzeMarkdownLineBlocksForVisibleRanges({
+      lineCount: lines.length,
+      readLine: (lineNumber) => lines[lineNumber - 1] ?? "",
+      visibleRanges: [{ first: 102, last: 103 }]
+    });
+
+    expect(states.map((state) => state.line)).toEqual([102, 103]);
+    expect(states.map((state) => state.tableBlock?.previewLine)).toEqual([102, 102]);
+    expect(states[0]?.tableBlock?.headerCells).toEqual(["Name", "Value"]);
+  });
+
+  it("returns no states for empty or invalid visible ranges", () => {
+    expect(analyzeMarkdownLineBlocksForVisibleRanges({
+      lineCount: 2,
+      readLine: (lineNumber) => ["```", "code"][lineNumber - 1] ?? "",
+      visibleRanges: []
+    })).toEqual([]);
+
+    expect(analyzeMarkdownLineBlocksForVisibleRanges({
+      lineCount: 2,
+      readLine: (lineNumber) => ["```", "code"][lineNumber - 1] ?? "",
+      visibleRanges: [{ first: 2, last: 1 }]
+    })).toEqual([]);
   });
 });
 
