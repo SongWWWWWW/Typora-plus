@@ -8,6 +8,7 @@ export * from "./extensionHostProtocolHost";
 export * from "./extensionHostProtocol";
 export * from "./extensionHostProtocolRuntime";
 export * from "./extensionHostProtocolSession";
+export * from "./extensionHostProtocolTransport";
 export * from "./extensionHostRuntimeBroker";
 export * from "./exports";
 export * from "./files";
