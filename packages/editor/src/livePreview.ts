@@ -281,6 +281,10 @@ export interface MarkdownTableColumnInsertionOptions {
   readonly columnIndex?: number;
 }
 
+export interface MarkdownTableBodyRowInsertionOptions {
+  readonly rowIndex?: number;
+}
+
 export interface MarkdownTableBodyRowDeletionOptions {
   readonly rowIndex?: number;
 }
@@ -296,7 +300,24 @@ export interface MarkdownTableColumnDeletionOptions {
 }
 
 export function createMarkdownTableEmptyBodyRow(columnCount: number): string {
-  return serializeMarkdownTableRow(Array.from({ length: Math.max(1, columnCount) }, () => ""));
+  return serializeMarkdownTableRow(createMarkdownTableEmptyBodyRowCells(columnCount));
+}
+
+export function createMarkdownTableWithInsertedBodyRow(
+  tableBlock: MarkdownTableBlockState,
+  options: MarkdownTableBodyRowInsertionOptions = {}
+): readonly string[] {
+  const columnCount = Math.max(1, tableBlock.headerCells.length);
+  const rowIndex = clampTableBodyRowInsertionIndex(options.rowIndex ?? tableBlock.bodyRows.length, tableBlock.bodyRows.length);
+  const headerCells = normalizeTableCells(tableBlock.headerCells, columnCount);
+  const alignments = normalizeTableAlignments(tableBlock.alignments, columnCount);
+  const bodyRows = tableBlock.bodyRows.map((row) => normalizeTableCells(row, columnCount));
+
+  return createMarkdownTableLines(
+    headerCells,
+    alignments,
+    insertTableArrayItem(bodyRows, rowIndex, createMarkdownTableEmptyBodyRowCells(columnCount))
+  );
 }
 
 export function getNextMarkdownTableColumnAlignment(
@@ -1337,6 +1358,14 @@ function clampTableColumnIndex(columnIndex: number, columnCount: number): number
   return Math.max(0, Math.min(Math.trunc(columnIndex), Math.max(0, columnCount - 1)));
 }
 
+function clampTableBodyRowInsertionIndex(rowIndex: number, rowCount: number): number {
+  if (!Number.isFinite(rowIndex)) {
+    return rowCount;
+  }
+
+  return Math.max(0, Math.min(Math.trunc(rowIndex), rowCount));
+}
+
 function clampTableBodyRowIndex(rowIndex: number, rowCount: number): number {
   if (!Number.isFinite(rowIndex)) {
     return Math.max(0, rowCount - 1);
@@ -1347,6 +1376,10 @@ function clampTableBodyRowIndex(rowIndex: number, rowCount: number): number {
 
 function normalizeTableCells(cells: readonly string[], columnCount: number): readonly string[] {
   return Array.from({ length: columnCount }, (_, index) => cells[index] ?? "");
+}
+
+function createMarkdownTableEmptyBodyRowCells(columnCount: number): readonly string[] {
+  return Array.from({ length: Math.max(1, columnCount) }, () => "");
 }
 
 function normalizeTableAlignments(
@@ -1378,21 +1411,24 @@ function readCurrentMarkdownTableBlock(view: EditorView, startLine: number): Mar
   return table?.states[0]?.tableBlock;
 }
 
-function insertMarkdownTableRowBelow(view: EditorView, tableBlock: MarkdownTableBlockState): void {
+function insertMarkdownTableRowBelow(
+  view: EditorView,
+  tableBlock: MarkdownTableBlockState,
+  rowIndex?: number
+): void {
   const currentTableBlock = readCurrentMarkdownTableBlock(view, tableBlock.blockStart);
   if (!currentTableBlock) {
     return;
   }
 
-  const blockEndLine = view.state.doc.line(currentTableBlock.blockEnd);
-  const row = createMarkdownTableEmptyBodyRow(currentTableBlock.headerCells.length);
-  const insert = `\n${row}`;
-
-  view.dispatch({
-    changes: { from: blockEndLine.to, insert },
-    selection: { anchor: blockEndLine.to + Math.min(3, insert.length) }
-  });
-  view.focus();
+  replaceMarkdownTableBlock(
+    view,
+    currentTableBlock,
+    createMarkdownTableWithInsertedBodyRow(
+      currentTableBlock,
+      rowIndex === undefined ? {} : { rowIndex }
+    )
+  );
 }
 
 function deleteMarkdownTableBodyRow(
@@ -1430,13 +1466,24 @@ function replaceMarkdownTableBlock(
   view.focus();
 }
 
-function insertMarkdownTableColumnRight(view: EditorView, tableBlock: MarkdownTableBlockState): void {
+function insertMarkdownTableColumnRight(
+  view: EditorView,
+  tableBlock: MarkdownTableBlockState,
+  columnIndex?: number
+): void {
   const currentTableBlock = readCurrentMarkdownTableBlock(view, tableBlock.blockStart);
   if (!currentTableBlock) {
     return;
   }
 
-  replaceMarkdownTableBlock(view, currentTableBlock, createMarkdownTableWithInsertedColumn(currentTableBlock));
+  replaceMarkdownTableBlock(
+    view,
+    currentTableBlock,
+    createMarkdownTableWithInsertedColumn(
+      currentTableBlock,
+      columnIndex === undefined ? {} : { columnIndex }
+    )
+  );
 }
 
 function deleteMarkdownTableColumn(
@@ -1561,6 +1608,12 @@ class MarkdownTableBlockWidget extends WidgetType {
           onClick: (alignment) => updateMarkdownTableColumnAlignment(view, this.tableBlock, index, alignment)
         }),
         createTableInlineButton({
+          className: "tp-editor-table-insert-column-inline",
+          text: "+",
+          title: `Insert column after column ${index + 1}`,
+          onClick: () => insertMarkdownTableColumnRight(view, this.tableBlock, index + 1)
+        }),
+        createTableInlineButton({
           className: "tp-editor-table-delete-column-inline",
           disabled: this.tableBlock.headerCells.length <= markdownTableMinimumColumnCount,
           text: "-",
@@ -1595,12 +1648,24 @@ class MarkdownTableBlockWidget extends WidgetType {
             label.className = "tp-editor-table-cell-label";
             label.textContent = readMarkdownTableCellPreviewText(cell);
 
-            content.append(label, createTableInlineButton({
-              className: "tp-editor-table-delete-row-inline",
-              text: "-",
-              title: `Delete row ${rowIndex + 1}`,
-              onClick: () => deleteMarkdownTableBodyRow(view, this.tableBlock, rowIndex)
-            }));
+            const controls = document.createElement("span");
+            controls.className = "tp-editor-table-cell-controls";
+            controls.append(
+              createTableInlineButton({
+                className: "tp-editor-table-insert-row-inline",
+                text: "+",
+                title: `Insert row below row ${rowIndex + 1}`,
+                onClick: () => insertMarkdownTableRowBelow(view, this.tableBlock, rowIndex + 1)
+              }),
+              createTableInlineButton({
+                className: "tp-editor-table-delete-row-inline",
+                text: "-",
+                title: `Delete row ${rowIndex + 1}`,
+                onClick: () => deleteMarkdownTableBodyRow(view, this.tableBlock, rowIndex)
+              })
+            );
+
+            content.append(label, controls);
             bodyCell.append(content);
           } else {
             bodyCell.textContent = readMarkdownTableCellPreviewText(cell);
@@ -2469,6 +2534,12 @@ function markdownEditorTheme(configuration: MarkdownEditorConfiguration): Extens
       justifyContent: "space-between",
       gap: "8px",
       minWidth: "0"
+    },
+    ".tp-editor-table-cell-controls": {
+      display: "flex",
+      alignItems: "center",
+      gap: "4px",
+      flex: "0 0 auto"
     },
     ".tp-editor-table-cell-label": {
       minWidth: "0",

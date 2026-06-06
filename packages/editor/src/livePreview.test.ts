@@ -10,6 +10,7 @@ import {
   createMarkdownTableEmptyBodyRow,
   createMarkdownTableWithDeletedBodyRow,
   createMarkdownTableWithDeletedColumn,
+  createMarkdownTableWithInsertedBodyRow,
   createMarkdownTableWithInsertedColumn,
   createMarkdownTableWithUpdatedColumnAlignment,
   findInactiveMarkdownInlineMathRanges,
@@ -596,6 +597,40 @@ describe("Markdown table editing helpers", () => {
 
   it("creates an empty body row for the current table width", () => {
     expect(createMarkdownTableEmptyBodyRow(3)).toBe("|  |  |  |");
+  });
+
+  it("creates a normalized table with a blank body row appended", () => {
+    const tableBlock = analyzeMarkdownLineBlocks([
+      "| Name | Count |",
+      "| --- | ---: |",
+      "| Alpha | 1 |"
+    ]).find((state) => state.tableBlock)?.tableBlock;
+
+    expect(tableBlock).toBeDefined();
+    expect(createMarkdownTableWithInsertedBodyRow(tableBlock!)).toEqual([
+      "| Name | Count |",
+      "| --- | ---: |",
+      "| Alpha | 1 |",
+      "|  |  |"
+    ]);
+  });
+
+  it("inserts a blank body row at a requested index", () => {
+    const tableBlock = analyzeMarkdownLineBlocks([
+      "| Name | Count |",
+      "| --- | ---: |",
+      "| Alpha | 1 |",
+      "| Beta | 2 |"
+    ]).find((state) => state.tableBlock)?.tableBlock;
+
+    expect(tableBlock).toBeDefined();
+    expect(createMarkdownTableWithInsertedBodyRow(tableBlock!, { rowIndex: 1 })).toEqual([
+      "| Name | Count |",
+      "| --- | ---: |",
+      "| Alpha | 1 |",
+      "|  |  |",
+      "| Beta | 2 |"
+    ]);
   });
 
   it("creates a normalized table with a blank column appended", () => {
