@@ -24,7 +24,12 @@ export interface SerializedSavedAttachment {
   readonly markdown: string;
 }
 
+export interface AttachmentServiceConfiguration {
+  readonly assetFolder: string;
+}
+
 export interface IAttachmentService {
+  configure(configuration: AttachmentServiceConfiguration): void;
   isAvailable(): boolean;
   saveImage(noteUri: URIType, image: PastedImage): Promise<SavedAttachment | undefined>;
 }
@@ -33,9 +38,13 @@ export const IAttachmentService = createServiceIdentifier<IAttachmentService>("a
 
 export class NativeAttachmentService implements IAttachmentService {
   constructor(
-    private readonly assetFolder: string,
+    private assetFolder: string,
     private readonly bridge: NativeAttachmentBridge | undefined = createNativeAttachmentBridge()
   ) {}
+
+  configure(configuration: AttachmentServiceConfiguration): void {
+    this.assetFolder = configuration.assetFolder;
+  }
 
   isAvailable(): boolean {
     return this.bridge?.isAvailable ?? false;

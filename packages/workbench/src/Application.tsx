@@ -90,7 +90,7 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
     () => workspace.files
       ? services.indexService.query(searchQuery)
       : searchDocument(model.value, searchQuery),
-    [indexStatus.updatedAt, model.value, searchQuery, services, workspace.files]
+    [configuration.workspace.searchMaxResults, indexStatus.updatedAt, model.value, searchQuery, services, workspace.files]
   );
   const backlinks = useMemo(
     () => workspace.files && model.uri.scheme === "file"
@@ -108,6 +108,13 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
   );
 
   useEffect(() => services.configurationService.onDidChangeConfiguration((nextConfiguration) => {
+    services.attachmentService.configure({
+      assetFolder: nextConfiguration.workspace.defaultAssetFolder
+    });
+    services.indexService.configure({
+      maxFileSizeBytes: nextConfiguration.workspace.searchMaxFileSizeBytes,
+      maxResults: nextConfiguration.workspace.searchMaxResults
+    });
     services.keybindingService.setUserKeybindings(nextConfiguration.keybindings.overrides);
     setConfiguration(nextConfiguration);
   }).dispose, [services]);
@@ -152,7 +159,7 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
       setOperationError,
       setSaveConflict
     );
-  }, [services, workspace.files]);
+  }, [configuration.workspace.searchMaxFileSizeBytes, services, workspace.files]);
 
   useEffect(() => {
     if (!configuration.editor.autoSave || !model.dirty || model.uri.scheme !== "file" || saveConflict) {

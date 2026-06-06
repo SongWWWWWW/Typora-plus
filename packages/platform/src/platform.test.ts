@@ -577,6 +577,48 @@ describe("workspace index", () => {
     expect(service.query("searchable")).toEqual([]);
   });
 
+  it("applies updated index configuration to queries and future indexing", async () => {
+    const workspaceFiles = createWorkspaceFileTree([
+      {
+        ...createFileEntry("C:/Notes/a.md", "a.md", "a.md"),
+        size: 20
+      },
+      {
+        ...createFileEntry("C:/Notes/b.md", "b.md", "b.md"),
+        size: 20
+      }
+    ]);
+    const host = createMemoryHost([
+      ["file://C:/Notes/a.md", "shared topic"],
+      ["file://C:/Notes/b.md", "shared topic"]
+    ]);
+    const service = new WorkspaceIndexService(new NativeFileService(host), {
+      maxFileSizeBytes: 4,
+      maxResults: 1
+    });
+
+    await service.indexWorkspace(workspaceFiles);
+
+    expect(service.getStatus().skippedFiles).toBe(2);
+    expect(service.query("shared")).toEqual([]);
+
+    service.configure({
+      maxFileSizeBytes: 100,
+      maxResults: 2
+    });
+    await service.indexWorkspace(workspaceFiles);
+
+    expect(service.getStatus().skippedFiles).toBe(0);
+    expect(service.query("shared").map((result) => result.relativePath)).toEqual(["a.md", "b.md"]);
+
+    service.configure({
+      maxFileSizeBytes: 100,
+      maxResults: 1
+    });
+
+    expect(service.query("shared").map((result) => result.relativePath)).toEqual(["a.md"]);
+  });
+
   it("updates a saved workspace file in the index without a full reindex", async () => {
     const host = createMemoryHost([
       ["file://C:/Notes/a.md", "# Alpha\n#old\n[Beta](b.md)"],
@@ -843,6 +885,38 @@ describe("attachments", () => {
 
     expect(saved?.uri.toString()).toBe("file://C:/Notes/assets/a/image.png");
     expect(saved?.markdown).toBe("![image](assets/a/image.png)");
+  });
+
+  it("uses updated asset folder configuration for later image saves", async () => {
+    const usedAssetFolders: string[] = [];
+    const service = new NativeAttachmentService("assets", {
+      isAvailable: true,
+      async saveImage(_noteUri, image, assetFolder) {
+        usedAssetFolders.push(assetFolder);
+        return {
+          uri: `file://C:/Notes/${assetFolder}/a/${image.name}`,
+          relativePath: `${assetFolder}/a/${image.name}`,
+          markdown: `![image](${assetFolder}/a/${image.name})`
+        };
+      }
+    });
+
+    await service.saveImage(URI.file("C:/Notes/a.md"), {
+      name: "first.png",
+      mimeType: "image/png",
+      base64: "AA=="
+    });
+    service.configure({
+      assetFolder: "media"
+    });
+    const saved = await service.saveImage(URI.file("C:/Notes/a.md"), {
+      name: "second.png",
+      mimeType: "image/png",
+      base64: "AA=="
+    });
+
+    expect(usedAssetFolders).toEqual(["assets", "media"]);
+    expect(saved?.markdown).toBe("![image](media/a/second.png)");
   });
 });
 

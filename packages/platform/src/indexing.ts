@@ -65,6 +65,11 @@ export interface WorkspaceIndexServiceOptions {
   readonly now?: () => number;
 }
 
+export interface WorkspaceIndexConfiguration {
+  readonly maxFileSizeBytes: number;
+  readonly maxResults: number;
+}
+
 export interface WorkspaceIndexQueryOptions {
   readonly maxResults: number;
   readonly maxPreviewLength: number;
@@ -79,6 +84,7 @@ export const defaultWorkspaceIndexServiceOptions: WorkspaceIndexServiceOptions =
 
 export interface IIndexService {
   readonly onDidChangeStatus: Event<WorkspaceIndexStatus>;
+  configure(configuration: WorkspaceIndexConfiguration): void;
   getStatus(): WorkspaceIndexStatus;
   indexWorkspace(workspace: WorkspaceFileTree): Promise<void>;
   indexFile(file: FileTreeEntry, value?: string): Promise<void>;
@@ -221,7 +227,7 @@ export class InMemoryWorkspaceIndexProvider implements WorkspaceIndexProvider {
 
 export class WorkspaceIndexService implements IIndexService {
   private readonly emitter = new Emitter<WorkspaceIndexStatus>();
-  private readonly options: WorkspaceIndexServiceOptions;
+  private options: WorkspaceIndexServiceOptions;
   private readonly now: () => number;
   private generation = 0;
   private status: WorkspaceIndexStatus;
@@ -243,6 +249,14 @@ export class WorkspaceIndexService implements IIndexService {
 
   getStatus(): WorkspaceIndexStatus {
     return this.status;
+  }
+
+  configure(configuration: WorkspaceIndexConfiguration): void {
+    this.options = {
+      ...this.options,
+      maxFileSizeBytes: configuration.maxFileSizeBytes,
+      maxResults: configuration.maxResults
+    };
   }
 
   async indexWorkspace(workspace: WorkspaceFileTree): Promise<void> {
