@@ -447,10 +447,11 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
   );
   const renderCodeFence = useMemo(
     () => createMarkdownCodeFenceRenderer({
+      cacheEntryLimit: configuration.editor.rendererPreviewCacheEntries,
       getUri: () => model.uri,
       markdownRendererService: services.markdownRendererService
     }),
-    [markdownRendererRevision, model.uri, services]
+    [configuration.editor.rendererPreviewCacheEntries, markdownRendererRevision, model.uri, services]
   );
 
   return (

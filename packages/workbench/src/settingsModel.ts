@@ -19,6 +19,7 @@ export type SettingsEntryId =
   | "editor.fontSize"
   | "editor.lineHeight"
   | "editor.maxWidth"
+  | "editor.rendererPreviewCacheEntries"
   | "workspace.defaultAssetFolder"
   | "workspace.searchMaxFileSize"
   | "workspace.searchMaxResults"
@@ -60,6 +61,7 @@ export const settingsEntries = [
   { id: "editor.fontSize", sectionId: "editor", label: "Font Size", keywords: ["font", "text", "size"] },
   { id: "editor.lineHeight", sectionId: "editor", label: "Line Height", keywords: ["line", "spacing"] },
   { id: "editor.maxWidth", sectionId: "editor", label: "Editor Width", keywords: ["width", "content"] },
+  { id: "editor.rendererPreviewCacheEntries", sectionId: "editor", label: "Renderer Cache", keywords: ["preview", "renderer", "cache", "mermaid"] },
   { id: "workspace.defaultAssetFolder", sectionId: "workspace", label: "Asset Folder", keywords: ["assets", "images", "attachments", "folder"] },
   { id: "workspace.searchMaxFileSize", sectionId: "workspace", label: "Search File Limit", keywords: ["search", "index", "file", "size", "limit"] },
   { id: "workspace.searchMaxResults", sectionId: "workspace", label: "Search Results", keywords: ["search", "results", "limit"] },
@@ -71,6 +73,7 @@ export const settingsNumberConstraints = {
   editorLineHeight: configurationNumberConstraints.editorLineHeight,
   editorMaxWidth: configurationNumberConstraints.editorMaxWidth,
   editorAutoSaveDelayMs: configurationNumberConstraints.editorAutoSaveDelayMs,
+  editorRendererPreviewCacheEntries: configurationNumberConstraints.editorRendererPreviewCacheEntries,
   workspaceSearchMaxFileSizeMegabytes: {
     min: configurationNumberConstraints.workspaceSearchMaxFileSizeBytes.min / configurationBytesPerMegabyte,
     max: configurationNumberConstraints.workspaceSearchMaxFileSizeBytes.max / configurationBytesPerMegabyte,

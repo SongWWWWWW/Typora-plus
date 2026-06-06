@@ -20,6 +20,7 @@ import {
   NativeResourceService,
   parseContextKeyExpression,
   createDefaultWorkspaceIndexSnapshotStorage,
+  defaultConfiguration,
   flattenFileTree,
   keybindingFromEvent,
   mergeConfiguration,
@@ -54,6 +55,37 @@ describe("configuration", () => {
     expect(next.appearance.colorScheme).toBe("system");
   });
 
+  it("keeps default numeric values aligned with configured steps", () => {
+    expectConfigurationNumberAligned(
+      defaultConfiguration.editor.fontSize,
+      configurationNumberConstraints.editorFontSize
+    );
+    expectConfigurationNumberAligned(
+      defaultConfiguration.editor.lineHeight,
+      configurationNumberConstraints.editorLineHeight
+    );
+    expectConfigurationNumberAligned(
+      defaultConfiguration.editor.maxWidth,
+      configurationNumberConstraints.editorMaxWidth
+    );
+    expectConfigurationNumberAligned(
+      defaultConfiguration.editor.autoSaveDelayMs,
+      configurationNumberConstraints.editorAutoSaveDelayMs
+    );
+    expectConfigurationNumberAligned(
+      defaultConfiguration.editor.rendererPreviewCacheEntries,
+      configurationNumberConstraints.editorRendererPreviewCacheEntries
+    );
+    expectConfigurationNumberAligned(
+      defaultConfiguration.workspace.searchMaxFileSizeBytes,
+      configurationNumberConstraints.workspaceSearchMaxFileSizeBytes
+    );
+    expectConfigurationNumberAligned(
+      defaultConfiguration.workspace.searchMaxResults,
+      configurationNumberConstraints.workspaceSearchMaxResults
+    );
+  });
+
   it("persists configuration updates through storage", () => {
     const storage = createMemoryStorage();
     const service = new ConfigurationService({
@@ -68,7 +100,8 @@ describe("configuration", () => {
       },
       editor: {
         focusMode: true,
-        autoSaveDelayMs: 1250
+        autoSaveDelayMs: 1250,
+        rendererPreviewCacheEntries: 0
       }
     });
 
@@ -82,6 +115,7 @@ describe("configuration", () => {
     expect(restored.getValue().editor.focusMode).toBe(true);
     expect(restored.getValue().editor.autoSave).toBe(true);
     expect(restored.getValue().editor.autoSaveDelayMs).toBe(1250);
+    expect(restored.getValue().editor.rendererPreviewCacheEntries).toBe(0);
   });
 
   it("clears optional appearance theme ids", () => {
@@ -116,6 +150,7 @@ describe("configuration", () => {
       editor: {
         autoSaveDelayMs: -250,
         fontSize: -1,
+        rendererPreviewCacheEntries: -1,
         typewriterMode: true
       },
       workspace: {
@@ -131,6 +166,9 @@ describe("configuration", () => {
     expect(service.getValue().appearance.colorScheme).toBe("system");
     expect(service.getValue().editor.autoSaveDelayMs).toBe(800);
     expect(service.getValue().editor.fontSize).toBe(17);
+    expect(service.getValue().editor.rendererPreviewCacheEntries).toBe(
+      defaultConfiguration.editor.rendererPreviewCacheEntries
+    );
     expect(service.getValue().editor.typewriterMode).toBe(true);
     expect(service.getValue().workspace.searchMaxResults).toBe(120);
   });
@@ -142,7 +180,8 @@ describe("configuration", () => {
         autoSaveDelayMs: 120000,
         fontSize: 999,
         lineHeight: 9,
-        maxWidth: 99999
+        maxWidth: 99999,
+        rendererPreviewCacheEntries: 9999
       },
       workspace: {
         searchMaxFileSizeBytes: 999 * 1024 * 1024,
@@ -159,6 +198,9 @@ describe("configuration", () => {
     expect(service.getValue().editor.fontSize).toBe(configurationNumberConstraints.editorFontSize.max);
     expect(service.getValue().editor.lineHeight).toBe(configurationNumberConstraints.editorLineHeight.max);
     expect(service.getValue().editor.maxWidth).toBe(configurationNumberConstraints.editorMaxWidth.max);
+    expect(service.getValue().editor.rendererPreviewCacheEntries).toBe(
+      configurationNumberConstraints.editorRendererPreviewCacheEntries.max
+    );
     expect(service.getValue().workspace.searchMaxFileSizeBytes).toBe(
       configurationNumberConstraints.workspaceSearchMaxFileSizeBytes.max
     );
@@ -2941,4 +2983,12 @@ function createCounterClock() {
     value += 1;
     return value;
   };
+}
+
+function expectConfigurationNumberAligned(
+  value: number,
+  constraint: { readonly min: number; readonly step: number }
+): void {
+  const offset = (value - constraint.min) / constraint.step;
+  expect(Math.abs(offset - Math.round(offset))).toBeLessThan(1e-8);
 }

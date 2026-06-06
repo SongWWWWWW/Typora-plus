@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { URI } from "@typora-plus/base";
-import { MarkdownRendererService, type RegisteredMarkdownRenderer } from "@typora-plus/platform";
+import {
+  configurationNumberConstraints,
+  defaultConfiguration,
+  MarkdownRendererService,
+  type RegisteredMarkdownRenderer
+} from "@typora-plus/platform";
 import {
   createMarkdownCodeFenceRenderer,
   defaultMarkdownCodeFenceRendererCacheEntryLimit,
@@ -242,6 +247,11 @@ describe("markdown renderer preview", () => {
   });
 
   it("exposes a bounded default preview cache size", () => {
-    expect(defaultMarkdownCodeFenceRendererCacheEntryLimit).toBeGreaterThan(0);
+    expect(defaultMarkdownCodeFenceRendererCacheEntryLimit).toBe(
+      defaultConfiguration.editor.rendererPreviewCacheEntries
+    );
+    expect(defaultMarkdownCodeFenceRendererCacheEntryLimit).toBeLessThanOrEqual(
+      configurationNumberConstraints.editorRendererPreviewCacheEntries.max
+    );
   });
 });

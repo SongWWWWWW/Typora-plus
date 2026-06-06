@@ -24,6 +24,7 @@ export interface TyporaPlusConfiguration {
     readonly typewriterMode: boolean;
     readonly autoSave: boolean;
     readonly autoSaveDelayMs: number;
+    readonly rendererPreviewCacheEntries: number;
   };
   readonly workspace: {
     readonly defaultAssetFolder: string;
@@ -79,9 +80,10 @@ export const configurationBytesPerMegabyte = 1024 * 1024;
 
 export const configurationNumberConstraints = {
   editorFontSize: { min: 13, max: 24, step: 1 },
-  editorLineHeight: { min: 1.2, max: 2.2, step: 0.05 },
+  editorLineHeight: { min: 1.2, max: 2.2, step: 0.01 },
   editorMaxWidth: { min: 560, max: 1120, step: 20 },
-  editorAutoSaveDelayMs: { min: 250, max: 5000, step: 250 },
+  editorAutoSaveDelayMs: { min: 250, max: 5000, step: 50 },
+  editorRendererPreviewCacheEntries: { min: 0, max: 200, step: 10 },
   workspaceSearchMaxFileSizeBytes: {
     min: configurationBytesPerMegabyte,
     max: 20 * configurationBytesPerMegabyte,
@@ -102,7 +104,8 @@ export const defaultConfiguration: TyporaPlusConfiguration = {
     focusMode: false,
     typewriterMode: false,
     autoSave: true,
-    autoSaveDelayMs: 800
+    autoSaveDelayMs: 800,
+    rendererPreviewCacheEntries: 40
   },
   workspace: {
     defaultAssetFolder: "assets",
@@ -250,7 +253,12 @@ function sanitizeEditorConfiguration(value: Record<string, unknown>): Partial<Ty
     ...(typeof value.focusMode === "boolean" ? { focusMode: value.focusMode } : {}),
     ...(typeof value.typewriterMode === "boolean" ? { typewriterMode: value.typewriterMode } : {}),
     ...(typeof value.autoSave === "boolean" ? { autoSave: value.autoSave } : {}),
-    ...sanitizeNumberProperty("autoSaveDelayMs", value.autoSaveDelayMs, configurationNumberConstraints.editorAutoSaveDelayMs)
+    ...sanitizeNumberProperty("autoSaveDelayMs", value.autoSaveDelayMs, configurationNumberConstraints.editorAutoSaveDelayMs),
+    ...sanitizeNumberProperty(
+      "rendererPreviewCacheEntries",
+      value.rendererPreviewCacheEntries,
+      configurationNumberConstraints.editorRendererPreviewCacheEntries
+    )
   };
 }
 
@@ -284,8 +292,13 @@ function isColorSchemePreference(value: unknown): value is ColorSchemePreference
   return value === "light" || value === "dark" || value === "system";
 }
 
-function isPositiveFiniteNumber(value: unknown): value is number {
-  return typeof value === "number" && Number.isFinite(value) && value > 0;
+function isSupportedFiniteNumber(
+  value: unknown,
+  constraint: ConfigurationNumberConstraint
+): value is number {
+  return typeof value === "number" &&
+    Number.isFinite(value) &&
+    (value > 0 || (constraint.min === 0 && value === 0));
 }
 
 export function clampConfigurationNumber(value: number, constraint: ConfigurationNumberConstraint): number {
@@ -302,7 +315,7 @@ function sanitizeNumberProperty<Key extends string>(
   value: unknown,
   constraint: ConfigurationNumberConstraint
 ): Partial<Record<Key, number>> {
-  if (!isPositiveFiniteNumber(value)) {
+  if (!isSupportedFiniteNumber(value, constraint)) {
     return {};
   }
 

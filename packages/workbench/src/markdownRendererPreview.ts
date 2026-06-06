@@ -4,9 +4,14 @@ import type {
   MarkdownCodeFenceRenderResult,
   MarkdownCodeFenceRenderer
 } from "@typora-plus/editor";
-import type { IMarkdownRendererService, RegisteredMarkdownRenderer } from "@typora-plus/platform";
+import {
+  defaultConfiguration,
+  type IMarkdownRendererService,
+  type RegisteredMarkdownRenderer
+} from "@typora-plus/platform";
 
-export const defaultMarkdownCodeFenceRendererCacheEntryLimit = 40;
+export const defaultMarkdownCodeFenceRendererCacheEntryLimit =
+  defaultConfiguration.editor.rendererPreviewCacheEntries;
 
 export interface MarkdownCodeFenceRendererOptions {
   readonly cacheEntryLimit?: number;
@@ -154,7 +159,13 @@ function writeMarkdownCodeFenceRenderCache(
 }
 
 function normalizeCacheEntryLimit(value: number | undefined): number {
-  return Math.max(0, Math.trunc(value ?? defaultMarkdownCodeFenceRendererCacheEntryLimit));
+  const candidate = value ?? defaultMarkdownCodeFenceRendererCacheEntryLimit;
+
+  if (!Number.isFinite(candidate)) {
+    return defaultMarkdownCodeFenceRendererCacheEntryLimit;
+  }
+
+  return Math.max(0, Math.trunc(candidate));
 }
 
 function normalizeMarkdownCodeFenceLanguage(language: string): string | undefined {

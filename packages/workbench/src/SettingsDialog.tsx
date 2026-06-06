@@ -406,6 +406,15 @@ export function SettingsDialog({
                     onChange={(maxWidth) => onUpdate({ editor: { maxWidth } })}
                   />
                 ) : null}
+                {isSettingsEntryVisible("editor.rendererPreviewCacheEntries") ? (
+                  <NumberSetting
+                    label="Renderer Cache"
+                    value={configuration.editor.rendererPreviewCacheEntries}
+                    constraint={settingsNumberConstraints.editorRendererPreviewCacheEntries}
+                    unit="entries"
+                    onChange={(rendererPreviewCacheEntries) => onUpdate({ editor: { rendererPreviewCacheEntries } })}
+                  />
+                ) : null}
               </SettingsSection>
             ) : null}
 
