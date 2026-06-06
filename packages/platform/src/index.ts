@@ -6,6 +6,7 @@ export * from "./files";
 export * from "./indexing";
 export * from "./instantiation";
 export * from "./keybindings";
+export * from "./menus";
 export * from "./recents";
 export * from "./resources";
 export * from "./textFile";

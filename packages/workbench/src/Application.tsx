@@ -4,6 +4,8 @@ import { calculateMarkdownStats, extractOutline, type OutlineEntry } from "@typo
 import type {
   FileSaveConflict,
   FileTreeEntry,
+  MenuId,
+  MenuItem,
   RecentResource,
   TextFileModel,
   TyporaPlusConfiguration,
@@ -84,6 +86,9 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
   const [saveConflict, setSaveConflict] = useState<FileSaveConflict | undefined>();
   const [indexStatus, setIndexStatus] = useState<WorkspaceIndexStatus>(() => services.indexService.getStatus());
   const editorRef = useRef<MarkdownEditorHandle | null>(null);
+  const titlebarMenuItems = useMenuItems(services, "titlebar.primary");
+  const activitybarPrimaryMenuItems = useMenuItems(services, "activitybar.primary");
+  const activitybarSecondaryMenuItems = useMenuItems(services, "activitybar.secondary");
 
   const outline = useMemo(() => extractOutline(model.value), [model.value]);
   const stats = useMemo(() => calculateMarkdownStats(model.value), [model.value]);
@@ -411,14 +416,18 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
         model={model}
         workspaceName={workspace.name}
         configuration={configuration}
+        menuItems={titlebarMenuItems}
+        getCommandTitle={(id) => commandTitle(services.commandService.getCommands(), id)}
         onCommand={(id) => services.commandService.executeCommand(id)}
       />
       <div className="tp-body">
         <ActivityBar
           activeView={sideView}
-          onToggle={(view) => toggleSideView(view, sideView, setSideView)}
-          onOpenPalette={() => setPaletteOpen(true)}
-          onOpenSettings={() => services.commandService.executeCommand("workbench.settings.open")}
+          configuration={configuration}
+          primaryMenuItems={activitybarPrimaryMenuItems}
+          secondaryMenuItems={activitybarSecondaryMenuItems}
+          getCommandTitle={(id) => commandTitle(services.commandService.getCommands(), id)}
+          onCommand={(id) => services.commandService.executeCommand(id)}
         />
         {sideView ? (
           <Sidebar
@@ -580,19 +589,94 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
   );
 }
 
+function useMenuItems(services: WorkbenchServices, menu: MenuId): readonly MenuItem[] {
+  const [items, setItems] = useState<readonly MenuItem[]>(() => services.menuService.getMenuItems(menu));
+
+  useEffect(() => services.menuService.onDidChangeMenu((changedMenu) => {
+    if (changedMenu === menu) {
+      setItems(services.menuService.getMenuItems(menu));
+    }
+  }).dispose, [menu, services]);
+
+  return items;
+}
+
+function commandTitle(commands: readonly { readonly id: string; readonly title: string }[], id: string): string {
+  return commands.find((command) => command.id === id)?.title ?? id;
+}
+
+function menuItemTitle(item: MenuItem, getCommandTitle: (id: string) => string): string {
+  return item.title ?? getCommandTitle(item.command);
+}
+
+function menuContext(
+  configuration: TyporaPlusConfiguration,
+  sideView: SideView | null
+): Readonly<Record<string, boolean | string | null>> {
+  return {
+    sideView,
+    "editor.focusMode": configuration.editor.focusMode,
+    "editor.typewriterMode": configuration.editor.typewriterMode
+  };
+}
+
+function isMenuItemActive(
+  item: MenuItem,
+  context: Readonly<Record<string, boolean | string | null>>
+): boolean {
+  return item.toggled ? context[item.toggled.context] === item.toggled.value : false;
+}
+
+function renderMenuIcon(item: MenuItem, configuration: TyporaPlusConfiguration, size: number): ReactNode {
+  switch (item.icon) {
+    case "command":
+      return <CommandIcon size={size} />;
+    case "file-down":
+      return <FileDown size={size} />;
+    case "file-plus":
+      return <FilePlus size={size} />;
+    case "file-text":
+      return <FileText size={size} />;
+    case "folder-open":
+      return <FolderOpen size={size} />;
+    case "hash":
+      return <Hash size={size} />;
+    case "link":
+      return <Link2 size={size} />;
+    case "list-tree":
+      return <ListTree size={size} />;
+    case "save":
+      return <Save size={size} />;
+    case "search":
+      return <Search size={size} />;
+    case "settings":
+      return <SettingsIcon size={size} />;
+    case "target":
+      return <Target size={size} />;
+    case "theme":
+      return configuration.appearance.colorScheme === "dark" ? <Sun size={size} /> : <Moon size={size} />;
+    case "type":
+      return <Type size={size} />;
+    default:
+      return <CommandIcon size={size} />;
+  }
+}
+
 function Titlebar({
   model,
   workspaceName,
   configuration,
+  menuItems,
+  getCommandTitle,
   onCommand
 }: {
   readonly model: TextFileModel;
   readonly workspaceName: string;
   readonly configuration: TyporaPlusConfiguration;
+  readonly menuItems: readonly MenuItem[];
+  readonly getCommandTitle: (id: string) => string;
   readonly onCommand: (id: string) => void;
 }) {
-  const themeIsDark = configuration.appearance.colorScheme === "dark";
-
   return (
     <header className="tp-titlebar">
       <div className="tp-titlebar-identity">
@@ -601,43 +685,17 @@ function Titlebar({
         {model.dirty ? <span className="tp-dirty-dot" aria-label="Unsaved changes" /> : null}
       </div>
       <div className="tp-titlebar-actions">
-        <IconButton title="New Note" onClick={() => onCommand("file.newUntitled")}>
-          <FilePlus size={17} />
-        </IconButton>
-        <IconButton title="Open Workspace" onClick={() => onCommand("file.openWorkspace")}>
-          <FolderOpen size={17} />
-        </IconButton>
-        <IconButton title="Save" onClick={() => onCommand("file.save")}>
-          <Save size={17} />
-        </IconButton>
-        <IconButton title="Save As" compactHidden onClick={() => onCommand("file.saveAs")}>
-          <FileText size={17} />
-        </IconButton>
-        <IconButton title="Export HTML" compactHidden onClick={() => onCommand("file.exportHtml")}>
-          <FileDown size={17} />
-        </IconButton>
-        <IconButton
-          title="Focus Mode"
-          active={configuration.editor.focusMode}
-          compactHidden
-          onClick={() => onCommand("editor.focusMode.toggle")}
-        >
-          <Target size={17} />
-        </IconButton>
-        <IconButton
-          title="Typewriter Mode"
-          active={configuration.editor.typewriterMode}
-          compactHidden
-          onClick={() => onCommand("editor.typewriterMode.toggle")}
-        >
-          <Type size={17} />
-        </IconButton>
-        <IconButton title="Theme" compactHidden onClick={() => onCommand("theme.toggle")}>
-          {themeIsDark ? <Sun size={17} /> : <Moon size={17} />}
-        </IconButton>
-        <IconButton title="Command Palette" onClick={() => onCommand("workbench.commandPalette.open")}>
-          <CommandIcon size={17} />
-        </IconButton>
+        {menuItems.map((item) => (
+          <IconButton
+            title={menuItemTitle(item, getCommandTitle)}
+            active={isMenuItemActive(item, menuContext(configuration, null))}
+            compactHidden={item.compactHidden ?? false}
+            key={item.id}
+            onClick={() => onCommand(item.command)}
+          >
+            {renderMenuIcon(item, configuration, 17)}
+          </IconButton>
+        ))}
       </div>
     </header>
   );
@@ -645,39 +703,44 @@ function Titlebar({
 
 function ActivityBar({
   activeView,
-  onToggle,
-  onOpenPalette,
-  onOpenSettings
+  configuration,
+  primaryMenuItems,
+  secondaryMenuItems,
+  getCommandTitle,
+  onCommand
 }: {
   readonly activeView: SideView | null;
-  readonly onToggle: (view: SideView) => void;
-  readonly onOpenPalette: () => void;
-  readonly onOpenSettings: () => void;
+  readonly configuration: TyporaPlusConfiguration;
+  readonly primaryMenuItems: readonly MenuItem[];
+  readonly secondaryMenuItems: readonly MenuItem[];
+  readonly getCommandTitle: (id: string) => string;
+  readonly onCommand: (id: string) => void;
 }) {
+  const context = menuContext(configuration, activeView);
+
   return (
     <nav className="tp-activitybar" aria-label="Primary">
-      <IconButton title="Files" active={activeView === "files"} onClick={() => onToggle("files")}>
-        <FileText size={19} />
-      </IconButton>
-      <IconButton title="Search" active={activeView === "search"} onClick={() => onToggle("search")}>
-        <Search size={19} />
-      </IconButton>
-      <IconButton title="Outline" active={activeView === "outline"} onClick={() => onToggle("outline")}>
-        <ListTree size={19} />
-      </IconButton>
-      <IconButton title="Backlinks" active={activeView === "backlinks"} onClick={() => onToggle("backlinks")}>
-        <Link2 size={19} />
-      </IconButton>
-      <IconButton title="Tags" active={activeView === "tags"} onClick={() => onToggle("tags")}>
-        <Hash size={19} />
-      </IconButton>
+      {primaryMenuItems.map((item) => (
+        <IconButton
+          title={menuItemTitle(item, getCommandTitle)}
+          active={isMenuItemActive(item, context)}
+          key={item.id}
+          onClick={() => onCommand(item.command)}
+        >
+          {renderMenuIcon(item, configuration, 19)}
+        </IconButton>
+      ))}
       <div className="tp-activitybar-spacer" />
-      <IconButton title="Settings" onClick={onOpenSettings}>
-        <SettingsIcon size={19} />
-      </IconButton>
-      <IconButton title="Command Palette" onClick={onOpenPalette}>
-        <CommandIcon size={19} />
-      </IconButton>
+      {secondaryMenuItems.map((item) => (
+        <IconButton
+          title={menuItemTitle(item, getCommandTitle)}
+          active={isMenuItemActive(item, context)}
+          key={item.id}
+          onClick={() => onCommand(item.command)}
+        >
+          {renderMenuIcon(item, configuration, 19)}
+        </IconButton>
+      ))}
     </nav>
   );
 }

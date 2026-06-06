@@ -10,11 +10,13 @@ import {
   IFileService,
   IIndexService,
   IKeybindingService,
+  IMenuService,
   IRecentService,
   IResourceService,
   ITextFileService,
   IWorkspaceService,
   KeybindingService,
+  MenuService,
   NativeAttachmentService,
   NativeFileService,
   NativeResourceService,
@@ -32,12 +34,13 @@ import {
   type IFileService as FileServiceContract,
   type IIndexService as IndexServiceContract,
   type IKeybindingService as KeybindingServiceContract,
+  type IMenuService as MenuServiceContract,
   type IRecentService as RecentServiceContract,
   type IResourceService as ResourceServiceContract,
   type ITextFileService as TextFileServiceContract,
-  type IWorkspaceService as WorkspaceServiceContract,
-  type KeybindingRule
+  type IWorkspaceService as WorkspaceServiceContract
 } from "@typora-plus/platform";
+import { defaultWorkbenchKeybindings, defaultWorkbenchMenuItems } from "./workbenchContributions";
 
 export interface WorkbenchServices {
   readonly serviceCollection: ServiceCollection;
@@ -48,6 +51,7 @@ export interface WorkbenchServices {
   readonly fileService: FileServiceContract;
   readonly indexService: IndexServiceContract;
   readonly keybindingService: KeybindingServiceContract;
+  readonly menuService: MenuServiceContract;
   readonly recentService: RecentServiceContract;
   readonly resourceService: ResourceServiceContract;
   readonly textFileService: TextFileServiceContract;
@@ -74,6 +78,7 @@ export function createWorkbenchServices(): WorkbenchServices {
   const keybindingService = new KeybindingService({
     primaryModifierLabel: readPrimaryModifierLabel()
   });
+  const menuService = new MenuService();
   const recentService = new RecentService();
   const attachmentService = new NativeAttachmentService(
     configurationService.getValue().workspace.defaultAssetFolder
@@ -90,6 +95,7 @@ export function createWorkbenchServices(): WorkbenchServices {
   serviceCollection.set(IFileService, fileService);
   serviceCollection.set(IIndexService, indexService);
   serviceCollection.set(IKeybindingService, keybindingService);
+  serviceCollection.set(IMenuService, menuService);
   serviceCollection.set(IRecentService, recentService);
   serviceCollection.set(IResourceService, resourceService);
   serviceCollection.set(IWorkspaceService, workspaceService);
@@ -102,6 +108,9 @@ export function createWorkbenchServices(): WorkbenchServices {
   for (const rule of defaultWorkbenchKeybindings) {
     keybindingService.registerKeybinding(rule);
   }
+  for (const item of defaultWorkbenchMenuItems) {
+    menuService.registerMenuItem(item);
+  }
   keybindingService.setUserKeybindings(configurationService.getValue().keybindings.overrides);
 
   return {
@@ -113,39 +122,13 @@ export function createWorkbenchServices(): WorkbenchServices {
     fileService,
     indexService,
     keybindingService,
+    menuService,
     recentService,
     resourceService,
     textFileService,
     workspaceService
   };
 }
-
-const defaultWorkbenchKeybindings: readonly KeybindingRule[] = [
-  {
-    command: "workbench.commandPalette.open",
-    keybinding: { key: "p", primary: true, shift: true }
-  },
-  {
-    command: "workbench.quickOpen",
-    keybinding: { key: "p", primary: true }
-  },
-  {
-    command: "workbench.settings.open",
-    keybinding: { key: ",", primary: true }
-  },
-  {
-    command: "file.save",
-    keybinding: { key: "s", primary: true }
-  },
-  {
-    command: "file.saveAs",
-    keybinding: { key: "s", primary: true, shift: true }
-  },
-  {
-    command: "file.exportHtml",
-    keybinding: { key: "e", primary: true, shift: true }
-  }
-];
 
 function readPrimaryModifierLabel(): string {
   if (typeof navigator !== "undefined" && /Mac|iPhone|iPad|iPod/.test(navigator.platform)) {

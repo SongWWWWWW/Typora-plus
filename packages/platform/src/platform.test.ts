@@ -10,6 +10,7 @@ import {
   WorkspaceTextFileService,
   WorkspaceIndexService,
   KeybindingService,
+  MenuService,
   PersistedWorkspaceIndexProvider,
   RecentService,
   NativeResourceService,
@@ -218,6 +219,65 @@ describe("commands", () => {
     });
 
     expect(commandService.executeCommand("test.echo", "ok")).toBe("ok");
+  });
+});
+
+describe("menus", () => {
+  it("registers menu items in stable group and order sequence", () => {
+    const service = new MenuService();
+
+    service.registerMenuItem({
+      id: "titlebar.z",
+      menu: "titlebar.primary",
+      command: "z",
+      group: "navigation",
+      order: 20
+    });
+    service.registerMenuItem({
+      id: "titlebar.a",
+      menu: "titlebar.primary",
+      command: "a",
+      group: "navigation",
+      order: 10
+    });
+    service.registerMenuItem({
+      id: "activitybar.a",
+      menu: "activitybar.primary",
+      command: "activity"
+    });
+    service.registerMenuItem({
+      id: "titlebar.workbench",
+      menu: "titlebar.primary",
+      command: "workbench",
+      group: "workbench",
+      order: 1
+    });
+
+    expect(service.getMenuItems("titlebar.primary").map((item) => item.command)).toEqual([
+      "a",
+      "z",
+      "workbench"
+    ]);
+    expect(service.getMenuItems("activitybar.primary").map((item) => item.command)).toEqual(["activity"]);
+  });
+
+  it("publishes menu changes and removes menu items through disposables", () => {
+    const service = new MenuService();
+    const changedMenus: string[] = [];
+    service.onDidChangeMenu((menu) => changedMenus.push(menu));
+
+    const disposable = service.registerMenuItem({
+      id: "titlebar.save",
+      menu: "titlebar.primary",
+      command: "file.save"
+    });
+
+    expect(service.getMenuItems("titlebar.primary").map((item) => item.command)).toEqual(["file.save"]);
+
+    disposable.dispose();
+
+    expect(service.getMenuItems("titlebar.primary")).toEqual([]);
+    expect(changedMenus).toEqual(["titlebar.primary", "titlebar.primary"]);
   });
 });
 
