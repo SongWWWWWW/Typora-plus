@@ -1108,5 +1108,32 @@ Review:
 
 Known limitations:
 
-- Save-as refreshes the index only when the saved URI is already present in the current workspace file list; newly created files may still rely on workspace refresh or watcher updates until the file tree catches up.
+- The index remains in memory; SQLite-backed incremental persistence is still planned.
+
+## 2026-06-06 - P2 Save-As Index Catch-Up
+
+Completed:
+
+- Moved saved-file index synchronization into a focused Workbench helper.
+- Kept normal saves fast by indexing from the current workspace tree without refreshing.
+- Added a workspace refresh-and-retry path when a saved file is not present in the current file tree yet.
+- Added Workbench tests for existing-file indexing and new save-as file catch-up.
+
+Quality gate:
+
+- `npm run test -- --run packages/workbench/src/savedFileIndexing.test.ts`: passed, 2 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 102 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- Browser regression: current-note search for `Project` returned line 1 with `# Project note`; save button check had no console errors or page horizontal overflow.
+
+Review:
+
+- The helper coordinates file-tree freshness only; Markdown extraction still stays behind `IIndexService`.
+- Save-as catch-up uses the existing `IFileService.refreshWorkspace()` boundary rather than renderer path inspection or hard-coded workspace path rules.
+- The refreshed workspace tree is pushed back through `IWorkspaceService`, keeping the file explorer and index source aligned.
+
+Known limitations:
+
+- Save-as files outside the active workspace are intentionally not indexed into the active workspace.
 - The index remains in memory; SQLite-backed incremental persistence is still planned.

@@ -40,7 +40,7 @@ P2 main progress is implemented:
 - current-note backlinks sidebar backed by the workspace index service
 - workspace tags sidebar backed by the workspace index service
 - workspace-backed image preview resource resolution
-- saved workspace files refresh their search, tag, and backlink index entries immediately after successful save
+- saved workspace files, including new save-as files after workspace catch-up, refresh their search, tag, and backlink index entries immediately after successful save
 
 ## Commands
 
