@@ -29,6 +29,11 @@ export interface MarkdownInlineMathRange {
   readonly to: number;
 }
 
+export interface MarkdownTableCellSourceRange {
+  readonly from: number;
+  readonly to: number;
+}
+
 export type MarkdownCodeFenceLineRole = "open" | "content" | "close";
 
 export interface MarkdownCodeFenceLineState {
@@ -426,6 +431,25 @@ export function createMarkdownTableWithDeletedColumn(
     removeTableArrayItem(alignments, columnIndex),
     bodyRows.map((row) => removeTableArrayItem(row, columnIndex))
   );
+}
+
+export function findMarkdownTableCellSourceRange(
+  text: string,
+  columnIndex: number
+): MarkdownTableCellSourceRange | undefined {
+  const spans = readMarkdownTableCellSpans(text);
+
+  if (!spans || !Number.isFinite(columnIndex)) {
+    return undefined;
+  }
+
+  const span = spans[Math.trunc(columnIndex)];
+
+  if (!span) {
+    return undefined;
+  }
+
+  return trimMarkdownTableCellSourceRange(span);
 }
 
 export function shouldIgnorePreviewEventTarget(tagName: string | undefined): boolean {
@@ -1155,6 +1179,10 @@ interface MarkdownTableReadLineResult {
   readonly tableLine: MarkdownTableLineState;
 }
 
+interface MarkdownTableCellSourceSpan extends MarkdownTableCellSourceRange {
+  readonly value: string;
+}
+
 function readMarkdownTableFromSource(source: {
   readonly isVisible?: (lineNumber: number) => boolean;
   readonly lineCount: number;
@@ -1252,39 +1280,83 @@ function readMarkdownTableDelimiterCells(text: string): readonly string[] | unde
 }
 
 function readMarkdownTableCells(text: string): readonly string[] | undefined {
-  const trimmed = text.trim();
-  const cells = splitMarkdownTableCells(trimmed).map((cell) => cell.trim());
+  const spans = readMarkdownTableCellSpans(text);
+  const cells = spans?.map((cell) => cell.value.trim());
 
-  return cells.length >= 2 ? cells : undefined;
+  return cells && cells.length >= 2 ? cells : undefined;
 }
 
-function splitMarkdownTableCells(text: string): readonly string[] {
-  const cells: string[] = [];
-  let current = "";
+function readMarkdownTableCellSpans(text: string): readonly MarkdownTableCellSourceSpan[] | undefined {
+  const trimmedStart = readFirstNonWhitespaceIndex(text);
+  const trimmedEnd = readLastNonWhitespaceIndex(text) + 1;
 
-  for (let index = 0; index < text.length; index += 1) {
+  if (trimmedStart >= trimmedEnd) {
+    return undefined;
+  }
+
+  const cells: MarkdownTableCellSourceSpan[] = [];
+  let current = "";
+  let cellStart = trimmedStart;
+
+  for (let index = trimmedStart; index < trimmedEnd; index += 1) {
     const character = text[index];
 
     if (character === "|" && !isEscaped(text, index)) {
-      cells.push(current);
+      cells.push({ from: cellStart, to: index, value: current });
       current = "";
+      cellStart = index + 1;
       continue;
     }
 
     current += character;
   }
 
-  cells.push(current);
+  cells.push({ from: cellStart, to: trimmedEnd, value: current });
 
-  if (text.startsWith("|")) {
+  if (text[trimmedStart] === "|") {
     cells.shift();
   }
 
-  if (text.endsWith("|") && !isEscaped(text, text.length - 1)) {
+  if (text[trimmedEnd - 1] === "|" && !isEscaped(text, trimmedEnd - 1)) {
     cells.pop();
   }
 
-  return cells;
+  return cells.length >= 2 ? cells : undefined;
+}
+
+function readFirstNonWhitespaceIndex(text: string): number {
+  for (let index = 0; index < text.length; index += 1) {
+    if (!/\s/.test(text[index] ?? "")) {
+      return index;
+    }
+  }
+
+  return text.length;
+}
+
+function readLastNonWhitespaceIndex(text: string): number {
+  for (let index = text.length - 1; index >= 0; index -= 1) {
+    if (!/\s/.test(text[index] ?? "")) {
+      return index;
+    }
+  }
+
+  return -1;
+}
+
+function trimMarkdownTableCellSourceRange(span: MarkdownTableCellSourceSpan): MarkdownTableCellSourceRange {
+  let from = span.from;
+  let to = span.to;
+
+  while (from < to && /\s/.test(span.value[from - span.from] ?? "")) {
+    from += 1;
+  }
+
+  while (to > from && /\s/.test(span.value[to - span.from - 1] ?? "")) {
+    to -= 1;
+  }
+
+  return { from, to };
 }
 
 function readMarkdownTableColumnAlignment(delimiter: string): MarkdownTableColumnAlignment {
@@ -1591,6 +1663,7 @@ class MarkdownTableBlockWidget extends WidgetType {
       const headerCell = document.createElement("th");
       headerCell.scope = "col";
       setTableCellAlignment(headerCell, this.tableBlock.alignments[index]);
+      addTableCellSourceNavigation(headerCell, view, this.tableBlock.blockStart, index);
 
       const content = document.createElement("span");
       content.className = "tp-editor-table-header-content";
@@ -1639,6 +1712,7 @@ class MarkdownTableBlockWidget extends WidgetType {
         row.forEach((cell, index) => {
           const bodyCell = document.createElement("td");
           setTableCellAlignment(bodyCell, this.tableBlock.alignments[index]);
+          addTableCellSourceNavigation(bodyCell, view, this.tableBlock.blockStart + rowIndex + 2, index);
 
           if (index === 0) {
             const content = document.createElement("span");
@@ -1691,7 +1765,7 @@ class MarkdownTableBlockWidget extends WidgetType {
   }
 
   override ignoreEvent(event: Event): boolean {
-    return isPreviewInteractiveEvent(event);
+    return isPreviewInteractiveEvent(event) || isTableCellSourceNavigationEvent(event);
   }
 }
 
@@ -1768,6 +1842,52 @@ function addPreviewButtonHandlers(button: HTMLButtonElement, onClick: () => void
     event.stopPropagation();
     onClick();
   });
+}
+
+function addTableCellSourceNavigation(
+  cell: HTMLTableCellElement,
+  view: EditorView,
+  lineNumber: number,
+  columnIndex: number
+): void {
+  cell.classList.add("tp-editor-table-source-cell");
+  cell.dataset.tableCellSource = "true";
+  cell.title = `Edit source for column ${columnIndex + 1}`;
+  cell.addEventListener("mousedown", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+  });
+  cell.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    focusMarkdownTableCellSource(view, lineNumber, columnIndex);
+  });
+}
+
+function focusMarkdownTableCellSource(view: EditorView, lineNumber: number, columnIndex: number): void {
+  if (lineNumber < 1 || lineNumber > view.state.doc.lines) {
+    return;
+  }
+
+  const sourceLine = view.state.doc.line(lineNumber);
+  const cellRange = findMarkdownTableCellSourceRange(sourceLine.text, columnIndex);
+
+  if (!cellRange) {
+    return;
+  }
+
+  const from = sourceLine.from + cellRange.from;
+  const to = sourceLine.from + cellRange.to;
+
+  view.dispatch({
+    selection: { anchor: from, head: to },
+    scrollIntoView: true
+  });
+  view.focus();
+}
+
+function isTableCellSourceNavigationEvent(event: Event): boolean {
+  return event.target instanceof Element && Boolean(event.target.closest("[data-table-cell-source='true']"));
 }
 
 function readTableAlignmentButtonText(alignment: MarkdownTableColumnAlignment): string {
@@ -2503,6 +2623,12 @@ function markdownEditorTheme(configuration: MarkdownEditorConfiguration): Extens
       fontSize: "13px",
       lineHeight: "1.35",
       textAlign: "left"
+    },
+    ".tp-editor-table-source-cell": {
+      cursor: "text"
+    },
+    ".tp-editor-table-source-cell:hover": {
+      backgroundColor: "var(--tp-color-surface)"
     },
     ".tp-editor-table-preview th": {
       backgroundColor: "var(--tp-color-table-header)",

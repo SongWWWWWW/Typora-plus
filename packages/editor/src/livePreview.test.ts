@@ -13,6 +13,7 @@ import {
   createMarkdownTableWithInsertedBodyRow,
   createMarkdownTableWithInsertedColumn,
   createMarkdownTableWithUpdatedColumnAlignment,
+  findMarkdownTableCellSourceRange,
   findInactiveMarkdownInlineMathRanges,
   findInactiveMarkdownSyntaxMarkers,
   getNextMarkdownTableColumnAlignment,
@@ -587,6 +588,34 @@ describe("analyzeMarkdownTableLines", () => {
 });
 
 describe("Markdown table editing helpers", () => {
+  it("finds source ranges for pipe-delimited table cells", () => {
+    const line = "| Name | Count | Status |";
+
+    expect(findMarkdownTableCellSourceRange(line, 0)).toEqual({ from: 2, to: 6 });
+    expect(findMarkdownTableCellSourceRange(line, 1)).toEqual({ from: 9, to: 14 });
+    expect(findMarkdownTableCellSourceRange(line, 2)).toEqual({ from: 17, to: 23 });
+  });
+
+  it("finds source ranges for table cells without outer pipes", () => {
+    const line = "Name | Count | Status";
+
+    expect(findMarkdownTableCellSourceRange(line, 0)).toEqual({ from: 0, to: 4 });
+    expect(findMarkdownTableCellSourceRange(line, 1)).toEqual({ from: 7, to: 12 });
+    expect(findMarkdownTableCellSourceRange(line, 2)).toEqual({ from: 15, to: 21 });
+  });
+
+  it("keeps escaped pipes inside source cell ranges", () => {
+    const line = "| Name \\| Alias | Status |";
+    const range = findMarkdownTableCellSourceRange(line, 0);
+
+    expect(range).toEqual({ from: 2, to: 15 });
+    expect(range ? line.slice(range.from, range.to) : "").toBe("Name \\| Alias");
+  });
+
+  it("does not find a table cell range for escaped-only separators", () => {
+    expect(findMarkdownTableCellSourceRange("Name \\| Value", 0)).toBeUndefined();
+  });
+
   it("cycles column alignments in a stable order", () => {
     expect(getNextMarkdownTableColumnAlignment(undefined)).toBe("left");
     expect(getNextMarkdownTableColumnAlignment("default")).toBe("left");
