@@ -1445,3 +1445,34 @@ Review:
 Known limitations:
 
 - Section navigation is limited to the current top-level settings sections; nested settings groups can be introduced later if the settings surface grows.
+
+## 2026-06-06 - P2 Settings Search
+
+Completed:
+
+- Added a Settings-level search box above the section navigation.
+- Added searchable settings entry metadata in `settingsModel.ts` so section navigation and field filtering share one model.
+- Filtered Settings sections and individual controls for queries such as `font`, `workspace`, `shortcut`, and multi-term search like `search limit`.
+- Added a compact empty state for unmatched settings queries and a clear action that restores the full settings surface.
+- Added focused Workbench model coverage for empty, section-level, field-level, multi-term, and no-result settings search behavior.
+
+Quality gate:
+
+- `npm run test -- --run packages/workbench/src/settingsModel.test.ts`: passed, 8 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 127 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed
+- Browser regression: `font` showed only Editor / Font Size, `workspace` showed the whole Workspace section, `shortcut` showed Keybindings, no-match showed `No matching settings`, and clear restored all sections.
+- Desktop 1280px and mobile 390px viewport checks: dialog, settings search, navigation, content, keybinding search, and toolbar had no horizontal overflow and no console errors were reported.
+
+Review:
+
+- Search metadata is centralized in `settingsModel.ts`; `SettingsDialog` consumes visible section and entry IDs instead of embedding matching rules in JSX.
+- Settings search is local UI state and does not touch persisted configuration.
+- Section-title matches intentionally show a full section, while field matches narrow to individual controls, keeping the surface compact without hiding expected section context.
+- The top-level settings search remains separate from the Keybindings command search, preserving focused command filtering inside the Keybindings section.
+
+Known limitations:
+
+- Settings search uses deterministic substring and multi-term matching; fuzzy ranking can be added later if the settings surface grows substantially.
