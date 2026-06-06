@@ -1855,3 +1855,37 @@ Known limitations:
 
 - HTML export embeds images as data URLs, which is portable but not ideal for very large assets; a future export asset pipeline can add copied asset folders or streamed resource packaging behind the same provider boundary.
 - Native dialog export behavior remains covered by build and IPC contract tests rather than automated desktop dialog interaction.
+
+## 2026-06-07 - P2 Export Asset Pipeline
+
+Completed:
+
+- Added optional exported asset metadata to the platform export document contract.
+- Added export asset mode context so providers can choose file assets when native saving is available and inline assets for browser fallback.
+- Updated the Markdown HTML provider to rewrite resolved workspace images into sibling export asset references in file asset mode.
+- Kept duplicate Markdown image references on a single exported asset path.
+- Added native export asset writing with centralized maximum asset count and per-asset size limits in shell configuration.
+- Added native asset path, MIME type, and base64 validation before writing assets beside the selected export document.
+- Updated exported HTML CSP to allow same-directory/sibling image assets while keeping the restrictive default policy.
+- Added Markdown and platform coverage for file asset mode, inline fallback mode, explicit asset mode overrides, duplicate image reuse, and non-base64 fallback behavior.
+
+Quality gate:
+
+- `npm run test -- --run packages/markdown/src/exportHtml.test.ts packages/platform/src/platform.test.ts`: passed, 50 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 154 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+
+Review:
+
+- Export asset behavior remains behind `IExportService`; Workbench still only triggers commands and does not parse Markdown or write files.
+- Markdown export owns rendering and asset-reference generation; Electron owns bounded file and asset writes.
+- Asset size/count limits live in `desktopShellConfig`, not in Workbench UI.
+- Browser export remains usable because provider context defaults to inline mode when no native save bridge is available.
+- No new documentation files, UI surface, packages, or direct filesystem assumptions were introduced.
+
+Known limitations:
+
+- Native save dialog interaction is still not covered by an automated desktop test; native asset writing is verified through type/build checks and contract-level tests.
+- Export assets are written as sibling files, not zipped or streamed; a future provider can add archive packaging behind the same `IExportService` boundary.
