@@ -16,6 +16,7 @@ import {
   PersistedWorkspaceIndexProvider,
   RecentService,
   NativeResourceService,
+  parseContextKeyExpression,
   createDefaultWorkspaceIndexSnapshotStorage,
   flattenFileTree,
   keybindingFromEvent,
@@ -246,6 +247,35 @@ describe("context keys", () => {
 
     expect(service.matches(ContextKeyExpr.defined("activeResource.scheme"))).toBe(false);
     expect(service.matches(ContextKeyExpr.not(ContextKeyExpr.defined("activeResource.scheme")))).toBe(true);
+  });
+
+  it("parses context key when-clause strings", () => {
+    const service = new ContextKeyService();
+    service.setValue("fileSystem.available", true);
+    service.setValue("workspace.open", false);
+    service.setValue("activeResource.scheme", "untitled");
+    service.setValue("editor.fontSize", 17);
+
+    expect(service.matches(parseContextKeyExpression("fileSystem.available && activeResource.scheme == untitled"))).toBe(true);
+    expect(service.matches(parseContextKeyExpression("fileSystem.available && activeResource.scheme != file"))).toBe(true);
+    expect(service.matches(parseContextKeyExpression("workspace.open || activeResource.scheme == 'untitled'"))).toBe(true);
+    expect(service.matches(parseContextKeyExpression("workspace.open || activeResource.scheme == \"file\""))).toBe(false);
+    expect(service.matches(parseContextKeyExpression("!workspace.open && editor.fontSize == 17"))).toBe(true);
+    expect(service.matches(parseContextKeyExpression("!(workspace.open || activeResource.scheme == file)"))).toBe(true);
+  });
+
+  it("returns no expression for empty context key strings", () => {
+    const service = new ContextKeyService();
+
+    expect(parseContextKeyExpression("   ")).toBeUndefined();
+    expect(service.matches(parseContextKeyExpression("   "))).toBe(true);
+  });
+
+  it("rejects invalid context key when-clause strings", () => {
+    expect(() => parseContextKeyExpression("workspace.open &&")).toThrow("Expected identifier");
+    expect(() => parseContextKeyExpression("workspace.open ==")).toThrow("Expected context key value");
+    expect(() => parseContextKeyExpression("workspace.open && (activeResource.scheme == file")).toThrow("Expected rightParen");
+    expect(() => parseContextKeyExpression("activeResource.scheme == 'file")).toThrow("Unterminated");
   });
 
   it("publishes context changes only when values change", () => {
