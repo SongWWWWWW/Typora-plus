@@ -614,8 +614,38 @@ button {
   font-size: 13px;
 }
 
+.tp-command-title,
+.tp-command-meta {
+  min-width: 0;
+}
+
+.tp-command-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tp-command-meta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 .tp-command-row small {
   color: var(--tp-color-text-soft);
+}
+
+.tp-command-row kbd {
+  min-width: 0;
+  border: 1px solid var(--tp-color-border);
+  border-radius: 4px;
+  padding: 1px 5px;
+  color: var(--tp-color-text-muted);
+  font: inherit;
+  font-size: 11px;
+  line-height: 16px;
+  white-space: nowrap;
 }
 
 .tp-quick-row {

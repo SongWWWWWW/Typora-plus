@@ -333,23 +333,8 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      const modifier = event.metaKey || event.ctrlKey;
-
-      if (modifier && event.shiftKey && event.key.toLowerCase() === "p") {
+      if (services.keybindingService.dispatch(event, services.commandService)) {
         event.preventDefault();
-        setPaletteOpen(true);
-        return;
-      }
-
-      if (modifier && !event.shiftKey && event.key.toLowerCase() === "p") {
-        event.preventDefault();
-        setQuickOpen(true);
-        return;
-      }
-
-      if (modifier && event.key.toLowerCase() === "s") {
-        event.preventDefault();
-        services.commandService.executeCommand("file.save");
       }
     };
 
@@ -511,6 +496,7 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
       <CommandPalette
         open={paletteOpen}
         commands={services.commandService.getCommands()}
+        getKeybindingLabel={(id) => services.keybindingService.getKeybindingLabel(id)}
         onClose={() => setPaletteOpen(false)}
         onExecute={(id) => {
           services.commandService.executeCommand(id);
@@ -1149,11 +1135,13 @@ function SaveConflictDialog({
 function CommandPalette({
   open,
   commands,
+  getKeybindingLabel,
   onClose,
   onExecute
 }: {
   readonly open: boolean;
   readonly commands: readonly { readonly id: string; readonly title: string; readonly category?: string }[];
+  readonly getKeybindingLabel: (id: string) => string | undefined;
   readonly onClose: () => void;
   readonly onExecute: (id: string) => void;
 }) {
@@ -1195,12 +1183,19 @@ function CommandPalette({
           />
         </div>
         <div className="tp-command-list">
-          {filteredCommands.map((command) => (
-            <button className="tp-command-row" key={command.id} type="button" onClick={() => onExecute(command.id)}>
-              <span>{command.title}</span>
-              {command.category ? <small>{command.category}</small> : null}
-            </button>
-          ))}
+          {filteredCommands.map((command) => {
+            const keybindingLabel = getKeybindingLabel(command.id);
+
+            return (
+              <button className="tp-command-row" key={command.id} type="button" onClick={() => onExecute(command.id)}>
+                <span className="tp-command-title">{command.title}</span>
+                <span className="tp-command-meta">
+                  {command.category ? <small>{command.category}</small> : null}
+                  {keybindingLabel ? <kbd>{keybindingLabel}</kbd> : null}
+                </span>
+              </button>
+            );
+          })}
         </div>
       </section>
     </div>

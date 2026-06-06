@@ -8,6 +8,7 @@ import {
   NativeAttachmentService,
   WorkspaceTextFileService,
   WorkspaceIndexService,
+  KeybindingService,
   RecentService,
   NativeResourceService,
   flattenFileTree,
@@ -53,6 +54,65 @@ describe("commands", () => {
     });
 
     expect(commandService.executeCommand("test.echo", "ok")).toBe("ok");
+  });
+});
+
+describe("keybindings", () => {
+  it("resolves primary keybindings and prefers higher weighted rules", () => {
+    const service = new KeybindingService();
+
+    service.registerKeybinding({
+      command: "workbench.quickOpen",
+      keybinding: { key: "p", primary: true },
+      weight: 1
+    });
+    service.registerKeybinding({
+      command: "workbench.commandPalette.open",
+      keybinding: { key: "p", primary: true },
+      weight: 2
+    });
+
+    expect(service.resolve({ key: "P", ctrlKey: true })).toBe("workbench.commandPalette.open");
+    expect(service.resolve({ key: "p", metaKey: true })).toBe("workbench.commandPalette.open");
+    expect(service.resolve({ key: "p" })).toBeUndefined();
+  });
+
+  it("removes keybindings through disposables and formats labels", () => {
+    const service = new KeybindingService({ primaryModifierLabel: "Cmd" });
+    const disposable = service.registerKeybinding({
+      command: "file.save",
+      keybinding: { key: "s", primary: true, shift: true }
+    });
+
+    expect(service.getKeybindingLabel("file.save")).toBe("Cmd+Shift+S");
+
+    disposable.dispose();
+
+    expect(service.resolve({ key: "s", metaKey: true, shiftKey: true })).toBeUndefined();
+    expect(service.getKeybindingLabel("file.save")).toBeUndefined();
+  });
+
+  it("dispatches resolved keybindings through the command service", () => {
+    const services = new ServiceCollection();
+    const commandService = new CommandService(services);
+    const keybindingService = new KeybindingService();
+    let saved = false;
+
+    commandService.registerCommand({
+      id: "file.save",
+      title: "Save",
+      run: () => {
+        saved = true;
+      }
+    });
+    keybindingService.registerKeybinding({
+      command: "file.save",
+      keybinding: { key: "s", primary: true }
+    });
+
+    expect(keybindingService.dispatch({ key: "s" }, commandService)).toBe(false);
+    expect(keybindingService.dispatch({ key: "s", ctrlKey: true }, commandService)).toBe(true);
+    expect(saved).toBe(true);
   });
 });
 
