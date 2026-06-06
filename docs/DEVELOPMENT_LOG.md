@@ -1382,3 +1382,35 @@ Known limitations:
 
 - The keybinding editor still records single-stroke shortcuts only; multi-step chord shortcuts remain future work.
 - Search is simple substring matching; fuzzy ranking can be added later if the command surface grows substantially.
+
+## 2026-06-06 - P2 Modified Keybinding Filter
+
+Completed:
+
+- Added a modified-only filter to the Settings Keybindings section.
+- Added a Reset All action that clears persisted user keybinding overrides through configuration updates.
+- Extended the centralized keybinding filtering model so search and modified-only filtering compose without duplicating command logic in the dialog.
+- Added focused Workbench coverage for filtering commands to modified overrides.
+- Added compact toolbar styling that holds the modified filter and reset action without changing the existing row layout.
+
+Quality gate:
+
+- `npm run test -- --run packages/workbench/src/keybindingSettings.test.ts`: passed, 6 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 122 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed
+- Browser regression: recorded `New Note` as `Ctrl+Alt+N`, verified Modified showed only that row, Reset All cleared the override, the empty state changed to `No modified shortcuts`, and the default `Unassigned` label was restored.
+- Desktop 1280px and mobile 390px viewport checks: keybinding toolbar, search, rows, and empty state had no horizontal overflow and no console errors were reported.
+
+Review:
+
+- Filtering remains in `keybindingSettings.ts`; `SettingsDialog` only coordinates UI state and configuration updates.
+- Reset All clears the override list through `IConfigurationService`, preserving the service-backed split between user preferences and keybinding dispatch.
+- The temporary browser-test shortcut was reset before finishing, so no local keybinding override was left behind.
+- The toolbar uses existing compact settings controls and stable grid sizing; no new hard-coded workspace paths or platform assumptions were introduced.
+
+Known limitations:
+
+- The keybinding editor still records single-stroke shortcuts only; multi-step chord shortcuts remain future work.
+- Modified filtering is exact to persisted override commands; richer auditing such as showing shadowed defaults can be added later if the keybinding surface expands.
