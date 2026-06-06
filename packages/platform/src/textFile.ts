@@ -1,5 +1,5 @@
 import { Disposable, Emitter, type Event, URI } from "@typora-plus/base";
-import type { IFileService, TextFileContent } from "./files";
+import type { IFileService, SaveFileOptions, TextFileContent } from "./files";
 import { createServiceIdentifier } from "./instantiation";
 
 export interface TextFileModel {
@@ -10,6 +10,11 @@ export interface TextFileModel {
   readonly dirty: boolean;
   readonly version: number;
   readonly lastSavedAt?: Date;
+  readonly lastSavedMtime?: number;
+}
+
+export interface TextFileSaveOptions {
+  readonly overwrite?: boolean;
 }
 
 export interface TextFileServiceOptions {
@@ -26,7 +31,7 @@ export interface ITextFileService {
   openFile(uri: URI): Promise<TextFileModel>;
   newUntitled(): TextFileModel;
   updateContent(value: string): TextFileModel;
-  save(): Promise<TextFileModel>;
+  save(options?: TextFileSaveOptions): Promise<TextFileModel>;
   saveAs(): Promise<TextFileModel | undefined>;
 }
 
@@ -89,7 +94,7 @@ export class BrowserTextFileService extends Disposable implements ITextFileServi
     return this.model;
   }
 
-  async save(): Promise<TextFileModel> {
+  async save(_options: TextFileSaveOptions = {}): Promise<TextFileModel> {
     this.model = {
       ...this.model,
       dirty: false,
@@ -117,7 +122,8 @@ export class BrowserTextFileService extends Disposable implements ITextFileServi
       value,
       dirty: stored?.dirty ?? false,
       version: 1,
-      ...(lastSavedAt ? { lastSavedAt } : {})
+      ...(lastSavedAt ? { lastSavedAt } : {}),
+      ...(stored?.lastSavedMtime === undefined ? {} : { lastSavedMtime: stored.lastSavedMtime })
     };
   }
 
@@ -130,7 +136,8 @@ export class BrowserTextFileService extends Disposable implements ITextFileServi
     if (this.model.lastSavedAt) {
       writeStorage(this.options.storageKey, {
         ...storedModel,
-        lastSavedAt: this.model.lastSavedAt.toISOString()
+        lastSavedAt: this.model.lastSavedAt.toISOString(),
+        ...(this.model.lastSavedMtime === undefined ? {} : { lastSavedMtime: this.model.lastSavedMtime })
       });
       return;
     }
@@ -201,13 +208,13 @@ export class WorkspaceTextFileService extends Disposable implements ITextFileSer
     return this.model;
   }
 
-  async save(): Promise<TextFileModel> {
+  async save(options: TextFileSaveOptions = {}): Promise<TextFileModel> {
     if (this.model.uri.scheme !== "file") {
       const saved = await this.saveAs();
       return saved ?? this.model;
     }
 
-    const content = await this.fileService.saveFile(this.model.uri, this.model.value);
+    const content = await this.fileService.saveFile(this.model.uri, this.model.value, createSaveFileOptions(this.model, options));
     this.model = modelFromContent(content, this.model.version + 1, false);
     this.persistDraft(false);
     this.emitter.fire(this.model);
@@ -239,7 +246,8 @@ export class WorkspaceTextFileService extends Disposable implements ITextFileSer
       value,
       dirty: stored?.dirty ?? false,
       version: 1,
-      ...(lastSavedAt ? { lastSavedAt } : {})
+      ...(lastSavedAt ? { lastSavedAt } : {}),
+      ...(stored?.lastSavedMtime === undefined ? {} : { lastSavedMtime: stored.lastSavedMtime })
     };
   }
 
@@ -252,7 +260,8 @@ export class WorkspaceTextFileService extends Disposable implements ITextFileSer
     if (this.model.lastSavedAt) {
       writeStorage(this.options.storageKey, {
         ...storedModel,
-        lastSavedAt: this.model.lastSavedAt.toISOString()
+        lastSavedAt: this.model.lastSavedAt.toISOString(),
+        ...(this.model.lastSavedMtime === undefined ? {} : { lastSavedMtime: this.model.lastSavedMtime })
       });
       return;
     }
@@ -265,6 +274,7 @@ interface StoredTextFileModel {
   readonly value: string;
   readonly dirty: boolean;
   readonly lastSavedAt?: string;
+  readonly lastSavedMtime?: number;
 }
 
 function readStorage(key: string): StoredTextFileModel | undefined {
@@ -306,6 +316,13 @@ function modelFromContent(content: TextFileContent, version: number, dirty: bool
     value: content.value,
     dirty,
     version,
-    ...(content.mtime ? { lastSavedAt: new Date(content.mtime) } : {})
+    ...(content.mtime === undefined ? {} : { lastSavedAt: new Date(content.mtime), lastSavedMtime: content.mtime })
+  };
+}
+
+function createSaveFileOptions(model: TextFileModel, options: TextFileSaveOptions): SaveFileOptions {
+  return {
+    ...(model.lastSavedMtime === undefined ? {} : { expectedMtime: model.lastSavedMtime }),
+    ...(options.overwrite ? { overwrite: true } : {})
   };
 }

@@ -1,8 +1,9 @@
-import { URI } from "@typora-plus/base";
+import { Emitter, URI } from "@typora-plus/base";
 import { describe, expect, it } from "vitest";
 import {
   CommandService,
   ConfigurationService,
+  FileSaveConflictError,
   NativeFileService,
   NativeAttachmentService,
   WorkspaceTextFileService,
@@ -11,7 +12,9 @@ import {
   mergeConfiguration,
   ServiceCollection,
   type FileTreeEntry,
-  type NativeFileSystemHost
+  type NativeFileSystemHost,
+  type SaveFileOptions,
+  type WorkspaceFileTree
 } from "./index";
 
 describe("configuration", () => {
@@ -76,6 +79,41 @@ describe("file tree", () => {
 
     expect(flattenFileTree(root).map((entry) => entry.relativePath)).toEqual(["a.md", "folder/b.md"]);
   });
+
+  it("publishes native workspace file changes", () => {
+    const emitter = new Emitter<WorkspaceFileTree | undefined>();
+    const workspaceFiles = createWorkspaceFileTree();
+    const host: NativeFileSystemHost = {
+      isAvailable: true,
+      onDidChangeWorkspaceFiles: emitter.event,
+      async openWorkspace() {
+        return workspaceFiles;
+      },
+      async refreshWorkspace() {
+        return workspaceFiles;
+      },
+      async readFile() {
+        throw new Error("Not used");
+      },
+      async writeFile() {
+        throw new Error("Not used");
+      },
+      async saveFileAs() {
+        return undefined;
+      }
+    };
+    const service = new NativeFileService(host);
+    let observed: WorkspaceFileTree | undefined;
+
+    service.onDidChangeWorkspaceFiles((workspace) => {
+      observed = workspace;
+    });
+
+    emitter.fire(workspaceFiles);
+
+    expect(observed?.root.name).toBe("Notes");
+    expect(service.getWorkspaceFiles()?.files.map((entry) => entry.name)).toEqual(["a.md"]);
+  });
 });
 
 describe("workspace text files", () => {
@@ -96,6 +134,97 @@ describe("workspace text files", () => {
 
     expect(saved.dirty).toBe(false);
     expect(host.files.get("file://C:/Notes/a.md")).toBe("# Updated");
+  });
+
+  it("uses the last disk mtime when saving native files", async () => {
+    const writes: SaveFileOptions[] = [];
+    const host: NativeFileSystemHost = {
+      isAvailable: true,
+      async openWorkspace() {
+        return undefined;
+      },
+      async refreshWorkspace() {
+        return undefined;
+      },
+      async readFile(uri) {
+        return {
+          uri: URI.parse(uri),
+          name: "a.md",
+          value: "# A",
+          mtime: 10
+        };
+      },
+      async writeFile(uri, value, options) {
+        writes.push(options ?? {});
+        return {
+          uri: URI.parse(uri),
+          name: "a.md",
+          value,
+          mtime: 20
+        };
+      },
+      async saveFileAs() {
+        return undefined;
+      }
+    };
+    const fileService = new NativeFileService(host);
+    const textFileService = new WorkspaceTextFileService(fileService, {
+      storageKey: "test-mtime-draft",
+      defaultName: "Untitled.md",
+      defaultContent: "# Untitled"
+    });
+
+    const opened = await textFileService.openFile(URI.file("C:/Notes/a.md"));
+    textFileService.updateContent("# Local");
+    const saved = await textFileService.save();
+
+    expect(opened.lastSavedMtime).toBe(10);
+    expect(writes[0]).toEqual({ expectedMtime: 10 });
+    expect(saved.lastSavedMtime).toBe(20);
+  });
+
+  it("keeps the active model dirty when native save reports a conflict", async () => {
+    const uri = URI.file("C:/Notes/a.md");
+    const host: NativeFileSystemHost = {
+      isAvailable: true,
+      async openWorkspace() {
+        return undefined;
+      },
+      async refreshWorkspace() {
+        return undefined;
+      },
+      async readFile() {
+        return {
+          uri,
+          name: "a.md",
+          value: "# A",
+          mtime: 10
+        };
+      },
+      async writeFile() {
+        throw new FileSaveConflictError({
+          uri,
+          expectedMtime: 10,
+          diskMtime: 20
+        });
+      },
+      async saveFileAs() {
+        return undefined;
+      }
+    };
+    const fileService = new NativeFileService(host);
+    const textFileService = new WorkspaceTextFileService(fileService, {
+      storageKey: "test-conflict-draft",
+      defaultName: "Untitled.md",
+      defaultContent: "# Untitled"
+    });
+
+    await textFileService.openFile(uri);
+    textFileService.updateContent("# Local");
+
+    await expect(textFileService.save()).rejects.toBeInstanceOf(FileSaveConflictError);
+    expect(textFileService.getActiveModel().dirty).toBe(true);
+    expect(textFileService.getActiveModel().value).toBe("# Local");
   });
 });
 
@@ -193,6 +322,26 @@ function createMemoryHost() {
   };
 
   return host;
+}
+
+function createWorkspaceFileTree(): WorkspaceFileTree {
+  const file: FileTreeEntry = {
+    uri: URI.file("C:/Notes/a.md"),
+    name: "a.md",
+    relativePath: "a.md",
+    kind: "file"
+  };
+
+  return {
+    root: {
+      uri: URI.file("C:/Notes"),
+      name: "Notes",
+      relativePath: "",
+      kind: "directory",
+      children: [file]
+    },
+    files: [file]
+  };
 }
 
 function createMemoryStorage() {

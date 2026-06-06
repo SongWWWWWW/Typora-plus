@@ -1,4 +1,4 @@
-import { Emitter, URI, type Event, type URI as URIType } from "@typora-plus/base";
+import { Emitter, URI, type Event, type IDisposable, type URI as URIType } from "@typora-plus/base";
 import { createServiceIdentifier } from "./instantiation";
 
 export type FileKind = "file" | "directory";
@@ -25,12 +25,33 @@ export interface TextFileContent {
   readonly mtime?: number;
 }
 
+export interface SaveFileOptions {
+  readonly expectedMtime?: number;
+  readonly overwrite?: boolean;
+}
+
+export interface FileSaveConflict {
+  readonly uri: URIType;
+  readonly expectedMtime?: number;
+  readonly diskMtime: number;
+}
+
+export class FileSaveConflictError extends Error {
+  readonly code = "FILE_SAVE_CONFLICT";
+
+  constructor(readonly conflict: FileSaveConflict) {
+    super("File changed on disk");
+    this.name = "FileSaveConflictError";
+  }
+}
+
 export interface NativeFileSystemHost {
   readonly isAvailable: boolean;
+  readonly onDidChangeWorkspaceFiles?: Event<WorkspaceFileTree | undefined>;
   openWorkspace(): Promise<WorkspaceFileTree | undefined>;
   refreshWorkspace(): Promise<WorkspaceFileTree | undefined>;
   readFile(uri: string): Promise<TextFileContent>;
-  writeFile(uri: string, value: string): Promise<TextFileContent>;
+  writeFile(uri: string, value: string, options?: SaveFileOptions): Promise<TextFileContent>;
   saveFileAs(defaultName: string, value: string): Promise<TextFileContent | undefined>;
 }
 
@@ -56,12 +77,28 @@ export interface SerializedTextFileContent {
   readonly mtime?: number;
 }
 
+export interface SerializedSaveFileOptions {
+  readonly expectedMtime?: number;
+  readonly overwrite?: boolean;
+}
+
+export interface SerializedFileSaveConflict {
+  readonly uri: string;
+  readonly expectedMtime?: number;
+  readonly diskMtime: number;
+}
+
+export type SerializedWriteFileResult =
+  | { readonly kind: "saved"; readonly content: SerializedTextFileContent }
+  | { readonly kind: "conflict"; readonly conflict: SerializedFileSaveConflict };
+
 export interface NativeFileSystemBridge {
   readonly isAvailable: boolean;
+  onDidChangeWorkspaceFiles?(listener: (workspace: SerializedWorkspaceFileTree | undefined) => void): () => void;
   openWorkspace(): Promise<SerializedWorkspaceFileTree | undefined>;
   refreshWorkspace(): Promise<SerializedWorkspaceFileTree | undefined>;
   readFile(uri: string): Promise<SerializedTextFileContent>;
-  writeFile(uri: string, value: string): Promise<SerializedTextFileContent>;
+  writeFile(uri: string, value: string, options?: SerializedSaveFileOptions): Promise<SerializedWriteFileResult>;
   saveFileAs(defaultName: string, value: string): Promise<SerializedTextFileContent | undefined>;
 }
 
@@ -72,7 +109,7 @@ export interface IFileService {
   openWorkspace(): Promise<WorkspaceFileTree | undefined>;
   refreshWorkspace(): Promise<WorkspaceFileTree | undefined>;
   openFile(uri: URIType): Promise<TextFileContent>;
-  saveFile(uri: URIType, value: string): Promise<TextFileContent>;
+  saveFile(uri: URIType, value: string, options?: SaveFileOptions): Promise<TextFileContent>;
   saveFileAs(defaultName: string, value: string): Promise<TextFileContent | undefined>;
 }
 
@@ -80,11 +117,17 @@ export const IFileService = createServiceIdentifier<IFileService>("file");
 
 export class NativeFileService implements IFileService {
   private readonly emitter = new Emitter<WorkspaceFileTree | undefined>();
+  private readonly workspaceChangeSubscription: IDisposable | undefined;
   private workspaceFiles: WorkspaceFileTree | undefined;
 
   readonly onDidChangeWorkspaceFiles = this.emitter.event;
 
-  constructor(private readonly host: NativeFileSystemHost | undefined = createNativeFileSystemHost()) {}
+  constructor(private readonly host: NativeFileSystemHost | undefined = createNativeFileSystemHost()) {
+    this.workspaceChangeSubscription = host?.onDidChangeWorkspaceFiles?.((workspaceFiles) => {
+      this.workspaceFiles = workspaceFiles;
+      this.emitter.fire(workspaceFiles);
+    });
+  }
 
   isAvailable(): boolean {
     return this.host?.isAvailable ?? false;
@@ -122,12 +165,12 @@ export class NativeFileService implements IFileService {
     return this.host.readFile(uri.toString());
   }
 
-  async saveFile(uri: URI, value: string): Promise<TextFileContent> {
+  async saveFile(uri: URI, value: string, options: SaveFileOptions = {}): Promise<TextFileContent> {
     if (!this.host?.isAvailable) {
       throw new Error("Native file system host is not available");
     }
 
-    return this.host.writeFile(uri.toString(), value);
+    return this.host.writeFile(uri.toString(), value, options);
   }
 
   async saveFileAs(defaultName: string, value: string): Promise<TextFileContent | undefined> {
@@ -136,6 +179,11 @@ export class NativeFileService implements IFileService {
     }
 
     return this.host.saveFileAs(defaultName, value);
+  }
+
+  dispose(): void {
+    this.workspaceChangeSubscription?.dispose();
+    this.emitter.dispose();
   }
 }
 
@@ -169,7 +217,7 @@ export function createNativeFileSystemHost(): NativeFileSystemHost | undefined {
     return undefined;
   }
 
-  return {
+  const host: NativeFileSystemHost = {
     isAvailable: bridge.isAvailable,
     async openWorkspace() {
       const workspace = await bridge.openWorkspace();
@@ -182,12 +230,29 @@ export function createNativeFileSystemHost(): NativeFileSystemHost | undefined {
     async readFile(uri) {
       return reviveTextFileContent(await bridge.readFile(uri));
     },
-    async writeFile(uri, value) {
-      return reviveTextFileContent(await bridge.writeFile(uri, value));
+    async writeFile(uri, value, options) {
+      return reviveWriteFileResult(await bridge.writeFile(uri, value, options));
     },
     async saveFileAs(defaultName, value) {
       const content = await bridge.saveFileAs(defaultName, value);
       return content ? reviveTextFileContent(content) : undefined;
+    }
+  };
+
+  if (!bridge.onDidChangeWorkspaceFiles) {
+    return host;
+  }
+
+  return {
+    ...host,
+    onDidChangeWorkspaceFiles(listener) {
+      const dispose = bridge.onDidChangeWorkspaceFiles?.((workspace) => {
+        listener(workspace ? reviveWorkspaceFileTree(workspace) : undefined);
+      });
+
+      return {
+        dispose: () => dispose?.()
+      };
     }
   };
 }
@@ -218,4 +283,25 @@ function reviveTextFileContent(content: SerializedTextFileContent): TextFileCont
     value: content.value,
     ...(content.mtime === undefined ? {} : { mtime: content.mtime })
   };
+}
+
+function reviveWriteFileResult(result: SerializedWriteFileResult): TextFileContent {
+  if (result.kind === "conflict") {
+    throw new FileSaveConflictError(reviveFileSaveConflict(result.conflict));
+  }
+
+  return reviveTextFileContent(result.content);
+}
+
+function reviveFileSaveConflict(conflict: SerializedFileSaveConflict): FileSaveConflict {
+  return {
+    uri: URI.parse(conflict.uri),
+    diskMtime: conflict.diskMtime,
+    ...(conflict.expectedMtime === undefined ? {} : { expectedMtime: conflict.expectedMtime })
+  };
+}
+
+export function isFileSaveConflictError(error: unknown): error is FileSaveConflictError {
+  return error instanceof FileSaveConflictError
+    || (typeof error === "object" && error !== null && "code" in error && error.code === "FILE_SAVE_CONFLICT");
 }

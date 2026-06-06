@@ -2,14 +2,17 @@ import { DisposableStore } from "@typora-plus/base";
 import { MarkdownEditor, type MarkdownEditorHandle } from "@typora-plus/editor";
 import { calculateMarkdownStats, extractOutline, type OutlineEntry } from "@typora-plus/markdown";
 import type {
+  FileSaveConflict,
   FileTreeEntry,
   RecentResource,
   TextFileModel,
   TyporaPlusConfiguration,
   WorkspaceState
 } from "@typora-plus/platform";
+import { isFileSaveConflictError } from "@typora-plus/platform";
 import { applyTheme, resolveThemeName } from "@typora-plus/theme";
 import {
+  AlertTriangle,
   Command as CommandIcon,
   FileText,
   FilePlus,
@@ -59,6 +62,7 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
   const [quickOpen, setQuickOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [operationError, setOperationError] = useState<string | undefined>();
+  const [saveConflict, setSaveConflict] = useState<FileSaveConflict | undefined>();
   const editorRef = useRef<MarkdownEditorHandle | null>(null);
 
   const outline = useMemo(() => extractOutline(model.value), [model.value]);
@@ -71,18 +75,26 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
 
   useEffect(() => services.workspaceService.onDidChangeWorkspace(setWorkspace).dispose, [services]);
 
+  useEffect(() => services.fileService.onDidChangeWorkspaceFiles((workspaceFiles) => {
+    if (!workspaceFiles) {
+      return;
+    }
+
+    services.workspaceService.setWorkspace(workspaceStateFromFiles(workspaceFiles));
+  }).dispose, [services]);
+
   useEffect(() => services.recentService.onDidChangeRecents(setRecents).dispose, [services]);
 
   useEffect(() => {
-    if (!configuration.editor.autoSave || !model.dirty || model.uri.scheme !== "file") {
+    if (!configuration.editor.autoSave || !model.dirty || model.uri.scheme !== "file" || saveConflict) {
       return;
     }
 
     const handle = window.setTimeout(() => {
-      void runWorkbenchAction(() => services.textFileService.save(), setOperationError);
+      void runWorkbenchAction(() => services.textFileService.save(), setOperationError, setSaveConflict);
     }, autoSaveDelayMs);
     return () => window.clearTimeout(handle);
-  }, [configuration.editor.autoSave, model.dirty, model.uri, model.value, services]);
+  }, [configuration.editor.autoSave, model.dirty, model.uri, model.value, saveConflict, services]);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -109,7 +121,10 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
       id: "file.newUntitled",
       title: "New Note",
       category: "File",
-      run: () => services.textFileService.newUntitled()
+      run: () => {
+        setSaveConflict(undefined);
+        return services.textFileService.newUntitled();
+      }
     }));
     disposables.add(services.commandService.registerCommand({
       id: "file.openWorkspace",
@@ -122,19 +137,16 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
           return;
         }
 
-        services.workspaceService.setWorkspace({
-          name: workspaceFiles.root.name,
-          rootUri: workspaceFiles.root.uri,
-          files: workspaceFiles
-        });
+        services.workspaceService.setWorkspace(workspaceStateFromFiles(workspaceFiles));
         services.recentService.addRecentWorkspace(workspaceFiles.root.uri, workspaceFiles.root.name);
         setSideView("files");
 
         if (workspaceFiles.files[0]) {
+          setSaveConflict(undefined);
           const opened = await services.textFileService.openFile(workspaceFiles.files[0].uri);
           services.recentService.addRecentFile(opened.uri, opened.name);
         }
-      }, setOperationError)
+      }, setOperationError, setSaveConflict)
     }));
     disposables.add(services.commandService.registerCommand({
       id: "file.refreshWorkspace",
@@ -147,12 +159,8 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
           return;
         }
 
-        services.workspaceService.setWorkspace({
-          name: workspaceFiles.root.name,
-          rootUri: workspaceFiles.root.uri,
-          files: workspaceFiles
-        });
-      }, setOperationError)
+        services.workspaceService.setWorkspace(workspaceStateFromFiles(workspaceFiles));
+      }, setOperationError, setSaveConflict)
     }));
     disposables.add(services.commandService.registerCommand({
       id: "workbench.quickOpen",
@@ -196,7 +204,7 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
         }
 
         return saved;
-      }, setOperationError)
+      }, setOperationError, setSaveConflict)
     }));
     disposables.add(services.commandService.registerCommand({
       id: "file.saveAs",
@@ -210,7 +218,7 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
         }
 
         return saved;
-      }, setOperationError)
+      }, setOperationError, setSaveConflict)
     }));
     disposables.add(services.commandService.registerCommand({
       id: "editor.focusMode.toggle",
@@ -311,9 +319,10 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
             onRefreshWorkspace={() => services.commandService.executeCommand("file.refreshWorkspace")}
             onOpenFile={(entry) => {
               void runWorkbenchAction(async () => {
+                setSaveConflict(undefined);
                 const opened = await services.textFileService.openFile(entry.uri);
                 services.recentService.addRecentFile(opened.uri, opened.name);
-              }, setOperationError);
+              }, setOperationError, setSaveConflict);
             }}
           />
         ) : null}
@@ -333,6 +342,33 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
         </section>
       </div>
       <Statusbar model={model} stats={stats} operationError={operationError} />
+      {saveConflict ? (
+        <SaveConflictDialog
+          conflict={saveConflict}
+          onClose={() => setSaveConflict(undefined)}
+          onReload={() => {
+            const conflict = saveConflict;
+            void runWorkbenchAction(async () => {
+              const opened = await services.textFileService.openFile(conflict.uri);
+              services.recentService.addRecentFile(opened.uri, opened.name);
+              setSaveConflict(undefined);
+              return opened;
+            }, setOperationError, setSaveConflict);
+          }}
+          onOverwrite={() => {
+            void runWorkbenchAction(async () => {
+              const saved = await services.textFileService.save({ overwrite: true });
+
+              if (saved.uri.scheme === "file") {
+                services.recentService.addRecentFile(saved.uri, saved.name);
+              }
+
+              setSaveConflict(undefined);
+              return saved;
+            }, setOperationError, setSaveConflict);
+          }}
+        />
+      ) : null}
       <CommandPalette
         open={paletteOpen}
         commands={services.commandService.getCommands()}
@@ -346,12 +382,13 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
         open={quickOpen}
         files={workspace.files?.files ?? []}
         onClose={() => setQuickOpen(false)}
-            onOpen={(entry) => {
+        onOpen={(entry) => {
           void runWorkbenchAction(async () => {
+            setSaveConflict(undefined);
             const opened = await services.textFileService.openFile(entry.uri);
             services.recentService.addRecentFile(opened.uri, opened.name);
             setQuickOpen(false);
-          }, setOperationError);
+          }, setOperationError, setSaveConflict);
         }}
       />
     </main>
@@ -762,6 +799,51 @@ function Statusbar({
   );
 }
 
+function SaveConflictDialog({
+  conflict,
+  onClose,
+  onReload,
+  onOverwrite
+}: {
+  readonly conflict: FileSaveConflict;
+  readonly onClose: () => void;
+  readonly onReload: () => void;
+  readonly onOverwrite: () => void;
+}) {
+  return (
+    <div className="tp-dialog-overlay" role="presentation" onMouseDown={onClose}>
+      <section
+        className="tp-dialog"
+        role="alertdialog"
+        aria-label="Save conflict"
+        aria-modal="true"
+        onMouseDown={(event) => event.stopPropagation()}
+      >
+        <div className="tp-dialog-header">
+          <div className="tp-dialog-title">
+            <AlertTriangle size={18} />
+            <span>File changed on disk</span>
+          </div>
+          <IconButton title="Close" onClick={onClose}>
+            <X size={16} />
+          </IconButton>
+        </div>
+        <p className="tp-dialog-message">{conflict.uri.path}</p>
+        <div className="tp-dialog-actions">
+          <button className="tp-dialog-button" type="button" onClick={onReload}>
+            <RefreshCw size={15} />
+            <span>Reload</span>
+          </button>
+          <button className="tp-dialog-button tp-dialog-button-primary" type="button" onClick={onOverwrite}>
+            <Save size={15} />
+            <span>Overwrite</span>
+          </button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
 function CommandPalette({
   open,
   commands,
@@ -1006,14 +1088,29 @@ function sidebarTitle(view: SideView): string {
   }
 }
 
+function workspaceStateFromFiles(workspaceFiles: NonNullable<WorkspaceState["files"]>): WorkspaceState {
+  return {
+    name: workspaceFiles.root.name,
+    rootUri: workspaceFiles.root.uri,
+    files: workspaceFiles
+  };
+}
+
 async function runWorkbenchAction<T>(
   action: () => Promise<T> | T,
-  setOperationError: (value: string | undefined) => void
+  setOperationError: (value: string | undefined) => void,
+  setSaveConflict?: (value: FileSaveConflict | undefined) => void
 ): Promise<T | undefined> {
   try {
     setOperationError(undefined);
     return await action();
   } catch (error) {
+    if (isFileSaveConflictError(error)) {
+      setSaveConflict?.(error.conflict);
+      setOperationError("File changed on disk");
+      return undefined;
+    }
+
     setOperationError(error instanceof Error ? error.message : "Operation failed");
     return undefined;
   }

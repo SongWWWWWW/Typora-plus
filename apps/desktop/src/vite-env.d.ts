@@ -5,10 +5,11 @@ interface Window {
     readonly platform: string;
     readonly fileSystem?: {
       readonly isAvailable: boolean;
+      onDidChangeWorkspaceFiles(listener: (workspace: unknown) => void): () => void;
       openWorkspace(): Promise<unknown>;
       refreshWorkspace(): Promise<unknown>;
       readFile(uri: string): Promise<unknown>;
-      writeFile(uri: string, value: string): Promise<unknown>;
+      writeFile(uri: string, value: string, options?: { readonly expectedMtime?: number; readonly overwrite?: boolean }): Promise<unknown>;
       saveFileAs(defaultName: string, value: string): Promise<unknown>;
     };
     readonly attachments?: {

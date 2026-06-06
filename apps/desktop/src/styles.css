@@ -392,6 +392,93 @@ button {
   white-space: nowrap;
 }
 
+.tp-dialog-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(18, 20, 16, 0.18);
+}
+
+.tp-dialog {
+  width: min(420px, calc(100vw - 32px));
+  overflow: hidden;
+  border: 1px solid var(--tp-color-border);
+  border-radius: var(--tp-radius-control);
+  background: var(--tp-color-surface-raised);
+  box-shadow: 0 18px 52px var(--tp-color-shadow);
+}
+
+.tp-dialog-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 46px;
+  padding: 6px 8px 6px 14px;
+  border-bottom: 1px solid var(--tp-color-border);
+}
+
+.tp-dialog-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  color: var(--tp-color-warning);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.tp-dialog-title span,
+.tp-dialog-message {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tp-dialog-message {
+  margin: 0;
+  padding: 14px 16px 8px;
+  color: var(--tp-color-text-muted);
+  font-size: 13px;
+}
+
+.tp-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 10px 16px 16px;
+}
+
+.tp-dialog-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-width: 96px;
+  min-height: 34px;
+  padding: 0 12px;
+  border: 1px solid var(--tp-color-border);
+  border-radius: var(--tp-radius-control);
+  background: var(--tp-color-surface);
+  color: var(--tp-color-text);
+  cursor: pointer;
+}
+
+.tp-dialog-button-primary {
+  border-color: var(--tp-color-accent);
+  background: var(--tp-color-accent);
+  color: var(--tp-color-surface);
+}
+
+.tp-dialog-button:hover {
+  border-color: var(--tp-color-border-strong);
+}
+
 .tp-command-overlay {
   position: fixed;
   inset: 0;

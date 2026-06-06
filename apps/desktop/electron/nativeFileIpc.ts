@@ -1,3 +1,4 @@
+import { watch, type FSWatcher } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { BrowserWindow, dialog, ipcMain, type OpenDialogOptions, type SaveDialogOptions } from "electron";
@@ -5,6 +6,7 @@ import { BrowserWindow, dialog, ipcMain, type OpenDialogOptions, type SaveDialog
 export const nativeFileIpcChannels = {
   openWorkspace: "typora-plus:workspace:open",
   refreshWorkspace: "typora-plus:workspace:refresh",
+  workspaceChanged: "typora-plus:workspace:changed",
   readFile: "typora-plus:file:read",
   writeFile: "typora-plus:file:write",
   saveFileAs: "typora-plus:file:saveAs",
@@ -41,15 +43,101 @@ interface SerializedTextFileContent {
   readonly mtime?: number;
 }
 
+interface SerializedSaveFileOptions {
+  readonly expectedMtime?: number;
+  readonly overwrite?: boolean;
+}
+
+interface SerializedFileSaveConflict {
+  readonly uri: string;
+  readonly expectedMtime?: number;
+  readonly diskMtime: number;
+}
+
+type SerializedWriteFileResult =
+  | { readonly kind: "saved"; readonly content: SerializedTextFileContent }
+  | { readonly kind: "conflict"; readonly conflict: SerializedFileSaveConflict };
+
 interface SerializedSavedAttachment {
   readonly uri: string;
   readonly relativePath: string;
   readonly markdown: string;
 }
 
+const workspaceWatchDebounceMs = 180;
+const fileMtimeConflictToleranceMs = 2;
+
 export function registerNativeFileIpc(config: NativeWorkspaceConfig): void {
   let workspaceRoot: string | undefined;
+  let workspaceWatcher: FSWatcher | undefined;
+  let workspaceRefreshTimer: ReturnType<typeof setTimeout> | undefined;
   const allowedFiles = new Set<string>();
+
+  const loadWorkspace = async () => {
+    if (!workspaceRoot) {
+      return undefined;
+    }
+
+    allowedFiles.clear();
+
+    const workspace = await buildWorkspaceFileTree(workspaceRoot, config);
+    for (const file of workspace.files) {
+      allowedFiles.add(pathFromFileUri(file.uri));
+    }
+
+    return workspace;
+  };
+
+  const publishWorkspaceChange = async () => {
+    let workspace: SerializedWorkspaceFileTree | undefined;
+
+    try {
+      workspace = await loadWorkspace();
+    } catch {
+      workspace = undefined;
+    }
+
+    for (const window of BrowserWindow.getAllWindows()) {
+      window.webContents.send(nativeFileIpcChannels.workspaceChanged, workspace);
+    }
+  };
+
+  const scheduleWorkspaceChange = () => {
+    if (workspaceRefreshTimer) {
+      clearTimeout(workspaceRefreshTimer);
+    }
+
+    workspaceRefreshTimer = setTimeout(() => {
+      workspaceRefreshTimer = undefined;
+      void publishWorkspaceChange();
+    }, workspaceWatchDebounceMs);
+  };
+
+  const startWorkspaceWatcher = () => {
+    if (workspaceRefreshTimer) {
+      clearTimeout(workspaceRefreshTimer);
+      workspaceRefreshTimer = undefined;
+    }
+
+    workspaceWatcher?.close();
+    workspaceWatcher = undefined;
+
+    if (!workspaceRoot) {
+      return;
+    }
+
+    try {
+      workspaceWatcher = watch(workspaceRoot, { recursive: true }, () => {
+        scheduleWorkspaceChange();
+      });
+      workspaceWatcher.on("error", () => {
+        workspaceWatcher?.close();
+        workspaceWatcher = undefined;
+      });
+    } catch {
+      workspaceWatcher = undefined;
+    }
+  };
 
   ipcMain.handle(nativeFileIpcChannels.openWorkspace, async (event) => {
     const owner = BrowserWindow.fromWebContents(event.sender) ?? undefined;
@@ -64,12 +152,8 @@ export function registerNativeFileIpc(config: NativeWorkspaceConfig): void {
     }
 
     workspaceRoot = path.resolve(result.filePaths[0]);
-    allowedFiles.clear();
-
-    const workspace = await buildWorkspaceFileTree(workspaceRoot, config);
-    for (const file of workspace.files) {
-      allowedFiles.add(pathFromFileUri(file.uri));
-    }
+    const workspace = await loadWorkspace();
+    startWorkspaceWatcher();
 
     return workspace;
   });
@@ -79,14 +163,7 @@ export function registerNativeFileIpc(config: NativeWorkspaceConfig): void {
       return undefined;
     }
 
-    allowedFiles.clear();
-
-    const workspace = await buildWorkspaceFileTree(workspaceRoot, config);
-    for (const file of workspace.files) {
-      allowedFiles.add(pathFromFileUri(file.uri));
-    }
-
-    return workspace;
+    return loadWorkspace();
   });
 
   ipcMain.handle(nativeFileIpcChannels.readFile, async (_event, uri: string) => {
@@ -101,17 +178,33 @@ export function registerNativeFileIpc(config: NativeWorkspaceConfig): void {
     } satisfies SerializedTextFileContent;
   });
 
-  ipcMain.handle(nativeFileIpcChannels.writeFile, async (_event, uri: string, value: string) => {
+  ipcMain.handle(nativeFileIpcChannels.writeFile, async (_event, uri: string, value: string, options: SerializedSaveFileOptions = {}) => {
     const filePath = assertWritableFile(uri, workspaceRoot, allowedFiles, config);
+    const beforeWrite = await fs.stat(filePath);
+
+    if (hasSaveConflict(beforeWrite.mtimeMs, options)) {
+      return {
+        kind: "conflict",
+        conflict: {
+          uri: fileUri(filePath),
+          diskMtime: beforeWrite.mtimeMs,
+          ...(options.expectedMtime === undefined ? {} : { expectedMtime: options.expectedMtime })
+        }
+      } satisfies SerializedWriteFileResult;
+    }
+
     await fs.writeFile(filePath, value, "utf8");
     const stat = await fs.stat(filePath);
 
     return {
-      uri: fileUri(filePath),
-      name: path.basename(filePath),
-      value,
-      mtime: stat.mtimeMs
-    } satisfies SerializedTextFileContent;
+      kind: "saved",
+      content: {
+        uri: fileUri(filePath),
+        name: path.basename(filePath),
+        value,
+        mtime: stat.mtimeMs
+      }
+    } satisfies SerializedWriteFileResult;
   });
 
   ipcMain.handle(nativeFileIpcChannels.saveFileAs, async (event, defaultName: string, value: string) => {
@@ -264,6 +357,12 @@ function assertWritableFile(
   config: NativeWorkspaceConfig
 ): string {
   return assertReadableFile(uri, workspaceRoot, allowedFiles, config);
+}
+
+function hasSaveConflict(diskMtime: number, options: SerializedSaveFileOptions): boolean {
+  return !options.overwrite
+    && options.expectedMtime !== undefined
+    && diskMtime > options.expectedMtime + fileMtimeConflictToleranceMs;
 }
 
 function isFileAllowed(filePath: string, workspaceRoot: string | undefined, allowedFiles: ReadonlySet<string>): boolean {
