@@ -49,6 +49,7 @@ export interface NativeFileSystemHost {
   readonly isAvailable: boolean;
   readonly onDidChangeWorkspaceFiles?: Event<WorkspaceFileTree | undefined>;
   openWorkspace(): Promise<WorkspaceFileTree | undefined>;
+  openRecentWorkspace(uri: string): Promise<WorkspaceFileTree | undefined>;
   refreshWorkspace(): Promise<WorkspaceFileTree | undefined>;
   readFile(uri: string): Promise<TextFileContent>;
   writeFile(uri: string, value: string, options?: SaveFileOptions): Promise<TextFileContent>;
@@ -96,6 +97,7 @@ export interface NativeFileSystemBridge {
   readonly isAvailable: boolean;
   onDidChangeWorkspaceFiles?(listener: (workspace: SerializedWorkspaceFileTree | undefined) => void): () => void;
   openWorkspace(): Promise<SerializedWorkspaceFileTree | undefined>;
+  openRecentWorkspace(uri: string): Promise<SerializedWorkspaceFileTree | undefined>;
   refreshWorkspace(): Promise<SerializedWorkspaceFileTree | undefined>;
   readFile(uri: string): Promise<SerializedTextFileContent>;
   writeFile(uri: string, value: string, options?: SerializedSaveFileOptions): Promise<SerializedWriteFileResult>;
@@ -107,6 +109,7 @@ export interface IFileService {
   isAvailable(): boolean;
   getWorkspaceFiles(): WorkspaceFileTree | undefined;
   openWorkspace(): Promise<WorkspaceFileTree | undefined>;
+  openRecentWorkspace(uri: URIType): Promise<WorkspaceFileTree | undefined>;
   refreshWorkspace(): Promise<WorkspaceFileTree | undefined>;
   openFile(uri: URIType): Promise<TextFileContent>;
   saveFile(uri: URIType, value: string, options?: SaveFileOptions): Promise<TextFileContent>;
@@ -143,6 +146,16 @@ export class NativeFileService implements IFileService {
     }
 
     this.workspaceFiles = await this.host.openWorkspace();
+    this.emitter.fire(this.workspaceFiles);
+    return this.workspaceFiles;
+  }
+
+  async openRecentWorkspace(uri: URI): Promise<WorkspaceFileTree | undefined> {
+    if (!this.host?.isAvailable) {
+      return undefined;
+    }
+
+    this.workspaceFiles = await this.host.openRecentWorkspace(uri.toString());
     this.emitter.fire(this.workspaceFiles);
     return this.workspaceFiles;
   }
@@ -221,6 +234,10 @@ export function createNativeFileSystemHost(): NativeFileSystemHost | undefined {
     isAvailable: bridge.isAvailable,
     async openWorkspace() {
       const workspace = await bridge.openWorkspace();
+      return workspace ? reviveWorkspaceFileTree(workspace) : undefined;
+    },
+    async openRecentWorkspace(uri) {
+      const workspace = await bridge.openRecentWorkspace(uri);
       return workspace ? reviveWorkspaceFileTree(workspace) : undefined;
     },
     async refreshWorkspace() {

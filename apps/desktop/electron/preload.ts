@@ -11,6 +11,7 @@ contextBridge.exposeInMainWorld("typoraPlus", {
       return () => ipcRenderer.removeListener(nativeFileIpcChannels.workspaceChanged, wrappedListener);
     },
     openWorkspace: () => ipcRenderer.invoke(nativeFileIpcChannels.openWorkspace),
+    openRecentWorkspace: (uri: string) => ipcRenderer.invoke(nativeFileIpcChannels.openRecentWorkspace, uri),
     refreshWorkspace: () => ipcRenderer.invoke(nativeFileIpcChannels.refreshWorkspace),
     readFile: (uri: string) => ipcRenderer.invoke(nativeFileIpcChannels.readFile, uri),
     writeFile: (uri: string, value: string, options?: { readonly expectedMtime?: number; readonly overwrite?: boolean }) =>

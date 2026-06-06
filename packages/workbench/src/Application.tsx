@@ -316,6 +316,25 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
             onClose={() => setSideView(null)}
             onSelectLine={(line) => editorRef.current?.scrollToLine(line)}
             onOpenWorkspace={() => services.commandService.executeCommand("file.openWorkspace")}
+            onOpenRecentWorkspace={(recent) => {
+              void runWorkbenchAction(async () => {
+                const workspaceFiles = await services.fileService.openRecentWorkspace(recent.uri);
+
+                if (!workspaceFiles) {
+                  return;
+                }
+
+                services.workspaceService.setWorkspace(workspaceStateFromFiles(workspaceFiles));
+                services.recentService.addRecentWorkspace(workspaceFiles.root.uri, workspaceFiles.root.name);
+                setSideView("files");
+                setSaveConflict(undefined);
+
+                if (workspaceFiles.files[0]) {
+                  const opened = await services.textFileService.openFile(workspaceFiles.files[0].uri);
+                  services.recentService.addRecentFile(opened.uri, opened.name);
+                }
+              }, setOperationError, setSaveConflict);
+            }}
             onRefreshWorkspace={() => services.commandService.executeCommand("file.refreshWorkspace")}
             onOpenFile={(entry) => {
               void runWorkbenchAction(async () => {
@@ -494,6 +513,7 @@ function Sidebar({
   onClose,
   onSelectLine,
   onOpenWorkspace,
+  onOpenRecentWorkspace,
   onRefreshWorkspace,
   onOpenFile
 }: {
@@ -509,6 +529,7 @@ function Sidebar({
   readonly onClose: () => void;
   readonly onSelectLine: (line: number) => void;
   readonly onOpenWorkspace: () => void;
+  readonly onOpenRecentWorkspace: (recent: RecentResource) => void;
   readonly onRefreshWorkspace: () => void;
   readonly onOpenFile: (entry: FileTreeEntry) => void;
 }) {
@@ -527,6 +548,7 @@ function Sidebar({
           recents={recents}
           fileServiceAvailable={fileServiceAvailable}
           onOpenWorkspace={onOpenWorkspace}
+          onOpenRecentWorkspace={onOpenRecentWorkspace}
           onRefreshWorkspace={onRefreshWorkspace}
           onOpenFile={onOpenFile}
         />
@@ -550,6 +572,7 @@ function FilesPanel({
   recents,
   fileServiceAvailable,
   onOpenWorkspace,
+  onOpenRecentWorkspace,
   onRefreshWorkspace,
   onOpenFile
 }: {
@@ -558,6 +581,7 @@ function FilesPanel({
   readonly recents: readonly RecentResource[];
   readonly fileServiceAvailable: boolean;
   readonly onOpenWorkspace: () => void;
+  readonly onOpenRecentWorkspace: (recent: RecentResource) => void;
   readonly onRefreshWorkspace: () => void;
   readonly onOpenFile: (entry: FileTreeEntry) => void;
 }) {
@@ -611,7 +635,12 @@ function FilesPanel({
         />
       ) : null}
       {recentWorkspaces.length > 0 ? (
-        <RecentSection title="Recent workspaces" recents={recentWorkspaces} activeUri={workspace.rootUri?.toString()} />
+        <RecentSection
+          title="Recent workspaces"
+          recents={recentWorkspaces}
+          activeUri={workspace.rootUri?.toString()}
+          {...(fileServiceAvailable ? { onOpenWorkspace: onOpenRecentWorkspace } : {})}
+        />
       ) : null}
     </div>
   );
@@ -621,12 +650,14 @@ function RecentSection({
   title,
   recents,
   activeUri,
-  onOpenFile
+  onOpenFile,
+  onOpenWorkspace
 }: {
   readonly title: string;
   readonly recents: readonly RecentResource[];
   readonly activeUri: string | undefined;
   readonly onOpenFile?: (entry: FileTreeEntry) => void;
+  readonly onOpenWorkspace?: (recent: RecentResource) => void;
 }) {
   return (
     <section className="tp-recent-section">
@@ -640,18 +671,21 @@ function RecentSection({
             className={isActive ? "tp-file-row tp-file-row-active" : "tp-file-row"}
             key={`${recent.kind}-${recent.uri.toString()}`}
             type="button"
-            disabled={!isFile || !onOpenFile}
+            disabled={(isFile && !onOpenFile) || (!isFile && !onOpenWorkspace)}
             onClick={() => {
-              if (!isFile || !onOpenFile) {
+              if (isFile && onOpenFile) {
+                onOpenFile({
+                  uri: recent.uri,
+                  name: recent.name,
+                  relativePath: recent.name,
+                  kind: "file"
+                });
                 return;
               }
 
-              onOpenFile({
-                uri: recent.uri,
-                name: recent.name,
-                relativePath: recent.name,
-                kind: "file"
-              });
+              if (!isFile && onOpenWorkspace) {
+                onOpenWorkspace(recent);
+              }
             }}
           >
             {isFile ? <FileText size={16} /> : <Folder size={16} />}

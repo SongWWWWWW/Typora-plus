@@ -7,6 +7,7 @@ interface Window {
       readonly isAvailable: boolean;
       onDidChangeWorkspaceFiles(listener: (workspace: unknown) => void): () => void;
       openWorkspace(): Promise<unknown>;
+      openRecentWorkspace(uri: string): Promise<unknown>;
       refreshWorkspace(): Promise<unknown>;
       readFile(uri: string): Promise<unknown>;
       writeFile(uri: string, value: string, options?: { readonly expectedMtime?: number; readonly overwrite?: boolean }): Promise<unknown>;

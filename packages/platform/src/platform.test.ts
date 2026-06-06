@@ -89,6 +89,9 @@ describe("file tree", () => {
       async openWorkspace() {
         return workspaceFiles;
       },
+      async openRecentWorkspace() {
+        return workspaceFiles;
+      },
       async refreshWorkspace() {
         return workspaceFiles;
       },
@@ -113,6 +116,45 @@ describe("file tree", () => {
 
     expect(observed?.root.name).toBe("Notes");
     expect(service.getWorkspaceFiles()?.files.map((entry) => entry.name)).toEqual(["a.md"]);
+  });
+
+  it("opens recent workspaces through the native file host", async () => {
+    const workspaceFiles = createWorkspaceFileTree();
+    let requestedUri: string | undefined;
+    const host: NativeFileSystemHost = {
+      isAvailable: true,
+      async openWorkspace() {
+        return undefined;
+      },
+      async openRecentWorkspace(uri) {
+        requestedUri = uri;
+        return workspaceFiles;
+      },
+      async refreshWorkspace() {
+        return undefined;
+      },
+      async readFile() {
+        throw new Error("Not used");
+      },
+      async writeFile() {
+        throw new Error("Not used");
+      },
+      async saveFileAs() {
+        return undefined;
+      }
+    };
+    const service = new NativeFileService(host);
+    let observed: WorkspaceFileTree | undefined;
+
+    service.onDidChangeWorkspaceFiles((workspace) => {
+      observed = workspace;
+    });
+
+    const opened = await service.openRecentWorkspace(URI.file("C:/Notes"));
+
+    expect(requestedUri).toBe("file://C:/Notes");
+    expect(opened?.root.name).toBe("Notes");
+    expect(observed?.files.map((entry) => entry.name)).toEqual(["a.md"]);
   });
 });
 
@@ -141,6 +183,9 @@ describe("workspace text files", () => {
     const host: NativeFileSystemHost = {
       isAvailable: true,
       async openWorkspace() {
+        return undefined;
+      },
+      async openRecentWorkspace() {
         return undefined;
       },
       async refreshWorkspace() {
@@ -188,6 +233,9 @@ describe("workspace text files", () => {
     const host: NativeFileSystemHost = {
       isAvailable: true,
       async openWorkspace() {
+        return undefined;
+      },
+      async openRecentWorkspace() {
         return undefined;
       },
       async refreshWorkspace() {
@@ -284,6 +332,9 @@ function createMemoryHost() {
     files,
     isAvailable: true,
     async openWorkspace() {
+      return undefined;
+    },
+    async openRecentWorkspace() {
       return undefined;
     },
     async refreshWorkspace() {

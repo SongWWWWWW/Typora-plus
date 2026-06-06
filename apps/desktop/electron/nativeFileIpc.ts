@@ -1,10 +1,11 @@
 import { watch, type FSWatcher } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { BrowserWindow, dialog, ipcMain, type OpenDialogOptions, type SaveDialogOptions } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, type OpenDialogOptions, type SaveDialogOptions } from "electron";
 
 export const nativeFileIpcChannels = {
   openWorkspace: "typora-plus:workspace:open",
+  openRecentWorkspace: "typora-plus:workspace:openRecent",
   refreshWorkspace: "typora-plus:workspace:refresh",
   workspaceChanged: "typora-plus:workspace:changed",
   readFile: "typora-plus:file:read",
@@ -16,7 +17,9 @@ export const nativeFileIpcChannels = {
 export interface NativeWorkspaceConfig {
   readonly maxDepth: number;
   readonly maxFiles: number;
+  readonly maxTrustedWorkspaces: number;
   readonly defaultAssetFolder: string;
+  readonly trustedWorkspacesStorageFile: string;
   readonly markdownExtensions: readonly string[];
   readonly ignoredDirectories: readonly string[];
 }
@@ -71,6 +74,7 @@ export function registerNativeFileIpc(config: NativeWorkspaceConfig): void {
   let workspaceRoot: string | undefined;
   let workspaceWatcher: FSWatcher | undefined;
   let workspaceRefreshTimer: ReturnType<typeof setTimeout> | undefined;
+  let trustedWorkspaceRoots: readonly string[] | undefined;
   const allowedFiles = new Set<string>();
 
   const loadWorkspace = async () => {
@@ -85,6 +89,13 @@ export function registerNativeFileIpc(config: NativeWorkspaceConfig): void {
       allowedFiles.add(pathFromFileUri(file.uri));
     }
 
+    return workspace;
+  };
+
+  const openWorkspaceRoot = async (rootPath: string) => {
+    workspaceRoot = path.resolve(rootPath);
+    const workspace = await loadWorkspace();
+    startWorkspaceWatcher();
     return workspace;
   };
 
@@ -151,11 +162,33 @@ export function registerNativeFileIpc(config: NativeWorkspaceConfig): void {
       return undefined;
     }
 
-    workspaceRoot = path.resolve(result.filePaths[0]);
-    const workspace = await loadWorkspace();
-    startWorkspaceWatcher();
+    const selectedRoot = result.filePaths[0];
+    const workspace = await openWorkspaceRoot(selectedRoot);
+
+    if (workspace) {
+      await rememberTrustedWorkspaceRoot(selectedRoot, config, () => trustedWorkspaceRoots, (roots) => {
+        trustedWorkspaceRoots = roots;
+      });
+    }
 
     return workspace;
+  });
+
+  ipcMain.handle(nativeFileIpcChannels.openRecentWorkspace, async (_event, uri: string) => {
+    const requestedRoot = pathFromFileUri(uri);
+    const trustedRoots = await readTrustedWorkspaceRoots(config, () => trustedWorkspaceRoots, (roots) => {
+      trustedWorkspaceRoots = roots;
+    });
+
+    if (!trustedRoots.some((trustedRoot) => samePath(trustedRoot, requestedRoot))) {
+      throw new Error("Workspace is not trusted by Typora Plus");
+    }
+
+    if (!await isDirectory(requestedRoot)) {
+      throw new Error("Workspace no longer exists");
+    }
+
+    return openWorkspaceRoot(requestedRoot);
   });
 
   ipcMain.handle(nativeFileIpcChannels.refreshWorkspace, async () => {
@@ -249,6 +282,102 @@ export function registerNativeFileIpc(config: NativeWorkspaceConfig): void {
       } satisfies SerializedSavedAttachment;
     }
   );
+}
+
+async function rememberTrustedWorkspaceRoot(
+  rootPath: string,
+  config: NativeWorkspaceConfig,
+  readCache: () => readonly string[] | undefined,
+  writeCache: (roots: readonly string[]) => void
+): Promise<void> {
+  const root = path.resolve(rootPath);
+  const roots = await readTrustedWorkspaceRoots(config, readCache, writeCache);
+  const nextRoots = [
+    root,
+    ...roots.filter((trustedRoot) => !samePath(trustedRoot, root))
+  ].slice(0, config.maxTrustedWorkspaces);
+
+  writeCache(nextRoots);
+
+  try {
+    await writeTrustedWorkspaceRoots(config, nextRoots);
+  } catch {
+    // Persisting trust is best-effort; opening the chosen workspace should still succeed.
+  }
+}
+
+async function readTrustedWorkspaceRoots(
+  config: NativeWorkspaceConfig,
+  readCache: () => readonly string[] | undefined,
+  writeCache: (roots: readonly string[]) => void
+): Promise<readonly string[]> {
+  const cached = readCache();
+
+  if (cached) {
+    return cached;
+  }
+
+  try {
+    const rawValue = await fs.readFile(trustedWorkspaceStoragePath(config), "utf8");
+    const parsed = JSON.parse(rawValue) as SerializedTrustedWorkspaces;
+    const roots = normalizeTrustedWorkspaceRoots(parsed.roots, config.maxTrustedWorkspaces);
+    writeCache(roots);
+    return roots;
+  } catch {
+    writeCache([]);
+    return [];
+  }
+}
+
+async function writeTrustedWorkspaceRoots(
+  config: NativeWorkspaceConfig,
+  roots: readonly string[]
+): Promise<void> {
+  const storagePath = trustedWorkspaceStoragePath(config);
+  await fs.mkdir(path.dirname(storagePath), { recursive: true });
+  await fs.writeFile(storagePath, JSON.stringify({ version: 1, roots }, null, 2), "utf8");
+}
+
+interface SerializedTrustedWorkspaces {
+  readonly roots?: unknown;
+}
+
+function normalizeTrustedWorkspaceRoots(value: unknown, maxEntries: number): readonly string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  const roots: string[] = [];
+
+  for (const candidate of value) {
+    if (typeof candidate !== "string") {
+      continue;
+    }
+
+    const root = path.resolve(candidate);
+
+    if (!roots.some((trustedRoot) => samePath(trustedRoot, root))) {
+      roots.push(root);
+    }
+
+    if (roots.length >= maxEntries) {
+      break;
+    }
+  }
+
+  return roots;
+}
+
+function trustedWorkspaceStoragePath(config: NativeWorkspaceConfig): string {
+  return path.join(app.getPath("userData"), config.trustedWorkspacesStorageFile);
+}
+
+async function isDirectory(value: string): Promise<boolean> {
+  try {
+    return (await fs.stat(value)).isDirectory();
+  } catch {
+    return false;
+  }
 }
 
 async function buildWorkspaceFileTree(
@@ -363,6 +492,15 @@ function hasSaveConflict(diskMtime: number, options: SerializedSaveFileOptions):
   return !options.overwrite
     && options.expectedMtime !== undefined
     && diskMtime > options.expectedMtime + fileMtimeConflictToleranceMs;
+}
+
+function samePath(first: string, second: string): boolean {
+  return comparablePath(first) === comparablePath(second);
+}
+
+function comparablePath(value: string): string {
+  const resolved = path.resolve(value);
+  return process.platform === "win32" ? resolved.toLowerCase() : resolved;
 }
 
 function isFileAllowed(filePath: string, workspaceRoot: string | undefined, allowedFiles: ReadonlySet<string>): boolean {
