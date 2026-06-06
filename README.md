@@ -41,7 +41,7 @@ P2 main progress is implemented:
 - workspace tags sidebar backed by the workspace index service
 - workspace-backed image preview resource resolution
 - saved workspace files, including new save-as files after workspace catch-up, refresh their search, tag, and backlink index entries immediately after successful save
-- workspace index storage and query behavior sit behind a provider boundary, with an in-memory provider, persisted snapshot provider, and storage contract ready for a future SQLite provider
+- workspace index storage and query behavior sit behind a provider boundary, with an in-memory provider, workspace-scoped persisted snapshot provider, and storage contract ready for a future SQLite provider
 - platform-level keybinding service for command execution, with Workbench shortcut defaults, active shortcut labels, user-editable overrides, and conflict confirmation
 - persisted configuration service for appearance, editor, including auto-save delay, and workspace preferences, with platform-owned numeric constraints, stored-value clamping, Electron native storage, and browser fallback
 - workspace search and attachment settings are applied to platform services when preferences change

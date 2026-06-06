@@ -1696,4 +1696,34 @@ Review:
 Known limitations:
 
 - The snapshot cache is still browser/local storage backed in the renderer; the planned SQLite provider remains the durable desktop index backend.
-- Workspace identity is not yet part of the snapshot key, so opening a workspace still performs a normal scan that replaces the cached index.
+- Opening a workspace still performs a normal scan that replaces the cached index; SQLite remains the planned durable desktop index backend.
+
+## 2026-06-07 - P2 Workspace-Scoped Index Snapshots
+
+Completed:
+
+- Added snapshot scope support to `WorkspaceIndexProvider`.
+- Derived persisted index snapshot storage keys from the workspace root URI.
+- Updated `WorkspaceIndexService.indexWorkspace()` to set the provider scope before workspace scans.
+- Included optional snapshot scope metadata in the versioned snapshot payload.
+- Cleared in-memory provider state when switching to a scope with no stored snapshot, preventing stale results from a previous workspace.
+- Added platform coverage proving two workspace roots persist and restore separate index snapshots.
+
+Quality gate:
+
+- `npm run test -- --run packages/platform/src/platform.test.ts`: passed, 36 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 140 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+
+Review:
+
+- Workspace identity now belongs to the platform index provider boundary, not Workbench UI code.
+- Storage key derivation is centralized in `packages/platform/src/indexing.ts`, avoiding hard-coded workspace paths or UI-owned cache keys.
+- The snapshot cache remains a replaceable provider implementation detail; `IIndexService` consumers did not change.
+- The change directly resolves the previous stage limitation where all snapshot data shared one global storage key.
+
+Known limitations:
+
+- Snapshot persistence is still a renderer-side cache; the planned SQLite provider remains the durable backend for larger workspaces and richer incremental indexing.
