@@ -2727,3 +2727,36 @@ Known limitations:
 - External extension package loading is still not implemented.
 - Extension host transport and IPC are still not implemented.
 - Broker protocol messages for export providers and Markdown renderer providers remain future work.
+
+## 2026-06-07 - P2 Extension Host Export and Renderer Broker Messages
+
+Completed:
+
+- Added extension host protocol messages for export provider registration, export document requests, and exported document results.
+- Added extension host protocol messages for Markdown renderer provider registration, render requests, and render results.
+- Added bounded protocol validation for export formats, document URIs, document names, source/exported text, default file names, MIME types, asset counts, relative asset paths, image asset MIME types, base64 payloads, renderer ids, renderer metadata, renderer languages, priorities, source text, and rendered HTML.
+- Kept non-serializable export and renderer runtime functions out of protocol payloads, including `resolveImageSource`, provider functions, DOM objects, Node objects, and internal platform services.
+- Added tests for export provider registration, export document request/result serialization, export asset validation, Markdown renderer registration/render serialization, and renderer metadata/HTML bounds.
+
+Quality gate:
+
+- `npm run typecheck`: passed
+- `npx vitest run packages/platform/src/extensionHostProtocol.test.ts`: passed, 13 tests
+- `npm run verify`: passed, 270 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Browser smoke check: not run because this stage only changes platform protocol types and documentation.
+
+Review:
+
+- The broker protocol remains platform-only and does not depend on Workbench, Electron, DOM, Node, or dynamic code loading.
+- Export provider registration is represented as bounded metadata, while export execution is represented as document request/result data; provider functions and resource resolver functions are still not serialized.
+- Export asset payloads are constrained before any future IPC transport can write sibling export assets.
+- Markdown renderer output is still just bounded HTML data at the protocol layer; Workbench/editor sanitizer boundaries remain responsible for preview insertion.
+- No new dependency, storage path, visual token, extra documentation file, or direct DOM access by extension runtimes was introduced.
+
+Known limitations:
+
+- External extension package loading is still not implemented.
+- Extension host transport and IPC are still not implemented.
+- Out-of-process export providers will need a future resource-resolution broker if they must resolve workspace-relative images during export.
