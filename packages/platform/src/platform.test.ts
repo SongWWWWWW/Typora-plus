@@ -9,6 +9,7 @@ import {
   WorkspaceTextFileService,
   WorkspaceIndexService,
   KeybindingService,
+  PersistedWorkspaceIndexProvider,
   RecentService,
   NativeResourceService,
   flattenFileTree,
@@ -702,6 +703,94 @@ describe("workspace index", () => {
       }
     });
     expect(results.map((result) => result.relativePath)).toEqual(["provider.md"]);
+  });
+
+  it("persists indexed snapshots through injected provider storage", async () => {
+    const storage = createMemoryStorage();
+    const host = createMemoryHost([[
+      "file://C:/Notes/a.md",
+      "# Alpha\nShared topic #project\n[Beta](b.md)"
+    ]]);
+    const file = createFileEntry("C:/Notes/a.md", "a.md", "a.md");
+    const provider = new PersistedWorkspaceIndexProvider({
+      storage,
+      storageKey: "workspace-index",
+      maxSnapshotBytes: 10000
+    });
+    const service = new WorkspaceIndexService(new NativeFileService(host), {
+      maxResults: 10
+    }, provider);
+
+    await service.indexWorkspace(createWorkspaceFileTree([file]));
+
+    const restoredProvider = new PersistedWorkspaceIndexProvider({
+      storage,
+      storageKey: "workspace-index",
+      maxSnapshotBytes: 10000
+    });
+    const restoredService = new WorkspaceIndexService(new NativeFileService(createMemoryHost()), {
+      maxResults: 10
+    }, restoredProvider);
+
+    expect(restoredService.getStatus().state).toBe("ready");
+    expect(restoredService.query("shared").map((result) => result.relativePath)).toEqual(["a.md"]);
+    expect(restoredService.getTaggedResources("project").map((tag) => tag.relativePath)).toEqual(["a.md"]);
+    expect(restoredService.getMetadata().links.map((link) => link.target)).toEqual(["b.md"]);
+  });
+
+  it("does not let a canceled workspace scan write stale documents", async () => {
+    let resolveStaleRead: ((value: { readonly uri: URI; readonly name: string; readonly value: string }) => void) | undefined;
+    const staleRead = new Promise<{ readonly uri: URI; readonly name: string; readonly value: string }>((resolve) => {
+      resolveStaleRead = resolve;
+    });
+    const host: NativeFileSystemHost = {
+      isAvailable: true,
+      async openWorkspace() {
+        return undefined;
+      },
+      async openRecentWorkspace() {
+        return undefined;
+      },
+      async refreshWorkspace() {
+        return undefined;
+      },
+      async readFile(uri) {
+        if (uri.endsWith("stale.md")) {
+          return staleRead;
+        }
+
+        return {
+          uri: URI.parse(uri),
+          name: "fresh.md",
+          value: "fresh topic"
+        };
+      },
+      async writeFile() {
+        throw new Error("Not used");
+      },
+      async saveFileAs() {
+        return undefined;
+      }
+    };
+    const service = new WorkspaceIndexService(new NativeFileService(host), {
+      maxResults: 10
+    });
+    const staleScan = service.indexWorkspace(createWorkspaceFileTree([
+      createFileEntry("C:/Notes/stale.md", "stale.md", "stale.md")
+    ]));
+
+    await service.indexWorkspace(createWorkspaceFileTree([
+      createFileEntry("C:/Notes/fresh.md", "fresh.md", "fresh.md")
+    ]));
+    resolveStaleRead?.({
+      uri: URI.file("C:/Notes/stale.md"),
+      name: "stale.md",
+      value: "stale topic"
+    });
+    await staleScan;
+
+    expect(service.query("fresh").map((result) => result.relativePath)).toEqual(["fresh.md"]);
+    expect(service.query("stale")).toEqual([]);
   });
 
   it("collects headings, tags, and links as workspace metadata", async () => {

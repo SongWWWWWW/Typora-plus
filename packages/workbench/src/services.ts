@@ -16,11 +16,13 @@ import {
   NativeAttachmentService,
   NativeFileService,
   NativeResourceService,
+  PersistedWorkspaceIndexProvider,
   RecentService,
   ServiceCollection,
   WorkspaceIndexService,
   WorkspaceTextFileService,
   WorkspaceService,
+  createBrowserWorkspaceIndexSnapshotStorage,
   type IAttachmentService as AttachmentServiceContract,
   type IConfigurationService as ConfigurationServiceContract,
   type ICommandService as CommandServiceContract,
@@ -56,10 +58,13 @@ export function createWorkbenchServices(): WorkbenchServices {
     name: "Typora Plus"
   });
   const fileService = new NativeFileService();
+  const indexSnapshotStorage = createBrowserWorkspaceIndexSnapshotStorage();
   const indexService = new WorkspaceIndexService(fileService, {
     maxFileSizeBytes: configurationService.getValue().workspace.searchMaxFileSizeBytes,
     maxResults: configurationService.getValue().workspace.searchMaxResults
-  });
+  }, indexSnapshotStorage
+    ? new PersistedWorkspaceIndexProvider({ storage: indexSnapshotStorage })
+    : undefined);
   const keybindingService = new KeybindingService({
     primaryModifierLabel: readPrimaryModifierLabel()
   });

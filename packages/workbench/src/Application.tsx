@@ -150,7 +150,6 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
     const workspaceFiles = workspace.files;
 
     if (!workspaceFiles) {
-      services.indexService.clear();
       return;
     }
 

@@ -1,5 +1,5 @@
-import { Emitter, type Event, type URI as URIType } from "@typora-plus/base";
-import { defaultConfiguration } from "./configuration";
+import { Emitter, URI, type Event, type URI as URIType } from "@typora-plus/base";
+import { configurationBytesPerMegabyte, defaultConfiguration } from "./configuration";
 import type { FileTreeEntry, IFileService, WorkspaceFileTree } from "./files";
 import { createServiceIdentifier } from "./instantiation";
 
@@ -100,6 +100,8 @@ export interface IIndexService {
 export const IIndexService = createServiceIdentifier<IIndexService>("index");
 
 export interface WorkspaceIndexProvider {
+  beginBatch?(): void;
+  endBatch?(): void;
   clear(): void;
   getDocumentCount(): number;
   upsertDocument(document: WorkspaceIndexedDocument): void;
@@ -111,8 +113,42 @@ export interface WorkspaceIndexProvider {
   getBacklinks(uri: URIType): readonly WorkspaceIndexedLink[];
 }
 
+export const workspaceIndexProviderSnapshotVersion = 1;
+
+export interface WorkspaceIndexProviderSnapshot {
+  readonly version: typeof workspaceIndexProviderSnapshotVersion;
+  readonly documents: readonly WorkspaceIndexedDocumentSnapshot[];
+}
+
+export interface WorkspaceIndexedDocumentSnapshot {
+  readonly uri: string;
+  readonly name: string;
+  readonly relativePath: string;
+  readonly content: string;
+}
+
+export interface WorkspaceIndexSnapshotStorage {
+  read(key: string): string | undefined;
+  write(key: string, value: string): void;
+}
+
+export interface PersistedWorkspaceIndexProviderOptions {
+  readonly storage: WorkspaceIndexSnapshotStorage;
+  readonly storageKey?: string;
+  readonly maxSnapshotBytes?: number;
+}
+
+export const defaultWorkspaceIndexSnapshotProviderOptions = {
+  storageKey: "typora-plus.workspaceIndex.snapshot",
+  maxSnapshotBytes: 5 * configurationBytesPerMegabyte
+} as const;
+
 export class InMemoryWorkspaceIndexProvider implements WorkspaceIndexProvider {
-  private documents: WorkspaceIndexedDocument[] = [];
+  private documents: WorkspaceIndexedDocument[];
+
+  constructor(documents: readonly WorkspaceIndexedDocument[] = []) {
+    this.documents = [...documents];
+  }
 
   clear(): void {
     this.documents = [];
@@ -224,6 +260,97 @@ export class InMemoryWorkspaceIndexProvider implements WorkspaceIndexProvider {
       .flatMap((document) => document.metadata.links
         .filter((link) => linkResolvesToDocument(link, document, targetDocument))));
   }
+
+  toSnapshot(): WorkspaceIndexProviderSnapshot {
+    return createWorkspaceIndexProviderSnapshot(this.documents);
+  }
+
+  restoreSnapshot(snapshot: WorkspaceIndexProviderSnapshot): void {
+    this.documents = snapshot.documents.map((document) => indexDocument({
+      uri: URI.parse(document.uri),
+      name: document.name,
+      relativePath: document.relativePath,
+      kind: "file"
+    }, document.content));
+  }
+}
+
+export class PersistedWorkspaceIndexProvider extends InMemoryWorkspaceIndexProvider {
+  private readonly storage: WorkspaceIndexSnapshotStorage;
+  private readonly storageKey: string;
+  private readonly maxSnapshotBytes: number;
+  private batchDepth = 0;
+  private pendingPersist = false;
+
+  constructor(options: PersistedWorkspaceIndexProviderOptions) {
+    super();
+    this.storage = options.storage;
+    this.storageKey = options.storageKey ?? defaultWorkspaceIndexSnapshotProviderOptions.storageKey;
+    this.maxSnapshotBytes = options.maxSnapshotBytes ?? defaultWorkspaceIndexSnapshotProviderOptions.maxSnapshotBytes;
+    this.restorePersistedSnapshot();
+  }
+
+  beginBatch(): void {
+    this.batchDepth += 1;
+  }
+
+  endBatch(): void {
+    this.batchDepth = Math.max(0, this.batchDepth - 1);
+
+    if (this.batchDepth === 0 && this.pendingPersist) {
+      this.pendingPersist = false;
+      this.persistSnapshot();
+    }
+  }
+
+  override clear(): void {
+    super.clear();
+    this.queuePersist();
+  }
+
+  override upsertDocument(document: WorkspaceIndexedDocument): void {
+    super.upsertDocument(document);
+    this.queuePersist();
+  }
+
+  override removeDocument(uri: URIType): void {
+    super.removeDocument(uri);
+    this.queuePersist();
+  }
+
+  private restorePersistedSnapshot(): void {
+    const snapshot = readWorkspaceIndexProviderSnapshot(this.storage.read(this.storageKey));
+
+    if (!snapshot) {
+      return;
+    }
+
+    this.restoreSnapshot(snapshot);
+  }
+
+  private queuePersist(): void {
+    if (this.batchDepth > 0) {
+      this.pendingPersist = true;
+      return;
+    }
+
+    this.persistSnapshot();
+  }
+
+  private persistSnapshot(): void {
+    const value = JSON.stringify(this.toSnapshot());
+    const persistedValue = value.length <= this.maxSnapshotBytes ? value : JSON.stringify(createEmptyIndexSnapshot());
+
+    try {
+      this.storage.write(this.storageKey, persistedValue);
+    } catch {
+      try {
+        this.storage.write(this.storageKey, JSON.stringify(createEmptyIndexSnapshot()));
+      } catch {
+        // Storage backends such as localStorage can reject writes when quota is exhausted.
+      }
+    }
+  }
 }
 
 export class WorkspaceIndexService implements IIndexService {
@@ -245,7 +372,10 @@ export class WorkspaceIndexService implements IIndexService {
       ...options
     };
     this.now = this.options.now ?? (() => Date.now());
-    this.status = this.createStatus("idle", 0, 0, 0);
+    const restoredDocumentCount = this.provider.getDocumentCount();
+    this.status = restoredDocumentCount > 0
+      ? this.createStatus("ready", restoredDocumentCount, restoredDocumentCount, 0)
+      : this.createStatus("idle", 0, 0, 0);
   }
 
   getStatus(): WorkspaceIndexStatus {
@@ -263,50 +393,64 @@ export class WorkspaceIndexService implements IIndexService {
   async indexWorkspace(workspace: WorkspaceFileTree): Promise<void> {
     const generation = this.generation + 1;
     this.generation = generation;
-    this.provider.clear();
+    this.provider.beginBatch?.();
 
-    const files = workspace.files.filter((file) => file.kind === "file");
-    let indexedFiles = 0;
-    let skippedFiles = 0;
+    try {
+      this.provider.clear();
 
-    this.updateStatus("indexing", indexedFiles, files.length, skippedFiles);
+      const files = workspace.files.filter((file) => file.kind === "file");
+      let indexedFiles = 0;
+      let skippedFiles = 0;
 
-    for (const [index, file] of files.entries()) {
+      this.updateStatus("indexing", indexedFiles, files.length, skippedFiles);
+
+      for (const [index, file] of files.entries()) {
+        if (generation !== this.generation) {
+          return;
+        }
+
+        if (shouldSkipFile(file, this.options.maxFileSizeBytes)) {
+          skippedFiles += 1;
+          this.updateStatus("indexing", indexedFiles, files.length, skippedFiles);
+          continue;
+        }
+
+        try {
+          const content = await this.fileService.openFile(file.uri);
+
+          if (generation !== this.generation) {
+            return;
+          }
+
+          if (content.value.length > this.options.maxFileSizeBytes) {
+            skippedFiles += 1;
+          } else {
+            this.provider.upsertDocument(indexDocument(file, content.value));
+            indexedFiles += 1;
+          }
+        } catch {
+          if (generation !== this.generation) {
+            return;
+          }
+
+          skippedFiles += 1;
+        }
+
+        this.updateStatus("indexing", indexedFiles, files.length, skippedFiles);
+
+        if ((index + 1) % this.options.yieldEveryFiles === 0) {
+          await yieldToHost();
+        }
+      }
+
       if (generation !== this.generation) {
         return;
       }
 
-      if (shouldSkipFile(file, this.options.maxFileSizeBytes)) {
-        skippedFiles += 1;
-        this.updateStatus("indexing", indexedFiles, files.length, skippedFiles);
-        continue;
-      }
-
-      try {
-        const content = await this.fileService.openFile(file.uri);
-
-        if (content.value.length > this.options.maxFileSizeBytes) {
-          skippedFiles += 1;
-        } else {
-          this.provider.upsertDocument(indexDocument(file, content.value));
-          indexedFiles += 1;
-        }
-      } catch {
-        skippedFiles += 1;
-      }
-
-      this.updateStatus("indexing", indexedFiles, files.length, skippedFiles);
-
-      if ((index + 1) % this.options.yieldEveryFiles === 0) {
-        await yieldToHost();
-      }
+      this.updateStatus("ready", indexedFiles, files.length, skippedFiles);
+    } finally {
+      this.provider.endBatch?.();
     }
-
-    if (generation !== this.generation) {
-      return;
-    }
-
-    this.updateStatus("ready", indexedFiles, files.length, skippedFiles);
   }
 
   async indexFile(file: FileTreeEntry, value?: string): Promise<void> {
@@ -744,6 +888,85 @@ function createPreview(value: string, maxLength: number): string {
   }
 
   return `${trimmed.slice(0, Math.max(0, maxLength - 3))}...`;
+}
+
+function createWorkspaceIndexProviderSnapshot(
+  documents: readonly WorkspaceIndexedDocument[]
+): WorkspaceIndexProviderSnapshot {
+  return {
+    version: workspaceIndexProviderSnapshotVersion,
+    documents: documents.map((document) => ({
+      uri: document.uri.toString(),
+      name: document.name,
+      relativePath: document.relativePath,
+      content: document.lines.map((line) => line.value).join("\n")
+    }))
+  };
+}
+
+function createEmptyIndexSnapshot(): WorkspaceIndexProviderSnapshot {
+  return {
+    version: workspaceIndexProviderSnapshotVersion,
+    documents: []
+  };
+}
+
+function readWorkspaceIndexProviderSnapshot(value: string | undefined): WorkspaceIndexProviderSnapshot | undefined {
+  if (!value) {
+    return undefined;
+  }
+
+  try {
+    return sanitizeWorkspaceIndexProviderSnapshot(JSON.parse(value));
+  } catch {
+    return undefined;
+  }
+}
+
+function sanitizeWorkspaceIndexProviderSnapshot(value: unknown): WorkspaceIndexProviderSnapshot | undefined {
+  if (!isRecord(value) || value.version !== workspaceIndexProviderSnapshotVersion || !Array.isArray(value.documents)) {
+    return undefined;
+  }
+
+  return {
+    version: workspaceIndexProviderSnapshotVersion,
+    documents: value.documents.filter(isWorkspaceIndexedDocumentSnapshot)
+  };
+}
+
+function isWorkspaceIndexedDocumentSnapshot(value: unknown): value is WorkspaceIndexedDocumentSnapshot {
+  return isRecord(value) &&
+    isNonEmptyString(value.uri) &&
+    isNonEmptyString(value.name) &&
+    typeof value.relativePath === "string" &&
+    typeof value.content === "string";
+}
+
+export function createBrowserWorkspaceIndexSnapshotStorage(): WorkspaceIndexSnapshotStorage | undefined {
+  if (!hasLocalStorage()) {
+    return undefined;
+  }
+
+  return {
+    read(key) {
+      return window.localStorage.getItem(key) ?? undefined;
+    },
+    write(key, value) {
+      window.localStorage.setItem(key, value);
+    }
+  };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+function hasLocalStorage(): boolean {
+  return typeof window !== "undefined" && "localStorage" in window;
 }
 
 async function yieldToHost(): Promise<void> {
