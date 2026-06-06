@@ -1,4 +1,4 @@
-import { marked } from "marked";
+import { Renderer, marked } from "marked";
 
 export interface MarkdownExportInput {
   readonly name: string;
@@ -25,7 +25,8 @@ export function createMarkdownHtmlExport(input: MarkdownExportInput): MarkdownHt
   const body = marked.parse(input.value, {
     async: false,
     breaks: false,
-    gfm: true
+    gfm: true,
+    renderer: createSafeHtmlExportRenderer()
   });
 
   return {
@@ -34,6 +35,34 @@ export function createMarkdownHtmlExport(input: MarkdownExportInput): MarkdownHt
     mimeType: "text/html;charset=utf-8",
     value: createHtmlDocument(title, body)
   };
+}
+
+function createSafeHtmlExportRenderer(): Renderer<string, string> {
+  const renderer = new Renderer<string, string>();
+
+  renderer.html = ({ text }) => escapeHtml(text);
+  renderer.link = ({ href, title, tokens }) => {
+    const label = renderer.parser.parseInline(tokens);
+
+    if (!isSafeExportLinkTarget(href)) {
+      return label;
+    }
+
+    const titleAttribute = title ? ` title="${escapeHtmlAttribute(title)}"` : "";
+    return `<a href="${escapeHtmlAttribute(href)}"${titleAttribute}>${label}</a>`;
+  };
+  renderer.image = ({ href, title, text, tokens }) => {
+    const altText = tokens ? renderer.parser.parseInline(tokens, renderer.parser.textRenderer) : text;
+
+    if (!isSafeExportImageSource(href)) {
+      return escapeHtml(altText);
+    }
+
+    const titleAttribute = title ? ` title="${escapeHtmlAttribute(title)}"` : "";
+    return `<img src="${escapeHtmlAttribute(href)}" alt="${escapeHtmlAttribute(altText)}"${titleAttribute}>`;
+  };
+
+  return renderer;
 }
 
 function createHtmlDocument(title: string, body: string): string {
@@ -82,10 +111,51 @@ function normalizeExportTitle(name: string): string {
   return name.trim().replace(/\.[^.]+$/, "") || "Untitled";
 }
 
+function isSafeExportLinkTarget(value: string): boolean {
+  const target = value.trim();
+
+  if (!target) {
+    return false;
+  }
+
+  if (target.startsWith("#") || target.startsWith("/") || target.startsWith("./") || target.startsWith("../")) {
+    return true;
+  }
+
+  if (!/^[a-z][a-z0-9+.-]*:/i.test(target)) {
+    return true;
+  }
+
+  return /^(https?|mailto):/i.test(target);
+}
+
+function isSafeExportImageSource(value: string): boolean {
+  const target = value.trim();
+
+  if (!target) {
+    return false;
+  }
+
+  if (target.startsWith("/") || target.startsWith("./") || target.startsWith("../")) {
+    return true;
+  }
+
+  if (!/^[a-z][a-z0-9+.-]*:/i.test(target)) {
+    return true;
+  }
+
+  return /^(data:image\/|blob:|file:)/i.test(target);
+}
+
 function escapeHtml(value: string): string {
   return value
     .replaceAll("&", "&amp;")
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;")
-    .replaceAll("\"", "&quot;");
+    .replaceAll("\"", "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+function escapeHtmlAttribute(value: string): string {
+  return escapeHtml(value);
 }
