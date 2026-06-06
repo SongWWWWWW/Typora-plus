@@ -2598,3 +2598,37 @@ Known limitations:
 - Status aliases are intentionally small and built-in; future user-defined badge vocabularies would need a settings or extension contribution schema.
 - The renderer preview cache is still in-memory only; previews are recomputed after app reload.
 - Mermaid remains isolated behind lazy loading, but its lazy chunk still needs future lower-end machine measurement.
+
+## 2026-06-07 - P2 Configurable Status Badge Vocabulary
+
+Completed:
+
+- Added `markdown.statusBadges` to persisted platform configuration.
+- Moved the built-in Status badge vocabulary into validated configuration defaults instead of a Workbench-only alias table.
+- Added bounded validation for badge keys, labels, tones, aliases, duplicate keys, duplicate aliases, and empty override lists.
+- Injected the current configuration into the Workbench built-in extension activation handler so the Status provider reads the latest badge vocabulary at render time.
+- Rebuilt Markdown renderer adapters when Markdown configuration changes, naturally dropping preview cache entries that depended on older renderer preferences.
+- Added tests for persisted status badge configuration, invalid stored-value fallback, empty vocabulary overrides, dynamic provider reads, and Workbench activation wiring.
+
+Quality gate:
+
+- `npm run typecheck`: passed
+- `npx vitest run packages/platform/src/platform.test.ts packages/workbench/src/statusMarkdownRenderer.test.ts packages/workbench/src/workbenchExtensionActivation.test.ts`: passed, 103 tests
+- `npm run verify`: passed, 253 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Browser smoke check at `http://127.0.0.1:5173/`: Workbench and editor loaded, no horizontal overflow, and no console errors.
+
+Review:
+
+- Status remains a built-in extension-style Markdown renderer, not editor-specific syntax.
+- The editor still receives only generic inline renderer callbacks and owns sanitization before preview insertion.
+- Status badge defaults and bounds now live in the platform configuration boundary, so the renderer provider does not carry a private hard-coded vocabulary.
+- Configuration changes are read through service injection and do not expose storage, DOM, or platform internals to the renderer provider.
+- No new dependency, storage path, visual token, extra documentation file, or direct DOM access by renderer providers was introduced.
+
+Known limitations:
+
+- The Settings UI does not yet expose a dedicated Status badge vocabulary editor; the validated configuration path is ready for a future compact settings surface or extension contribution schema.
+- The renderer preview cache is still in-memory only; previews are recomputed after app reload.
+- Mermaid remains isolated behind lazy loading, but its lazy chunk still needs future lower-end machine measurement.
