@@ -1318,4 +1318,36 @@ Review:
 Known limitations:
 
 - The keybinding editor records single-stroke shortcuts only; multi-step chord shortcuts remain future work.
-- Conflict handling currently moves an existing user override with the same key to the newly recorded command. A richer conflict preview can be added later without changing the service contract.
+
+## 2026-06-06 - P2 Keybinding Conflict Confirmation
+
+Completed:
+
+- Added `IKeybindingService` queries for active command ownership and arbitrary keybinding label formatting.
+- Changed shortcut labels to report only bindings that are currently effective for a command, so shadowed defaults render as unassigned.
+- Added inline conflict confirmation in Settings when a recorded shortcut is already active for another command.
+- Added Replace and Cancel actions for keybinding conflicts before any override is persisted.
+- Kept override writes behind `IConfigurationService`; Settings still does not mutate keybinding service state directly.
+- Added platform coverage for active binding ownership, arbitrary label formatting, and shadowed default labels.
+
+Quality gate:
+
+- `npm run test -- --run packages/platform/src/platform.test.ts packages/workbench/src/keybindingSettings.test.ts`: passed, 34 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 120 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed
+- Browser regression: recording Settings as `Ctrl+P` showed `Ctrl+P is used by Quick Open`, Cancel left both shortcuts unchanged, Replace assigned Settings and rendered Quick Open as Unassigned, Reset restored Settings to `Ctrl+,` and Quick Open to `Ctrl+P`.
+- Mobile 390px viewport check: keybinding rows had no horizontal overflow and no console errors were reported.
+
+Review:
+
+- Conflict detection is service-backed, not string-label based, so it follows the same priority rules used for actual dispatch.
+- Command Palette and Settings now consume active shortcut labels, preventing UI from advertising shortcuts that will not dispatch to that command.
+- The conflict confirmation remains inline within Settings and reuses existing compact controls.
+- The browser verification reset the temporary `Ctrl+P` Settings override before finishing.
+
+Known limitations:
+
+- The keybinding editor still records single-stroke shortcuts only; multi-step chord shortcuts remain future work.
+- Conflict confirmation is scoped to the recorded active shortcut; a broader keybinding search/filter view is not implemented yet.
