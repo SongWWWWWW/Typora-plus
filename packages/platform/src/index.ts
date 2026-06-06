@@ -12,4 +12,5 @@ export * from "./menus";
 export * from "./recents";
 export * from "./resources";
 export * from "./textFile";
+export * from "./themes";
 export * from "./workspace";

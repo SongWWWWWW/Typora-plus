@@ -24,6 +24,7 @@ import {
   mergeConfiguration,
   configurationNumberConstraints,
   ServiceCollection,
+  ThemeService,
   type FileTreeEntry,
   type ExtensionActivationHandler,
   type NativeFileSystemHost,
@@ -499,6 +500,84 @@ describe("menus", () => {
   });
 });
 
+describe("themes", () => {
+  it("registers normalized themes and removes them through disposables", () => {
+    const service = new ThemeService();
+    const disposable = service.registerTheme({
+      id: " notes.focus ",
+      label: " Focus Light ",
+      colorScheme: "light",
+      tokens: {
+        "--tp-color-canvas": " #fffdf8 ",
+        "--tp-color-text": "#20221f"
+      }
+    });
+
+    expect(service.getThemes()).toEqual([
+      {
+        id: "notes.focus",
+        label: "Focus Light",
+        colorScheme: "light",
+        tokens: {
+          "--tp-color-canvas": "#fffdf8",
+          "--tp-color-text": "#20221f"
+        }
+      }
+    ]);
+
+    const theme = service.getTheme("notes.focus");
+
+    expect(theme?.tokens["--tp-color-text"]).toBe("#20221f");
+
+    if (theme) {
+      (theme.tokens as Record<string, string>)["--tp-color-text"] = "#000";
+    }
+
+    expect(service.getTheme("notes.focus")?.tokens["--tp-color-text"]).toBe("#20221f");
+
+    disposable.dispose();
+
+    expect(service.getThemes()).toEqual([]);
+    expect(service.getTheme("notes.focus")).toBeUndefined();
+  });
+
+  it("rejects duplicate themes and unsafe token values", () => {
+    const service = new ThemeService();
+
+    service.registerTheme({
+      id: "notes.focus",
+      label: "Focus",
+      tokens: {
+        "--tp-color-canvas": "#fff"
+      }
+    });
+
+    expect(() => service.registerTheme({
+      id: "notes.focus",
+      label: "Focus Duplicate",
+      tokens: {
+        "--tp-color-canvas": "#fff"
+      }
+    })).toThrow("Theme already registered");
+
+    expect(() => service.registerTheme({
+      id: "notes.invalidToken",
+      label: "Invalid Token",
+      tokens: {
+        "color": "#fff"
+      }
+    })).toThrow("must be a Typora Plus CSS token");
+
+    expect(() => service.registerTheme({
+      id: "notes.invalidValue",
+      label: "Invalid Value",
+      tokens: {
+        "--tp-color-canvas": "#fff; color: red"
+      }
+    })).toThrow("unsupported CSS syntax");
+  });
+});
+
 describe("extensions", () => {
   it("registers manifest command metadata, menus, and keybindings", async () => {
     const { commandService, extensionService, keybindingService, menuService } = createExtensionServices();
@@ -546,6 +625,96 @@ describe("extensions", () => {
     expect(menuService.getMenuItems("titlebar.primary").map((item) => item.command)).toEqual(["notes.insertDate"]);
     expect(keybindingService.resolve({ key: "d", ctrlKey: true })).toBe("notes.insertDate");
     await expect(commandService.executeCommand("notes.insertDate")).rejects.toThrow("No extension activation handler registered");
+  });
+
+  it("registers manifest theme contributions", () => {
+    const { extensionService, themeService } = createExtensionServices();
+    const disposable = extensionService.registerExtension({
+      id: "notes.theme",
+      contributes: {
+        themes: [
+          {
+            id: "notes.theme.focus",
+            label: "Focus Theme",
+            colorScheme: "dark",
+            tokens: {
+              "--tp-color-canvas": "#111315",
+              "--tp-color-text": "#f2f4ef"
+            }
+          }
+        ]
+      }
+    });
+
+    expect(themeService.getThemes()).toEqual([
+      {
+        id: "notes.theme.focus",
+        label: "Focus Theme",
+        colorScheme: "dark",
+        tokens: {
+          "--tp-color-canvas": "#111315",
+          "--tp-color-text": "#f2f4ef"
+        }
+      }
+    ]);
+
+    disposable.dispose();
+
+    expect(themeService.getThemes()).toEqual([]);
+  });
+
+  it("rolls back extension contributions when theme registration fails", () => {
+    const { commandService, extensionService, themeService } = createExtensionServices();
+
+    expect(() => extensionService.registerExtension({
+      id: "notes.invalidTheme",
+      contributes: {
+        commands: [
+          {
+            command: "notes.invalidTheme.command",
+            title: "Invalid Theme Command"
+          }
+        ],
+        themes: [
+          {
+            id: "notes.invalidTheme.theme",
+            label: "Invalid Theme",
+            tokens: {
+              "color": "#fff"
+            }
+          }
+        ]
+      }
+    })).toThrow("must be a Typora Plus CSS token");
+
+    expect(commandService.getCommands()).toEqual([]);
+    expect(themeService.getThemes()).toEqual([]);
+  });
+
+  it("requires a theme service for manifest theme contributions", () => {
+    const serviceCollection = new ServiceCollection();
+    const commandService = new CommandService(serviceCollection);
+    const contextKeyService = new ContextKeyService();
+    const extensionService = new ExtensionService(
+      commandService,
+      new MenuService(contextKeyService),
+      new KeybindingService()
+    );
+
+    expect(() => extensionService.registerExtension({
+      id: "notes.noThemeService",
+      contributes: {
+        themes: [
+          {
+            id: "notes.noThemeService.theme",
+            label: "Missing Theme Service",
+            tokens: {
+              "--tp-color-canvas": "#fff"
+            }
+          }
+        ]
+      }
+    })).toThrow("No extension theme service registered");
   });
 
   it("indexes explicit and command-derived activation events", async () => {
@@ -2307,6 +2476,7 @@ function createExtensionServices(activationHandler?: ExtensionActivationHandler)
   const exportService = new ExportService({
     browserSave: () => true
   });
+  const themeService = new ThemeService();
   extensionService = new ExtensionService(
     commandService,
     menuService,
@@ -2314,6 +2484,7 @@ function createExtensionServices(activationHandler?: ExtensionActivationHandler)
     {
       contextKeyService,
       exportService,
+      themeService,
       ...(activationHandler ? { activationHandler } : {})
     }
   );
@@ -2324,7 +2495,8 @@ function createExtensionServices(activationHandler?: ExtensionActivationHandler)
     extensionService,
     exportService,
     keybindingService,
-    menuService
+    menuService,
+    themeService
   };
 }
 

@@ -10,6 +10,7 @@ import type { ExportProvider, IExportService } from "./exports";
 import { createServiceIdentifier } from "./instantiation";
 import type { IKeybindingService, Keybinding } from "./keybindings";
 import type { IMenuService, MenuIconId, MenuId, MenuItemToggle } from "./menus";
+import type { IThemeService, ThemeColorScheme, ThemeContribution } from "./themes";
 
 export interface ExtensionManifest {
   readonly id: string;
@@ -22,6 +23,7 @@ export interface ExtensionContributions {
   readonly commands?: readonly ExtensionCommandContribution[];
   readonly menus?: readonly ExtensionMenuContribution[];
   readonly keybindings?: readonly ExtensionKeybindingContribution[];
+  readonly themes?: readonly ExtensionThemeContribution[];
 }
 
 export interface ExtensionCommandContribution {
@@ -49,6 +51,13 @@ export interface ExtensionKeybindingContribution {
   readonly weight?: number;
 }
 
+export interface ExtensionThemeContribution {
+  readonly id: string;
+  readonly label: string;
+  readonly colorScheme?: ThemeColorScheme;
+  readonly tokens: Readonly<Record<string, string>>;
+}
+
 export interface RegisteredExtension {
   readonly id: string;
   readonly displayName?: string;
@@ -70,6 +79,7 @@ export interface ExtensionServiceOptions {
   readonly activationHandler?: ExtensionActivationHandler;
   readonly contextKeyService?: IContextKeyService;
   readonly exportService?: IExportService;
+  readonly themeService?: IThemeService;
 }
 
 export interface IExtensionService {
@@ -163,6 +173,18 @@ export class ExtensionService extends Disposable implements IExtensionService {
 
       for (const rule of normalizedManifest.contributes.keybindings) {
         disposables.add(this.keybindingService.registerKeybinding(rule));
+      }
+
+      if (normalizedManifest.contributes.themes.length > 0) {
+        const themeService = this.options.themeService;
+
+        if (!themeService) {
+          throw new Error(`No extension theme service registered: ${normalizedManifest.id}`);
+        }
+
+        for (const theme of normalizedManifest.contributes.themes) {
+          disposables.add(themeService.registerTheme(theme));
+        }
       }
 
       const record: RegisteredExtensionRecord = {
@@ -305,6 +327,7 @@ interface NormalizedExtensionManifest {
     readonly commands: readonly ExtensionCommandContribution[];
     readonly menus: readonly NormalizedExtensionMenuContribution[];
     readonly keybindings: readonly ExtensionKeybindingContribution[];
+    readonly themes: readonly ThemeContribution[];
   };
 }
 
@@ -327,6 +350,8 @@ function normalizeExtensionManifest(manifest: ExtensionManifest): NormalizedExte
     .map((contribution, index) => normalizeMenuContribution(contribution, id, index));
   const keybindings = readOptionalArray(contributes.keybindings, `Keybinding contributions for ${id}`)
     .map((contribution, index) => normalizeKeybindingContribution(contribution, id, index));
+  const themes = readOptionalArray(contributes.themes, `Theme contributions for ${id}`)
+    .map((contribution, index) => normalizeThemeContribution(contribution, id, index));
   const activationEvents = uniqueValues([
     ...readOptionalArray(record.activationEvents, `Activation events for ${id}`)
       .map((activationEvent, index) => normalizeActivationEvent(activationEvent, id, index)),
@@ -335,6 +360,7 @@ function normalizeExtensionManifest(manifest: ExtensionManifest): NormalizedExte
 
   assertUnique(commands.map((command) => command.command), `Command contribution ids for ${id}`);
   assertUnique(menus.map((menu) => menu.id), `Menu contribution ids for ${id}`);
+  assertUnique(themes.map((theme) => theme.id), `Theme contribution ids for ${id}`);
 
   return {
     id,
@@ -343,7 +369,8 @@ function normalizeExtensionManifest(manifest: ExtensionManifest): NormalizedExte
     contributes: {
       commands,
       menus,
-      keybindings
+      keybindings,
+      themes
     }
   };
 }
@@ -415,6 +442,37 @@ function normalizeKeybindingContribution(
     keybinding,
     ...(weight !== undefined ? { weight } : {})
   };
+}
+
+function normalizeThemeContribution(
+  contribution: unknown,
+  extensionId: string,
+  index: number
+): ThemeContribution {
+  const record = expectRecord(contribution, `Theme contribution ${index + 1} for ${extensionId}`);
+  const id = readRequiredString(record.id, `Theme contribution id for ${extensionId}`);
+  const label = readRequiredString(record.label, `Theme contribution label for ${id}`);
+  const colorScheme = normalizeOptionalThemeColorScheme(record.colorScheme, id);
+  const tokens = expectRecord(record.tokens, `Theme contribution tokens for ${id}`) as Record<string, string>;
+
+  return {
+    id,
+    label,
+    ...(colorScheme ? { colorScheme } : {}),
+    tokens
+  };
+}
+
+function normalizeOptionalThemeColorScheme(value: unknown, themeId: string): ThemeColorScheme | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (value !== "light" && value !== "dark") {
+    throw new Error(`Theme color scheme for ${themeId} must be light or dark`);
+  }
+
+  return value;
 }
 
 function normalizeKeybinding(value: unknown, command: string): Keybinding {

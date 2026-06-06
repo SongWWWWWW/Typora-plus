@@ -18,6 +18,7 @@ import {
   IRecentService,
   IResourceService,
   ITextFileService,
+  IThemeService,
   IWorkspaceService,
   KeybindingService,
   MenuService,
@@ -27,6 +28,7 @@ import {
   PersistedWorkspaceIndexProvider,
   RecentService,
   ServiceCollection,
+  ThemeService,
   WorkspaceIndexService,
   WorkspaceTextFileService,
   WorkspaceService,
@@ -44,6 +46,7 @@ import {
   type IRecentService as RecentServiceContract,
   type IResourceService as ResourceServiceContract,
   type ITextFileService as TextFileServiceContract,
+  type IThemeService as ThemeServiceContract,
   type IWorkspaceService as WorkspaceServiceContract
 } from "@typora-plus/platform";
 import { defaultWorkbenchExtensionManifest } from "./workbenchContributions";
@@ -63,6 +66,7 @@ export interface WorkbenchServices {
   readonly recentService: RecentServiceContract;
   readonly resourceService: ResourceServiceContract;
   readonly textFileService: TextFileServiceContract;
+  readonly themeService: ThemeServiceContract;
   readonly workspaceService: WorkspaceServiceContract;
 }
 
@@ -77,6 +81,7 @@ export function createWorkbenchServices(): WorkbenchServices {
   const resourceService = new NativeResourceService();
   const exportService = new ExportService({ resourceService });
   const contextKeyService = new ContextKeyService();
+  const themeService = new ThemeService();
   const indexSnapshotStorage = createDefaultWorkspaceIndexSnapshotStorage();
   const indexService = new WorkspaceIndexService(fileService, {
     maxFileSizeBytes: configurationService.getValue().workspace.searchMaxFileSizeBytes,
@@ -108,6 +113,7 @@ export function createWorkbenchServices(): WorkbenchServices {
   serviceCollection.set(IMenuService, menuService);
   serviceCollection.set(IRecentService, recentService);
   serviceCollection.set(IResourceService, resourceService);
+  serviceCollection.set(IThemeService, themeService);
   serviceCollection.set(IWorkspaceService, workspaceService);
   serviceCollection.set(ITextFileService, textFileService);
 
@@ -120,7 +126,8 @@ export function createWorkbenchServices(): WorkbenchServices {
   serviceCollection.set(ICommandService, commandService);
   extensionService = new ExtensionService(commandService, menuService, keybindingService, {
     contextKeyService,
-    exportService
+    exportService,
+    themeService
   });
   serviceCollection.set(IExtensionService, extensionService);
   exportService.registerProvider(markdownHtmlExportProvider);
@@ -145,6 +152,7 @@ export function createWorkbenchServices(): WorkbenchServices {
     recentService,
     resourceService,
     textFileService,
+    themeService,
     workspaceService
   };
 }
