@@ -719,6 +719,108 @@ describe("extensions", () => {
     expect(services.commandService.getCommands()).toEqual([]);
   });
 
+  it("lets extension context keys drive contributed menu visibility", async () => {
+    const services = createExtensionServices((request) => {
+      request.context.contextKeys.setValue("notes.context.enabled", true);
+      expect(request.context.contextKeys.getValue("notes.context.enabled")).toBe(true);
+      request.context.commands.registerCommand("notes.context.disable", () => {
+        request.context.contextKeys.setValue("notes.context.enabled", undefined);
+      });
+    });
+
+    services.extensionService.registerExtension({
+      id: "notes.context",
+      activationEvents: ["onStartupFinished"],
+      contributes: {
+        commands: [
+          {
+            command: "notes.context.disable",
+            title: "Disable Context"
+          }
+        ],
+        menus: [
+          {
+            id: "activitybar.notes.context",
+            menu: "activitybar.primary",
+            command: "notes.context.disable",
+            when: "notes.context.enabled"
+          }
+        ]
+      }
+    });
+
+    expect(services.menuService.getMenuItems("activitybar.primary")).toEqual([]);
+
+    await expect(services.extensionService.activateByEvent("onStartupFinished")).resolves.toHaveLength(1);
+
+    expect(services.contextKeyService.getValue("notes.context.enabled")).toBe(true);
+    expect(services.menuService.getMenuItems("activitybar.primary").map((item) => item.command)).toEqual(["notes.context.disable"]);
+
+    await services.commandService.executeCommand("notes.context.disable");
+
+    expect(services.contextKeyService.getValue("notes.context.enabled")).toBeUndefined();
+    expect(services.menuService.getMenuItems("activitybar.primary")).toEqual([]);
+  });
+
+  it("clears extension-owned context keys when unregistering extensions", async () => {
+    const services = createExtensionServices((request) => {
+      request.context.contextKeys.setValue("notes.cleanup.enabled", true);
+    });
+
+    const disposable = services.extensionService.registerExtension({
+      id: "notes.cleanup",
+      activationEvents: ["onStartupFinished"],
+      contributes: {
+        menus: [
+          {
+            id: "activitybar.notes.cleanup",
+            menu: "activitybar.primary",
+            command: "notes.cleanup",
+            when: "notes.cleanup.enabled"
+          }
+        ]
+      }
+    });
+
+    await services.extensionService.activateByEvent("onStartupFinished");
+    expect(services.contextKeyService.getValue("notes.cleanup.enabled")).toBe(true);
+
+    disposable.dispose();
+
+    expect(services.contextKeyService.getValue("notes.cleanup.enabled")).toBeUndefined();
+    expect(services.menuService.getMenuItems("activitybar.primary")).toEqual([]);
+  });
+
+  it("clears extension-owned context keys when activation fails", async () => {
+    const services = createExtensionServices((request) => {
+      request.context.contextKeys.setValue("notes.failedContext.enabled", true);
+      throw new Error("Activation failed");
+    });
+
+    services.extensionService.registerExtension({
+      id: "notes.failedContext",
+      activationEvents: ["onStartupFinished"]
+    });
+
+    await expect(services.extensionService.activateByEvent("onStartupFinished")).rejects.toThrow("Activation failed");
+    expect(services.contextKeyService.getValue("notes.failedContext.enabled")).toBeUndefined();
+  });
+
+  it("keeps extension context keys inside the extension namespace", async () => {
+    const services = createExtensionServices((request) => {
+      request.context.contextKeys.setValue("workspace.open", true);
+    });
+
+    services.extensionService.registerExtension({
+      id: "notes.namespace",
+      activationEvents: ["onStartupFinished"]
+    });
+
+    await expect(services.extensionService.activateByEvent("onStartupFinished"))
+      .rejects.toThrow("Extension context key must start with");
+    expect(services.contextKeyService.getValue("workspace.open")).toBeUndefined();
+  });
+
   it("rejects matching activation events when no activation handler is registered", async () => {
     const { extensionService } = createExtensionServices();
 
@@ -2104,7 +2206,10 @@ function createExtensionServices(activationHandler?: ExtensionActivationHandler)
     commandService,
     menuService,
     keybindingService,
-    activationHandler ? { activationHandler } : {}
+    {
+      contextKeyService,
+      ...(activationHandler ? { activationHandler } : {})
+    }
   );
 
   return {

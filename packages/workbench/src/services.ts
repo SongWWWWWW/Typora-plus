@@ -118,7 +118,7 @@ export function createWorkbenchServices(): WorkbenchServices {
     }
   });
   serviceCollection.set(ICommandService, commandService);
-  extensionService = new ExtensionService(commandService, menuService, keybindingService);
+  extensionService = new ExtensionService(commandService, menuService, keybindingService, { contextKeyService });
   serviceCollection.set(IExtensionService, extensionService);
   exportService.registerProvider(markdownHtmlExportProvider);
   contextKeyService.setValue("fileSystem.available", fileService.isAvailable());

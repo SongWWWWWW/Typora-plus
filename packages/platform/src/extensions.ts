@@ -1,6 +1,11 @@
 import { Disposable, DisposableStore, toDisposable, type IDisposable } from "@typora-plus/base";
 import type { CommandMetadata, ICommandService } from "./commands";
-import { parseContextKeyExpression, type ContextKeyExpression } from "./contextKeys";
+import {
+  parseContextKeyExpression,
+  type ContextKeyExpression,
+  type ContextKeyValue,
+  type IContextKeyService
+} from "./contextKeys";
 import { createServiceIdentifier } from "./instantiation";
 import type { IKeybindingService, Keybinding } from "./keybindings";
 import type { IMenuService, MenuIconId, MenuId, MenuItemToggle } from "./menus";
@@ -62,6 +67,7 @@ export type ExtensionActivationHandler = (request: ExtensionActivationRequest) =
 
 export interface ExtensionServiceOptions {
   readonly activationHandler?: ExtensionActivationHandler;
+  readonly contextKeyService?: IContextKeyService;
 }
 
 export interface IExtensionService {
@@ -74,6 +80,7 @@ export interface ExtensionContext {
   readonly extension: RegisteredExtension;
   readonly subscriptions: ExtensionSubscriptionStore;
   readonly commands: ExtensionCommandApi;
+  readonly contextKeys: ExtensionContextKeyApi;
 }
 
 export interface ExtensionSubscriptionStore {
@@ -84,6 +91,11 @@ export interface ExtensionCommandApi {
   registerCommand(command: string, handler: ExtensionCommandHandler, metadata?: ExtensionRuntimeCommandMetadata): IDisposable;
   executeCommand<T = unknown>(command: string, ...args: unknown[]): Promise<T>;
   getCommands(): readonly CommandMetadata[];
+}
+
+export interface ExtensionContextKeyApi {
+  setValue(key: string, value: ContextKeyValue | undefined): void;
+  getValue(key: string): ContextKeyValue | undefined;
 }
 
 export type ExtensionCommandHandler = (...args: unknown[]) => unknown;
@@ -149,6 +161,7 @@ export class ExtensionService extends Disposable implements IExtensionService {
         manifest: normalizedManifest,
         disposables,
         runtimeDisposables: new DisposableStore(),
+        runtimeContextKeys: new Set<string>(),
         activationState: "inactive"
       };
       this.extensions.set(normalizedManifest.id, record);
@@ -194,14 +207,14 @@ export class ExtensionService extends Disposable implements IExtensionService {
         return activationHandler({
           activationEvent: normalizedActivationEvent,
           extension: registeredExtension,
-          context: createExtensionContext(record, registeredExtension, this.commandService)
+          context: createExtensionContext(record, registeredExtension, this.commandService, this.options.contextKeyService)
         });
       }).then(() => {
         record.activationState = "activated";
         delete record.activationPromise;
       }).catch((error: unknown) => {
         record.activationState = "failed";
-        record.runtimeDisposables.clear();
+        clearRuntimeContributions(record, this.options.contextKeyService);
         delete record.activationPromise;
         throw error;
       });
@@ -233,6 +246,7 @@ export class ExtensionService extends Disposable implements IExtensionService {
     }
 
     this.extensions.delete(id);
+    clearRuntimeContextKeys(currentRecord, this.options.contextKeyService);
     currentRecord.runtimeDisposables.dispose();
     currentRecord.disposables.dispose();
   }
@@ -264,6 +278,7 @@ interface RegisteredExtensionRecord {
   readonly manifest: NormalizedExtensionManifest;
   readonly disposables: DisposableStore;
   readonly runtimeDisposables: DisposableStore;
+  readonly runtimeContextKeys: Set<string>;
   activationState: ExtensionActivationState;
   activationPromise?: Promise<void>;
 }
@@ -541,7 +556,8 @@ function toRegisteredExtension(record: RegisteredExtensionRecord): RegisteredExt
 function createExtensionContext(
   record: RegisteredExtensionRecord,
   extension: RegisteredExtension,
-  commandService: ICommandService
+  commandService: ICommandService,
+  contextKeyService: IContextKeyService | undefined
 ): ExtensionContext {
   return {
     extension,
@@ -562,6 +578,30 @@ function createExtensionContext(
       },
       executeCommand: (command, ...args) => commandService.executeCommand(command, ...args),
       getCommands: () => commandService.getCommands()
+    },
+    contextKeys: {
+      setValue(key, value) {
+        if (!contextKeyService) {
+          throw new Error(`No extension context key service registered: ${record.manifest.id}`);
+        }
+
+        const normalizedKey = normalizeExtensionContextKey(record.manifest.id, key);
+        contextKeyService.setValue(normalizedKey, value);
+
+        if (value === undefined) {
+          record.runtimeContextKeys.delete(normalizedKey);
+          return;
+        }
+
+        record.runtimeContextKeys.add(normalizedKey);
+      },
+      getValue(key) {
+        if (!contextKeyService) {
+          return undefined;
+        }
+
+        return contextKeyService.getValue(normalizeExtensionContextKey(record.manifest.id, key));
+      }
     }
   };
 }
@@ -585,4 +625,43 @@ function resolveRuntimeCommandMetadata(
     title,
     ...(category ? { category } : {})
   };
+}
+
+function clearRuntimeContributions(
+  record: RegisteredExtensionRecord,
+  contextKeyService: IContextKeyService | undefined
+): void {
+  record.runtimeDisposables.clear();
+  clearRuntimeContextKeys(record, contextKeyService);
+}
+
+function clearRuntimeContextKeys(
+  record: RegisteredExtensionRecord,
+  contextKeyService: IContextKeyService | undefined
+): void {
+  if (!contextKeyService) {
+    record.runtimeContextKeys.clear();
+    return;
+  }
+
+  for (const key of record.runtimeContextKeys) {
+    contextKeyService.setValue(key, undefined);
+  }
+
+  record.runtimeContextKeys.clear();
+}
+
+function normalizeExtensionContextKey(extensionId: string, key: string): string {
+  const normalizedKey = readRequiredString(key, `Runtime context key for ${extensionId}`);
+  const prefix = `${extensionId}.`;
+
+  if (!normalizedKey.startsWith(prefix) || normalizedKey.length === prefix.length) {
+    throw new Error(`Extension context key must start with "${prefix}": ${normalizedKey}`);
+  }
+
+  if (!/^[A-Za-z_][A-Za-z0-9_.:-]*$/.test(normalizedKey)) {
+    throw new Error(`Extension context key is not valid in when clauses: ${normalizedKey}`);
+  }
+
+  return normalizedKey;
 }
