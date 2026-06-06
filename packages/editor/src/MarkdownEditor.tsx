@@ -16,6 +16,12 @@ import {
 import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
 import { livePreviewExtension, type MarkdownEditorConfiguration } from "./livePreview";
 
+export interface PastedEditorImage {
+  readonly name: string;
+  readonly mimeType: string;
+  readonly base64: string;
+}
+
 export interface MarkdownEditorHandle {
   focus(): void;
   scrollToLine(line: number): void;
@@ -25,20 +31,26 @@ export interface MarkdownEditorProps {
   readonly value: string;
   readonly configuration: MarkdownEditorConfiguration;
   readonly onChange: (value: string) => void;
+  readonly onPasteImage?: ((image: PastedEditorImage) => Promise<string | undefined>) | undefined;
 }
 
 const editorPlaceholder = " ";
 
 export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorProps>(
-  ({ value, configuration, onChange }, ref) => {
+  ({ value, configuration, onChange, onPasteImage }, ref) => {
     const containerRef = useRef<HTMLDivElement | null>(null);
     const viewRef = useRef<EditorView | null>(null);
     const onChangeRef = useRef(onChange);
+    const onPasteImageRef = useRef(onPasteImage);
     const previewCompartmentRef = useRef(new Compartment());
 
     useEffect(() => {
       onChangeRef.current = onChange;
     }, [onChange]);
+
+    useEffect(() => {
+      onPasteImageRef.current = onPasteImage;
+    }, [onPasteImage]);
 
     useImperativeHandle(ref, () => ({
       focus() {
@@ -77,6 +89,7 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
         doc: value,
         extensions: [
           ...baseEditorExtensions(),
+          imagePasteExtension(() => onPasteImageRef.current),
           previewCompartmentRef.current.of(livePreviewExtension(configuration)),
           updateListener
         ]
@@ -143,4 +156,73 @@ function baseEditorExtensions(): Extension[] {
     EditorView.lineWrapping,
     keymap.of([...defaultKeymap, ...historyKeymap, ...searchKeymap])
   ];
+}
+
+function imagePasteExtension(
+  resolvePasteImageHandler: () => ((image: PastedEditorImage) => Promise<string | undefined>) | undefined
+): Extension {
+  return EditorView.domEventHandlers({
+    paste(event, view) {
+      const onPasteImage = resolvePasteImageHandler();
+
+      if (!onPasteImage) {
+        return false;
+      }
+
+      const file = firstImageFile(event.clipboardData?.files);
+
+      if (!file) {
+        return false;
+      }
+
+      event.preventDefault();
+      void insertPastedImage(view, file, onPasteImage);
+      return true;
+    }
+  });
+}
+
+async function insertPastedImage(
+  view: EditorView,
+  file: File,
+  onPasteImage: (image: PastedEditorImage) => Promise<string | undefined> | undefined
+): Promise<void> {
+  const markdown = await onPasteImage({
+    name: file.name || "image",
+    mimeType: file.type || "image/png",
+    base64: await fileToBase64(file)
+  });
+
+  if (!markdown) {
+    return;
+  }
+
+  view.dispatch(view.state.replaceSelection(markdown));
+  view.focus();
+}
+
+function firstImageFile(files: FileList | undefined): File | undefined {
+  if (!files) {
+    return undefined;
+  }
+
+  for (const file of Array.from(files)) {
+    if (file.type.startsWith("image/")) {
+      return file;
+    }
+  }
+
+  return undefined;
+}
+
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.addEventListener("load", () => {
+      const result = String(reader.result ?? "");
+      resolve(result.includes(",") ? result.split(",").at(1) ?? "" : result);
+    });
+    reader.addEventListener("error", () => reject(reader.error ?? new Error("Failed to read pasted image")));
+    reader.readAsDataURL(file);
+  });
 }

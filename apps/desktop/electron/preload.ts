@@ -9,5 +9,10 @@ contextBridge.exposeInMainWorld("typoraPlus", {
     readFile: (uri: string) => ipcRenderer.invoke(nativeFileIpcChannels.readFile, uri),
     writeFile: (uri: string, value: string) => ipcRenderer.invoke(nativeFileIpcChannels.writeFile, uri, value),
     saveFileAs: (defaultName: string, value: string) => ipcRenderer.invoke(nativeFileIpcChannels.saveFileAs, defaultName, value)
+  },
+  attachments: {
+    isAvailable: true,
+    saveImage: (noteUri: string, image: { readonly name: string; readonly mimeType: string; readonly base64: string }, assetFolder: string) =>
+      ipcRenderer.invoke(nativeFileIpcChannels.saveAttachment, noteUri, image, assetFolder)
   }
 });

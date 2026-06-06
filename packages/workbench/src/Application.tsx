@@ -272,6 +272,12 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
             value={model.value}
             configuration={editorConfiguration}
             onChange={(value) => services.textFileService.updateContent(value)}
+            onPasteImage={services.attachmentService.isAvailable()
+              ? async (image) => {
+                const saved = await services.attachmentService.saveImage(model.uri, image);
+                return saved?.markdown;
+              }
+              : undefined}
           />
         </section>
       </div>

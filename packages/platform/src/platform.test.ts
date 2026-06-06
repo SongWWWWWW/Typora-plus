@@ -4,6 +4,7 @@ import {
   CommandService,
   ConfigurationService,
   NativeFileService,
+  NativeAttachmentService,
   WorkspaceTextFileService,
   flattenFileTree,
   mergeConfiguration,
@@ -94,6 +95,30 @@ describe("workspace text files", () => {
 
     expect(saved.dirty).toBe(false);
     expect(host.files.get("file://C:/Notes/a.md")).toBe("# Updated");
+  });
+});
+
+describe("attachments", () => {
+  it("saves images through the native bridge", async () => {
+    const service = new NativeAttachmentService("assets", {
+      isAvailable: true,
+      async saveImage(noteUri, image, assetFolder) {
+        return {
+          uri: "file://C:/Notes/assets/a/image.png",
+          relativePath: `${assetFolder}/a/${image.name}`,
+          markdown: `![image](${assetFolder}/a/${image.name})`
+        };
+      }
+    });
+
+    const saved = await service.saveImage(URI.file("C:/Notes/a.md"), {
+      name: "image.png",
+      mimeType: "image/png",
+      base64: "AA=="
+    });
+
+    expect(saved?.uri.toString()).toBe("file://C:/Notes/assets/a/image.png");
+    expect(saved?.markdown).toBe("![image](assets/a/image.png)");
   });
 });
 

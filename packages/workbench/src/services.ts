@@ -2,15 +2,18 @@ import { createWelcomeDocument } from "@typora-plus/markdown";
 import {
   CommandService,
   ConfigurationService,
+  IAttachmentService,
   IConfigurationService,
   ICommandService,
   IFileService,
   ITextFileService,
   IWorkspaceService,
+  NativeAttachmentService,
   NativeFileService,
   ServiceCollection,
   WorkspaceTextFileService,
   WorkspaceService,
+  type IAttachmentService as AttachmentServiceContract,
   type IConfigurationService as ConfigurationServiceContract,
   type ICommandService as CommandServiceContract,
   type IFileService as FileServiceContract,
@@ -21,6 +24,7 @@ import {
 export interface WorkbenchServices {
   readonly serviceCollection: ServiceCollection;
   readonly commandService: CommandServiceContract;
+  readonly attachmentService: AttachmentServiceContract;
   readonly configurationService: ConfigurationServiceContract;
   readonly fileService: FileServiceContract;
   readonly textFileService: TextFileServiceContract;
@@ -35,12 +39,16 @@ export function createWorkbenchServices(): WorkbenchServices {
     name: "Typora Plus"
   });
   const fileService = new NativeFileService();
+  const attachmentService = new NativeAttachmentService(
+    configurationService.getValue().workspace.defaultAssetFolder
+  );
   const textFileService = new WorkspaceTextFileService(fileService, {
     storageKey: "typora-plus.default-draft",
     defaultName: "Untitled.md",
     defaultContent: createWelcomeDocument()
   });
 
+  serviceCollection.set(IAttachmentService, attachmentService);
   serviceCollection.set(IConfigurationService, configurationService);
   serviceCollection.set(IFileService, fileService);
   serviceCollection.set(IWorkspaceService, workspaceService);
@@ -52,6 +60,7 @@ export function createWorkbenchServices(): WorkbenchServices {
   return {
     serviceCollection,
     commandService,
+    attachmentService,
     configurationService,
     fileService,
     textFileService,

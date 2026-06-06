@@ -1,3 +1,4 @@
+export * from "./attachments";
 export * from "./commands";
 export * from "./configuration";
 export * from "./files";

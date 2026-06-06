@@ -6,12 +6,14 @@ export const nativeFileIpcChannels = {
   openWorkspace: "typora-plus:workspace:open",
   readFile: "typora-plus:file:read",
   writeFile: "typora-plus:file:write",
-  saveFileAs: "typora-plus:file:saveAs"
+  saveFileAs: "typora-plus:file:saveAs",
+  saveAttachment: "typora-plus:attachment:save"
 } as const;
 
 export interface NativeWorkspaceConfig {
   readonly maxDepth: number;
   readonly maxFiles: number;
+  readonly defaultAssetFolder: string;
   readonly markdownExtensions: readonly string[];
   readonly ignoredDirectories: readonly string[];
 }
@@ -36,6 +38,12 @@ interface SerializedTextFileContent {
   readonly name: string;
   readonly value: string;
   readonly mtime?: number;
+}
+
+interface SerializedSavedAttachment {
+  readonly uri: string;
+  readonly relativePath: string;
+  readonly markdown: string;
 }
 
 export function registerNativeFileIpc(config: NativeWorkspaceConfig): void {
@@ -116,6 +124,22 @@ export function registerNativeFileIpc(config: NativeWorkspaceConfig): void {
       mtime: stat.mtimeMs
     } satisfies SerializedTextFileContent;
   });
+
+  ipcMain.handle(
+    nativeFileIpcChannels.saveAttachment,
+    async (_event, noteUri: string, image: { readonly name: string; readonly mimeType: string; readonly base64: string }, assetFolder: string) => {
+      const notePath = assertWritableFile(noteUri, workspaceRoot, allowedFiles, config);
+      const attachmentPath = await createAttachmentPath(notePath, workspaceRoot, image, assetFolder || config.defaultAssetFolder);
+      await fs.writeFile(attachmentPath, Buffer.from(image.base64, "base64"));
+
+      const relativePath = normalizePath(path.relative(path.dirname(notePath), attachmentPath));
+      return {
+        uri: fileUri(attachmentPath),
+        relativePath,
+        markdown: `![${markdownAltText(image.name)}](${encodeMarkdownPath(relativePath)})`
+      } satisfies SerializedSavedAttachment;
+    }
+  );
 }
 
 async function buildWorkspaceFileTree(
@@ -242,6 +266,92 @@ function isFileAllowed(filePath: string, workspaceRoot: string | undefined, allo
 function assertMarkdownFile(filePath: string, config: NativeWorkspaceConfig): void {
   if (!isMarkdownFile(filePath, config)) {
     throw new Error("Only Markdown files can be opened or saved by Typora Plus");
+  }
+}
+
+async function createAttachmentPath(
+  notePath: string,
+  workspaceRoot: string | undefined,
+  image: { readonly name: string; readonly mimeType: string },
+  assetFolder: string
+): Promise<string> {
+  const noteDirectory = path.dirname(notePath);
+  const noteName = sanitizeFileSegment(path.basename(notePath, path.extname(notePath)));
+  const root = workspaceRoot && isFileAllowed(notePath, workspaceRoot, new Set([notePath]))
+    ? workspaceRoot
+    : noteDirectory;
+  const attachmentDirectory = path.join(root, sanitizeFileSegment(assetFolder), noteName);
+  await fs.mkdir(attachmentDirectory, { recursive: true });
+
+  const extension = extensionFromImage(image);
+  const baseName = `image-${timestampSegment(new Date())}`;
+  let candidate = path.join(attachmentDirectory, `${baseName}${extension}`);
+  let counter = 2;
+
+  while (await exists(candidate)) {
+    candidate = path.join(attachmentDirectory, `${baseName}-${counter}${extension}`);
+    counter += 1;
+  }
+
+  return candidate;
+}
+
+function extensionFromImage(image: { readonly name: string; readonly mimeType: string }): string {
+  const extension = path.extname(image.name).toLowerCase();
+
+  if (extension) {
+    return extension;
+  }
+
+  switch (image.mimeType) {
+    case "image/jpeg":
+      return ".jpg";
+    case "image/webp":
+      return ".webp";
+    case "image/gif":
+      return ".gif";
+    case "image/svg+xml":
+      return ".svg";
+    default:
+      return ".png";
+  }
+}
+
+function timestampSegment(date: Date): string {
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return [
+    date.getFullYear(),
+    pad(date.getMonth() + 1),
+    pad(date.getDate()),
+    "-",
+    pad(date.getHours()),
+    pad(date.getMinutes()),
+    pad(date.getSeconds())
+  ].join("");
+}
+
+function sanitizeFileSegment(value: string): string {
+  return value
+    .trim()
+    .replace(/[<>:"/\\|?*\u0000-\u001F]+/g, "-")
+    .replace(/^\.+$/g, "-")
+    .slice(0, 80) || "attachment";
+}
+
+function markdownAltText(value: string): string {
+  return path.basename(value, path.extname(value)).replace(/[!\[\]\n\r]/g, " ").trim() || "image";
+}
+
+function encodeMarkdownPath(value: string): string {
+  return value.split("/").map((part) => encodeURIComponent(part)).join("/");
+}
+
+async function exists(filePath: string): Promise<boolean> {
+  try {
+    await fs.access(filePath);
+    return true;
+  } catch {
+    return false;
   }
 }
 

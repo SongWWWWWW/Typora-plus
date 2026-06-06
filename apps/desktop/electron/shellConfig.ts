@@ -11,6 +11,7 @@ export const desktopShellConfig = {
   workspace: {
     maxDepth: 8,
     maxFiles: 5000,
+    defaultAssetFolder: "assets",
     markdownExtensions: [".md", ".markdown", ".mdown"],
     ignoredDirectories: [".git", ".typora-plus", "node_modules", "dist", "dist-electron"]
   }
