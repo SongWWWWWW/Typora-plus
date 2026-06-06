@@ -612,7 +612,13 @@ function buildDecorations(
           ? []
           : findInactiveMarkdownInlineMathRanges(line.text, lineIsActive);
         const inlineDecorations = inlineMathRanges.map((inlineMath) => ({
-          decoration: Decoration.replace({ widget: new MarkdownInlineMathWidget(inlineMath) }),
+          decoration: Decoration.replace({
+            widget: new MarkdownInlineMathWidget(
+              inlineMath,
+              line.from + inlineMath.from,
+              line.from + inlineMath.to
+            )
+          }),
           from: line.from + inlineMath.from,
           to: line.from + inlineMath.to
         }));
@@ -2256,23 +2262,42 @@ class MarkdownMathBlockWidget extends WidgetType {
 }
 
 class MarkdownInlineMathWidget extends WidgetType {
-  constructor(private readonly math: MarkdownInlineMathRange) {
+  constructor(
+    private readonly math: MarkdownInlineMathRange,
+    private readonly sourceFrom: number,
+    private readonly sourceTo: number
+  ) {
     super();
   }
 
   override eq(widget: WidgetType): boolean {
-    return widget instanceof MarkdownInlineMathWidget && widget.math.expression === this.math.expression;
+    return widget instanceof MarkdownInlineMathWidget &&
+      widget.math.expression === this.math.expression &&
+      widget.sourceFrom === this.sourceFrom &&
+      widget.sourceTo === this.sourceTo;
   }
 
-  override toDOM(): HTMLElement {
+  override toDOM(view: EditorView): HTMLElement {
     const renderResult = renderMarkdownMathExpression(this.math.expression, false);
     const inline = document.createElement("span");
     inline.className = `tp-editor-inline-math-preview tp-editor-inline-math-preview-${renderResult.status}`;
     inline.setAttribute("aria-label", renderResult.status === "error" ? "Invalid inline math" : "Inline math preview");
+    inline.dataset.inlineMathSource = "true";
+    inline.title = renderResult.status === "error"
+      ? `Invalid TeX: ${renderResult.error ?? ""}`
+      : "Edit inline math";
+    inline.addEventListener("mousedown", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+    });
+    inline.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      focusMarkdownInlineMathSource(view, this.sourceFrom, this.sourceTo);
+    });
 
     if (renderResult.status !== "valid") {
       inline.textContent = renderResult.status === "empty" ? "" : renderResult.source;
-      inline.title = renderResult.error ? `Invalid TeX: ${renderResult.error}` : "";
       inline.classList.add("tp-editor-inline-math-preview-error");
       return inline;
     }
@@ -2280,6 +2305,29 @@ class MarkdownInlineMathWidget extends WidgetType {
     inline.innerHTML = renderResult.html ?? "";
     return inline;
   }
+
+  override ignoreEvent(event: Event): boolean {
+    return isInlineMathSourceNavigationEvent(event);
+  }
+}
+
+function focusMarkdownInlineMathSource(view: EditorView, sourceFrom: number, sourceTo: number): void {
+  if (sourceFrom < 0 || sourceTo > view.state.doc.length || sourceFrom >= sourceTo) {
+    return;
+  }
+
+  const expressionFrom = sourceTo - sourceFrom > 2 ? sourceFrom + 1 : sourceFrom;
+  const expressionTo = sourceTo - sourceFrom > 2 ? sourceTo - 1 : sourceTo;
+
+  view.dispatch({
+    selection: { anchor: expressionFrom, head: expressionTo },
+    scrollIntoView: true
+  });
+  view.focus();
+}
+
+function isInlineMathSourceNavigationEvent(event: Event): boolean {
+  return event.target instanceof Element && Boolean(event.target.closest("[data-inline-math-source='true']"));
 }
 
 function readMathPreviewLabel(status: MarkdownMathRenderStatus): string {
@@ -2894,7 +2942,8 @@ function markdownEditorTheme(configuration: MarkdownEditorConfiguration): Extens
       padding: "0 3px",
       borderRadius: "4px",
       backgroundColor: "var(--tp-color-math-inline)",
-      color: "var(--tp-color-text)"
+      color: "var(--tp-color-text)",
+      cursor: "text"
     },
     ".tp-editor-inline-math-preview math": {
       maxWidth: "100%"

@@ -380,6 +380,13 @@ describe("findInactiveMarkdownInlineMathRanges", () => {
     ]);
   });
 
+  it("keeps repeated inline math source ranges distinct", () => {
+    expect(findInactiveMarkdownInlineMathRanges("$x$ and $x$", false)).toEqual([
+      { expression: "x", from: 0, to: 3 },
+      { expression: "x", from: 8, to: 11 }
+    ]);
+  });
+
   it("keeps inline math source visible on the active line", () => {
     expect(findInactiveMarkdownInlineMathRanges("A $x+y$ note", true)).toEqual([]);
   });
