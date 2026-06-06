@@ -736,6 +736,55 @@ button {
   padding: 16px;
 }
 
+.tp-settings-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+  min-width: 0;
+}
+
+.tp-settings-search {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) 26px;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  min-width: 0;
+  padding: 0 7px;
+  border: 1px solid var(--tp-color-border);
+  border-radius: var(--tp-radius-control);
+  background: var(--tp-color-canvas);
+  color: var(--tp-color-text-muted);
+}
+
+.tp-settings-search input {
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--tp-color-text);
+}
+
+.tp-settings-search button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--tp-color-text-muted);
+  cursor: pointer;
+}
+
+.tp-settings-search button:hover {
+  background: var(--tp-color-surface-muted);
+  color: var(--tp-color-text);
+}
+
 .tp-settings-nav {
   display: flex;
   flex-direction: column;
@@ -1140,6 +1189,10 @@ button {
     grid-template-columns: minmax(0, 1fr);
     gap: 12px;
     padding: 14px;
+  }
+
+  .tp-settings-sidebar {
+    gap: 8px;
   }
 
   .tp-settings-nav {

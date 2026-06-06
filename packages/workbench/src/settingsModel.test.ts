@@ -2,9 +2,11 @@ import { describe, expect, it } from "vitest";
 import {
   bytesToMegabytes,
   clampSettingNumber,
+  createSettingsSearchResult,
   megabytesToBytes,
   normalizeAssetFolderInput,
   settingSectionAnchorId,
+  settingsEntries,
   settingsSections,
   settingsNumberConstraints
 } from "./settingsModel";
@@ -29,6 +31,35 @@ describe("settings model", () => {
       "tp-settings-section-keybindings"
     ]);
     expect(new Set(anchors).size).toBe(anchors.length);
+  });
+
+  it("returns every settings entry for an empty settings search", () => {
+    const result = createSettingsSearchResult("   ");
+
+    expect(result.query).toBe("");
+    expect(result.visibleSections).toEqual(settingsSections.map((section) => section.id));
+    expect(result.visibleEntries).toEqual(settingsEntries.map((entry) => entry.id));
+  });
+
+  it("matches complete sections and individual settings entries", () => {
+    expect(createSettingsSearchResult("workspace").visibleEntries).toEqual([
+      "workspace.defaultAssetFolder",
+      "workspace.searchMaxFileSize",
+      "workspace.searchMaxResults"
+    ]);
+    expect(createSettingsSearchResult("font").visibleEntries).toEqual(["editor.fontSize"]);
+    expect(createSettingsSearchResult("shortcut").visibleEntries).toEqual(["keybindings.editor"]);
+    expect(createSettingsSearchResult("search limit").visibleEntries).toEqual([
+      "workspace.searchMaxFileSize",
+      "workspace.searchMaxResults"
+    ]);
+  });
+
+  it("returns no sections when settings search has no matches", () => {
+    const result = createSettingsSearchResult("does-not-exist");
+
+    expect(result.visibleEntries).toEqual([]);
+    expect(result.visibleSections).toEqual([]);
   });
 
   it("clamps numeric settings to their configured bounds", () => {
