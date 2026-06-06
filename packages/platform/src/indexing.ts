@@ -38,6 +38,11 @@ export interface WorkspaceIndexedTag extends WorkspaceIndexedResource {
   readonly tag: string;
 }
 
+export interface WorkspaceIndexedTagSummary {
+  readonly tag: string;
+  readonly count: number;
+}
+
 export type WorkspaceIndexedLinkKind = "markdown" | "wiki";
 
 export interface WorkspaceIndexedLink extends WorkspaceIndexedResource {
@@ -73,6 +78,8 @@ export interface IIndexService {
   indexWorkspace(workspace: WorkspaceFileTree): Promise<void>;
   query(value: string): readonly WorkspaceSearchResult[];
   getMetadata(): WorkspaceIndexMetadata;
+  getTags(): readonly WorkspaceIndexedTagSummary[];
+  getTaggedResources(tag: string): readonly WorkspaceIndexedTag[];
   getBacklinks(uri: URIType): readonly WorkspaceIndexedLink[];
   clear(): void;
 }
@@ -193,6 +200,36 @@ export class WorkspaceIndexService implements IIndexService {
       links: this.documents.flatMap((document) => document.metadata.links),
       tags: this.documents.flatMap((document) => document.metadata.tags)
     };
+  }
+
+  getTags(): readonly WorkspaceIndexedTagSummary[] {
+    const summaries = new Map<string, WorkspaceIndexedTagSummary>();
+
+    for (const tag of this.documents.flatMap((document) => document.metadata.tags)) {
+      const key = normalizeTagName(tag.tag);
+      const existing = summaries.get(key);
+
+      summaries.set(key, {
+        tag: existing?.tag ?? tag.tag,
+        count: (existing?.count ?? 0) + 1
+      });
+    }
+
+    return [...summaries.values()].sort((first, second) =>
+      normalizeTagName(first.tag).localeCompare(normalizeTagName(second.tag))
+    );
+  }
+
+  getTaggedResources(tag: string): readonly WorkspaceIndexedTag[] {
+    const normalizedTag = normalizeTagName(tag);
+
+    if (!normalizedTag) {
+      return [];
+    }
+
+    return sortIndexedTags(this.documents
+      .flatMap((document) => document.metadata.tags)
+      .filter((entry) => normalizeTagName(entry.tag) === normalizedTag));
   }
 
   getBacklinks(uri: URIType): readonly WorkspaceIndexedLink[] {
@@ -514,6 +551,18 @@ function sortIndexedLinks(links: readonly WorkspaceIndexedLink[]): readonly Work
     first.line - second.line ||
     first.target.localeCompare(second.target)
   );
+}
+
+function sortIndexedTags(tags: readonly WorkspaceIndexedTag[]): readonly WorkspaceIndexedTag[] {
+  return [...tags].sort((first, second) =>
+    first.relativePath.localeCompare(second.relativePath) ||
+    first.line - second.line ||
+    first.tag.localeCompare(second.tag)
+  );
+}
+
+function normalizeTagName(tag: string): string {
+  return tag.trim().toLowerCase();
 }
 
 function normalizeQuery(value: string): readonly string[] {

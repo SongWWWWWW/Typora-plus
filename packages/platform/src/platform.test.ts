@@ -410,6 +410,38 @@ describe("workspace index", () => {
     expect(service.getBacklinks(URI.file("C:/Notes/missing.md"))).toEqual([]);
   });
 
+  it("queries indexed tags and tagged resources", async () => {
+    const host = createMemoryHost([
+      ["file://C:/Notes/a.md", "# Alpha\n#Project #topic/nested"],
+      ["file://C:/Notes/b.md", "# Beta\n#project"],
+      ["file://C:/Notes/c.md", "`#project`\n#archive"]
+    ]);
+    const service = new WorkspaceIndexService(new NativeFileService(host), {
+      maxResults: 10
+    });
+
+    await service.indexWorkspace(createWorkspaceFileTree([
+      createFileEntry("C:/Notes/a.md", "a.md", "a.md"),
+      createFileEntry("C:/Notes/b.md", "b.md", "b.md"),
+      createFileEntry("C:/Notes/c.md", "c.md", "c.md")
+    ]));
+
+    expect(service.getTags()).toEqual([
+      { tag: "archive", count: 1 },
+      { tag: "Project", count: 2 },
+      { tag: "topic/nested", count: 1 }
+    ]);
+    expect(service.getTaggedResources(" project ").map((tag) => ({
+      line: tag.line,
+      relativePath: tag.relativePath,
+      tag: tag.tag
+    }))).toEqual([
+      { line: 2, relativePath: "a.md", tag: "Project" },
+      { line: 2, relativePath: "b.md", tag: "project" }
+    ]);
+    expect(service.getTaggedResources("missing")).toEqual([]);
+  });
+
   it("clears indexed workspace metadata", async () => {
     const host = createMemoryHost([["file://C:/Notes/a.md", "# Alpha\n#topic"]]);
     const service = new WorkspaceIndexService(new NativeFileService(host), {
@@ -424,6 +456,8 @@ describe("workspace index", () => {
     expect(service.getStatus().state).toBe("idle");
     expect(service.getMetadata()).toEqual({ headings: [], links: [], tags: [] });
     expect(service.getBacklinks(URI.file("C:/Notes/a.md"))).toEqual([]);
+    expect(service.getTags()).toEqual([]);
+    expect(service.getTaggedResources("topic")).toEqual([]);
   });
 });
 
