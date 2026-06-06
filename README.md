@@ -43,7 +43,7 @@ P2 main progress is implemented:
 - saved workspace files, including new save-as files after workspace catch-up, refresh their search, tag, and backlink index entries immediately after successful save
 - workspace index storage and query behavior sit behind a provider boundary, with an in-memory provider, workspace-scoped persisted snapshot provider, Electron native snapshot storage, browser fallback storage, and a contract ready for a future SQLite provider
 - hardened HTML note export through a platform export service, Markdown HTML provider, Electron save dialog bridge, and browser download fallback
-- platform-level keybinding service for command execution, with Workbench shortcut defaults, active shortcut labels, user-editable overrides, and conflict confirmation
+- platform-level command service with separated command metadata and executable handlers, plus keybinding service support for command execution, Workbench shortcut defaults, active shortcut labels, user-editable overrides, and conflict confirmation
 - platform-level menu contribution and context-key services for titlebar and activitybar actions, with structured and string-parsed `when` clauses for future manifest-style contributions
 - platform-level extension service for static manifest registration of commands, menus, and keybindings, with Workbench default menu/keybinding contributions supplied by a built-in extension manifest
 - persisted configuration service for appearance, editor, including auto-save delay, and workspace preferences, with platform-owned numeric constraints, stored-value clamping, Electron native storage, and browser fallback

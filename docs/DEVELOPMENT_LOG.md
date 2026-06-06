@@ -2027,3 +2027,37 @@ Known limitations:
 - There is no extension host, activation event handling, extension code execution, or extension-owned context mutation yet.
 - Manifest commands are metadata placeholders only; runtime command handlers need a future out-of-process extension host and command activation flow.
 - Themes, Markdown renderers, and export providers are still future manifest contribution points.
+
+## 2026-06-07 - P2 Command Metadata Boundary
+
+Completed:
+
+- Split `ICommandService` command data into display metadata and executable handlers.
+- Added `registerCommandMetadata()` so extension manifests can contribute command palette and Settings entries without registering placeholder execution functions.
+- Kept `registerCommand()` compatible for built-in commands by automatically providing implicit command metadata when no explicit metadata exists.
+- Allowed runtime handlers to attach to an existing command metadata id without overwriting its manifest-provided title/category.
+- Updated `ExtensionService` so manifest command contributions register metadata only.
+- Updated Settings keybinding models to depend on command metadata instead of executable command handlers.
+- Added platform coverage for metadata-only commands, later handler registration, handler disposal, metadata disposal, and duplicate metadata/handler rejection.
+
+Quality gate:
+
+- `npm run test -- --run packages/platform/src/platform.test.ts packages/workbench/src/commandPaletteModel.test.ts packages/workbench/src/keybindingSettings.test.ts packages/workbench/src/workbenchContributions.test.ts`: passed, 74 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 176 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Browser desktop smoke check at `http://127.0.0.1:5173`: command palette opened through `Ctrl+Shift+P`, 17 commands rendered from metadata, no horizontal overflow, and no console errors.
+- Browser 390px viewport smoke check: no horizontal overflow and no console errors.
+
+Review:
+
+- Command contribution metadata is now separate from command execution, matching the VS Code-style split between manifest contributions and runtime handlers.
+- Extension manifests no longer install executable placeholder command handlers, reducing the risk of shadowing a future runtime command handler.
+- Workbench UI surfaces consume metadata-only command records, so command palette and Settings remain usable before extension activation exists.
+- No dynamic code execution, new package, storage path, visual token, or extra documentation file was introduced.
+
+Known limitations:
+
+- Metadata-only extension commands still cannot execute until an out-of-process extension host registers real handlers.
+- Command activation events and extension-owned context mutation remain future extension runtime work.
