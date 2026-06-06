@@ -987,3 +987,34 @@ Known limitations:
 - Backlinks are still computed from the in-memory index; SQLite persistence remains planned.
 - Wiki-link disambiguation is name/path based and does not yet model duplicate-note resolution policies.
 - Link resolution remains scanner-based until a fuller Markdown parser-backed metadata pass is introduced.
+
+## 2026-06-06 - P2 Backlinks Sidebar
+
+Completed:
+
+- Added a Backlinks activity bar entry and sidebar view for the active note.
+- Wired the view to `IIndexService.getBacklinks(model.uri)` instead of parsing Markdown in Workbench.
+- Rendered inbound link rows with source line, source relative path, and link label.
+- Added backlink row navigation that opens the source note and scrolls to the indexed line.
+- Kept the empty state compact and reused existing result-list styling.
+
+Quality gate:
+
+- `npm run verify`: passed, 98 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed
+- Browser Backlinks regression: activity entry rendered, sidebar title switched to `Backlinks`, empty state rendered, and no console errors occurred.
+- Browser search regression: current-note search for `topic` returned line 3 with `Alpha searchable topic`.
+- Browser layout check: desktop preview and 390px mobile viewport had no page horizontal overflow.
+
+Review:
+
+- Workbench consumes the backlink service contract only; link resolution remains in `packages/platform`.
+- The new view follows the existing activity bar/sidebar pattern instead of introducing a separate panel framework.
+- Visual behavior reuses existing list and status styles with one small empty-row style.
+- No new hard-coded file paths, workspace assumptions, or extra documentation files were introduced.
+
+Known limitations:
+
+- Browser verification covers the no-workspace fallback; full inbound-link navigation still depends on native workspace fixture coverage or future Workbench component tests.
+- Backlinks are based on the current in-memory index, so saved-file updates still rely on workspace refresh/watch until SQLite persistence and incremental indexing land.

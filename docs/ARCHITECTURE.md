@@ -51,6 +51,8 @@ Native workspace trust is owned by the Electron main process. The renderer may r
 
 Preview resources are also resolved by the platform layer. The renderer passes the active note URI and Markdown image source through `IResourceService`; the Electron main process rejects protocols, absolute paths, path traversal, unsupported extensions, and oversized images before returning a renderer-safe data URL.
 
+Workbench navigation surfaces, including search, outline, files, and backlinks, consume package/service contracts. Backlinks are queried through `IIndexService`; Workbench opens the source note and scrolls to the indexed line without resolving Markdown links itself.
+
 Planned services:
 
 - SQLite-backed index provider for `IIndexService`: persisted search, metadata, and link graph queries
