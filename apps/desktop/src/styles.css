@@ -235,6 +235,26 @@ button {
   color: var(--tp-color-accent-strong);
 }
 
+.tp-file-row:disabled {
+  cursor: default;
+  color: var(--tp-color-text-soft);
+}
+
+.tp-recent-section {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-top: 10px;
+}
+
+.tp-section-label {
+  padding: 6px 8px 3px;
+  color: var(--tp-color-text-soft);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
 .tp-file-row span:nth-child(2),
 .tp-sidebar-action span,
 .tp-folder-row span,

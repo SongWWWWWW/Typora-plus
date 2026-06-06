@@ -1,7 +1,13 @@
 import { DisposableStore } from "@typora-plus/base";
 import { MarkdownEditor, type MarkdownEditorHandle } from "@typora-plus/editor";
 import { calculateMarkdownStats, extractOutline, type OutlineEntry } from "@typora-plus/markdown";
-import type { FileTreeEntry, TextFileModel, TyporaPlusConfiguration, WorkspaceState } from "@typora-plus/platform";
+import type {
+  FileTreeEntry,
+  RecentResource,
+  TextFileModel,
+  TyporaPlusConfiguration,
+  WorkspaceState
+} from "@typora-plus/platform";
 import { applyTheme, resolveThemeName } from "@typora-plus/theme";
 import {
   Command as CommandIcon,
@@ -46,6 +52,7 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
   );
   const [model, setModel] = useState<TextFileModel>(() => services.textFileService.openDefault());
   const [workspace, setWorkspace] = useState<WorkspaceState>(() => services.workspaceService.getWorkspace());
+  const [recents, setRecents] = useState<readonly RecentResource[]>(() => services.recentService.getRecents());
   const [sideView, setSideView] = useState<SideView | null>("outline");
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [quickOpen, setQuickOpen] = useState(false);
@@ -63,8 +70,10 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
 
   useEffect(() => services.workspaceService.onDidChangeWorkspace(setWorkspace).dispose, [services]);
 
+  useEffect(() => services.recentService.onDidChangeRecents(setRecents).dispose, [services]);
+
   useEffect(() => {
-    if (!configuration.editor.autoSave || !model.dirty) {
+    if (!configuration.editor.autoSave || !model.dirty || model.uri.scheme !== "file") {
       return;
     }
 
@@ -72,7 +81,7 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
       void runWorkbenchAction(() => services.textFileService.save(), setOperationError);
     }, autoSaveDelayMs);
     return () => window.clearTimeout(handle);
-  }, [configuration.editor.autoSave, model.dirty, model.value, services]);
+  }, [configuration.editor.autoSave, model.dirty, model.uri, model.value, services]);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -117,10 +126,12 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
           rootUri: workspaceFiles.root.uri,
           files: workspaceFiles
         });
+        services.recentService.addRecentWorkspace(workspaceFiles.root.uri, workspaceFiles.root.name);
         setSideView("files");
 
         if (workspaceFiles.files[0]) {
-          await services.textFileService.openFile(workspaceFiles.files[0].uri);
+          const opened = await services.textFileService.openFile(workspaceFiles.files[0].uri);
+          services.recentService.addRecentFile(opened.uri, opened.name);
         }
       }, setOperationError)
     }));
@@ -158,13 +169,29 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
       id: "file.save",
       title: "Save",
       category: "File",
-      run: () => runWorkbenchAction(() => services.textFileService.save(), setOperationError)
+      run: () => runWorkbenchAction(async () => {
+        const saved = await services.textFileService.save();
+
+        if (saved.uri.scheme === "file") {
+          services.recentService.addRecentFile(saved.uri, saved.name);
+        }
+
+        return saved;
+      }, setOperationError)
     }));
     disposables.add(services.commandService.registerCommand({
       id: "file.saveAs",
       title: "Save As",
       category: "File",
-      run: () => runWorkbenchAction(() => services.textFileService.saveAs(), setOperationError)
+      run: () => runWorkbenchAction(async () => {
+        const saved = await services.textFileService.saveAs();
+
+        if (saved) {
+          services.recentService.addRecentFile(saved.uri, saved.name);
+        }
+
+        return saved;
+      }, setOperationError)
     }));
     disposables.add(services.commandService.registerCommand({
       id: "editor.focusMode.toggle",
@@ -218,7 +245,7 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
 
       if (modifier && event.key.toLowerCase() === "s") {
         event.preventDefault();
-        void runWorkbenchAction(() => services.textFileService.save(), setOperationError);
+        services.commandService.executeCommand("file.save");
       }
     };
 
@@ -253,6 +280,7 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
             view={sideView}
             model={model}
             workspace={workspace}
+            recents={recents}
             fileServiceAvailable={services.fileService.isAvailable()}
             outline={outline}
             searchQuery={searchQuery}
@@ -262,7 +290,10 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
             onSelectLine={(line) => editorRef.current?.scrollToLine(line)}
             onOpenWorkspace={() => services.commandService.executeCommand("file.openWorkspace")}
             onOpenFile={(entry) => {
-              void runWorkbenchAction(() => services.textFileService.openFile(entry.uri), setOperationError);
+              void runWorkbenchAction(async () => {
+                const opened = await services.textFileService.openFile(entry.uri);
+                services.recentService.addRecentFile(opened.uri, opened.name);
+              }, setOperationError);
             }}
           />
         ) : null}
@@ -295,9 +326,10 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
         open={quickOpen}
         files={workspace.files?.files ?? []}
         onClose={() => setQuickOpen(false)}
-        onOpen={(entry) => {
+            onOpen={(entry) => {
           void runWorkbenchAction(async () => {
-            await services.textFileService.openFile(entry.uri);
+            const opened = await services.textFileService.openFile(entry.uri);
+            services.recentService.addRecentFile(opened.uri, opened.name);
             setQuickOpen(false);
           }, setOperationError);
         }}
@@ -396,6 +428,7 @@ function Sidebar({
   view,
   model,
   workspace,
+  recents,
   fileServiceAvailable,
   outline,
   searchQuery,
@@ -409,6 +442,7 @@ function Sidebar({
   readonly view: SideView;
   readonly model: TextFileModel;
   readonly workspace: WorkspaceState;
+  readonly recents: readonly RecentResource[];
   readonly fileServiceAvailable: boolean;
   readonly outline: readonly OutlineEntry[];
   readonly searchQuery: string;
@@ -431,6 +465,7 @@ function Sidebar({
         <FilesPanel
           model={model}
           workspace={workspace}
+          recents={recents}
           fileServiceAvailable={fileServiceAvailable}
           onOpenWorkspace={onOpenWorkspace}
           onOpenFile={onOpenFile}
@@ -452,17 +487,21 @@ function Sidebar({
 function FilesPanel({
   model,
   workspace,
+  recents,
   fileServiceAvailable,
   onOpenWorkspace,
   onOpenFile
 }: {
   readonly model: TextFileModel;
   readonly workspace: WorkspaceState;
+  readonly recents: readonly RecentResource[];
   readonly fileServiceAvailable: boolean;
   readonly onOpenWorkspace: () => void;
   readonly onOpenFile: (entry: FileTreeEntry) => void;
 }) {
   const workspaceFiles = workspace.files;
+  const recentFiles = recents.filter((recent) => recent.kind === "file");
+  const recentWorkspaces = recents.filter((recent) => recent.kind === "workspace");
 
   return (
     <div className="tp-sidebar-content">
@@ -492,7 +531,64 @@ function FilesPanel({
           {model.dirty ? <span className="tp-row-dot" /> : null}
         </button>
       )}
+      {recentFiles.length > 0 ? (
+        <RecentSection
+          title="Recent files"
+          recents={recentFiles}
+          activeUri={model.uri.toString()}
+          onOpenFile={onOpenFile}
+        />
+      ) : null}
+      {recentWorkspaces.length > 0 ? (
+        <RecentSection title="Recent workspaces" recents={recentWorkspaces} activeUri={workspace.rootUri?.toString()} />
+      ) : null}
     </div>
+  );
+}
+
+function RecentSection({
+  title,
+  recents,
+  activeUri,
+  onOpenFile
+}: {
+  readonly title: string;
+  readonly recents: readonly RecentResource[];
+  readonly activeUri: string | undefined;
+  readonly onOpenFile?: (entry: FileTreeEntry) => void;
+}) {
+  return (
+    <section className="tp-recent-section">
+      <div className="tp-section-label">{title}</div>
+      {recents.slice(0, 8).map((recent) => {
+        const isFile = recent.kind === "file";
+        const isActive = recent.uri.toString() === activeUri;
+
+        return (
+          <button
+            className={isActive ? "tp-file-row tp-file-row-active" : "tp-file-row"}
+            key={`${recent.kind}-${recent.uri.toString()}`}
+            type="button"
+            disabled={!isFile || !onOpenFile}
+            onClick={() => {
+              if (!isFile || !onOpenFile) {
+                return;
+              }
+
+              onOpenFile({
+                uri: recent.uri,
+                name: recent.name,
+                relativePath: recent.name,
+                kind: "file"
+              });
+            }}
+          >
+            {isFile ? <FileText size={16} /> : <Folder size={16} />}
+            <span>{recent.name}</span>
+          </button>
+        );
+      })}
+    </section>
   );
 }
 

@@ -6,10 +6,12 @@ import {
   IConfigurationService,
   ICommandService,
   IFileService,
+  IRecentService,
   ITextFileService,
   IWorkspaceService,
   NativeAttachmentService,
   NativeFileService,
+  RecentService,
   ServiceCollection,
   WorkspaceTextFileService,
   WorkspaceService,
@@ -17,6 +19,7 @@ import {
   type IConfigurationService as ConfigurationServiceContract,
   type ICommandService as CommandServiceContract,
   type IFileService as FileServiceContract,
+  type IRecentService as RecentServiceContract,
   type ITextFileService as TextFileServiceContract,
   type IWorkspaceService as WorkspaceServiceContract
 } from "@typora-plus/platform";
@@ -27,6 +30,7 @@ export interface WorkbenchServices {
   readonly attachmentService: AttachmentServiceContract;
   readonly configurationService: ConfigurationServiceContract;
   readonly fileService: FileServiceContract;
+  readonly recentService: RecentServiceContract;
   readonly textFileService: TextFileServiceContract;
   readonly workspaceService: WorkspaceServiceContract;
 }
@@ -39,6 +43,7 @@ export function createWorkbenchServices(): WorkbenchServices {
     name: "Typora Plus"
   });
   const fileService = new NativeFileService();
+  const recentService = new RecentService();
   const attachmentService = new NativeAttachmentService(
     configurationService.getValue().workspace.defaultAssetFolder
   );
@@ -51,6 +56,7 @@ export function createWorkbenchServices(): WorkbenchServices {
   serviceCollection.set(IAttachmentService, attachmentService);
   serviceCollection.set(IConfigurationService, configurationService);
   serviceCollection.set(IFileService, fileService);
+  serviceCollection.set(IRecentService, recentService);
   serviceCollection.set(IWorkspaceService, workspaceService);
   serviceCollection.set(ITextFileService, textFileService);
 
@@ -63,6 +69,7 @@ export function createWorkbenchServices(): WorkbenchServices {
     attachmentService,
     configurationService,
     fileService,
+    recentService,
     textFileService,
     workspaceService
   };
