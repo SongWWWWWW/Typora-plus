@@ -36,6 +36,16 @@ export interface MarkdownCodeFenceLineState {
   readonly role: MarkdownCodeFenceLineRole;
 }
 
+export interface MarkdownCodeFenceBlockState {
+  readonly blockEnd: number;
+  readonly blockStart: number;
+  readonly content: string;
+  readonly info: string;
+  readonly language: string;
+  readonly line: number;
+  readonly role: MarkdownCodeFenceLineRole;
+}
+
 export type MarkdownTableLineRole = "header" | "delimiter" | "body";
 
 export interface MarkdownTableLineState {
@@ -65,6 +75,7 @@ export interface MarkdownMathBlockState {
 }
 
 export interface MarkdownLineClassificationState {
+  readonly codeFence?: MarkdownCodeFenceBlockState;
   readonly codeFenceRole?: MarkdownCodeFenceLineRole;
   readonly imageBlock?: MarkdownImageBlockState;
   readonly mathBlock?: MarkdownMathBlockState;
@@ -78,6 +89,7 @@ export interface MarkdownLineBlockState extends MarkdownLineClassificationState 
 export type MarkdownImageSourceResolver = (source: string) => Promise<string | undefined> | string | undefined;
 
 const syntaxMarkerDecoration = Decoration.mark({ class: "tp-editor-markdown-marker" });
+const codeCopyFeedbackDurationMs = 1200;
 
 export function livePreviewExtension(
   configuration: MarkdownEditorConfiguration,
@@ -186,6 +198,13 @@ export function analyzeMarkdownLineBlocks(lines: readonly string[]): readonly Ma
   });
 }
 
+export function shouldReplaceInactiveCodeFenceLine(
+  role: MarkdownCodeFenceLineRole,
+  codeFenceIsActive: boolean
+): boolean {
+  return !codeFenceIsActive && role !== "content";
+}
+
 export function findInactiveMarkdownSyntaxMarkers(text: string, active: boolean): readonly MarkdownSyntaxMarkerRange[] {
   if (active) {
     return [];
@@ -269,6 +288,7 @@ function buildDecorations(
     while (position <= range.to) {
       const line = view.state.doc.lineAt(position);
       const lineBlockState = lineBlockStates.get(line.number);
+      const codeFence = lineBlockState?.codeFence;
       const imageBlock = lineBlockState?.imageBlock;
       const mathBlock = lineBlockState?.mathBlock;
       const classes = classifyMarkdownLine(
@@ -280,11 +300,18 @@ function buildDecorations(
 
       builder.add(line.from, line.from, Decoration.line({ class: classes.join(" ") }));
       const lineIsActive = line.number === activeLine;
+      const codeFenceIsActive = codeFence
+        ? activeLine >= codeFence.blockStart && activeLine <= codeFence.blockEnd
+        : false;
       const mathBlockIsActive = mathBlock
         ? activeLine >= mathBlock.blockStart && activeLine <= mathBlock.blockEnd
         : false;
 
-      if (mathBlock && !mathBlockIsActive) {
+      if (codeFence && shouldReplaceInactiveCodeFenceLine(codeFence.role, codeFenceIsActive)) {
+        builder.add(line.from, line.to, Decoration.replace(
+          codeFence.role === "open" ? { widget: new MarkdownCodeFenceHeaderWidget(codeFence) } : {}
+        ));
+      } else if (mathBlock && !mathBlockIsActive) {
         builder.add(line.from, line.to, Decoration.replace(
           mathBlock.role === "open" ? { widget: new MarkdownMathBlockWidget(mathBlock) } : {}
         ));
@@ -301,7 +328,8 @@ function buildDecorations(
           from: line.from + inlineMath.from,
           to: line.from + inlineMath.to
         }));
-        const markerDecorations = findInactiveMarkdownSyntaxMarkers(line.text, lineIsActive)
+        const sourceLineIsActive = lineIsActive || codeFenceIsActive;
+        const markerDecorations = findInactiveMarkdownSyntaxMarkers(line.text, sourceLineIsActive)
           .filter((marker) => !inlineMathRanges.some((inlineMath) => rangesOverlap(marker, inlineMath)))
           .map((marker) => ({
             decoration: syntaxMarkerDecoration,
@@ -372,29 +400,26 @@ function analyzeMarkdownLineBlocksFromSource(source: {
     });
   };
 
-  let activeFence: string | undefined;
   let lineNumber = 1;
 
   while (lineNumber <= scanUntilLine) {
     const text = source.readLine(lineNumber);
 
-    if (activeFence) {
-      if (isClosingFence(text, activeFence)) {
-        activeFence = undefined;
-        setLineState(lineNumber, { codeFenceRole: "close" });
-      } else {
-        setLineState(lineNumber, { codeFenceRole: "content" });
+    const codeFence = readMarkdownCodeFenceBlockFromSource({
+      ...(source.isVisible === undefined ? {} : { isVisible: source.isVisible }),
+      lineCount: source.lineCount,
+      readLine: source.readLine,
+      startLine: lineNumber
+    });
+    if (codeFence) {
+      for (const codeFenceState of codeFence.states) {
+        setLineState(codeFenceState.line, {
+          codeFence: codeFenceState,
+          codeFenceRole: codeFenceState.role
+        });
       }
 
-      lineNumber += 1;
-      continue;
-    }
-
-    const marker = readOpeningFenceMarker(text);
-    if (marker) {
-      activeFence = marker;
-      setLineState(lineNumber, { codeFenceRole: "open" });
-      lineNumber += 1;
+      lineNumber = codeFence.nextLine;
       continue;
     }
 
@@ -438,19 +463,109 @@ function analyzeMarkdownLineBlocksFromSource(source: {
   return Array.from(states.values()).sort((first, second) => first.line - second.line);
 }
 
+interface MarkdownCodeFenceReadResult {
+  readonly nextLine: number;
+  readonly states: readonly MarkdownCodeFenceBlockState[];
+}
+
+function readMarkdownCodeFenceBlockFromSource(source: {
+  readonly isVisible?: (lineNumber: number) => boolean;
+  readonly lineCount: number;
+  readonly readLine: (lineNumber: number) => string;
+  readonly startLine: number;
+}): MarkdownCodeFenceReadResult | undefined {
+  const openingFence = readOpeningFence(source.readLine(source.startLine));
+  if (!openingFence) {
+    return undefined;
+  }
+
+  const contentLines: string[] = [];
+  let closeLine: number | undefined;
+  let nextLine = source.startLine + 1;
+
+  while (nextLine <= source.lineCount) {
+    const text = source.readLine(nextLine);
+
+    if (isClosingFence(text, openingFence.marker)) {
+      closeLine = nextLine;
+      break;
+    }
+
+    contentLines.push(text);
+    nextLine += 1;
+  }
+
+  const blockEnd = closeLine ?? source.lineCount;
+  const content = contentLines.join("\n");
+  const states: MarkdownCodeFenceBlockState[] = [];
+  const pushState = (line: number, role: MarkdownCodeFenceLineRole): void => {
+    if (source.isVisible && !source.isVisible(line)) {
+      return;
+    }
+
+    states.push({
+      blockEnd,
+      blockStart: source.startLine,
+      content,
+      info: openingFence.info,
+      language: openingFence.language,
+      line,
+      role
+    });
+  };
+
+  pushState(source.startLine, "open");
+  const contentEndExclusive = closeLine ?? source.lineCount + 1;
+
+  for (let line = source.startLine + 1; line < contentEndExclusive; line += 1) {
+    pushState(line, "content");
+  }
+
+  if (closeLine !== undefined) {
+    pushState(closeLine, "close");
+  }
+
+  return {
+    nextLine: (closeLine ?? source.lineCount) + 1,
+    states
+  };
+}
+
 function isClosingFence(text: string, activeFence: string): boolean {
   const marker = readClosingFenceMarker(text);
   return Boolean(marker && marker[0] === activeFence[0] && marker.length >= activeFence.length);
 }
 
-function readOpeningFenceMarker(text: string): string | undefined {
-  const match = /^\s{0,3}(`{3,}|~{3,})/.exec(text);
-  return match?.[1];
+function readOpeningFence(text: string): {
+  readonly info: string;
+  readonly language: string;
+  readonly marker: string;
+} | undefined {
+  const match = /^\s{0,3}(`{3,}|~{3,})(.*)$/.exec(text);
+  if (!match?.[1]) {
+    return undefined;
+  }
+
+  const info = (match[2] ?? "").trim();
+  return {
+    info,
+    language: readCodeFenceLanguage(info),
+    marker: match[1]
+  };
 }
 
 function readClosingFenceMarker(text: string): string | undefined {
   const match = /^\s{0,3}(`{3,}|~{3,})\s*$/.exec(text);
   return match?.[1];
+}
+
+function readCodeFenceLanguage(info: string): string {
+  const token = info.trim().split(/\s+/, 1)[0] ?? "";
+
+  return token
+    .replace(/^\{\.?/, "")
+    .replace(/\}$/, "")
+    .trim();
 }
 
 function readMarkdownImageBlock(text: string, line: number): MarkdownImageBlockState | undefined {
@@ -821,6 +936,99 @@ function readMarkdownTableCells(text: string): readonly string[] | undefined {
   return cells.length >= 2 ? cells : undefined;
 }
 
+class MarkdownCodeFenceHeaderWidget extends WidgetType {
+  constructor(private readonly codeFence: MarkdownCodeFenceBlockState) {
+    super();
+  }
+
+  override eq(widget: WidgetType): boolean {
+    return widget instanceof MarkdownCodeFenceHeaderWidget &&
+      widget.codeFence.content === this.codeFence.content &&
+      widget.codeFence.info === this.codeFence.info &&
+      widget.codeFence.language === this.codeFence.language;
+  }
+
+  override toDOM(): HTMLElement {
+    const toolbar = document.createElement("span");
+    toolbar.className = "tp-editor-code-toolbar";
+    toolbar.setAttribute("aria-label", "Code block tools");
+    toolbar.setAttribute("role", "group");
+
+    const language = document.createElement("span");
+    language.className = "tp-editor-code-language";
+    language.textContent = this.codeFence.language || "Code";
+
+    const copyButton = document.createElement("button");
+    copyButton.className = "tp-editor-code-copy";
+    copyButton.type = "button";
+    copyButton.textContent = "Copy";
+    copyButton.title = "Copy code";
+    copyButton.setAttribute("aria-label", "Copy code");
+    copyButton.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      void copyCodeFenceContent(this.codeFence.content, copyButton);
+    });
+
+    toolbar.append(language, copyButton);
+    return toolbar;
+  }
+
+  override ignoreEvent(): boolean {
+    return true;
+  }
+}
+
+async function copyCodeFenceContent(content: string, button: HTMLButtonElement): Promise<void> {
+  const copied = await writeClipboardText(content);
+  if (!copied) {
+    return;
+  }
+
+  button.dataset.copied = "true";
+  button.setAttribute("aria-label", "Code copied");
+  button.title = "Copied";
+  window.setTimeout(() => {
+    button.dataset.copied = "false";
+    button.setAttribute("aria-label", "Copy code");
+    button.title = "Copy code";
+  }, codeCopyFeedbackDurationMs);
+}
+
+async function writeClipboardText(content: string): Promise<boolean> {
+  if (navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(content);
+      return true;
+    } catch {
+      // Fall through to the textarea fallback for environments without clipboard permission.
+    }
+  }
+
+  return writeClipboardTextWithTextarea(content);
+}
+
+function writeClipboardTextWithTextarea(content: string): boolean {
+  const textarea = document.createElement("textarea");
+  textarea.value = content;
+  textarea.setAttribute("aria-hidden", "true");
+  textarea.tabIndex = -1;
+  textarea.style.position = "fixed";
+  textarea.style.inset = "0";
+  textarea.style.opacity = "0";
+
+  document.body.append(textarea);
+  textarea.select();
+
+  try {
+    return document.execCommand("copy");
+  } catch {
+    return false;
+  } finally {
+    textarea.remove();
+  }
+}
+
 class MarkdownImageBlockWidget extends WidgetType {
   constructor(
     private readonly image: MarkdownImageBlockState,
@@ -1162,6 +1370,46 @@ function markdownEditorTheme(configuration: MarkdownEditorConfiguration): Extens
     },
     ".tp-editor-code-block-content": {
       color: "var(--tp-color-text-muted)"
+    },
+    ".tp-editor-code-toolbar": {
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: "10px",
+      width: "100%",
+      minHeight: "28px",
+      boxSizing: "border-box",
+      fontFamily: "var(--tp-font-ui)",
+      fontSize: "12px",
+      lineHeight: "1",
+      color: "var(--tp-color-text-muted)"
+    },
+    ".tp-editor-code-language": {
+      minWidth: "0",
+      overflow: "hidden",
+      textOverflow: "ellipsis",
+      whiteSpace: "nowrap",
+      fontWeight: "650",
+      letterSpacing: "0"
+    },
+    ".tp-editor-code-copy": {
+      flex: "0 0 auto",
+      minWidth: "54px",
+      height: "24px",
+      padding: "0 8px",
+      border: "1px solid var(--tp-color-code-block-border)",
+      borderRadius: "6px",
+      backgroundColor: "var(--tp-color-code-toolbar)",
+      color: "var(--tp-color-text-muted)",
+      font: "inherit",
+      fontWeight: "650",
+      letterSpacing: "0",
+      cursor: "pointer",
+      transition: "background-color var(--tp-motion-fast) ease, color var(--tp-motion-fast) ease"
+    },
+    ".tp-editor-code-copy:hover, .tp-editor-code-copy[data-copied='true']": {
+      color: "var(--tp-color-accent-strong)",
+      backgroundColor: "var(--tp-color-surface-raised)"
     },
     ".tp-editor-table-row": {
       backgroundColor: "var(--tp-color-table-row)",

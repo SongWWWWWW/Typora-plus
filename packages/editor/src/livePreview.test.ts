@@ -7,7 +7,8 @@ import {
   analyzeMarkdownTableLines,
   classifyMarkdownLine,
   findInactiveMarkdownInlineMathRanges,
-  findInactiveMarkdownSyntaxMarkers
+  findInactiveMarkdownSyntaxMarkers,
+  shouldReplaceInactiveCodeFenceLine
 } from "./index";
 
 describe("classifyMarkdownLine", () => {
@@ -100,6 +101,68 @@ describe("analyzeMarkdownCodeFenceLines", () => {
       { line: 3, role: "close" }
     ]);
   });
+
+  it("collects code fence language, content, and block range", () => {
+    const states = analyzeMarkdownLineBlocks([
+      "```ts title",
+      "const value = 1;",
+      "console.log(value);",
+      "```"
+    ]).flatMap((state) => state.codeFence ? [state.codeFence] : []);
+
+    expect(states).toEqual([
+      {
+        blockEnd: 4,
+        blockStart: 1,
+        content: "const value = 1;\nconsole.log(value);",
+        info: "ts title",
+        language: "ts",
+        line: 1,
+        role: "open"
+      },
+      {
+        blockEnd: 4,
+        blockStart: 1,
+        content: "const value = 1;\nconsole.log(value);",
+        info: "ts title",
+        language: "ts",
+        line: 2,
+        role: "content"
+      },
+      {
+        blockEnd: 4,
+        blockStart: 1,
+        content: "const value = 1;\nconsole.log(value);",
+        info: "ts title",
+        language: "ts",
+        line: 3,
+        role: "content"
+      },
+      {
+        blockEnd: 4,
+        blockStart: 1,
+        content: "const value = 1;\nconsole.log(value);",
+        info: "ts title",
+        language: "ts",
+        line: 4,
+        role: "close"
+      }
+    ]);
+  });
+});
+
+describe("shouldReplaceInactiveCodeFenceLine", () => {
+  it("replaces inactive fence delimiters but keeps inactive content visible", () => {
+    expect(shouldReplaceInactiveCodeFenceLine("open", false)).toBe(true);
+    expect(shouldReplaceInactiveCodeFenceLine("content", false)).toBe(false);
+    expect(shouldReplaceInactiveCodeFenceLine("close", false)).toBe(true);
+  });
+
+  it("keeps every code fence source line visible while the block is active", () => {
+    expect(shouldReplaceInactiveCodeFenceLine("open", true)).toBe(false);
+    expect(shouldReplaceInactiveCodeFenceLine("content", true)).toBe(false);
+    expect(shouldReplaceInactiveCodeFenceLine("close", true)).toBe(false);
+  });
 });
 
 describe("analyzeMarkdownLineBlocks", () => {
@@ -136,19 +199,22 @@ describe("analyzeMarkdownLineBlocks", () => {
   });
 
   it("does not collect image or table state inside code fences", () => {
-    expect(analyzeMarkdownLineBlocks([
+    const states = analyzeMarkdownLineBlocks([
       "```",
       "![Code](code.png)",
       "| Name | Value |",
       "| --- | --- |",
       "```"
-    ])).toEqual([
-      { line: 1, codeFenceRole: "open" },
-      { line: 2, codeFenceRole: "content" },
-      { line: 3, codeFenceRole: "content" },
-      { line: 4, codeFenceRole: "content" },
-      { line: 5, codeFenceRole: "close" }
     ]);
+
+    expect(states.map((state) => [state.line, state.codeFenceRole])).toEqual([
+      [1, "open"],
+      [2, "content"],
+      [3, "content"],
+      [4, "content"],
+      [5, "close"]
+    ]);
+    expect(states.every((state) => state.codeFence && !state.imageBlock && !state.tableState)).toBe(true);
   });
 });
 
