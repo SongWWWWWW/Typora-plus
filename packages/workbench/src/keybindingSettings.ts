@@ -29,22 +29,45 @@ export function filterKeybindingCommands(
   query: string,
   options: {
     readonly modifiedOnly?: boolean;
+    readonly getLabel?: (command: Command) => string | undefined;
     readonly overrides?: readonly UserKeybindingRule[];
+    readonly unassignedLabel?: string;
   } = {}
 ): readonly Command[] {
-  const normalizedQuery = query.trim().toLowerCase();
+  const queryTerms = normalizeSearchTerms(query);
   const modifiedCommands = new Set((options.overrides ?? []).map((override) => override.command));
+  const unassignedLabel = options.unassignedLabel ?? "Unassigned";
 
   return commands.filter((command) => {
     if (options.modifiedOnly && !modifiedCommands.has(command.id)) {
       return false;
     }
 
-    if (!normalizedQuery) {
+    if (queryTerms.length === 0) {
       return true;
     }
 
-    const haystack = `${command.title} ${command.category ?? ""} ${command.id}`.toLowerCase();
-    return haystack.includes(normalizedQuery);
+    const label = options.getLabel?.(command) ?? unassignedLabel;
+    const haystack = normalizeSearchHaystack([
+      command.title,
+      command.category ?? "",
+      command.id,
+      label,
+      label.replace(/\+/g, " ")
+    ]);
+
+    return queryTerms.every((term) => haystack.includes(term));
   });
+}
+
+function normalizeSearchTerms(value: string): readonly string[] {
+  return value
+    .trim()
+    .toLowerCase()
+    .split(/\s+/)
+    .filter((term) => term.length > 0);
+}
+
+function normalizeSearchHaystack(values: readonly string[]): string {
+  return values.join(" ").toLowerCase();
 }

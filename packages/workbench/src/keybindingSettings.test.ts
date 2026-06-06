@@ -67,6 +67,29 @@ describe("keybinding settings", () => {
     ]);
   });
 
+  it("filters keybinding commands by active labels and unassigned state", () => {
+    const commands = [
+      { id: "file.save", title: "Save", category: "File", run: () => undefined },
+      { id: "workbench.commandPalette", title: "Command Palette", category: "Workbench", run: () => undefined },
+      { id: "workbench.quickOpen", title: "Quick Open", category: "Workbench", run: () => undefined },
+      { id: "theme.toggle", title: "Toggle Theme", category: "Workbench", run: () => undefined }
+    ];
+    const labels = new Map([
+      ["file.save", "Ctrl+S"],
+      ["workbench.commandPalette", "Ctrl+Shift+P"],
+      ["workbench.quickOpen", "Ctrl+P"]
+    ]);
+
+    const filter = (query: string) => filterKeybindingCommands(commands, query, {
+      getLabel: (command) => labels.get(command.id)
+    }).map((command) => command.id);
+
+    expect(filter("ctrl+p")).toEqual(["workbench.quickOpen"]);
+    expect(filter("ctrl shift p")).toEqual(["workbench.commandPalette"]);
+    expect(filter("unassigned")).toEqual(["theme.toggle"]);
+    expect(filter("workbench ctrl")).toEqual(["workbench.commandPalette", "workbench.quickOpen"]);
+  });
+
   it("filters keybinding commands to modified overrides", () => {
     const commands = [
       { id: "file.save", title: "Save", category: "File", run: () => undefined },

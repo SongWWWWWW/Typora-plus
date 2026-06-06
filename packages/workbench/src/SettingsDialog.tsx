@@ -67,10 +67,11 @@ export function SettingsDialog({
   );
   const filteredKeybindingCommands = useMemo(
     () => filterKeybindingCommands(commands, keybindingQuery, {
+      getLabel: (command) => getKeybindingLabel(command.id),
       modifiedOnly: modifiedKeybindingsOnly,
       overrides: configuration.keybindings.overrides
     }),
-    [commands, configuration.keybindings.overrides, keybindingQuery, modifiedKeybindingsOnly]
+    [commands, configuration.keybindings.overrides, getKeybindingLabel, keybindingQuery, modifiedKeybindingsOnly]
   );
 
   useEffect(() => {
