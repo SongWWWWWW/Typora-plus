@@ -2828,3 +2828,37 @@ Known limitations:
 - External extension package loading is still not implemented.
 - Extension host transport and IPC are still not implemented.
 - No concrete out-of-process extension host implementation is wired to the session yet.
+
+## 2026-06-07 - P2 Extension Host Protocol Host Adapter
+
+Completed:
+
+- Added `ExtensionHostProtocolHost` as a platform implementation of the existing `ExtensionHost` interface.
+- Added a caller-provided transport factory so future worker, process, or Electron IPC transports can plug in without changing `IExtensionHostService`.
+- Created one `ExtensionHostProtocolSession` per extension id, reused sessions across repeated activation calls, and exposed session ids for lightweight diagnostics.
+- Tied protocol session cleanup to host disposal and the extension subscription lifecycle so unregistering an extension tears down its transport-backed runtime state.
+- Disposed failed activation sessions immediately so failed remote activations do not leave stale proxy providers or pending request state.
+- Added focused tests for matching activation, non-matching rejection, per-extension session reuse, activation failure cleanup, extension subscription cleanup, host disposal cleanup, and option validation.
+
+Quality gate:
+
+- `npm run typecheck`: passed
+- `npx vitest run packages/platform/src/extensionHostProtocolHost.test.ts packages/platform/src/extensionHostProtocolSession.test.ts packages/platform/src/extensionHostRuntimeBroker.test.ts`: passed, 16 tests
+- `npm run verify`: passed, 286 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Browser smoke check: not run because this stage only changes platform extension-host adapter code and documentation.
+
+Review:
+
+- The adapter remains platform-only and implements the same host interface already used by the in-process Workbench host.
+- Host selection, session correlation, runtime API mapping, and future transport implementation now sit in separate units, matching the intended VS Code-style layering.
+- No transport implementation, external code loader, DOM access, Node access, storage path, visual token, or extra documentation file was introduced.
+- The host id, activation selector, transport factory, request id generation, and error handling are injected instead of hidden in hard-coded behavior.
+- Session lifecycle is tied to extension subscriptions so runtime contributions remain removable through the existing extension cleanup path.
+
+Known limitations:
+
+- External extension package loading is still not implemented.
+- Extension host transport and IPC are still not implemented.
+- The protocol host is not registered by Workbench or Electron yet; the next stage should introduce a concrete transport boundary only when the runtime environment is clear.
