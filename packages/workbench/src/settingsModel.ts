@@ -4,6 +4,20 @@ export interface NumberSettingConstraint {
   readonly step: number;
 }
 
+export type SettingsSectionId = "appearance" | "editor" | "workspace" | "keybindings";
+
+export interface SettingsSectionDefinition {
+  readonly id: SettingsSectionId;
+  readonly title: string;
+}
+
+export const settingsSections = [
+  { id: "appearance", title: "Appearance" },
+  { id: "editor", title: "Editor" },
+  { id: "workspace", title: "Workspace" },
+  { id: "keybindings", title: "Keybindings" }
+] as const satisfies readonly SettingsSectionDefinition[];
+
 export const settingsNumberConstraints = {
   editorFontSize: { min: 13, max: 24, step: 1 },
   editorLineHeight: { min: 1.2, max: 2.2, step: 0.05 },
@@ -39,6 +53,10 @@ export function bytesToMegabytes(value: number): number {
 export function normalizeAssetFolderInput(value: string): string | undefined {
   const normalized = value.trim().replace(/\\/g, "/");
   return normalized.length > 0 ? normalized : undefined;
+}
+
+export function settingSectionAnchorId(sectionId: SettingsSectionId): string {
+  return `tp-settings-section-${sectionId}`;
 }
 
 function stepPrecision(step: number): number {

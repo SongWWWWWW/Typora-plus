@@ -727,12 +727,60 @@ button {
 }
 
 .tp-settings-body {
+  display: grid;
+  flex: 1 1 auto;
+  grid-template-columns: 148px minmax(0, 1fr);
+  gap: 16px;
+  min-height: 0;
+  overflow: hidden;
+  padding: 16px;
+}
+
+.tp-settings-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-height: 0;
+  min-width: 0;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.tp-settings-nav-button {
+  min-width: 0;
+  height: 32px;
+  padding: 0 10px;
+  overflow: hidden;
+  border: 1px solid transparent;
+  border-radius: var(--tp-radius-control);
+  background: transparent;
+  color: var(--tp-color-text-muted);
+  cursor: pointer;
+  font-size: 13px;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tp-settings-nav-button:hover {
+  background: var(--tp-color-surface-muted);
+  color: var(--tp-color-text);
+}
+
+.tp-settings-nav-button-active {
+  border-color: var(--tp-color-border);
+  background: var(--tp-color-surface);
+  color: var(--tp-color-accent-strong);
+}
+
+.tp-settings-content {
   display: flex;
   flex-direction: column;
   gap: 18px;
   min-height: 0;
+  min-width: 0;
   overflow: auto;
-  padding: 16px;
+  scroll-behavior: smooth;
 }
 
 .tp-settings-section {
@@ -740,6 +788,7 @@ button {
   flex-direction: column;
   gap: 8px;
   min-width: 0;
+  scroll-margin-top: 4px;
 }
 
 .tp-settings-section-title {
@@ -1088,7 +1137,21 @@ button {
   }
 
   .tp-settings-body {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
     padding: 14px;
+  }
+
+  .tp-settings-nav {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    overflow: visible;
+    padding-right: 0;
+  }
+
+  .tp-settings-nav-button {
+    height: 30px;
+    text-align: center;
   }
 
   .tp-settings-field {

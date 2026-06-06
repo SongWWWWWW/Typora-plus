@@ -1,7 +1,7 @@
 import { keybindingFromEvent } from "@typora-plus/platform";
 import type { Command, Keybinding, PartialConfiguration, TyporaPlusConfiguration } from "@typora-plus/platform";
 import { Search, Settings as SettingsIcon, X } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import {
   filterKeybindingCommands,
@@ -14,7 +14,10 @@ import {
   clampSettingNumber,
   megabytesToBytes,
   normalizeAssetFolderInput,
+  settingSectionAnchorId,
   settingsNumberConstraints,
+  settingsSections,
+  type SettingsSectionId,
   type NumberSettingConstraint
 } from "./settingsModel";
 
@@ -42,6 +45,8 @@ export function SettingsDialog({
   const [keybindingQuery, setKeybindingQuery] = useState("");
   const [modifiedKeybindingsOnly, setModifiedKeybindingsOnly] = useState(false);
   const [pendingKeybinding, setPendingKeybinding] = useState<PendingKeybindingOverride | undefined>();
+  const [activeSettingsSection, setActiveSettingsSection] = useState<SettingsSectionId>("appearance");
+  const settingsContentRef = useRef<HTMLDivElement | null>(null);
   const hasKeybindingOverrides = configuration.keybindings.overrides.length > 0;
   const searchMaxFileSizeMegabytes = bytesToMegabytes(configuration.workspace.searchMaxFileSizeBytes);
   const filteredKeybindingCommands = useMemo(
@@ -59,6 +64,7 @@ export function SettingsDialog({
       setKeybindingQuery("");
       setModifiedKeybindingsOnly(false);
       setPendingKeybinding(undefined);
+      setActiveSettingsSection("appearance");
     }
   }, [configuration.workspace.defaultAssetFolder, open]);
 
@@ -141,6 +147,44 @@ export function SettingsDialog({
     });
   };
 
+  const scrollToSettingsSection = (sectionId: SettingsSectionId) => {
+    setActiveSettingsSection(sectionId);
+    settingsContentRef.current
+      ?.querySelector<HTMLElement>(`#${settingSectionAnchorId(sectionId)}`)
+      ?.scrollIntoView({ block: "start", behavior: "smooth" });
+  };
+
+  const syncActiveSettingsSection = () => {
+    const container = settingsContentRef.current;
+
+    if (!container) {
+      return;
+    }
+
+    const containerTop = container.getBoundingClientRect().top;
+    let nextSection = activeSettingsSection;
+    let nearestDistance = Number.POSITIVE_INFINITY;
+
+    for (const section of settingsSections) {
+      const element = container.querySelector<HTMLElement>(`#${settingSectionAnchorId(section.id)}`);
+
+      if (!element) {
+        continue;
+      }
+
+      const distance = Math.abs(element.getBoundingClientRect().top - containerTop);
+
+      if (distance < nearestDistance) {
+        nearestDistance = distance;
+        nextSection = section.id;
+      }
+    }
+
+    if (nextSection !== activeSettingsSection) {
+      setActiveSettingsSection(nextSection);
+    }
+  };
+
   return (
     <div className="tp-dialog-overlay" role="presentation" onMouseDown={onClose}>
       <section
@@ -160,226 +204,242 @@ export function SettingsDialog({
           </SettingsIconButton>
         </div>
         <div className="tp-settings-body">
-          <SettingsSection title="Appearance">
-            <SettingsField label="Theme">
-              <SegmentedControl
-                ariaLabel="Theme"
-                value={configuration.appearance.colorScheme}
-                options={[
-                  { value: "system", label: "System" },
-                  { value: "light", label: "Light" },
-                  { value: "dark", label: "Dark" }
-                ]}
-                onChange={(colorScheme) => onUpdate({ appearance: { colorScheme } })}
-              />
-            </SettingsField>
-            <SettingsField label="Density">
-              <SegmentedControl
-                ariaLabel="Density"
-                value={configuration.appearance.density}
-                options={[
-                  { value: "comfortable", label: "Comfortable" },
-                  { value: "compact", label: "Compact" }
-                ]}
-                onChange={(density) => onUpdate({ appearance: { density } })}
-              />
-            </SettingsField>
-          </SettingsSection>
-
-          <SettingsSection title="Editor">
-            <SettingsField label="Auto Save">
-              <ToggleControl
-                checked={configuration.editor.autoSave}
-                label="Auto Save"
-                onChange={(autoSave) => onUpdate({ editor: { autoSave } })}
-              />
-            </SettingsField>
-            <SettingsField label="Focus Mode">
-              <ToggleControl
-                checked={configuration.editor.focusMode}
-                label="Focus Mode"
-                onChange={(focusMode) => onUpdate({ editor: { focusMode } })}
-              />
-            </SettingsField>
-            <SettingsField label="Typewriter Mode">
-              <ToggleControl
-                checked={configuration.editor.typewriterMode}
-                label="Typewriter Mode"
-                onChange={(typewriterMode) => onUpdate({ editor: { typewriterMode } })}
-              />
-            </SettingsField>
-            <NumberSetting
-              label="Font Size"
-              value={configuration.editor.fontSize}
-              constraint={settingsNumberConstraints.editorFontSize}
-              unit="px"
-              onChange={(fontSize) => onUpdate({ editor: { fontSize } })}
-            />
-            <NumberSetting
-              label="Line Height"
-              value={configuration.editor.lineHeight}
-              constraint={settingsNumberConstraints.editorLineHeight}
-              onChange={(lineHeight) => onUpdate({ editor: { lineHeight } })}
-            />
-            <NumberSetting
-              label="Editor Width"
-              value={configuration.editor.maxWidth}
-              constraint={settingsNumberConstraints.editorMaxWidth}
-              unit="px"
-              onChange={(maxWidth) => onUpdate({ editor: { maxWidth } })}
-            />
-          </SettingsSection>
-
-          <SettingsSection title="Workspace">
-            <SettingsField label="Asset Folder">
-              <input
-                className="tp-settings-text-input"
-                type="text"
-                value={assetFolderDraft}
-                aria-label="Asset Folder"
-                onChange={(event) => setAssetFolderDraft(event.target.value)}
-                onBlur={commitAssetFolder}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") {
-                    commitAssetFolder();
-                  }
-                }}
-              />
-            </SettingsField>
-            <NumberSetting
-              label="Search File Limit"
-              value={searchMaxFileSizeMegabytes}
-              constraint={settingsNumberConstraints.workspaceSearchMaxFileSizeMegabytes}
-              unit="MB"
-              onChange={(value) => onUpdate({
-                workspace: {
-                  searchMaxFileSizeBytes: megabytesToBytes(value)
-                }
-              })}
-            />
-            <NumberSetting
-              label="Search Results"
-              value={configuration.workspace.searchMaxResults}
-              constraint={settingsNumberConstraints.workspaceSearchMaxResults}
-              onChange={(searchMaxResults) => onUpdate({ workspace: { searchMaxResults } })}
-            />
-          </SettingsSection>
-
-          <SettingsSection title="Keybindings">
-            <div className="tp-settings-keybinding-search">
-              <Search size={15} />
-              <input
-                type="search"
-                value={keybindingQuery}
-                aria-label="Search Keybindings"
-                onChange={(event) => setKeybindingQuery(event.target.value)}
-              />
-              {keybindingQuery ? (
-                <button
-                  type="button"
-                  aria-label="Clear Keybinding Search"
-                  onClick={() => setKeybindingQuery("")}
-                >
-                  <X size={14} />
-                </button>
-              ) : <span aria-hidden="true" />}
-            </div>
-            <div className="tp-settings-keybinding-toolbar">
-              <label className="tp-settings-toggle">
-                <input
-                  type="checkbox"
-                  checked={modifiedKeybindingsOnly}
-                  aria-label="Modified Keybindings"
-                  onChange={(event) => setModifiedKeybindingsOnly(event.target.checked)}
-                />
-                <span>Modified</span>
-              </label>
+          <nav className="tp-settings-nav" aria-label="Settings Sections">
+            {settingsSections.map((section) => (
               <button
-                className="tp-settings-small-button"
+                className={activeSettingsSection === section.id ? "tp-settings-nav-button tp-settings-nav-button-active" : "tp-settings-nav-button"}
+                key={section.id}
                 type="button"
-                disabled={!hasKeybindingOverrides}
-                onClick={() => {
-                  setPendingKeybinding(undefined);
-                  onUpdate({
-                    keybindings: {
-                      overrides: []
-                    }
-                  });
-                }}
+                aria-current={activeSettingsSection === section.id ? "true" : undefined}
+                aria-controls={settingSectionAnchorId(section.id)}
+                onClick={() => scrollToSettingsSection(section.id)}
               >
-                Reset All
+                {section.title}
               </button>
-            </div>
-            <div className="tp-settings-keybinding-list">
-              {filteredKeybindingCommands.map((command) => {
-                const hasOverride = configuration.keybindings.overrides.some((override) => override.command === command.id);
-                const recording = recordingCommand === command.id;
+            ))}
+          </nav>
+          <div className="tp-settings-content" ref={settingsContentRef} onScroll={syncActiveSettingsSection}>
+            <SettingsSection sectionId="appearance">
+              <SettingsField label="Theme">
+                <SegmentedControl
+                  ariaLabel="Theme"
+                  value={configuration.appearance.colorScheme}
+                  options={[
+                    { value: "system", label: "System" },
+                    { value: "light", label: "Light" },
+                    { value: "dark", label: "Dark" }
+                  ]}
+                  onChange={(colorScheme) => onUpdate({ appearance: { colorScheme } })}
+                />
+              </SettingsField>
+              <SettingsField label="Density">
+                <SegmentedControl
+                  ariaLabel="Density"
+                  value={configuration.appearance.density}
+                  options={[
+                    { value: "comfortable", label: "Comfortable" },
+                    { value: "compact", label: "Compact" }
+                  ]}
+                  onChange={(density) => onUpdate({ appearance: { density } })}
+                />
+              </SettingsField>
+            </SettingsSection>
 
-                return (
-                  <div className="tp-settings-keybinding-row" key={command.id}>
-                    <span className="tp-settings-keybinding-name">
-                      <span>{command.title}</span>
-                      {command.category ? <small>{command.category}</small> : null}
-                    </span>
-                    <kbd className={recording ? "tp-settings-keybinding-value tp-settings-keybinding-value-recording" : "tp-settings-keybinding-value"}>
-                      {recording ? "Press keys" : getKeybindingLabel(command.id) ?? "Unassigned"}
-                    </kbd>
-                    <button
-                      className="tp-settings-small-button"
-                      type="button"
-                      onClick={() => {
-                        setPendingKeybinding(undefined);
-                        setRecordingCommand(command.id);
-                      }}
-                    >
-                      Record
-                    </button>
-                    <button
-                      className="tp-settings-small-button"
-                      type="button"
-                      disabled={!hasOverride}
-                      onClick={() => onUpdate({
-                        keybindings: {
-                          overrides: removeKeybindingOverride(configuration.keybindings.overrides, command.id)
-                        }
-                      })}
-                    >
-                      Reset
-                    </button>
-                    {pendingKeybinding?.command === command.id ? (
-                      <div className="tp-settings-keybinding-conflict">
-                        <span>
-                          {pendingKeybinding.label} is used by {commandTitle(commands, pendingKeybinding.conflictCommand)}.
-                        </span>
-                        <button
-                          className="tp-settings-small-button"
-                          type="button"
-                          onClick={() => {
-                            applyKeybindingOverride(configuration, pendingKeybinding, onUpdate);
-                            setPendingKeybinding(undefined);
-                          }}
-                        >
-                          Replace
-                        </button>
-                        <button
-                          className="tp-settings-small-button"
-                          type="button"
-                          onClick={() => setPendingKeybinding(undefined)}
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    ) : null}
+            <SettingsSection sectionId="editor">
+              <SettingsField label="Auto Save">
+                <ToggleControl
+                  checked={configuration.editor.autoSave}
+                  label="Auto Save"
+                  onChange={(autoSave) => onUpdate({ editor: { autoSave } })}
+                />
+              </SettingsField>
+              <SettingsField label="Focus Mode">
+                <ToggleControl
+                  checked={configuration.editor.focusMode}
+                  label="Focus Mode"
+                  onChange={(focusMode) => onUpdate({ editor: { focusMode } })}
+                />
+              </SettingsField>
+              <SettingsField label="Typewriter Mode">
+                <ToggleControl
+                  checked={configuration.editor.typewriterMode}
+                  label="Typewriter Mode"
+                  onChange={(typewriterMode) => onUpdate({ editor: { typewriterMode } })}
+                />
+              </SettingsField>
+              <NumberSetting
+                label="Font Size"
+                value={configuration.editor.fontSize}
+                constraint={settingsNumberConstraints.editorFontSize}
+                unit="px"
+                onChange={(fontSize) => onUpdate({ editor: { fontSize } })}
+              />
+              <NumberSetting
+                label="Line Height"
+                value={configuration.editor.lineHeight}
+                constraint={settingsNumberConstraints.editorLineHeight}
+                onChange={(lineHeight) => onUpdate({ editor: { lineHeight } })}
+              />
+              <NumberSetting
+                label="Editor Width"
+                value={configuration.editor.maxWidth}
+                constraint={settingsNumberConstraints.editorMaxWidth}
+                unit="px"
+                onChange={(maxWidth) => onUpdate({ editor: { maxWidth } })}
+              />
+            </SettingsSection>
+
+            <SettingsSection sectionId="workspace">
+              <SettingsField label="Asset Folder">
+                <input
+                  className="tp-settings-text-input"
+                  type="text"
+                  value={assetFolderDraft}
+                  aria-label="Asset Folder"
+                  onChange={(event) => setAssetFolderDraft(event.target.value)}
+                  onBlur={commitAssetFolder}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      commitAssetFolder();
+                    }
+                  }}
+                />
+              </SettingsField>
+              <NumberSetting
+                label="Search File Limit"
+                value={searchMaxFileSizeMegabytes}
+                constraint={settingsNumberConstraints.workspaceSearchMaxFileSizeMegabytes}
+                unit="MB"
+                onChange={(value) => onUpdate({
+                  workspace: {
+                    searchMaxFileSizeBytes: megabytesToBytes(value)
+                  }
+                })}
+              />
+              <NumberSetting
+                label="Search Results"
+                value={configuration.workspace.searchMaxResults}
+                constraint={settingsNumberConstraints.workspaceSearchMaxResults}
+                onChange={(searchMaxResults) => onUpdate({ workspace: { searchMaxResults } })}
+              />
+            </SettingsSection>
+
+            <SettingsSection sectionId="keybindings">
+              <div className="tp-settings-keybinding-search">
+                <Search size={15} />
+                <input
+                  type="search"
+                  value={keybindingQuery}
+                  aria-label="Search Keybindings"
+                  onChange={(event) => setKeybindingQuery(event.target.value)}
+                />
+                {keybindingQuery ? (
+                  <button
+                    type="button"
+                    aria-label="Clear Keybinding Search"
+                    onClick={() => setKeybindingQuery("")}
+                  >
+                    <X size={14} />
+                  </button>
+                ) : <span aria-hidden="true" />}
+              </div>
+              <div className="tp-settings-keybinding-toolbar">
+                <label className="tp-settings-toggle">
+                  <input
+                    type="checkbox"
+                    checked={modifiedKeybindingsOnly}
+                    aria-label="Modified Keybindings"
+                    onChange={(event) => setModifiedKeybindingsOnly(event.target.checked)}
+                  />
+                  <span>Modified</span>
+                </label>
+                <button
+                  className="tp-settings-small-button"
+                  type="button"
+                  disabled={!hasKeybindingOverrides}
+                  onClick={() => {
+                    setPendingKeybinding(undefined);
+                    onUpdate({
+                      keybindings: {
+                        overrides: []
+                      }
+                    });
+                  }}
+                >
+                  Reset All
+                </button>
+              </div>
+              <div className="tp-settings-keybinding-list">
+                {filteredKeybindingCommands.map((command) => {
+                  const hasOverride = configuration.keybindings.overrides.some((override) => override.command === command.id);
+                  const recording = recordingCommand === command.id;
+
+                  return (
+                    <div className="tp-settings-keybinding-row" key={command.id}>
+                      <span className="tp-settings-keybinding-name">
+                        <span>{command.title}</span>
+                        {command.category ? <small>{command.category}</small> : null}
+                      </span>
+                      <kbd className={recording ? "tp-settings-keybinding-value tp-settings-keybinding-value-recording" : "tp-settings-keybinding-value"}>
+                        {recording ? "Press keys" : getKeybindingLabel(command.id) ?? "Unassigned"}
+                      </kbd>
+                      <button
+                        className="tp-settings-small-button"
+                        type="button"
+                        onClick={() => {
+                          setPendingKeybinding(undefined);
+                          setRecordingCommand(command.id);
+                        }}
+                      >
+                        Record
+                      </button>
+                      <button
+                        className="tp-settings-small-button"
+                        type="button"
+                        disabled={!hasOverride}
+                        onClick={() => onUpdate({
+                          keybindings: {
+                            overrides: removeKeybindingOverride(configuration.keybindings.overrides, command.id)
+                          }
+                        })}
+                      >
+                        Reset
+                      </button>
+                      {pendingKeybinding?.command === command.id ? (
+                        <div className="tp-settings-keybinding-conflict">
+                          <span>
+                            {pendingKeybinding.label} is used by {commandTitle(commands, pendingKeybinding.conflictCommand)}.
+                          </span>
+                          <button
+                            className="tp-settings-small-button"
+                            type="button"
+                            onClick={() => {
+                              applyKeybindingOverride(configuration, pendingKeybinding, onUpdate);
+                              setPendingKeybinding(undefined);
+                            }}
+                          >
+                            Replace
+                          </button>
+                          <button
+                            className="tp-settings-small-button"
+                            type="button"
+                            onClick={() => setPendingKeybinding(undefined)}
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      ) : null}
+                    </div>
+                  );
+                })}
+                {filteredKeybindingCommands.length === 0 ? (
+                  <div className="tp-settings-empty-row">
+                    {modifiedKeybindingsOnly && !hasKeybindingOverrides ? "No modified shortcuts" : "No matching commands"}
                   </div>
-                );
-              })}
-              {filteredKeybindingCommands.length === 0 ? (
-                <div className="tp-settings-empty-row">
-                  {modifiedKeybindingsOnly && !hasKeybindingOverrides ? "No modified shortcuts" : "No matching commands"}
-                </div>
-              ) : null}
-            </div>
-          </SettingsSection>
+                ) : null}
+              </div>
+            </SettingsSection>
+          </div>
         </div>
       </section>
     </div>
@@ -410,14 +470,17 @@ function commandTitle(commands: readonly Command[], id: string): string {
 }
 
 function SettingsSection({
-  title,
+  sectionId,
   children
 }: {
-  readonly title: string;
+  readonly sectionId: SettingsSectionId;
   readonly children: ReactNode;
 }) {
+  const section = settingsSections.find((candidate) => candidate.id === sectionId);
+  const title = section?.title ?? sectionId;
+
   return (
-    <section className="tp-settings-section">
+    <section className="tp-settings-section" id={settingSectionAnchorId(sectionId)}>
       <h2 className="tp-settings-section-title">{title}</h2>
       <div className="tp-settings-section-content">{children}</div>
     </section>
