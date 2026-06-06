@@ -454,7 +454,7 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
       getUri: () => model.uri,
       markdownRendererService: services.markdownRendererService
     }),
-    [configuration.editor.rendererPreviewCacheEntries, markdownRendererRevision, model.uri, services]
+    [configuration.editor.rendererPreviewCacheEntries, configuration.markdown, markdownRendererRevision, model.uri, services]
   );
   const renderInline = useMemo(
     () => createMarkdownInlineRenderer({
@@ -462,7 +462,7 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
       getUri: () => model.uri,
       markdownRendererService: services.markdownRendererService
     }),
-    [configuration.editor.rendererPreviewCacheEntries, markdownRendererRevision, model.uri, services]
+    [configuration.editor.rendererPreviewCacheEntries, configuration.markdown, markdownRendererRevision, model.uri, services]
   );
 
   return (

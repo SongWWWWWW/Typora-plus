@@ -1,49 +1,30 @@
-import type { MarkdownRendererProvider } from "@typora-plus/platform";
+import {
+  defaultConfiguration,
+  type MarkdownRendererProvider,
+  type MarkdownStatusBadgeConfiguration,
+  type MarkdownStatusBadgeTone
+} from "@typora-plus/platform";
 
 export const workbenchStatusRendererId = "typora-plus.renderer.status";
 export const workbenchStatusRendererLanguage = "status";
 
-type StatusRendererTone = "danger" | "info" | "neutral" | "success" | "warning";
-
 interface StatusRendererState {
   readonly aliases: readonly string[];
   readonly label: string;
-  readonly tone: StatusRendererTone;
+  readonly tone: MarkdownStatusBadgeTone;
 }
 
-const statusRendererStates = [
-  {
-    aliases: ["done", "complete", "completed", "ok", "success", "yes"],
-    label: "Done",
-    tone: "success"
-  },
-  {
-    aliases: ["doing", "in-progress", "progress", "wip", "active"],
-    label: "In Progress",
-    tone: "info"
-  },
-  {
-    aliases: ["review", "pending", "waiting", "hold"],
-    label: "Pending",
-    tone: "warning"
-  },
-  {
-    aliases: ["blocked", "error", "failed", "failure", "risk"],
-    label: "Blocked",
-    tone: "danger"
-  },
-  {
-    aliases: ["todo", "open", "planned", "draft"],
-    label: "Todo",
-    tone: "neutral"
-  }
-] as const satisfies readonly StatusRendererState[];
+export interface StatusMarkdownRendererProviderOptions {
+  readonly getStatusBadges?: () => readonly MarkdownStatusBadgeConfiguration[];
+}
 
-export function createStatusMarkdownRendererProvider(): MarkdownRendererProvider {
+export function createStatusMarkdownRendererProvider(
+  options: StatusMarkdownRendererProviderOptions = {}
+): MarkdownRendererProvider {
   return {
     id: workbenchStatusRendererId,
     render(input) {
-      const status = parseStatusRendererValue(input.value);
+      const status = parseStatusRendererValue(input.value, resolveStatusRendererStates(options));
 
       return {
         html: [
@@ -56,10 +37,10 @@ export function createStatusMarkdownRendererProvider(): MarkdownRendererProvider
   };
 }
 
-function parseStatusRendererValue(value: string): {
+function parseStatusRendererValue(value: string, states: readonly StatusRendererState[]): {
   readonly label: string;
   readonly source: string;
-  readonly tone: StatusRendererTone;
+  readonly tone: MarkdownStatusBadgeTone;
 } {
   const source = normalizeStatusText(value);
 
@@ -71,8 +52,8 @@ function parseStatusRendererValue(value: string): {
     };
   }
 
-  const parsed = splitStatusText(source);
-  const state = findStatusRendererState(parsed.key);
+  const parsed = splitStatusText(source, states);
+  const state = findStatusRendererState(parsed.key, states);
 
   return {
     label: parsed.label || state?.label || source,
@@ -81,7 +62,10 @@ function parseStatusRendererValue(value: string): {
   };
 }
 
-function splitStatusText(source: string): { readonly key: string; readonly label: string } {
+function splitStatusText(
+  source: string,
+  states: readonly StatusRendererState[]
+): { readonly key: string; readonly label: string } {
   const colon = source.indexOf(":");
 
   if (colon >= 0) {
@@ -96,7 +80,7 @@ function splitStatusText(source: string): { readonly key: string; readonly label
   if (firstWhitespace > 0) {
     const key = source.slice(0, firstWhitespace);
 
-    if (findStatusRendererState(key)) {
+    if (findStatusRendererState(key, states)) {
       return {
         key,
         label: normalizeStatusText(source.slice(firstWhitespace + 1))
@@ -110,9 +94,22 @@ function splitStatusText(source: string): { readonly key: string; readonly label
   };
 }
 
-function findStatusRendererState(value: string): StatusRendererState | undefined {
+function resolveStatusRendererStates(
+  options: StatusMarkdownRendererProviderOptions
+): readonly StatusRendererState[] {
+  return (options.getStatusBadges?.() ?? defaultConfiguration.markdown.statusBadges).map((badge) => ({
+    aliases: uniqueStatusAliases([badge.key, ...badge.aliases]),
+    label: badge.label,
+    tone: badge.tone
+  }));
+}
+
+function findStatusRendererState(
+  value: string,
+  states: readonly StatusRendererState[]
+): StatusRendererState | undefined {
   const normalized = normalizeStatusKey(value);
-  return statusRendererStates.find((state) => (state.aliases as readonly string[]).includes(normalized));
+  return states.find((state) => state.aliases.includes(normalized));
 }
 
 function normalizeStatusText(value: string): string {
@@ -121,6 +118,10 @@ function normalizeStatusText(value: string): string {
 
 function normalizeStatusKey(value: string): string {
   return normalizeStatusText(value).toLowerCase();
+}
+
+function uniqueStatusAliases(values: readonly string[]): readonly string[] {
+  return [...new Set(values.map(normalizeStatusKey).filter((value) => value.length > 0))];
 }
 
 function escapeHtmlAttribute(value: string): string {

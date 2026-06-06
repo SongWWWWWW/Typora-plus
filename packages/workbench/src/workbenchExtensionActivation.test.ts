@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 import type {
   ExtensionActivationRequest,
   ExtensionContext,
+  MarkdownRendererProvider,
   RegisteredExtension
 } from "@typora-plus/platform";
+import { defaultConfiguration } from "@typora-plus/platform";
 import { toDisposable, type IDisposable } from "@typora-plus/base";
 import {
   workbenchMermaidRendererId
@@ -26,8 +28,8 @@ describe("Workbench extension activation", () => {
         addSubscription(disposable) {
           subscriptions.push(disposable);
         },
-        registerRendererProvider(id) {
-          providerId = id;
+        registerRendererProvider(provider) {
+          providerId = provider.id;
           return toDisposable(() => undefined);
         }
       }),
@@ -40,8 +42,22 @@ describe("Workbench extension activation", () => {
 
   it("registers the built-in Status provider on renderer activation", async () => {
     const subscriptions: IDisposable[] = [];
-    let providerId: string | undefined;
-    const handler = createWorkbenchExtensionActivationHandler();
+    let provider: MarkdownRendererProvider | undefined;
+    const handler = createWorkbenchExtensionActivationHandler({
+      getConfiguration: () => ({
+        ...defaultConfiguration,
+        markdown: {
+          statusBadges: [
+            {
+              key: "shipped",
+              label: "Shipped",
+              tone: "success",
+              aliases: ["released"]
+            }
+          ]
+        }
+      })
+    });
 
     await handler({
       activationEvent: `onMarkdownRenderer:${workbenchStatusRendererId}`,
@@ -49,15 +65,25 @@ describe("Workbench extension activation", () => {
         addSubscription(disposable) {
           subscriptions.push(disposable);
         },
-        registerRendererProvider(id) {
-          providerId = id;
+        registerRendererProvider(registeredProvider) {
+          provider = registeredProvider;
           return toDisposable(() => undefined);
         }
       }),
       extension: createRegisteredExtension(defaultWorkbenchExtensionManifest.id)
     });
 
-    expect(providerId).toBe(workbenchStatusRendererId);
+    expect(provider?.id).toBe(workbenchStatusRendererId);
+    await expect(Promise.resolve(provider?.render({
+      language: "status",
+      value: "released"
+    }))).resolves.toEqual({
+      html: [
+        `<span class="tp-renderer-status tp-renderer-status-success" title="released">`,
+        `Shipped`,
+        `</span>`
+      ].join("")
+    });
     expect(subscriptions).toHaveLength(1);
   });
 
@@ -82,7 +108,7 @@ function createRegisteredExtension(id: string): RegisteredExtension {
 
 function createActivationContext(options: {
   readonly addSubscription?: (disposable: IDisposable) => void;
-  readonly registerRendererProvider?: (id: string) => IDisposable;
+  readonly registerRendererProvider?: (provider: MarkdownRendererProvider) => IDisposable;
 }): ExtensionContext {
   const extension = createRegisteredExtension(defaultWorkbenchExtensionManifest.id);
 
@@ -104,7 +130,7 @@ function createActivationContext(options: {
     markdown: {
       getRenderers: () => [],
       registerRendererProvider(provider) {
-        return options.registerRendererProvider?.(provider.id) ?? toDisposable(() => undefined);
+        return options.registerRendererProvider?.(provider) ?? toDisposable(() => undefined);
       }
     },
     subscriptions: {

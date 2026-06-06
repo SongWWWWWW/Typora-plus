@@ -136,7 +136,9 @@ export function createWorkbenchServices(): WorkbenchServices {
   });
   serviceCollection.set(ICommandService, commandService);
   extensionService = new ExtensionService(commandService, menuService, keybindingService, {
-    activationHandler: createWorkbenchExtensionActivationHandler(),
+    activationHandler: createWorkbenchExtensionActivationHandler({
+      getConfiguration: () => configurationService.getValue()
+    }),
     contextKeyService,
     exportService,
     markdownRendererService,

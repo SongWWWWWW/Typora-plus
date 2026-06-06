@@ -53,6 +53,7 @@ describe("configuration", () => {
 
     expect(next.editor.maxWidth).toBe(720);
     expect(next.appearance.colorScheme).toBe("system");
+    expect(next.markdown.statusBadges).toEqual(defaultConfiguration.markdown.statusBadges);
   });
 
   it("keeps default numeric values aligned with configured steps", () => {
@@ -102,6 +103,16 @@ describe("configuration", () => {
         focusMode: true,
         autoSaveDelayMs: 1250,
         rendererPreviewCacheEntries: 0
+      },
+      markdown: {
+        statusBadges: [
+          {
+            key: "shipped",
+            label: "Shipped",
+            tone: "success",
+            aliases: ["released"]
+          }
+        ]
       }
     });
 
@@ -116,6 +127,76 @@ describe("configuration", () => {
     expect(restored.getValue().editor.autoSave).toBe(true);
     expect(restored.getValue().editor.autoSaveDelayMs).toBe(1250);
     expect(restored.getValue().editor.rendererPreviewCacheEntries).toBe(0);
+    expect(restored.getValue().markdown.statusBadges).toEqual([
+      {
+        key: "shipped",
+        label: "Shipped",
+        tone: "success",
+        aliases: ["released"]
+      }
+    ]);
+  });
+
+  it("sanitizes Markdown status badge configuration", () => {
+    const storage = createMemoryStorage();
+    storage.write("configuration", JSON.stringify({
+      markdown: {
+        statusBadges: [
+          {
+            key: " Ship ",
+            label: " Ready   to ship ",
+            tone: "success",
+            aliases: ["Released", "ship", "", "QA Done"]
+          },
+          {
+            key: "risk",
+            label: "Risk",
+            tone: "danger",
+            aliases: ["Blocked", "failed"]
+          },
+          {
+            key: "risk",
+            label: "Duplicate",
+            tone: "warning",
+            aliases: []
+          },
+          {
+            key: "invalid key",
+            label: "Invalid",
+            tone: "neutral",
+            aliases: []
+          }
+        ]
+      }
+    }));
+
+    const service = new ConfigurationService({
+      storageKey: "configuration",
+      storage
+    });
+
+    expect(service.getValue().markdown.statusBadges).toEqual([
+      {
+        key: "ship",
+        label: "Ready to ship",
+        tone: "success",
+        aliases: ["released"]
+      },
+      {
+        key: "risk",
+        label: "Risk",
+        tone: "danger",
+        aliases: ["blocked", "failed"]
+      }
+    ]);
+
+    service.updateValue({
+      markdown: {
+        statusBadges: []
+      }
+    });
+
+    expect(service.getValue().markdown.statusBadges).toEqual([]);
   });
 
   it("clears optional appearance theme ids", () => {
@@ -155,6 +236,16 @@ describe("configuration", () => {
       },
       workspace: {
         searchMaxResults: 0
+      },
+      markdown: {
+        statusBadges: [
+          {
+            key: "invalid key",
+            label: "Invalid",
+            tone: "missing",
+            aliases: {}
+          }
+        ]
       }
     }));
 
@@ -171,6 +262,7 @@ describe("configuration", () => {
     );
     expect(service.getValue().editor.typewriterMode).toBe(true);
     expect(service.getValue().workspace.searchMaxResults).toBe(120);
+    expect(service.getValue().markdown.statusBadges).toEqual(defaultConfiguration.markdown.statusBadges);
   });
 
   it("clamps out-of-range stored numeric configuration values", () => {

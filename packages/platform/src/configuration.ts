@@ -3,11 +3,19 @@ import { createServiceIdentifier } from "./instantiation";
 import type { UserKeybindingRule } from "./keybindings";
 
 export type ColorSchemePreference = "light" | "dark" | "system";
+export type MarkdownStatusBadgeTone = "danger" | "info" | "neutral" | "success" | "warning";
 
 export interface ConfigurationNumberConstraint {
   readonly min: number;
   readonly max: number;
   readonly step: number;
+}
+
+export interface MarkdownStatusBadgeConfiguration {
+  readonly key: string;
+  readonly label: string;
+  readonly tone: MarkdownStatusBadgeTone;
+  readonly aliases: readonly string[];
 }
 
 export interface TyporaPlusConfiguration {
@@ -30,6 +38,9 @@ export interface TyporaPlusConfiguration {
     readonly defaultAssetFolder: string;
     readonly searchMaxFileSizeBytes: number;
     readonly searchMaxResults: number;
+  };
+  readonly markdown: {
+    readonly statusBadges: readonly MarkdownStatusBadgeConfiguration[];
   };
   readonly keybindings: {
     readonly overrides: readonly UserKeybindingRule[];
@@ -67,6 +78,7 @@ export type PartialConfiguration = {
   readonly appearance?: PartialAppearanceConfiguration;
   readonly editor?: Partial<TyporaPlusConfiguration["editor"]>;
   readonly workspace?: Partial<TyporaPlusConfiguration["workspace"]>;
+  readonly markdown?: Partial<TyporaPlusConfiguration["markdown"]>;
   readonly keybindings?: Partial<TyporaPlusConfiguration["keybindings"]>;
 };
 
@@ -77,6 +89,9 @@ export const defaultConfigurationServiceOptions: ConfigurationServiceOptions = {
 };
 
 export const configurationBytesPerMegabyte = 1024 * 1024;
+export const configurationMaxMarkdownStatusBadges = 50;
+export const configurationMaxMarkdownStatusBadgeAliases = 30;
+export const configurationMaxMarkdownStatusBadgeTextLength = 64;
 
 export const configurationNumberConstraints = {
   editorFontSize: { min: 13, max: 24, step: 1 },
@@ -91,6 +106,39 @@ export const configurationNumberConstraints = {
   },
   workspaceSearchMaxResults: { min: 20, max: 500, step: 10 }
 } as const satisfies Record<string, ConfigurationNumberConstraint>;
+
+export const defaultMarkdownStatusBadges = [
+  {
+    key: "done",
+    aliases: ["complete", "completed", "ok", "success", "yes"],
+    label: "Done",
+    tone: "success"
+  },
+  {
+    key: "doing",
+    aliases: ["in-progress", "progress", "wip", "active"],
+    label: "In Progress",
+    tone: "info"
+  },
+  {
+    key: "pending",
+    aliases: ["review", "waiting", "hold"],
+    label: "Pending",
+    tone: "warning"
+  },
+  {
+    key: "blocked",
+    aliases: ["error", "failed", "failure", "risk"],
+    label: "Blocked",
+    tone: "danger"
+  },
+  {
+    key: "todo",
+    aliases: ["open", "planned", "draft"],
+    label: "Todo",
+    tone: "neutral"
+  }
+] as const satisfies readonly MarkdownStatusBadgeConfiguration[];
 
 export const defaultConfiguration: TyporaPlusConfiguration = {
   appearance: {
@@ -111,6 +159,9 @@ export const defaultConfiguration: TyporaPlusConfiguration = {
     defaultAssetFolder: "assets",
     searchMaxFileSizeBytes: 2 * configurationBytesPerMegabyte,
     searchMaxResults: 120
+  },
+  markdown: {
+    statusBadges: defaultMarkdownStatusBadges
   },
   keybindings: {
     overrides: []
@@ -173,6 +224,10 @@ export function mergeConfiguration(
       ...base.workspace,
       ...value.workspace
     },
+    markdown: {
+      ...base.markdown,
+      ...value.markdown
+    },
     keybindings: {
       ...base.keybindings,
       ...value.keybindings
@@ -224,6 +279,7 @@ function sanitizePartialConfiguration(value: unknown): PartialConfiguration {
     ...(isRecord(value.appearance) ? { appearance: sanitizeAppearanceConfiguration(value.appearance) } : {}),
     ...(isRecord(value.editor) ? { editor: sanitizeEditorConfiguration(value.editor) } : {}),
     ...(isRecord(value.workspace) ? { workspace: sanitizeWorkspaceConfiguration(value.workspace) } : {}),
+    ...(isRecord(value.markdown) ? { markdown: sanitizeMarkdownConfiguration(value.markdown) } : {}),
     ...(isRecord(value.keybindings) ? { keybindings: sanitizeKeybindingsConfiguration(value.keybindings) } : {})
   };
 }
@@ -274,6 +330,77 @@ function sanitizeWorkspaceConfiguration(value: Record<string, unknown>): Partial
   };
 }
 
+function sanitizeMarkdownConfiguration(value: Record<string, unknown>): Partial<TyporaPlusConfiguration["markdown"]> {
+  const statusBadges = sanitizeMarkdownStatusBadges(value.statusBadges);
+
+  return {
+    ...(statusBadges !== undefined ? { statusBadges } : {})
+  };
+}
+
+function sanitizeMarkdownStatusBadges(value: unknown): readonly MarkdownStatusBadgeConfiguration[] | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+
+  const badges: MarkdownStatusBadgeConfiguration[] = [];
+  const seenKeys = new Set<string>();
+
+  for (const candidate of value.slice(0, configurationMaxMarkdownStatusBadges)) {
+    if (!isRecord(candidate)) {
+      continue;
+    }
+
+    const key = normalizeMarkdownStatusBadgeKey(candidate.key);
+    const label = normalizeMarkdownStatusBadgeText(candidate.label);
+    const tone = isMarkdownStatusBadgeTone(candidate.tone) ? candidate.tone : undefined;
+
+    if (!key || !label || !tone || seenKeys.has(key)) {
+      continue;
+    }
+
+    seenKeys.add(key);
+    badges.push({
+      key,
+      label,
+      tone,
+      aliases: sanitizeMarkdownStatusBadgeAliases(candidate.aliases, key)
+    });
+  }
+
+  if (badges.length === 0 && value.length > 0) {
+    return undefined;
+  }
+
+  return badges;
+}
+
+function sanitizeMarkdownStatusBadgeAliases(value: unknown, key: string): readonly string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  const aliases: string[] = [];
+  const seenAliases = new Set([key]);
+
+  for (const candidate of value.slice(0, configurationMaxMarkdownStatusBadgeAliases)) {
+    const alias = normalizeMarkdownStatusBadgeKey(candidate);
+
+    if (!alias || seenAliases.has(alias)) {
+      continue;
+    }
+
+    seenAliases.add(alias);
+    aliases.push(alias);
+  }
+
+  return aliases;
+}
+
 function sanitizeKeybindingsConfiguration(value: Record<string, unknown>): Partial<TyporaPlusConfiguration["keybindings"]> {
   if (!Array.isArray(value.overrides)) {
     return {};
@@ -290,6 +417,14 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function isColorSchemePreference(value: unknown): value is ColorSchemePreference {
   return value === "light" || value === "dark" || value === "system";
+}
+
+function isMarkdownStatusBadgeTone(value: unknown): value is MarkdownStatusBadgeTone {
+  return value === "danger" ||
+    value === "info" ||
+    value === "neutral" ||
+    value === "success" ||
+    value === "warning";
 }
 
 function isSupportedFiniteNumber(
@@ -331,6 +466,38 @@ function stepPrecision(step: number): number {
 
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;
+}
+
+function normalizeMarkdownStatusBadgeKey(value: unknown): string | undefined {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+
+  const normalized = value.trim().toLowerCase();
+
+  if (!normalized || normalized.length > configurationMaxMarkdownStatusBadgeTextLength) {
+    return undefined;
+  }
+
+  if (!/^[a-z0-9][a-z0-9_.+-]*$/.test(normalized)) {
+    return undefined;
+  }
+
+  return normalized;
+}
+
+function normalizeMarkdownStatusBadgeText(value: unknown): string | undefined {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+
+  const normalized = value.trim().replace(/\s+/g, " ");
+
+  if (!normalized || normalized.length > configurationMaxMarkdownStatusBadgeTextLength) {
+    return undefined;
+  }
+
+  return normalized;
 }
 
 function isUserKeybindingRule(value: unknown): value is UserKeybindingRule {

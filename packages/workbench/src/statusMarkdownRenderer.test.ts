@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { MarkdownStatusBadgeConfiguration } from "@typora-plus/platform";
 import {
   createStatusMarkdownRendererProvider,
   workbenchStatusRendererId
@@ -46,6 +47,61 @@ describe("Status Markdown renderer", () => {
       html: [
         `<span class="tp-renderer-status tp-renderer-status-neutral" title="needs triage">`,
         `needs triage`,
+        `</span>`
+      ].join("")
+    });
+  });
+
+  it("uses configured status badge vocabulary on each render", async () => {
+    let statusBadges: readonly MarkdownStatusBadgeConfiguration[] = [
+      {
+        key: "shipped",
+        label: "Shipped",
+        tone: "success",
+        aliases: ["released"]
+      }
+    ];
+    const provider = createStatusMarkdownRendererProvider({
+      getStatusBadges: () => statusBadges
+    });
+
+    await expect(Promise.resolve(provider.render({
+      language: "status",
+      value: "released"
+    }))).resolves.toEqual({
+      html: [
+        `<span class="tp-renderer-status tp-renderer-status-success" title="released">`,
+        `Shipped`,
+        `</span>`
+      ].join("")
+    });
+
+    statusBadges = [
+      {
+        key: "risk",
+        label: "Risk",
+        tone: "danger",
+        aliases: ["blocked"]
+      }
+    ];
+
+    await expect(Promise.resolve(provider.render({
+      language: "status",
+      value: "blocked: Waiting on API"
+    }))).resolves.toEqual({
+      html: [
+        `<span class="tp-renderer-status tp-renderer-status-danger" title="blocked: Waiting on API">`,
+        `Waiting on API`,
+        `</span>`
+      ].join("")
+    });
+    await expect(Promise.resolve(provider.render({
+      language: "status",
+      value: "released"
+    }))).resolves.toEqual({
+      html: [
+        `<span class="tp-renderer-status tp-renderer-status-neutral" title="released">`,
+        `released`,
         `</span>`
       ].join("")
     });
