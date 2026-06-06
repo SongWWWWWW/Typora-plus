@@ -40,11 +40,16 @@ export function SettingsDialog({
   const [assetFolderDraft, setAssetFolderDraft] = useState(configuration.workspace.defaultAssetFolder);
   const [recordingCommand, setRecordingCommand] = useState<string | undefined>();
   const [keybindingQuery, setKeybindingQuery] = useState("");
+  const [modifiedKeybindingsOnly, setModifiedKeybindingsOnly] = useState(false);
   const [pendingKeybinding, setPendingKeybinding] = useState<PendingKeybindingOverride | undefined>();
+  const hasKeybindingOverrides = configuration.keybindings.overrides.length > 0;
   const searchMaxFileSizeMegabytes = bytesToMegabytes(configuration.workspace.searchMaxFileSizeBytes);
   const filteredKeybindingCommands = useMemo(
-    () => filterKeybindingCommands(commands, keybindingQuery),
-    [commands, keybindingQuery]
+    () => filterKeybindingCommands(commands, keybindingQuery, {
+      modifiedOnly: modifiedKeybindingsOnly,
+      overrides: configuration.keybindings.overrides
+    }),
+    [commands, configuration.keybindings.overrides, keybindingQuery, modifiedKeybindingsOnly]
   );
 
   useEffect(() => {
@@ -52,6 +57,7 @@ export function SettingsDialog({
       setAssetFolderDraft(configuration.workspace.defaultAssetFolder);
       setRecordingCommand(undefined);
       setKeybindingQuery("");
+      setModifiedKeybindingsOnly(false);
       setPendingKeybinding(undefined);
     }
   }, [configuration.workspace.defaultAssetFolder, open]);
@@ -278,6 +284,32 @@ export function SettingsDialog({
                 </button>
               ) : <span aria-hidden="true" />}
             </div>
+            <div className="tp-settings-keybinding-toolbar">
+              <label className="tp-settings-toggle">
+                <input
+                  type="checkbox"
+                  checked={modifiedKeybindingsOnly}
+                  aria-label="Modified Keybindings"
+                  onChange={(event) => setModifiedKeybindingsOnly(event.target.checked)}
+                />
+                <span>Modified</span>
+              </label>
+              <button
+                className="tp-settings-small-button"
+                type="button"
+                disabled={!hasKeybindingOverrides}
+                onClick={() => {
+                  setPendingKeybinding(undefined);
+                  onUpdate({
+                    keybindings: {
+                      overrides: []
+                    }
+                  });
+                }}
+              >
+                Reset All
+              </button>
+            </div>
             <div className="tp-settings-keybinding-list">
               {filteredKeybindingCommands.map((command) => {
                 const hasOverride = configuration.keybindings.overrides.some((override) => override.command === command.id);
@@ -342,7 +374,9 @@ export function SettingsDialog({
                 );
               })}
               {filteredKeybindingCommands.length === 0 ? (
-                <div className="tp-settings-empty-row">No matching commands</div>
+                <div className="tp-settings-empty-row">
+                  {modifiedKeybindingsOnly && !hasKeybindingOverrides ? "No modified shortcuts" : "No matching commands"}
+                </div>
               ) : null}
             </div>
           </SettingsSection>

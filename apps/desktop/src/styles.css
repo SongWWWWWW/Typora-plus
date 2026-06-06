@@ -929,6 +929,14 @@ button {
   color: var(--tp-color-text);
 }
 
+.tp-settings-keybinding-toolbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 92px;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
 .tp-settings-keybinding-row {
   display: grid;
   grid-template-columns: minmax(120px, 1fr) minmax(88px, auto) 72px 64px;
@@ -1094,6 +1102,10 @@ button {
 
   .tp-settings-keybinding-row {
     grid-template-columns: minmax(0, 1fr) minmax(74px, auto);
+  }
+
+  .tp-settings-keybinding-toolbar {
+    grid-template-columns: minmax(0, 1fr) 88px;
   }
 
   .tp-settings-keybinding-conflict {

@@ -26,15 +26,24 @@ export function isRecordableKeybinding(keybinding: Keybinding): boolean {
 
 export function filterKeybindingCommands(
   commands: readonly Command[],
-  query: string
+  query: string,
+  options: {
+    readonly modifiedOnly?: boolean;
+    readonly overrides?: readonly UserKeybindingRule[];
+  } = {}
 ): readonly Command[] {
   const normalizedQuery = query.trim().toLowerCase();
-
-  if (!normalizedQuery) {
-    return commands;
-  }
+  const modifiedCommands = new Set((options.overrides ?? []).map((override) => override.command));
 
   return commands.filter((command) => {
+    if (options.modifiedOnly && !modifiedCommands.has(command.id)) {
+      return false;
+    }
+
+    if (!normalizedQuery) {
+      return true;
+    }
+
     const haystack = `${command.title} ${command.category ?? ""} ${command.id}`.toLowerCase();
     return haystack.includes(normalizedQuery);
   });

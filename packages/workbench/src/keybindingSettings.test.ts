@@ -66,4 +66,28 @@ describe("keybinding settings", () => {
       "theme.toggle"
     ]);
   });
+
+  it("filters keybinding commands to modified overrides", () => {
+    const commands = [
+      { id: "file.save", title: "Save", category: "File", run: () => undefined },
+      { id: "workbench.quickOpen", title: "Quick Open", category: "Workbench", run: () => undefined },
+      { id: "theme.toggle", title: "Toggle Theme", category: "Workbench", run: () => undefined }
+    ];
+
+    expect(filterKeybindingCommands(commands, "", {
+      modifiedOnly: true,
+      overrides: [
+        { command: "file.save", keybinding: { key: "k", primary: true } },
+        { command: "theme.toggle", keybinding: { key: "t", primary: true } }
+      ]
+    }).map((command) => command.id)).toEqual(["file.save", "theme.toggle"]);
+
+    expect(filterKeybindingCommands(commands, "theme", {
+      modifiedOnly: true,
+      overrides: [
+        { command: "file.save", keybinding: { key: "k", primary: true } },
+        { command: "theme.toggle", keybinding: { key: "t", primary: true } }
+      ]
+    }).map((command) => command.id)).toEqual(["theme.toggle"]);
+  });
 });
