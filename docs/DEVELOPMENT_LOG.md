@@ -859,3 +859,35 @@ Review:
 Known limitations:
 
 - The scanner handles escaped pipes and inline code spans, but a full Markdown parser-backed mapping is still planned for deeper inline syntax cases.
+
+## 2026-06-06 - P2 Inline Math Source Navigation
+
+Completed:
+
+- Added source-focused click editing for inactive inline math previews.
+- Inline math preview clicks now focus the editor and select only the TeX expression inside `$...$`, preserving the delimiters.
+- Kept widget identity tied to source ranges so repeated formulas with the same expression keep distinct edit targets.
+- Added a focused test for repeated inline math source ranges.
+
+Quality gate:
+
+- `npm run test -- --run packages/editor/src/livePreview.test.ts`: passed, 71 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 91 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed
+- Production browser preview: passed at `http://127.0.0.1:4173`
+- Browser interaction check: clicking rendered `$x+y$` selected `x+y`; clicking rendered `$a^2+b^2=c^2$` selected `a^2+b^2=c^2`.
+- Desktop default viewport and mobile 390px checks: passed without page horizontal overflow or console errors.
+
+Review:
+
+- Inline math navigation remains inside `packages/editor`; Workbench, platform, and Electron boundaries did not change.
+- The Markdown source model remains unchanged; preview clicks dispatch editor selections only.
+- The interaction follows the same lightweight source navigation pattern as table cell previews.
+- Visual behavior reuses the existing inline math preview style with a text cursor affordance; no new token family was needed.
+
+Known limitations:
+
+- Display math blocks still rely on body clicks or the active block state for source editing; a more explicit display-math edit affordance remains planned.
+- Inline math parsing remains scanner-based pending parser-backed position mapping.
