@@ -889,5 +889,36 @@ Review:
 
 Known limitations:
 
-- Display math blocks still rely on body clicks or the active block state for source editing; a more explicit display-math edit affordance remains planned.
 - Inline math parsing remains scanner-based pending parser-backed position mapping.
+
+## 2026-06-06 - P2 Display Math Source Navigation
+
+Completed:
+
+- Added a pure source-range helper for display math blocks.
+- Added source-focused click editing for inactive display math preview bodies.
+- Display math body clicks now focus the editor and select only the TeX content inside `$$` fences.
+- Kept the existing Copy TeX button path isolated so copy actions do not trigger source selection.
+- Added focused tests for single-line, multiline, empty, and non-math source-range behavior.
+
+Quality gate:
+
+- `npm run test -- --run packages/editor/src/livePreview.test.ts`: passed, 75 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 95 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed
+- Production browser preview: passed at `http://127.0.0.1:4173`
+- Browser interaction check: clicking the display math body selected the multiline TeX source inside `$$`; clicking `Copy TeX` did not select source text.
+- Desktop default viewport and mobile 390px checks: passed without page horizontal overflow or console errors.
+
+Review:
+
+- Display math navigation remains inside `packages/editor`; Workbench, platform, and Electron boundaries did not change.
+- Source range calculation is pure and testable, keeping widget code focused on mapping ranges into CodeMirror selections.
+- The Markdown source model remains unchanged; preview clicks only dispatch editor selections.
+- Visual behavior reuses the existing math preview body with a text cursor affordance; no new token family or hard-coded platform behavior was introduced.
+
+Known limitations:
+
+- Display math source ranges are scanner-based and select content lines as written; parser-backed math position mapping remains planned for deeper syntax-aware editing.
