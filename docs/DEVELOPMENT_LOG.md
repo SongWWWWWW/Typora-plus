@@ -2931,3 +2931,37 @@ Known limitations:
 - External extension package loading is still not implemented.
 - Extension host transport and IPC are still not implemented.
 - The runtime facade is not wired to a worker/process transport yet.
+
+## 2026-06-07 - P2 Extension Host Linked Protocol Transport
+
+Completed:
+
+- Added `createLinkedExtensionHostProtocolTransports()` as a platform-only linked transport pair for protocol integration tests.
+- Made the linked transport JSON round-trip every message through the protocol serializer/deserializer so tests do not pass object references across the boundary.
+- Added disposal checks for local and peer endpoints so closed transports fail fast.
+- Added end-to-end tests wiring `ExtensionHostProtocolHost`, `ExtensionHostProtocolSession`, `ExtensionHostRuntimeBroker`, `ExtensionHostProtocolRuntime`, and the linked transport together.
+- Verified remote runtime command, export provider, and Markdown renderer registrations appear as main-side proxies.
+- Verified main-side proxy command execution, export document calls, and Markdown render calls travel back to the runtime facade and return results.
+- Verified remote disposable cleanup sends unregister messages and removes main-side proxy contributions.
+
+Quality gate:
+
+- `npm run typecheck`: passed
+- `npx vitest run packages/platform/src/extensionHostProtocolTransport.test.ts packages/platform/src/extensionHostProtocolRuntime.test.ts packages/platform/src/extensionHostProtocolHost.test.ts`: passed, 15 tests
+- `npm run verify`: passed, 296 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Browser smoke check: not run because this stage only changes platform protocol transport test utilities and documentation.
+
+Review:
+
+- This transport is a test/integration helper, not a production IPC implementation.
+- The protocol stack is now verified as a closed loop from host activation through runtime registration, main-side proxy invocation, remote callback handling, and unregister cleanup.
+- JSON round-trip delivery keeps the tests honest about serializable protocol payloads.
+- No Electron IPC, worker transport, external code loader, DOM access, unrestricted Node access, storage path, visual token, or extra documentation file was introduced.
+
+Known limitations:
+
+- External extension package loading is still not implemented.
+- Extension host transport and IPC are still not implemented.
+- A production transport adapter still needs to decide between worker, process, or Electron IPC based on runtime constraints.
