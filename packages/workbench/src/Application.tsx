@@ -8,6 +8,8 @@ import type {
   TextFileModel,
   TyporaPlusConfiguration,
   WorkspaceIndexedLink,
+  WorkspaceIndexedTag,
+  WorkspaceIndexedTagSummary,
   WorkspaceIndexStatus,
   WorkspaceSearchResult,
   WorkspaceState
@@ -21,6 +23,7 @@ import {
   FilePlus,
   Folder,
   FolderOpen,
+  Hash,
   Link2,
   ListTree,
   Moon,
@@ -37,7 +40,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import type { WorkbenchServices } from "./services";
 
-type SideView = "files" | "search" | "outline" | "backlinks";
+type SideView = "files" | "search" | "outline" | "backlinks" | "tags";
 
 export interface WorkbenchApplicationProps {
   readonly services: WorkbenchServices;
@@ -67,6 +70,7 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [quickOpen, setQuickOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [selectedTag, setSelectedTag] = useState<string | undefined>();
   const [operationError, setOperationError] = useState<string | undefined>();
   const [saveConflict, setSaveConflict] = useState<FileSaveConflict | undefined>();
   const [indexStatus, setIndexStatus] = useState<WorkspaceIndexStatus>(() => services.indexService.getStatus());
@@ -86,6 +90,14 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
       : [],
     [indexStatus.updatedAt, model.uri, services, workspace.files]
   );
+  const tags = useMemo(
+    () => workspace.files ? services.indexService.getTags() : [],
+    [indexStatus.updatedAt, services, workspace.files]
+  );
+  const taggedResources = useMemo(
+    () => workspace.files && selectedTag ? services.indexService.getTaggedResources(selectedTag) : [],
+    [indexStatus.updatedAt, selectedTag, services, workspace.files]
+  );
 
   useEffect(() => services.configurationService.onDidChangeConfiguration(setConfiguration).dispose, [services]);
 
@@ -104,6 +116,17 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
   useEffect(() => services.recentService.onDidChangeRecents(setRecents).dispose, [services]);
 
   useEffect(() => services.indexService.onDidChangeStatus(setIndexStatus).dispose, [services]);
+
+  useEffect(() => {
+    if (tags.length === 0) {
+      setSelectedTag(undefined);
+      return;
+    }
+
+    if (!selectedTag || !tags.some((tag) => tag.tag.toLowerCase() === selectedTag.toLowerCase())) {
+      setSelectedTag(tags[0]?.tag);
+    }
+  }, [selectedTag, tags]);
 
   useEffect(() => {
     const workspaceFiles = workspace.files;
@@ -234,6 +257,12 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
       run: () => toggleSideView("backlinks", sideView, setSideView)
     }));
     disposables.add(services.commandService.registerCommand({
+      id: "workbench.sidebar.tags",
+      title: "Show Tags",
+      category: "Workbench",
+      run: () => toggleSideView("tags", sideView, setSideView)
+    }));
+    disposables.add(services.commandService.registerCommand({
       id: "file.save",
       title: "Save",
       category: "File",
@@ -360,6 +389,9 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
             searchQuery={searchQuery}
             searchResults={searchResults}
             backlinks={backlinks}
+            tags={tags}
+            selectedTag={selectedTag}
+            taggedResources={taggedResources}
             indexStatus={indexStatus}
             onSearchQueryChange={setSearchQuery}
             onClose={() => setSideView(null)}
@@ -383,6 +415,15 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
                 const opened = await services.textFileService.openFile(link.uri);
                 services.recentService.addRecentFile(opened.uri, opened.name);
                 window.setTimeout(() => editorRef.current?.scrollToLine(link.line), 0);
+              }, setOperationError, setSaveConflict);
+            }}
+            onSelectTag={setSelectedTag}
+            onOpenTaggedResource={(tag) => {
+              void runWorkbenchAction(async () => {
+                setSaveConflict(undefined);
+                const opened = await services.textFileService.openFile(tag.uri);
+                services.recentService.addRecentFile(opened.uri, opened.name);
+                window.setTimeout(() => editorRef.current?.scrollToLine(tag.line), 0);
               }, setOperationError, setSaveConflict);
             }}
             onOpenWorkspace={() => services.commandService.executeCommand("file.openWorkspace")}
@@ -568,6 +609,9 @@ function ActivityBar({
       <IconButton title="Backlinks" active={activeView === "backlinks"} onClick={() => onToggle("backlinks")}>
         <Link2 size={19} />
       </IconButton>
+      <IconButton title="Tags" active={activeView === "tags"} onClick={() => onToggle("tags")}>
+        <Hash size={19} />
+      </IconButton>
       <div className="tp-activitybar-spacer" />
       <IconButton title="Command Palette" onClick={onOpenPalette}>
         <CommandIcon size={19} />
@@ -586,12 +630,17 @@ function Sidebar({
   searchQuery,
   searchResults,
   backlinks,
+  tags,
+  selectedTag,
+  taggedResources,
   indexStatus,
   onSearchQueryChange,
   onClose,
   onSelectLine,
   onOpenSearchResult,
   onOpenBacklink,
+  onSelectTag,
+  onOpenTaggedResource,
   onOpenWorkspace,
   onOpenRecentWorkspace,
   onRefreshWorkspace,
@@ -606,12 +655,17 @@ function Sidebar({
   readonly searchQuery: string;
   readonly searchResults: readonly WorkbenchSearchResult[];
   readonly backlinks: readonly WorkspaceIndexedLink[];
+  readonly tags: readonly WorkspaceIndexedTagSummary[];
+  readonly selectedTag: string | undefined;
+  readonly taggedResources: readonly WorkspaceIndexedTag[];
   readonly indexStatus: WorkspaceIndexStatus;
   readonly onSearchQueryChange: (value: string) => void;
   readonly onClose: () => void;
   readonly onSelectLine: (line: number) => void;
   readonly onOpenSearchResult: (result: WorkbenchSearchResult) => void;
   readonly onOpenBacklink: (link: WorkspaceIndexedLink) => void;
+  readonly onSelectTag: (tag: string) => void;
+  readonly onOpenTaggedResource: (tag: WorkspaceIndexedTag) => void;
   readonly onOpenWorkspace: () => void;
   readonly onOpenRecentWorkspace: (recent: RecentResource) => void;
   readonly onRefreshWorkspace: () => void;
@@ -652,6 +706,16 @@ function Sidebar({
           backlinks={backlinks}
           indexStatus={indexStatus}
           onOpenBacklink={onOpenBacklink}
+        />
+      ) : null}
+      {view === "tags" ? (
+        <TagsPanel
+          tags={tags}
+          selectedTag={selectedTag}
+          taggedResources={taggedResources}
+          indexStatus={indexStatus}
+          onSelectTag={onSelectTag}
+          onOpenTaggedResource={onOpenTaggedResource}
         />
       ) : null}
     </aside>
@@ -948,6 +1012,68 @@ function BacklinksPanel({
   );
 }
 
+function TagsPanel({
+  tags,
+  selectedTag,
+  taggedResources,
+  indexStatus,
+  onSelectTag,
+  onOpenTaggedResource
+}: {
+  readonly tags: readonly WorkspaceIndexedTagSummary[];
+  readonly selectedTag: string | undefined;
+  readonly taggedResources: readonly WorkspaceIndexedTag[];
+  readonly indexStatus: WorkspaceIndexStatus;
+  readonly onSelectTag: (tag: string) => void;
+  readonly onOpenTaggedResource: (tag: WorkspaceIndexedTag) => void;
+}) {
+  return (
+    <div className="tp-sidebar-content">
+      {indexStatus.state === "indexing" ? (
+        <div className="tp-search-status">{indexStatus.indexedFiles}/{indexStatus.totalFiles} indexed</div>
+      ) : null}
+      {tags.length > 0 ? (
+        <>
+          <section className="tp-tag-list" aria-label="Tags">
+            {tags.map((tag) => {
+              const active = selectedTag?.toLowerCase() === tag.tag.toLowerCase();
+
+              return (
+                <button
+                  className={active ? "tp-tag-row tp-tag-row-active" : "tp-tag-row"}
+                  key={tag.tag}
+                  type="button"
+                  onClick={() => onSelectTag(tag.tag)}
+                >
+                  <span>#{tag.tag}</span>
+                  <small>{tag.count}</small>
+                </button>
+              );
+            })}
+          </section>
+          <div className="tp-section-label">Notes</div>
+          <div className="tp-result-list">
+            {taggedResources.map((tag, index) => (
+              <button
+                className="tp-result-row"
+                key={tagResourceKey(tag, index)}
+                type="button"
+                onClick={() => onOpenTaggedResource(tag)}
+              >
+                <span className="tp-result-line">{tag.line}</span>
+                <span className="tp-result-body">
+                  <small>{tag.relativePath}</small>
+                  <span className="tp-result-preview">#{tag.tag}</span>
+                </span>
+              </button>
+            ))}
+          </div>
+        </>
+      ) : <div className="tp-empty-row">No tags</div>}
+    </div>
+  );
+}
+
 function Statusbar({
   model,
   stats,
@@ -1200,6 +1326,10 @@ function formatBacklinkPreview(link: WorkspaceIndexedLink): string {
   return link.label.trim() || link.target;
 }
 
+function tagResourceKey(tag: WorkspaceIndexedTag, index: number): string {
+  return `${tag.uri.toString()}-${tag.line}-${tag.tag}-${index}`;
+}
+
 function filterCommands(
   commands: readonly { readonly id: string; readonly title: string; readonly category?: string }[],
   query: string
@@ -1280,6 +1410,8 @@ function sidebarTitle(view: SideView): string {
       return "Outline";
     case "backlinks":
       return "Backlinks";
+    case "tags":
+      return "Tags";
   }
 }
 
