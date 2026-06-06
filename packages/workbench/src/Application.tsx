@@ -48,6 +48,7 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
   const [workspace, setWorkspace] = useState<WorkspaceState>(() => services.workspaceService.getWorkspace());
   const [sideView, setSideView] = useState<SideView | null>("outline");
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [quickOpen, setQuickOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [operationError, setOperationError] = useState<string | undefined>();
   const editorRef = useRef<MarkdownEditorHandle | null>(null);
@@ -122,6 +123,12 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
           await services.textFileService.openFile(workspaceFiles.files[0].uri);
         }
       }, setOperationError)
+    }));
+    disposables.add(services.commandService.registerCommand({
+      id: "workbench.quickOpen",
+      title: "Quick Open",
+      category: "Workbench",
+      run: () => setQuickOpen(true)
     }));
     disposables.add(services.commandService.registerCommand({
       id: "workbench.commandPalette.open",
@@ -203,6 +210,12 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
         return;
       }
 
+      if (modifier && !event.shiftKey && event.key.toLowerCase() === "p") {
+        event.preventDefault();
+        setQuickOpen(true);
+        return;
+      }
+
       if (modifier && event.key.toLowerCase() === "s") {
         event.preventDefault();
         void runWorkbenchAction(() => services.textFileService.save(), setOperationError);
@@ -270,6 +283,17 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
         onExecute={(id) => {
           services.commandService.executeCommand(id);
           setPaletteOpen(false);
+        }}
+      />
+      <QuickOpen
+        open={quickOpen}
+        files={workspace.files?.files ?? []}
+        onClose={() => setQuickOpen(false)}
+        onOpen={(entry) => {
+          void runWorkbenchAction(async () => {
+            await services.textFileService.openFile(entry.uri);
+            setQuickOpen(false);
+          }, setOperationError);
         }}
       />
     </main>
@@ -663,6 +687,68 @@ function CommandPalette({
   );
 }
 
+function QuickOpen({
+  open,
+  files,
+  onClose,
+  onOpen
+}: {
+  readonly open: boolean;
+  readonly files: readonly FileTreeEntry[];
+  readonly onClose: () => void;
+  readonly onOpen: (entry: FileTreeEntry) => void;
+}) {
+  const [query, setQuery] = useState("");
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const filteredFiles = useMemo(() => filterFiles(files, query), [files, query]);
+
+  useEffect(() => {
+    if (!open) {
+      setQuery("");
+      return;
+    }
+
+    window.setTimeout(() => inputRef.current?.focus(), 0);
+  }, [open]);
+
+  if (!open) {
+    return null;
+  }
+
+  return (
+    <div className="tp-command-overlay" role="presentation" onMouseDown={onClose}>
+      <section className="tp-command-palette" role="dialog" aria-label="Quick Open" onMouseDown={(event) => event.stopPropagation()}>
+        <div className="tp-command-input">
+          <Search size={17} />
+          <input
+            ref={inputRef}
+            value={query}
+            aria-label="Quick Open"
+            onChange={(event) => setQuery(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Escape") {
+                onClose();
+              }
+              if (event.key === "Enter" && filteredFiles[0]) {
+                onOpen(filteredFiles[0]);
+              }
+            }}
+          />
+        </div>
+        <div className="tp-command-list">
+          {filteredFiles.map((entry) => (
+            <button className="tp-quick-row" key={entry.uri.toString()} type="button" onClick={() => onOpen(entry)}>
+              <FileText size={15} />
+              <span>{entry.name}</span>
+              <small>{entry.relativePath}</small>
+            </button>
+          ))}
+        </div>
+      </section>
+    </div>
+  );
+}
+
 function IconButton({
   title,
   active = false,
@@ -717,6 +803,52 @@ function filterCommands(
     const haystack = `${command.title} ${command.category ?? ""} ${command.id}`.toLowerCase();
     return haystack.includes(normalizedQuery);
   });
+}
+
+function filterFiles(files: readonly FileTreeEntry[], query: string): FileTreeEntry[] {
+  const normalizedQuery = query.trim().toLowerCase();
+
+  if (!normalizedQuery) {
+    return files.slice(0, 80);
+  }
+
+  return files
+    .map((file) => ({
+      file,
+      score: scoreFile(file, normalizedQuery)
+    }))
+    .filter((result) => result.score > 0)
+    .sort((first, second) => second.score - first.score || first.file.relativePath.localeCompare(second.file.relativePath))
+    .slice(0, 80)
+    .map((result) => result.file);
+}
+
+function scoreFile(file: FileTreeEntry, query: string): number {
+  const path = file.relativePath.toLowerCase();
+  const name = file.name.toLowerCase();
+
+  if (name === query) {
+    return 100;
+  }
+
+  if (name.startsWith(query)) {
+    return 80;
+  }
+
+  if (path.includes(query)) {
+    return 60;
+  }
+
+  let cursor = 0;
+  for (const character of query) {
+    cursor = path.indexOf(character, cursor);
+    if (cursor === -1) {
+      return 0;
+    }
+    cursor += 1;
+  }
+
+  return 30;
 }
 
 function toggleSideView(
