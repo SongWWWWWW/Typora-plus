@@ -1,9 +1,10 @@
 import { keybindingFromEvent } from "@typora-plus/platform";
 import type { Command, Keybinding, PartialConfiguration, TyporaPlusConfiguration } from "@typora-plus/platform";
-import { Settings as SettingsIcon, X } from "lucide-react";
-import { useEffect, useState } from "react";
+import { Search, Settings as SettingsIcon, X } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import {
+  filterKeybindingCommands,
   isRecordableKeybinding,
   removeKeybindingOverride,
   upsertKeybindingOverride
@@ -38,13 +39,19 @@ export function SettingsDialog({
 }) {
   const [assetFolderDraft, setAssetFolderDraft] = useState(configuration.workspace.defaultAssetFolder);
   const [recordingCommand, setRecordingCommand] = useState<string | undefined>();
+  const [keybindingQuery, setKeybindingQuery] = useState("");
   const [pendingKeybinding, setPendingKeybinding] = useState<PendingKeybindingOverride | undefined>();
   const searchMaxFileSizeMegabytes = bytesToMegabytes(configuration.workspace.searchMaxFileSizeBytes);
+  const filteredKeybindingCommands = useMemo(
+    () => filterKeybindingCommands(commands, keybindingQuery),
+    [commands, keybindingQuery]
+  );
 
   useEffect(() => {
     if (open) {
       setAssetFolderDraft(configuration.workspace.defaultAssetFolder);
       setRecordingCommand(undefined);
+      setKeybindingQuery("");
       setPendingKeybinding(undefined);
     }
   }, [configuration.workspace.defaultAssetFolder, open]);
@@ -253,8 +260,26 @@ export function SettingsDialog({
           </SettingsSection>
 
           <SettingsSection title="Keybindings">
+            <div className="tp-settings-keybinding-search">
+              <Search size={15} />
+              <input
+                type="search"
+                value={keybindingQuery}
+                aria-label="Search Keybindings"
+                onChange={(event) => setKeybindingQuery(event.target.value)}
+              />
+              {keybindingQuery ? (
+                <button
+                  type="button"
+                  aria-label="Clear Keybinding Search"
+                  onClick={() => setKeybindingQuery("")}
+                >
+                  <X size={14} />
+                </button>
+              ) : <span aria-hidden="true" />}
+            </div>
             <div className="tp-settings-keybinding-list">
-              {commands.map((command) => {
+              {filteredKeybindingCommands.map((command) => {
                 const hasOverride = configuration.keybindings.overrides.some((override) => override.command === command.id);
                 const recording = recordingCommand === command.id;
 
@@ -316,6 +341,9 @@ export function SettingsDialog({
                   </div>
                 );
               })}
+              {filteredKeybindingCommands.length === 0 ? (
+                <div className="tp-settings-empty-row">No matching commands</div>
+              ) : null}
             </div>
           </SettingsSection>
         </div>

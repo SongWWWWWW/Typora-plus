@@ -1,4 +1,4 @@
-import { keybindingEquals, type Keybinding, type UserKeybindingRule } from "@typora-plus/platform";
+import { keybindingEquals, type Command, type Keybinding, type UserKeybindingRule } from "@typora-plus/platform";
 
 export function upsertKeybindingOverride(
   overrides: readonly UserKeybindingRule[],
@@ -22,4 +22,20 @@ export function removeKeybindingOverride(
 
 export function isRecordableKeybinding(keybinding: Keybinding): boolean {
   return Boolean(keybinding.primary || keybinding.alt);
+}
+
+export function filterKeybindingCommands(
+  commands: readonly Command[],
+  query: string
+): readonly Command[] {
+  const normalizedQuery = query.trim().toLowerCase();
+
+  if (!normalizedQuery) {
+    return commands;
+  }
+
+  return commands.filter((command) => {
+    const haystack = `${command.title} ${command.category ?? ""} ${command.id}`.toLowerCase();
+    return haystack.includes(normalizedQuery);
+  });
 }
