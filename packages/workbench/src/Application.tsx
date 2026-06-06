@@ -7,6 +7,8 @@ import type {
   RecentResource,
   TextFileModel,
   TyporaPlusConfiguration,
+  WorkspaceIndexStatus,
+  WorkspaceSearchResult,
   WorkspaceState
 } from "@typora-plus/platform";
 import { isFileSaveConflictError } from "@typora-plus/platform";
@@ -44,6 +46,8 @@ interface SearchResult {
   readonly preview: string;
 }
 
+type WorkbenchSearchResult = SearchResult | WorkspaceSearchResult;
+
 type TreeStyle = CSSProperties & {
   readonly "--tp-tree-depth": number;
 };
@@ -63,11 +67,17 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [operationError, setOperationError] = useState<string | undefined>();
   const [saveConflict, setSaveConflict] = useState<FileSaveConflict | undefined>();
+  const [indexStatus, setIndexStatus] = useState<WorkspaceIndexStatus>(() => services.indexService.getStatus());
   const editorRef = useRef<MarkdownEditorHandle | null>(null);
 
   const outline = useMemo(() => extractOutline(model.value), [model.value]);
   const stats = useMemo(() => calculateMarkdownStats(model.value), [model.value]);
-  const searchResults = useMemo(() => searchDocument(model.value, searchQuery), [model.value, searchQuery]);
+  const searchResults = useMemo(
+    () => workspace.files
+      ? services.indexService.query(searchQuery)
+      : searchDocument(model.value, searchQuery),
+    [indexStatus.updatedAt, model.value, searchQuery, services, workspace.files]
+  );
 
   useEffect(() => services.configurationService.onDidChangeConfiguration(setConfiguration).dispose, [services]);
 
@@ -84,6 +94,23 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
   }).dispose, [services]);
 
   useEffect(() => services.recentService.onDidChangeRecents(setRecents).dispose, [services]);
+
+  useEffect(() => services.indexService.onDidChangeStatus(setIndexStatus).dispose, [services]);
+
+  useEffect(() => {
+    const workspaceFiles = workspace.files;
+
+    if (!workspaceFiles) {
+      services.indexService.clear();
+      return;
+    }
+
+    void runWorkbenchAction(
+      () => services.indexService.indexWorkspace(workspaceFiles),
+      setOperationError,
+      setSaveConflict
+    );
+  }, [services, workspace.files]);
 
   useEffect(() => {
     if (!configuration.editor.autoSave || !model.dirty || model.uri.scheme !== "file" || saveConflict) {
@@ -312,9 +339,23 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
             outline={outline}
             searchQuery={searchQuery}
             searchResults={searchResults}
+            indexStatus={indexStatus}
             onSearchQueryChange={setSearchQuery}
             onClose={() => setSideView(null)}
             onSelectLine={(line) => editorRef.current?.scrollToLine(line)}
+            onOpenSearchResult={(result) => {
+              if (!isWorkspaceSearchResult(result)) {
+                editorRef.current?.scrollToLine(result.line);
+                return;
+              }
+
+              void runWorkbenchAction(async () => {
+                setSaveConflict(undefined);
+                const opened = await services.textFileService.openFile(result.uri);
+                services.recentService.addRecentFile(opened.uri, opened.name);
+                window.setTimeout(() => editorRef.current?.scrollToLine(result.line), 0);
+              }, setOperationError, setSaveConflict);
+            }}
             onOpenWorkspace={() => services.commandService.executeCommand("file.openWorkspace")}
             onOpenRecentWorkspace={(recent) => {
               void runWorkbenchAction(async () => {
@@ -509,9 +550,11 @@ function Sidebar({
   outline,
   searchQuery,
   searchResults,
+  indexStatus,
   onSearchQueryChange,
   onClose,
   onSelectLine,
+  onOpenSearchResult,
   onOpenWorkspace,
   onOpenRecentWorkspace,
   onRefreshWorkspace,
@@ -524,10 +567,12 @@ function Sidebar({
   readonly fileServiceAvailable: boolean;
   readonly outline: readonly OutlineEntry[];
   readonly searchQuery: string;
-  readonly searchResults: readonly SearchResult[];
+  readonly searchResults: readonly WorkbenchSearchResult[];
+  readonly indexStatus: WorkspaceIndexStatus;
   readonly onSearchQueryChange: (value: string) => void;
   readonly onClose: () => void;
   readonly onSelectLine: (line: number) => void;
+  readonly onOpenSearchResult: (result: WorkbenchSearchResult) => void;
   readonly onOpenWorkspace: () => void;
   readonly onOpenRecentWorkspace: (recent: RecentResource) => void;
   readonly onRefreshWorkspace: () => void;
@@ -557,8 +602,9 @@ function Sidebar({
         <SearchPanel
           query={searchQuery}
           results={searchResults}
+          indexStatus={indexStatus}
           onQueryChange={onSearchQueryChange}
-          onSelectLine={onSelectLine}
+          onOpenResult={onOpenSearchResult}
         />
       ) : null}
       {view === "outline" ? <OutlinePanel outline={outline} onSelectLine={onSelectLine} /> : null}
@@ -749,13 +795,15 @@ function FileTreeRows({
 function SearchPanel({
   query,
   results,
+  indexStatus,
   onQueryChange,
-  onSelectLine
+  onOpenResult
 }: {
   readonly query: string;
-  readonly results: readonly SearchResult[];
+  readonly results: readonly WorkbenchSearchResult[];
+  readonly indexStatus: WorkspaceIndexStatus;
   readonly onQueryChange: (value: string) => void;
-  readonly onSelectLine: (line: number) => void;
+  readonly onOpenResult: (result: WorkbenchSearchResult) => void;
 }) {
   return (
     <div className="tp-sidebar-content">
@@ -773,16 +821,22 @@ function SearchPanel({
           </button>
         ) : null}
       </div>
+      {indexStatus.state === "indexing" ? (
+        <div className="tp-search-status">{indexStatus.indexedFiles}/{indexStatus.totalFiles} indexed</div>
+      ) : null}
       <div className="tp-result-list">
         {results.map((result) => (
           <button
             className="tp-result-row"
-            key={`${result.line}-${result.preview}`}
+            key={searchResultKey(result)}
             type="button"
-            onClick={() => onSelectLine(result.line)}
+            onClick={() => onOpenResult(result)}
           >
             <span className="tp-result-line">{result.line}</span>
-            <span>{result.preview}</span>
+            <span className="tp-result-body">
+              {isWorkspaceSearchResult(result) ? <small>{result.relativePath}</small> : null}
+              <span className="tp-result-preview">{result.preview}</span>
+            </span>
           </button>
         ))}
       </div>
@@ -1039,6 +1093,16 @@ function searchDocument(markdown: string, query: string): SearchResult[] {
     }))
     .filter((result) => result.preview.toLowerCase().includes(normalizedQuery))
     .slice(0, 50);
+}
+
+function isWorkspaceSearchResult(result: WorkbenchSearchResult): result is WorkspaceSearchResult {
+  return "uri" in result;
+}
+
+function searchResultKey(result: WorkbenchSearchResult): string {
+  return isWorkspaceSearchResult(result)
+    ? `${result.uri.toString()}-${result.line}-${result.preview}`
+    : `${result.line}-${result.preview}`;
 }
 
 function filterCommands(

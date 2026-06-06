@@ -7,6 +7,7 @@ import {
   NativeFileService,
   NativeAttachmentService,
   WorkspaceTextFileService,
+  WorkspaceIndexService,
   RecentService,
   flattenFileTree,
   mergeConfiguration,
@@ -276,6 +277,48 @@ describe("workspace text files", () => {
   });
 });
 
+describe("workspace index", () => {
+  it("indexes workspace files and returns cross-file search results", async () => {
+    const host = createMemoryHost([
+      ["file://C:/Notes/a.md", "# Alpha\nShared topic"],
+      ["file://C:/Notes/folder/b.md", "# Beta\nAnother shared topic"]
+    ]);
+    const service = new WorkspaceIndexService(new NativeFileService(host), {
+      maxResults: 10,
+      maxPreviewLength: 80
+    });
+
+    await service.indexWorkspace(createWorkspaceFileTree([
+      createFileEntry("C:/Notes/a.md", "a.md", "a.md"),
+      createFileEntry("C:/Notes/folder/b.md", "b.md", "folder/b.md")
+    ]));
+
+    const results = service.query("shared topic");
+
+    expect(service.getStatus().state).toBe("ready");
+    expect(results.map((result) => result.relativePath)).toEqual(["a.md", "folder/b.md"]);
+    expect(results.map((result) => result.line)).toEqual([2, 2]);
+  });
+
+  it("skips files larger than the configured index limit", async () => {
+    const host = createMemoryHost([["file://C:/Notes/large.md", "searchable"]]);
+    const service = new WorkspaceIndexService(new NativeFileService(host), {
+      maxFileSizeBytes: 4,
+      maxResults: 10
+    });
+
+    await service.indexWorkspace(createWorkspaceFileTree([
+      {
+        ...createFileEntry("C:/Notes/large.md", "large.md", "large.md"),
+        size: 100
+      }
+    ]));
+
+    expect(service.getStatus().skippedFiles).toBe(1);
+    expect(service.query("searchable")).toEqual([]);
+  });
+});
+
 describe("attachments", () => {
   it("saves images through the native bridge", async () => {
     const service = new NativeAttachmentService("assets", {
@@ -326,8 +369,8 @@ describe("recents", () => {
   });
 });
 
-function createMemoryHost() {
-  const files = new Map<string, string>([["file://C:/Notes/a.md", "# A"]]);
+function createMemoryHost(entries: readonly (readonly [string, string])[] = [["file://C:/Notes/a.md", "# A"]]) {
+  const files = new Map<string, string>(entries);
   const host: NativeFileSystemHost & { readonly files: Map<string, string> } = {
     files,
     isAvailable: true,
@@ -375,13 +418,9 @@ function createMemoryHost() {
   return host;
 }
 
-function createWorkspaceFileTree(): WorkspaceFileTree {
-  const file: FileTreeEntry = {
-    uri: URI.file("C:/Notes/a.md"),
-    name: "a.md",
-    relativePath: "a.md",
-    kind: "file"
-  };
+function createWorkspaceFileTree(files: readonly FileTreeEntry[] = [
+  createFileEntry("C:/Notes/a.md", "a.md", "a.md")
+]): WorkspaceFileTree {
 
   return {
     root: {
@@ -389,9 +428,18 @@ function createWorkspaceFileTree(): WorkspaceFileTree {
       name: "Notes",
       relativePath: "",
       kind: "directory",
-      children: [file]
+      children: files
     },
-    files: [file]
+    files
+  };
+}
+
+function createFileEntry(path: string, name: string, relativePath: string): FileTreeEntry {
+  return {
+    uri: URI.file(path),
+    name,
+    relativePath,
+    kind: "file"
   };
 }
 

@@ -6,6 +6,7 @@ import {
   IConfigurationService,
   ICommandService,
   IFileService,
+  IIndexService,
   IRecentService,
   ITextFileService,
   IWorkspaceService,
@@ -13,12 +14,14 @@ import {
   NativeFileService,
   RecentService,
   ServiceCollection,
+  WorkspaceIndexService,
   WorkspaceTextFileService,
   WorkspaceService,
   type IAttachmentService as AttachmentServiceContract,
   type IConfigurationService as ConfigurationServiceContract,
   type ICommandService as CommandServiceContract,
   type IFileService as FileServiceContract,
+  type IIndexService as IndexServiceContract,
   type IRecentService as RecentServiceContract,
   type ITextFileService as TextFileServiceContract,
   type IWorkspaceService as WorkspaceServiceContract
@@ -30,6 +33,7 @@ export interface WorkbenchServices {
   readonly attachmentService: AttachmentServiceContract;
   readonly configurationService: ConfigurationServiceContract;
   readonly fileService: FileServiceContract;
+  readonly indexService: IndexServiceContract;
   readonly recentService: RecentServiceContract;
   readonly textFileService: TextFileServiceContract;
   readonly workspaceService: WorkspaceServiceContract;
@@ -43,6 +47,10 @@ export function createWorkbenchServices(): WorkbenchServices {
     name: "Typora Plus"
   });
   const fileService = new NativeFileService();
+  const indexService = new WorkspaceIndexService(fileService, {
+    maxFileSizeBytes: configurationService.getValue().workspace.searchMaxFileSizeBytes,
+    maxResults: configurationService.getValue().workspace.searchMaxResults
+  });
   const recentService = new RecentService();
   const attachmentService = new NativeAttachmentService(
     configurationService.getValue().workspace.defaultAssetFolder
@@ -56,6 +64,7 @@ export function createWorkbenchServices(): WorkbenchServices {
   serviceCollection.set(IAttachmentService, attachmentService);
   serviceCollection.set(IConfigurationService, configurationService);
   serviceCollection.set(IFileService, fileService);
+  serviceCollection.set(IIndexService, indexService);
   serviceCollection.set(IRecentService, recentService);
   serviceCollection.set(IWorkspaceService, workspaceService);
   serviceCollection.set(ITextFileService, textFileService);
@@ -69,6 +78,7 @@ export function createWorkbenchServices(): WorkbenchServices {
     attachmentService,
     configurationService,
     fileService,
+    indexService,
     recentService,
     textFileService,
     workspaceService

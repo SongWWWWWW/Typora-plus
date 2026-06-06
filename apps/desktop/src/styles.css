@@ -258,7 +258,6 @@ button {
 .tp-file-row span:nth-child(2),
 .tp-sidebar-action span,
 .tp-folder-row span,
-.tp-result-row span:last-child,
 .tp-command-row span {
   min-width: 0;
   overflow: hidden;
@@ -340,6 +339,12 @@ button {
   overflow: auto;
 }
 
+.tp-search-status {
+  padding: 4px 8px;
+  color: var(--tp-color-text-soft);
+  font-size: 12px;
+}
+
 .tp-result-row {
   display: grid;
   grid-template-columns: 34px minmax(0, 1fr);
@@ -353,6 +358,29 @@ button {
 .tp-result-line {
   color: var(--tp-color-text-soft);
   font-variant-numeric: tabular-nums;
+}
+
+.tp-result-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.tp-result-body small {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--tp-color-text-soft);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tp-result-preview {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .tp-editor-pane {

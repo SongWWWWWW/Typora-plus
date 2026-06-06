@@ -18,6 +18,8 @@ export interface TyporaPlusConfiguration {
   };
   readonly workspace: {
     readonly defaultAssetFolder: string;
+    readonly searchMaxFileSizeBytes: number;
+    readonly searchMaxResults: number;
   };
 }
 
@@ -49,7 +51,9 @@ export const defaultConfiguration: TyporaPlusConfiguration = {
     autoSave: true
   },
   workspace: {
-    defaultAssetFolder: "assets"
+    defaultAssetFolder: "assets",
+    searchMaxFileSizeBytes: 2 * 1024 * 1024,
+    searchMaxResults: 120
   }
 };
 
