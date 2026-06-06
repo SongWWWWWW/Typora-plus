@@ -4,6 +4,7 @@ export * from "./configuration";
 export * from "./contextKeys";
 export * from "./extensions";
 export * from "./extensionHosts";
+export * from "./extensionHostProtocolHost";
 export * from "./extensionHostProtocol";
 export * from "./extensionHostProtocolSession";
 export * from "./extensionHostRuntimeBroker";
