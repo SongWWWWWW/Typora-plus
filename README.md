@@ -13,7 +13,7 @@ P0/P1 are implemented:
 - live-preview-oriented line styling
 - unified live preview block-state analysis
 - inactive Markdown marker soft hiding
-- code fence block styling
+- code fence block styling with inactive language/copy widgets
 - Markdown table block styling
 - standalone image preview cards
 - KaTeX-backed display math preview blocks

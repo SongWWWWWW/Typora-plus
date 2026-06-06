@@ -444,3 +444,34 @@ Known limitations:
 
 - Inline math parsing is still lightweight and regex/scan based; parser-backed position mapping remains planned.
 - KaTeX is still rendered as MathML without the full KaTeX CSS layer.
+
+## 2026-06-06 - P2 Code Fence Widgets
+
+Completed:
+
+- Added richer code fence block state with language, info string, content, and block range metadata.
+- Rendered inactive code fence opening lines as compact language/copy widgets.
+- Kept code content visible while hiding inactive fence delimiter source.
+- Kept the full code fence source visible whenever the cursor is inside the block.
+- Added a guarded copy interaction with browser Clipboard API and textarea fallback.
+- Added a code toolbar theme token and focused tests for code fence metadata and replacement rules.
+
+Quality gate:
+
+- `npm run verify`: passed
+- `npm test`: passed, 55 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- Production browser preview: passed at `http://127.0.0.1:4173`
+- Desktop 1280px and mobile 390px checks: passed without horizontal overflow or console errors
+
+Review:
+
+- Code fence rendering remains inside `packages/editor`; Workbench and platform services do not parse Markdown code fences.
+- The plain Markdown text model is unchanged; widgets are CodeMirror decorations only.
+- Visual additions use centralized theme tokens.
+- Visible-range analysis now avoids constructing code fence line states for non-visible lines when a visible-range filter is available.
+
+Known limitations:
+
+- Clipboard contents could not be asserted in the in-app browser because its virtual clipboard is unavailable; button presence and stable click behavior were verified without console errors.
+- Code fence parsing remains scanner-based pending parser-backed position mapping.

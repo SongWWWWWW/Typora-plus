@@ -68,7 +68,7 @@ Current features:
 - unified live preview block-state analysis for visible editor ranges
 - heading/quote/list/fence line styling
 - inactive Markdown marker soft hiding for headings, lists, quotes, fences, links, and strong emphasis
-- code fence block styling with visible-range-aware fence state tracking
+- code fence block styling with visible-range-aware fence state tracking and inactive language/copy widgets
 - table block styling with code-fence-aware table detection
 - standalone image preview cards with workspace-backed local image resolution and direct inline/blob rendering
 - KaTeX-backed display math preview blocks
@@ -79,9 +79,9 @@ Current features:
 
 Next editor work:
 
-- richer code fence widgets
 - richer table editing affordances
 - richer math editing affordances
+- viewport-aware block analysis refinements
 - viewport-safe large document behavior tests
 - parser-backed position mapping
 
