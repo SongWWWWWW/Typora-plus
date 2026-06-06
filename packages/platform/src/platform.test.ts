@@ -306,7 +306,7 @@ describe("exports", () => {
           format: "html",
           defaultFileName: input.name,
           mimeType: "text/html",
-          value: imageSource ?? "missing"
+          value: `${input.assetMode}:${imageSource ?? "missing"}`
         };
       }
     });
@@ -317,8 +317,71 @@ describe("exports", () => {
       value: "Draft"
     }, "html");
 
-    expect(exported.value).toBe("data:image/png;base64,assets/a.png");
+    expect(exported.value).toBe("inline:data:image/png;base64,assets/a.png");
     expect(requestedResources).toEqual(["file://C:/Notes/a.md:assets/a.png"]);
+  });
+
+  it("uses file asset mode when native export saving is available", async () => {
+    const service = new ExportService({
+      nativeBridge: {
+        isAvailable: true,
+        async saveDocument() {
+          return true;
+        }
+      }
+    });
+    service.registerProvider({
+      format: "html",
+      title: "HTML",
+      exportDocument(input) {
+        return {
+          format: "html",
+          defaultFileName: input.name,
+          mimeType: "text/html",
+          value: input.assetMode ?? "missing"
+        };
+      }
+    });
+
+    const exported = await service.exportDocument({
+      uri: URI.file("C:/Notes/a.md"),
+      name: "a.md",
+      value: "Draft"
+    }, "html");
+
+    expect(exported.value).toBe("file");
+  });
+
+  it("preserves explicit export asset mode overrides", async () => {
+    const service = new ExportService({
+      nativeBridge: {
+        isAvailable: true,
+        async saveDocument() {
+          return true;
+        }
+      }
+    });
+    service.registerProvider({
+      format: "html",
+      title: "HTML",
+      exportDocument(input) {
+        return {
+          format: "html",
+          defaultFileName: input.name,
+          mimeType: "text/html",
+          value: input.assetMode ?? "missing"
+        };
+      }
+    });
+
+    const exported = await service.exportDocument({
+      uri: URI.file("C:/Notes/a.md"),
+      name: "a.md",
+      value: "Draft",
+      assetMode: "inline"
+    }, "html");
+
+    expect(exported.value).toBe("inline");
   });
 });
 

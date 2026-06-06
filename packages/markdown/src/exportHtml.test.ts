@@ -14,6 +14,7 @@ describe("createMarkdownHtmlExport", () => {
     expect(exported.value).toContain("<!doctype html>");
     expect(exported.value).toContain("<h1>Project</h1>");
     expect(exported.value).toContain("<li>Write</li>");
+    expect(exported.assets).toBeUndefined();
   });
 
   it("escapes titles and normalizes unsafe filenames", async () => {
@@ -79,6 +80,54 @@ describe("createMarkdownHtmlExport", () => {
     expect(exported.value).toContain("<img src=\"assets/missing.png\" alt=\"Missing\">");
     expect(exported.value).toContain("Remote");
     expect(exported.value).not.toContain("src=\"https://example.com/image.png\"");
+  });
+
+  it("writes resolved workspace images as export assets in file asset mode", async () => {
+    const exported = await createMarkdownHtmlExport({
+      name: "Project Notes.md",
+      value: [
+        "![Local](assets/image.png)",
+        "![Duplicate](assets/image.png)",
+        "![Nested](media/nested.svg)"
+      ].join("\n\n"),
+      assetMode: "file",
+      async resolveImageSource(source) {
+        if (source === "assets/image.png") {
+          return "data:image/png;base64,AA==";
+        }
+
+        return "data:image/svg+xml;base64,PHN2Zy8+";
+      }
+    });
+
+    expect(exported.value).toContain("<img src=\"Project Notes_assets/image.png\" alt=\"Local\">");
+    expect(exported.value).toContain("<img src=\"Project Notes_assets/image.png\" alt=\"Duplicate\">");
+    expect(exported.value).toContain("<img src=\"Project Notes_assets/nested.svg\" alt=\"Nested\">");
+    expect(exported.value).toContain("img-src 'self' data: file:");
+    expect(exported.assets).toEqual([
+      {
+        relativePath: "Project Notes_assets/image.png",
+        mimeType: "image/png",
+        base64: "AA=="
+      },
+      {
+        relativePath: "Project Notes_assets/nested.svg",
+        mimeType: "image/svg+xml",
+        base64: "PHN2Zy8+"
+      }
+    ]);
+  });
+
+  it("keeps resolved non-base64 image sources inline in file asset mode", async () => {
+    const exported = await createMarkdownHtmlExport({
+      name: "Images.md",
+      value: "![Local](assets/image.png)",
+      assetMode: "file",
+      resolveImageSource: () => "file://C:/Notes/assets/image.png"
+    });
+
+    expect(exported.value).toContain("<img src=\"file://C:/Notes/assets/image.png\" alt=\"Local\">");
+    expect(exported.assets).toBeUndefined();
   });
 
   it("keeps export working when image resolution fails", async () => {

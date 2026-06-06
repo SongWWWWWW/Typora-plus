@@ -1,11 +1,13 @@
 import { Renderer, marked } from "marked";
 
 export type MarkdownImageSourceResolver = (source: string) => Promise<string | undefined> | string | undefined;
+export type MarkdownExportAssetMode = "inline" | "file";
 
 export interface MarkdownExportInput {
   readonly name: string;
   readonly value: string;
   readonly resolveImageSource?: MarkdownImageSourceResolver;
+  readonly assetMode?: MarkdownExportAssetMode;
 }
 
 export interface MarkdownHtmlExportedDocument {
@@ -13,6 +15,13 @@ export interface MarkdownHtmlExportedDocument {
   readonly defaultFileName: string;
   readonly mimeType: string;
   readonly value: string;
+  readonly assets?: readonly MarkdownHtmlExportedAsset[];
+}
+
+export interface MarkdownHtmlExportedAsset {
+  readonly relativePath: string;
+  readonly mimeType: string;
+  readonly base64: string;
 }
 
 export const markdownHtmlExportProvider = {
@@ -28,18 +37,21 @@ export async function createMarkdownHtmlExport(input: MarkdownExportInput): Prom
   const resolvedImageSources = input.resolveImageSource
     ? await resolveExportImageSources(input.value, input.resolveImageSource)
     : new Map<string, string>();
+  const exportImages = createExportImageSources(input.name, resolvedImageSources, input.assetMode ?? "inline");
   const body = marked.parse(input.value, {
     async: false,
     breaks: false,
     gfm: true,
-    renderer: createSafeHtmlExportRenderer(resolvedImageSources)
+    renderer: createSafeHtmlExportRenderer(exportImages.sources)
   });
+  const assets = exportImages.assets;
 
   return {
     format: "html",
     defaultFileName: createHtmlExportFileName(input.name),
     mimeType: "text/html;charset=utf-8",
-    value: createHtmlDocument(title, body)
+    value: createHtmlDocument(title, body),
+    ...(assets.length > 0 ? { assets } : {})
   };
 }
 
@@ -70,6 +82,47 @@ function createSafeHtmlExportRenderer(resolvedImageSources: ReadonlyMap<string, 
   };
 
   return renderer;
+}
+
+function createExportImageSources(
+  documentName: string,
+  resolvedImageSources: ReadonlyMap<string, string>,
+  assetMode: MarkdownExportAssetMode
+): { readonly sources: ReadonlyMap<string, string>; readonly assets: readonly MarkdownHtmlExportedAsset[] } {
+  if (assetMode !== "file") {
+    return { sources: resolvedImageSources, assets: [] };
+  }
+
+  const sources = new Map<string, string>();
+  const assets: MarkdownHtmlExportedAsset[] = [];
+  const usedRelativePaths = new Set<string>();
+  const assetDirectoryName = createHtmlExportAssetDirectoryName(documentName);
+
+  for (const [source, resolvedSource] of resolvedImageSources) {
+    const assetData = parseExportDataImageSource(resolvedSource);
+
+    if (!assetData) {
+      sources.set(source, resolvedSource);
+      continue;
+    }
+
+    const relativePath = createExportAssetRelativePath(
+      assetDirectoryName,
+      source,
+      assetData.mimeType,
+      assets.length,
+      usedRelativePaths
+    );
+    usedRelativePaths.add(relativePath);
+    sources.set(source, relativePath);
+    assets.push({
+      relativePath,
+      mimeType: assetData.mimeType,
+      base64: assetData.base64
+    });
+  }
+
+  return { sources, assets };
 }
 
 async function resolveExportImageSources(
@@ -132,7 +185,7 @@ function createHtmlDocument(title: string, body: string): string {
     "<head>",
     "<meta charset=\"utf-8\">",
     "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">",
-    "<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; img-src data: file:; style-src 'unsafe-inline';\">",
+    "<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; img-src 'self' data: file:; style-src 'unsafe-inline';\">",
     `<title>${escapeHtml(title)}</title>`,
     "<style>",
     ":root{color-scheme:light dark;font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,\"Segoe UI\",sans-serif;line-height:1.65;color:#24231f;background:#f8f7f2;}",
@@ -165,6 +218,99 @@ function createHtmlExportFileName(name: string): string {
   const baseName = name.trim().replace(/\.[^.]+$/, "") || "Untitled";
   const safeName = baseName.replace(/[<>:"/\\|?*\u0000-\u001f]/g, "-").replace(/\s+/g, " ").trim();
   return `${safeName || "Untitled"}.html`;
+}
+
+function createHtmlExportAssetDirectoryName(name: string): string {
+  return createHtmlExportFileName(name).replace(/\.html$/i, "_assets");
+}
+
+function createExportAssetRelativePath(
+  assetDirectoryName: string,
+  source: string,
+  mimeType: string,
+  index: number,
+  usedRelativePaths: ReadonlySet<string>
+): string {
+  const extension = imageExtensionFromSource(source) ?? imageExtensionFromMimeType(mimeType);
+  const sourceName = decodePathSegment(source.trim().split(/[?#]/, 1)[0]?.split(/[\\/]/).at(-1) ?? "");
+  const stem = sanitizeAssetFileStem(sourceName.replace(/\.[^.]*$/, "")) || `image-${index + 1}`;
+  let candidate = `${assetDirectoryName}/${stem}${extension}`;
+  let counter = 2;
+
+  while (usedRelativePaths.has(candidate)) {
+    candidate = `${assetDirectoryName}/${stem}-${counter}${extension}`;
+    counter += 1;
+  }
+
+  return candidate;
+}
+
+function parseExportDataImageSource(value: string): { readonly mimeType: string; readonly base64: string } | undefined {
+  const match = /^data:(image\/[a-z0-9+.-]+);base64,([a-z0-9+/=\s]+)$/i.exec(value.trim());
+
+  if (!match) {
+    return undefined;
+  }
+
+  const mimeType = match[1];
+  const base64 = match[2];
+
+  if (!mimeType || !base64) {
+    return undefined;
+  }
+
+  return {
+    mimeType: mimeType.toLowerCase(),
+    base64: base64.replace(/\s+/g, "")
+  };
+}
+
+function imageExtensionFromSource(source: string): string | undefined {
+  const pathSource = source.trim().split(/[?#]/, 1)[0] ?? "";
+  const extension = pathSource.match(/\.([a-z0-9]+)$/i)?.[1]?.toLowerCase();
+
+  switch (extension) {
+    case "gif":
+    case "jpeg":
+    case "jpg":
+    case "png":
+    case "svg":
+    case "webp":
+      return `.${extension}`;
+    default:
+      return undefined;
+  }
+}
+
+function imageExtensionFromMimeType(mimeType: string): string {
+  switch (mimeType.toLowerCase()) {
+    case "image/gif":
+      return ".gif";
+    case "image/jpeg":
+      return ".jpg";
+    case "image/svg+xml":
+      return ".svg";
+    case "image/webp":
+      return ".webp";
+    default:
+      return ".png";
+  }
+}
+
+function sanitizeAssetFileStem(value: string): string {
+  return value
+    .trim()
+    .replace(/[<>:"/\\|?*\u0000-\u001f]+/g, "-")
+    .replace(/^\.+$/g, "-")
+    .slice(0, 80);
+}
+
+function decodePathSegment(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
 }
 
 function normalizeExportTitle(name: string): string {

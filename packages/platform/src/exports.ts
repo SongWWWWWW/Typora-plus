@@ -3,12 +3,14 @@ import { createServiceIdentifier } from "./instantiation";
 
 export type ExportFormat = "html";
 export type ExportImageSourceResolver = (source: string) => Promise<string | undefined>;
+export type ExportAssetMode = "inline" | "file";
 
 export interface ExportDocumentInput {
   readonly uri: URIType;
   readonly name: string;
   readonly value: string;
   readonly resolveImageSource?: ExportImageSourceResolver;
+  readonly assetMode?: ExportAssetMode;
 }
 
 export interface ExportedDocument {
@@ -16,6 +18,13 @@ export interface ExportedDocument {
   readonly defaultFileName: string;
   readonly mimeType: string;
   readonly value: string;
+  readonly assets?: readonly ExportedDocumentAsset[];
+}
+
+export interface ExportedDocumentAsset {
+  readonly relativePath: string;
+  readonly mimeType: string;
+  readonly base64: string;
 }
 
 export interface SerializedExportedDocument {
@@ -23,6 +32,7 @@ export interface SerializedExportedDocument {
   readonly defaultFileName: string;
   readonly mimeType: string;
   readonly value: string;
+  readonly assets?: readonly ExportedDocumentAsset[];
 }
 
 export interface ExportProvider {
@@ -107,20 +117,30 @@ export class ExportService implements IExportService {
 
   private withResourceContext(input: ExportDocumentInput): ExportDocumentInput {
     const resourceService = this.resourceService;
+    const assetMode = input.assetMode ?? (this.nativeBridge?.isAvailable ? "file" : "inline");
 
-    if (input.resolveImageSource || !resourceService?.isAvailable()) {
-      return input;
+    if (input.resolveImageSource) {
+      return { ...input, assetMode };
     }
 
-    return {
-      ...input,
-      resolveImageSource: (source) => resourceService.resolveImageSource(input.uri, source)
-    };
+    if (resourceService?.isAvailable()) {
+      return {
+        ...input,
+        assetMode,
+        resolveImageSource: (source) => resourceService.resolveImageSource(input.uri, source)
+      };
+    }
+
+    return { ...input, assetMode };
   }
 }
 
 function saveExportedDocumentInBrowser(document: ExportedDocument): boolean {
   if (typeof window === "undefined" || typeof Blob === "undefined" || typeof URL === "undefined") {
+    return false;
+  }
+
+  if ((document.assets?.length ?? 0) > 0) {
     return false;
   }
 

@@ -18,6 +18,8 @@ export const desktopShellConfig = {
   },
   exportDocuments: {
     maxValueBytes: 10 * 1024 * 1024,
+    maxAssetBytes: 5 * 1024 * 1024,
+    maxAssetCount: 200,
     formats: [
       {
         format: "html",
