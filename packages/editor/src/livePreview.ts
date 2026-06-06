@@ -103,7 +103,13 @@ export interface MarkdownLineBlockState extends MarkdownLineClassificationState 
 export type MarkdownImageSourceResolver = (source: string) => Promise<string | undefined> | string | undefined;
 
 const syntaxMarkerDecoration = Decoration.mark({ class: "tp-editor-markdown-marker" });
-const codeCopyFeedbackDurationMs = 1200;
+const previewCopyFeedbackDurationMs = 1200;
+const previewCopyButtonHeightPx = 24;
+const previewCopyButtonMinWidthPx = 54;
+const mathPreviewBodyMinHeightPx = 38;
+const mathPreviewEstimatedHeight = 92;
+const mathPreviewMinHeightPx = 66;
+const mathPreviewToolbarMinHeightPx = 24;
 const tablePreviewCellMaxWidthPx = 260;
 const tablePreviewCellMinWidthPx = 88;
 const tablePreviewHeaderEstimatedHeight = 42;
@@ -225,6 +231,10 @@ export function shouldReplaceInactiveCodeFenceLine(
 
 export function shouldReplaceInactiveTableLine(tableBlockIsActive: boolean): boolean {
   return !tableBlockIsActive;
+}
+
+export function shouldIgnorePreviewEventTarget(tagName: string | undefined): boolean {
+  return tagName?.toLowerCase() === "button";
 }
 
 export function findInactiveMarkdownSyntaxMarkers(text: string, active: boolean): readonly MarkdownSyntaxMarkerRange[] {
@@ -1120,41 +1130,78 @@ class MarkdownCodeFenceHeaderWidget extends WidgetType {
     language.className = "tp-editor-code-language";
     language.textContent = this.codeFence.language || "Code";
 
-    const copyButton = document.createElement("button");
-    copyButton.className = "tp-editor-code-copy";
-    copyButton.type = "button";
-    copyButton.textContent = "Copy";
-    copyButton.title = "Copy code";
-    copyButton.setAttribute("aria-label", "Copy code");
-    copyButton.addEventListener("click", (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      void copyCodeFenceContent(this.codeFence.content, copyButton);
+    const copyButton = createPreviewCopyButton({
+      className: "tp-editor-code-copy",
+      content: this.codeFence.content,
+      copiedAriaLabel: "Code copied",
+      copiedTitle: "Copied",
+      defaultAriaLabel: "Copy code",
+      defaultTitle: "Copy code",
+      text: "Copy"
     });
 
     toolbar.append(language, copyButton);
     return toolbar;
   }
 
-  override ignoreEvent(): boolean {
-    return true;
+  override ignoreEvent(event: Event): boolean {
+    return isPreviewInteractiveEvent(event);
   }
 }
 
-async function copyCodeFenceContent(content: string, button: HTMLButtonElement): Promise<void> {
+interface PreviewCopyButtonOptions {
+  readonly className: string;
+  readonly content: string;
+  readonly copiedAriaLabel: string;
+  readonly copiedTitle: string;
+  readonly defaultAriaLabel: string;
+  readonly defaultTitle: string;
+  readonly text: string;
+}
+
+function createPreviewCopyButton(options: PreviewCopyButtonOptions): HTMLButtonElement {
+  const copyButton = document.createElement("button");
+  copyButton.className = `tp-editor-preview-copy ${options.className}`;
+  copyButton.type = "button";
+  copyButton.textContent = options.text;
+  copyButton.title = options.defaultTitle;
+  copyButton.setAttribute("aria-label", options.defaultAriaLabel);
+  copyButton.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    void copyPreviewContent(options.content, copyButton, options);
+  });
+
+  return copyButton;
+}
+
+async function copyPreviewContent(
+  content: string,
+  button: HTMLButtonElement,
+  options: Pick<PreviewCopyButtonOptions, "copiedAriaLabel" | "copiedTitle" | "defaultAriaLabel" | "defaultTitle">
+): Promise<void> {
   const copied = await writeClipboardText(content);
   if (!copied) {
     return;
   }
 
   button.dataset.copied = "true";
-  button.setAttribute("aria-label", "Code copied");
-  button.title = "Copied";
+  button.setAttribute("aria-label", options.copiedAriaLabel);
+  button.title = options.copiedTitle;
   window.setTimeout(() => {
     button.dataset.copied = "false";
-    button.setAttribute("aria-label", "Copy code");
-    button.title = "Copy code";
-  }, codeCopyFeedbackDurationMs);
+    button.setAttribute("aria-label", options.defaultAriaLabel);
+    button.title = options.defaultTitle;
+  }, previewCopyFeedbackDurationMs);
+}
+
+function isPreviewInteractiveEvent(event: Event): boolean {
+  if (!(event.target instanceof Element)) {
+    return false;
+  }
+
+  const interactiveTarget = event.target.closest("button");
+  return shouldIgnorePreviewEventTarget(interactiveTarget?.tagName);
 }
 
 async function writeClipboardText(content: string): Promise<boolean> {
@@ -1302,28 +1349,57 @@ class MarkdownMathBlockWidget extends WidgetType {
     block.className = "tp-editor-math-preview";
     block.setAttribute("aria-label", "Math preview");
 
+    const toolbar = document.createElement("span");
+    toolbar.className = "tp-editor-math-toolbar";
+
+    const label = document.createElement("span");
+    label.className = "tp-editor-math-label";
+    label.textContent = "TeX";
+
+    const copyButton = createPreviewCopyButton({
+      className: "tp-editor-math-copy",
+      content: this.math.expression,
+      copiedAriaLabel: "TeX copied",
+      copiedTitle: "Copied",
+      defaultAriaLabel: "Copy TeX",
+      defaultTitle: "Copy TeX",
+      text: "Copy"
+    });
+
+    toolbar.append(label, copyButton);
+    block.append(toolbar);
+
+    const body = document.createElement("span");
+    body.className = "tp-editor-math-body";
+
     if (!this.math.expression) {
-      block.textContent = "Empty math block";
-      block.classList.add("tp-editor-math-preview-empty");
+      body.textContent = "Empty math block";
+      body.classList.add("tp-editor-math-preview-empty");
+      block.append(body);
       return block;
     }
 
     try {
-      block.innerHTML = renderKatexToString(this.math.expression, {
+      body.innerHTML = renderKatexToString(this.math.expression, {
         displayMode: true,
         output: "mathml",
         throwOnError: false
       });
     } catch {
-      block.textContent = this.math.expression;
-      block.classList.add("tp-editor-math-preview-error");
+      body.textContent = this.math.expression;
+      body.classList.add("tp-editor-math-preview-error");
     }
 
+    block.append(body);
     return block;
   }
 
   override get estimatedHeight(): number {
-    return 74;
+    return mathPreviewEstimatedHeight;
+  }
+
+  override ignoreEvent(event: Event): boolean {
+    return isPreviewInteractiveEvent(event);
   }
 }
 
@@ -1554,10 +1630,10 @@ function markdownEditorTheme(configuration: MarkdownEditorConfiguration): Extens
       fontWeight: "650",
       letterSpacing: "0"
     },
-    ".tp-editor-code-copy": {
+    ".tp-editor-preview-copy": {
       flex: "0 0 auto",
-      minWidth: "54px",
-      height: "24px",
+      minWidth: `${previewCopyButtonMinWidthPx}px`,
+      height: `${previewCopyButtonHeightPx}px`,
       padding: "0 8px",
       border: "1px solid var(--tp-color-code-block-border)",
       borderRadius: "6px",
@@ -1569,7 +1645,7 @@ function markdownEditorTheme(configuration: MarkdownEditorConfiguration): Extens
       cursor: "pointer",
       transition: "background-color var(--tp-motion-fast) ease, color var(--tp-motion-fast) ease"
     },
-    ".tp-editor-code-copy:hover, .tp-editor-code-copy[data-copied='true']": {
+    ".tp-editor-preview-copy:hover, .tp-editor-preview-copy[data-copied='true']": {
       color: "var(--tp-color-accent-strong)",
       backgroundColor: "var(--tp-color-surface-raised)"
     },
@@ -1736,9 +1812,11 @@ function markdownEditorTheme(configuration: MarkdownEditorConfiguration): Extens
     },
     ".tp-editor-math-preview": {
       display: "flex",
-      alignItems: "center",
-      justifyContent: "center",
-      minHeight: "66px",
+      flexDirection: "column",
+      alignItems: "stretch",
+      justifyContent: "flex-start",
+      gap: "8px",
+      minHeight: `${mathPreviewMinHeightPx}px`,
       boxSizing: "border-box",
       overflowX: "auto",
       padding: "12px",
@@ -1747,6 +1825,34 @@ function markdownEditorTheme(configuration: MarkdownEditorConfiguration): Extens
       borderRadius: "var(--tp-radius-control)",
       backgroundColor: "var(--tp-color-math-block)",
       color: "var(--tp-color-text)"
+    },
+    ".tp-editor-math-toolbar": {
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: "10px",
+      width: "100%",
+      minHeight: `${mathPreviewToolbarMinHeightPx}px`,
+      color: "var(--tp-color-text-muted)",
+      fontFamily: "var(--tp-font-ui)",
+      fontSize: "12px",
+      lineHeight: "1"
+    },
+    ".tp-editor-math-label": {
+      minWidth: "0",
+      overflow: "hidden",
+      textOverflow: "ellipsis",
+      whiteSpace: "nowrap",
+      fontWeight: "650",
+      letterSpacing: "0"
+    },
+    ".tp-editor-math-body": {
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      width: "100%",
+      minHeight: `${mathPreviewBodyMinHeightPx}px`,
+      overflowX: "auto"
     },
     ".tp-editor-math-preview math": {
       maxWidth: "100%"

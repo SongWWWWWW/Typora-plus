@@ -9,6 +9,7 @@ import {
   findInactiveMarkdownInlineMathRanges,
   findInactiveMarkdownSyntaxMarkers,
   shouldReplaceInactiveCodeFenceLine,
+  shouldIgnorePreviewEventTarget,
   shouldReplaceInactiveTableLine
 } from "./index";
 
@@ -170,6 +171,15 @@ describe("shouldReplaceInactiveTableLine", () => {
   it("replaces inactive table lines and keeps active table source visible", () => {
     expect(shouldReplaceInactiveTableLine(false)).toBe(true);
     expect(shouldReplaceInactiveTableLine(true)).toBe(false);
+  });
+});
+
+describe("shouldIgnorePreviewEventTarget", () => {
+  it("only ignores preview button events", () => {
+    expect(shouldIgnorePreviewEventTarget("button")).toBe(true);
+    expect(shouldIgnorePreviewEventTarget("BUTTON")).toBe(true);
+    expect(shouldIgnorePreviewEventTarget("span")).toBe(false);
+    expect(shouldIgnorePreviewEventTarget(undefined)).toBe(false);
   });
 });
 
