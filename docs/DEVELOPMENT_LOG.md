@@ -268,3 +268,32 @@ Known limitations:
 
 - Code fences are styled as blocks but do not yet have richer widgets such as language labels or copy controls.
 - Parser-backed position mapping remains planned for more complex Markdown constructs.
+
+## 2026-06-06 - P2 Table Block Styling
+
+Completed:
+
+- Added Markdown table line-state analysis for header, delimiter, and body rows.
+- Styled table rows as cohesive blocks with header, delimiter, body, first, and last row classes.
+- Kept table detection code-fence-aware so table-like code content is not restyled.
+- Added table theme tokens for row, header, and border colors.
+- Refactored line classification state into an object so future block roles can be added without positional parameters.
+
+Quality gate:
+
+- `npm run typecheck`: passed
+- `npm test`: passed, 33 tests
+- `npm run verify`: passed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- Production browser preview: passed at `http://127.0.0.1:4173`
+
+Review:
+
+- The table feature stays in the editor presentation layer and does not change the Markdown text model.
+- Workbench, platform, and file services remain unaware of Markdown table syntax.
+- Visual values are supplied by theme tokens, not inline hard-coded component colors.
+
+Known limitations:
+
+- Tables are visually grouped but do not yet provide structural editing controls.
+- Escaped pipe parsing remains a future parser-backed Markdown enhancement.

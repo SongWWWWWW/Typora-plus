@@ -13,6 +13,7 @@ P0/P1 are implemented:
 - live-preview-oriented line styling
 - inactive Markdown marker soft hiding
 - code fence block styling
+- Markdown table block styling
 - focus mode and typewriter mode
 - command palette, sidebar, outline, current-note search
 - browser draft persistence
