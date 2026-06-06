@@ -1727,3 +1727,36 @@ Review:
 Known limitations:
 
 - Snapshot persistence is still a renderer-side cache; the planned SQLite provider remains the durable backend for larger workspaces and richer incremental indexing.
+
+## 2026-06-07 - P2 Native Index Snapshot Storage
+
+Completed:
+
+- Added a dedicated Electron IPC bridge for workspace index snapshot storage.
+- Stored native index snapshots as bounded app data files keyed by the platform-derived snapshot key.
+- Added centralized shell configuration for the native snapshot directory and maximum snapshot size.
+- Updated preload typings and bridge exposure so platform storage selection can detect native snapshot storage.
+- Added `createDefaultWorkspaceIndexSnapshotStorage()` to prefer native storage and fall back to browser storage.
+- Updated Workbench service creation to depend on the platform default storage resolver instead of browser-specific storage.
+- Added platform coverage proving native index snapshot storage is selected when available.
+
+Quality gate:
+
+- `npm run test -- --run packages/platform/src/platform.test.ts packages/workbench/src/savedFileIndexing.test.ts`: passed, 39 tests
+- `npm run typecheck`: passed
+- `npm run build -w @typora-plus/desktop`: passed
+- `npm run verify`: passed, 141 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Browser smoke check at `http://127.0.0.1:5173`: browser fallback started without an Electron index bridge, rendered the Workbench, had no horizontal overflow, and reported no console errors.
+
+Review:
+
+- Snapshot storage resolution remains in the platform layer; Workbench still only asks for the default index snapshot storage.
+- Native snapshot paths and size limits are centralized in `desktopShellConfig`, not scattered through UI or platform consumers.
+- The Electron bridge stays narrow: renderer code can only read/write validated snapshot keys through preload, not arbitrary files.
+- Browser builds keep the same fallback behavior, so web preview verification remains valid.
+
+Known limitations:
+
+- Native snapshot files are still a cache of Markdown-derived index data; SQLite remains the planned backend for durable, query-optimized indexing at larger scale.
