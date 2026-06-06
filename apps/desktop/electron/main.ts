@@ -1,9 +1,12 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { app, BrowserWindow } from "electron";
+import { registerNativeFileIpc } from "./nativeFileIpc.js";
 import { desktopShellConfig } from "./shellConfig.js";
 
 const currentDir = path.dirname(fileURLToPath(import.meta.url));
+
+registerNativeFileIpc(desktopShellConfig.workspace);
 
 async function createWindow(): Promise<void> {
   const window = new BrowserWindow({

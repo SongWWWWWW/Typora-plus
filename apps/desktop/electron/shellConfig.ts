@@ -7,5 +7,11 @@ export const desktopShellConfig = {
     minHeight: 560,
     title: "Typora Plus",
     backgroundColor: "#f8f7f2"
+  },
+  workspace: {
+    maxDepth: 8,
+    maxFiles: 5000,
+    markdownExtensions: [".md", ".markdown", ".mdown"],
+    ignoredDirectories: [".git", ".typora-plus", "node_modules", "dist", "dist-electron"]
   }
 } as const;
