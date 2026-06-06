@@ -48,6 +48,7 @@ describe("settings model", () => {
       "workspace.searchMaxResults"
     ]);
     expect(createSettingsSearchResult("font").visibleEntries).toEqual(["editor.fontSize"]);
+    expect(createSettingsSearchResult("save delay").visibleEntries).toEqual(["editor.autoSaveDelay"]);
     expect(createSettingsSearchResult("shortcut").visibleEntries).toEqual(["keybindings.editor"]);
     expect(createSettingsSearchResult("search limit").visibleEntries).toEqual([
       "workspace.searchMaxFileSize",
@@ -66,6 +67,8 @@ describe("settings model", () => {
     expect(clampSettingNumber(9, settingsNumberConstraints.editorFontSize)).toBe(13);
     expect(clampSettingNumber(26, settingsNumberConstraints.editorFontSize)).toBe(24);
     expect(clampSettingNumber(1.725, settingsNumberConstraints.editorLineHeight)).toBe(1.73);
+    expect(clampSettingNumber(100, settingsNumberConstraints.editorAutoSaveDelayMs)).toBe(250);
+    expect(clampSettingNumber(5250, settingsNumberConstraints.editorAutoSaveDelayMs)).toBe(5000);
   });
 
   it("converts search file size between bytes and megabytes", () => {

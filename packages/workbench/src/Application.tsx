@@ -66,8 +66,6 @@ type TreeStyle = CSSProperties & {
   readonly "--tp-tree-depth": number;
 };
 
-const autoSaveDelayMs = 800;
-
 export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
   const [configuration, setConfiguration] = useState<TyporaPlusConfiguration>(
     services.configurationService.getValue()
@@ -167,9 +165,18 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
         await updateSavedFileIndexAndWorkspace(services, workspace.files, saved);
         return saved;
       }, setOperationError, setSaveConflict);
-    }, autoSaveDelayMs);
+    }, configuration.editor.autoSaveDelayMs);
     return () => window.clearTimeout(handle);
-  }, [configuration.editor.autoSave, model.dirty, model.uri, model.value, saveConflict, services, workspace.files]);
+  }, [
+    configuration.editor.autoSave,
+    configuration.editor.autoSaveDelayMs,
+    model.dirty,
+    model.uri,
+    model.value,
+    saveConflict,
+    services,
+    workspace.files
+  ]);
 
   useEffect(() => {
     if (typeof window === "undefined") {

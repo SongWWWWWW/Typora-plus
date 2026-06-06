@@ -16,6 +16,7 @@ export interface TyporaPlusConfiguration {
     readonly focusMode: boolean;
     readonly typewriterMode: boolean;
     readonly autoSave: boolean;
+    readonly autoSaveDelayMs: number;
   };
   readonly workspace: {
     readonly defaultAssetFolder: string;
@@ -73,7 +74,8 @@ export const defaultConfiguration: TyporaPlusConfiguration = {
     maxWidth: 860,
     focusMode: false,
     typewriterMode: false,
-    autoSave: true
+    autoSave: true,
+    autoSaveDelayMs: 800
   },
   workspace: {
     defaultAssetFolder: "assets",
@@ -178,7 +180,8 @@ function sanitizeEditorConfiguration(value: Record<string, unknown>): Partial<Ty
     ...(isPositiveFiniteNumber(value.maxWidth) ? { maxWidth: value.maxWidth } : {}),
     ...(typeof value.focusMode === "boolean" ? { focusMode: value.focusMode } : {}),
     ...(typeof value.typewriterMode === "boolean" ? { typewriterMode: value.typewriterMode } : {}),
-    ...(typeof value.autoSave === "boolean" ? { autoSave: value.autoSave } : {})
+    ...(typeof value.autoSave === "boolean" ? { autoSave: value.autoSave } : {}),
+    ...(isPositiveFiniteNumber(value.autoSaveDelayMs) ? { autoSaveDelayMs: value.autoSaveDelayMs } : {})
   };
 }
 

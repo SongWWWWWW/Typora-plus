@@ -54,7 +54,8 @@ describe("configuration", () => {
         colorScheme: "dark"
       },
       editor: {
-        focusMode: true
+        focusMode: true,
+        autoSaveDelayMs: 1250
       }
     });
 
@@ -66,6 +67,7 @@ describe("configuration", () => {
     expect(restored.getValue().appearance.colorScheme).toBe("dark");
     expect(restored.getValue().editor.focusMode).toBe(true);
     expect(restored.getValue().editor.autoSave).toBe(true);
+    expect(restored.getValue().editor.autoSaveDelayMs).toBe(1250);
   });
 
   it("ignores invalid stored configuration values", () => {
@@ -75,6 +77,7 @@ describe("configuration", () => {
         colorScheme: "blue"
       },
       editor: {
+        autoSaveDelayMs: -250,
         fontSize: -1,
         typewriterMode: true
       },
@@ -89,6 +92,7 @@ describe("configuration", () => {
     });
 
     expect(service.getValue().appearance.colorScheme).toBe("system");
+    expect(service.getValue().editor.autoSaveDelayMs).toBe(800);
     expect(service.getValue().editor.fontSize).toBe(17);
     expect(service.getValue().editor.typewriterMode).toBe(true);
     expect(service.getValue().workspace.searchMaxResults).toBe(120);

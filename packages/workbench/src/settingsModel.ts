@@ -9,6 +9,7 @@ export type SettingsEntryId =
   | "appearance.theme"
   | "appearance.density"
   | "editor.autoSave"
+  | "editor.autoSaveDelay"
   | "editor.focusMode"
   | "editor.typewriterMode"
   | "editor.fontSize"
@@ -48,6 +49,7 @@ export const settingsEntries = [
   { id: "appearance.theme", sectionId: "appearance", label: "Theme", keywords: ["color scheme", "system", "light", "dark"] },
   { id: "appearance.density", sectionId: "appearance", label: "Density", keywords: ["comfortable", "compact"] },
   { id: "editor.autoSave", sectionId: "editor", label: "Auto Save", keywords: ["autosave", "save"] },
+  { id: "editor.autoSaveDelay", sectionId: "editor", label: "Auto Save Delay", keywords: ["autosave", "save", "delay", "debounce", "milliseconds"] },
   { id: "editor.focusMode", sectionId: "editor", label: "Focus Mode", keywords: ["focus", "distraction"] },
   { id: "editor.typewriterMode", sectionId: "editor", label: "Typewriter Mode", keywords: ["typewriter", "cursor"] },
   { id: "editor.fontSize", sectionId: "editor", label: "Font Size", keywords: ["font", "text", "size"] },
@@ -63,6 +65,7 @@ export const settingsNumberConstraints = {
   editorFontSize: { min: 13, max: 24, step: 1 },
   editorLineHeight: { min: 1.2, max: 2.2, step: 0.05 },
   editorMaxWidth: { min: 560, max: 1120, step: 20 },
+  editorAutoSaveDelayMs: { min: 250, max: 5000, step: 250 },
   workspaceSearchMaxFileSizeMegabytes: { min: 1, max: 20, step: 1 },
   workspaceSearchMaxResults: { min: 20, max: 500, step: 10 }
 } as const satisfies Record<string, NumberSettingConstraint>;

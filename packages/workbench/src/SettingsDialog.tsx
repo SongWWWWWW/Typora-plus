@@ -321,6 +321,15 @@ export function SettingsDialog({
                     />
                   </SettingsField>
                 ) : null}
+                {isSettingsEntryVisible("editor.autoSaveDelay") ? (
+                  <NumberSetting
+                    label="Auto Save Delay"
+                    value={configuration.editor.autoSaveDelayMs}
+                    constraint={settingsNumberConstraints.editorAutoSaveDelayMs}
+                    unit="ms"
+                    onChange={(autoSaveDelayMs) => onUpdate({ editor: { autoSaveDelayMs } })}
+                  />
+                ) : null}
                 {isSettingsEntryVisible("editor.focusMode") ? (
                   <SettingsField label="Focus Mode">
                     <ToggleControl
