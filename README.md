@@ -24,6 +24,8 @@ P2 main progress is implemented:
 - workbench file explorer and active file switching
 - quick open overlay with fuzzy file matching
 - pasted image attachment bridge and editor insertion path
+- persisted recent files and workspaces
+- active workspace refresh
 
 ## Commands
 

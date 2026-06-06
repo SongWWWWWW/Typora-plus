@@ -43,6 +43,7 @@ Current services:
 - `IWorkspaceService`: workspace identity
 - `IFileService`: native workspace file tree, file open, save, save-as
 - `IAttachmentService`: pasted image persistence through a native bridge
+- `IRecentService`: persisted recent files and workspaces
 
 Planned services:
 

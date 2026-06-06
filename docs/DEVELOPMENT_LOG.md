@@ -91,3 +91,31 @@ Known limitations:
 Next stage:
 
 - P2 continuation: persisted recent files, workspace refresh/watch, save conflict prompts, then SQLite indexing.
+
+## 2026-06-06 - P2 Continuation
+
+Completed:
+
+- Added `IRecentService` for persisted recent files and workspaces.
+- Added recent file and recent workspace sections to the file sidebar.
+- Recorded recent workspaces after opening a workspace.
+- Recorded recent files after opening, saving, and save-as operations.
+- Prevented auto-save from triggering save-as dialogs for untitled notes.
+- Added `IFileService.refreshWorkspace()` and Electron IPC for refreshing the active workspace scan.
+- Added a Workbench command and file panel action for workspace refresh.
+
+Quality gate:
+
+- `npm run typecheck`: passed before documentation update
+- `npm test`: passed, 15 tests before documentation update
+
+Review:
+
+- Recent state is isolated behind `IRecentService`; UI does not read local storage directly.
+- Refresh still goes through the native file service bridge; Workbench does not access filesystem paths.
+- Recent workspace rows are displayed as history but not reopened directly yet, avoiding a renderer-controlled arbitrary path read.
+
+Known limitations:
+
+- Recent workspaces are not directly reopenable until trusted recent paths move to the main process.
+- File watcher and conflict prompts remain pending.
