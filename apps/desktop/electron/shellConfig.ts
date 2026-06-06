@@ -8,6 +8,10 @@ export const desktopShellConfig = {
     title: "Typora Plus",
     backgroundColor: "#f8f7f2"
   },
+  configuration: {
+    storageFile: "configuration.json",
+    maxValueBytes: 256 * 1024
+  },
   workspace: {
     maxDepth: 8,
     maxFiles: 5000,

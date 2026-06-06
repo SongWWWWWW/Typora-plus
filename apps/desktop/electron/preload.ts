@@ -1,8 +1,14 @@
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from "electron";
+import { nativeConfigurationIpcChannels } from "./nativeConfigurationIpc.js";
 import { nativeFileIpcChannels } from "./nativeFileIpc.js";
 
 contextBridge.exposeInMainWorld("typoraPlus", {
   platform: process.platform,
+  configuration: {
+    isAvailable: true,
+    read: (key: string) => ipcRenderer.sendSync(nativeConfigurationIpcChannels.read, key),
+    write: (key: string, value: string) => ipcRenderer.sendSync(nativeConfigurationIpcChannels.write, key, value)
+  },
   fileSystem: {
     isAvailable: true,
     onDidChangeWorkspaceFiles: (listener: (workspace: unknown) => void) => {

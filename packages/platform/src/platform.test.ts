@@ -92,6 +92,40 @@ describe("configuration", () => {
     expect(service.getValue().editor.typewriterMode).toBe(true);
     expect(service.getValue().workspace.searchMaxResults).toBe(120);
   });
+
+  it("uses a native configuration bridge when available", () => {
+    const previousTyporaPlus = (globalThis as { typoraPlus?: unknown }).typoraPlus;
+    const values = new Map<string, string>();
+    (globalThis as {
+      typoraPlus?: {
+        readonly configuration: {
+          readonly isAvailable: boolean;
+          read(key: string): string | undefined;
+          write(key: string, value: string): void;
+        };
+      };
+    }).typoraPlus = {
+      configuration: {
+        isAvailable: true,
+        read: (key) => values.get(key),
+        write: (key, value) => values.set(key, value)
+      }
+    };
+
+    try {
+      const service = new ConfigurationService();
+      service.updateValue({
+        appearance: {
+          colorScheme: "dark"
+        }
+      });
+
+      expect(values.has("typora-plus.configuration")).toBe(true);
+      expect(JSON.parse(values.get("typora-plus.configuration") ?? "{}").appearance.colorScheme).toBe("dark");
+    } finally {
+      (globalThis as { typoraPlus?: unknown }).typoraPlus = previousTyporaPlus;
+    }
+  });
 });
 
 describe("commands", () => {

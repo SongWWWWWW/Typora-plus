@@ -28,6 +28,12 @@ export interface ConfigurationStorage {
   write(key: string, value: string): void;
 }
 
+export interface NativeConfigurationBridge {
+  readonly isAvailable: boolean;
+  read(key: string): string | undefined;
+  write(key: string, value: string): void;
+}
+
 export interface ConfigurationServiceOptions {
   readonly storageKey: string;
   readonly storage?: ConfigurationStorage;
@@ -188,6 +194,12 @@ function isNonEmptyString(value: unknown): value is string {
 }
 
 function createBrowserConfigurationStorage(): ConfigurationStorage {
+  const nativeStorage = createNativeConfigurationStorage();
+
+  if (nativeStorage) {
+    return nativeStorage;
+  }
+
   return {
     read(key) {
       if (!hasLocalStorage()) {
@@ -203,6 +215,24 @@ function createBrowserConfigurationStorage(): ConfigurationStorage {
 
       window.localStorage.setItem(key, value);
     }
+  };
+}
+
+function createNativeConfigurationStorage(): ConfigurationStorage | undefined {
+  const candidate = globalThis as {
+    readonly typoraPlus?: {
+      readonly configuration?: NativeConfigurationBridge;
+    };
+  };
+  const bridge = candidate.typoraPlus?.configuration;
+
+  if (!bridge?.isAvailable) {
+    return undefined;
+  }
+
+  return {
+    read: (key) => bridge.read(key),
+    write: (key, value) => bridge.write(key, value)
   };
 }
 

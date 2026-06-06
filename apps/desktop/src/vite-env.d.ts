@@ -3,6 +3,11 @@
 interface Window {
   readonly typoraPlus?: {
     readonly platform: string;
+    readonly configuration?: {
+      readonly isAvailable: boolean;
+      read(key: string): string | undefined;
+      write(key: string, value: string): boolean;
+    };
     readonly fileSystem?: {
       readonly isAvailable: boolean;
       onDidChangeWorkspaceFiles(listener: (workspace: unknown) => void): () => void;
