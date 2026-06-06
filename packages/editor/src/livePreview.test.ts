@@ -7,6 +7,8 @@ import {
   analyzeMarkdownMathBlocks,
   analyzeMarkdownTableLines,
   classifyMarkdownLine,
+  createMarkdownTableEmptyBodyRow,
+  createMarkdownTableWithInsertedColumn,
   findInactiveMarkdownInlineMathRanges,
   findInactiveMarkdownSyntaxMarkers,
   shouldReplaceInactiveCodeFenceLine,
@@ -530,6 +532,44 @@ describe("analyzeMarkdownTableLines", () => {
       "| --- | --- |",
       "```"
     ])).toEqual([]);
+  });
+});
+
+describe("Markdown table editing helpers", () => {
+  it("creates an empty body row for the current table width", () => {
+    expect(createMarkdownTableEmptyBodyRow(3)).toBe("|  |  |  |");
+  });
+
+  it("creates a normalized table with a blank column appended", () => {
+    const tableBlock = analyzeMarkdownLineBlocks([
+      "| Name | Count |",
+      "| :--- | ---: |",
+      "| Alpha | 1 |",
+      "| Beta | 2 |"
+    ]).find((state) => state.tableBlock)?.tableBlock;
+
+    expect(tableBlock).toBeDefined();
+    expect(createMarkdownTableWithInsertedColumn(tableBlock!)).toEqual([
+      "| Name | Count |  |",
+      "| :--- | ---: | --- |",
+      "| Alpha | 1 |  |",
+      "| Beta | 2 |  |"
+    ]);
+  });
+
+  it("inserts a blank column at a requested index while preserving alignments", () => {
+    const tableBlock = analyzeMarkdownLineBlocks([
+      "| Name | Count | Status |",
+      "| :--- | ---: | :---: |",
+      "| Alpha | 1 | Ready |"
+    ]).find((state) => state.tableBlock)?.tableBlock;
+
+    expect(tableBlock).toBeDefined();
+    expect(createMarkdownTableWithInsertedColumn(tableBlock!, { columnIndex: 1 })).toEqual([
+      "| Name |  | Count | Status |",
+      "| :--- | --- | ---: | :---: |",
+      "| Alpha |  | 1 | Ready |"
+    ]);
   });
 });
 

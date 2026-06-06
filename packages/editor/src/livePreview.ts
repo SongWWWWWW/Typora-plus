@@ -119,6 +119,9 @@ const tablePreviewCellMaxWidthPx = 260;
 const tablePreviewCellMinWidthPx = 88;
 const tablePreviewHeaderEstimatedHeight = 42;
 const tablePreviewRowEstimatedHeight = 34;
+const tablePreviewToolbarEstimatedHeight = 36;
+const tableToolButtonHeightPx = 24;
+const tableToolButtonMinWidthPx = 52;
 
 export function livePreviewExtension(
   configuration: MarkdownEditorConfiguration,
@@ -260,6 +263,39 @@ export function shouldReplaceInactiveCodeFenceLine(
 
 export function shouldReplaceInactiveTableLine(tableBlockIsActive: boolean): boolean {
   return !tableBlockIsActive;
+}
+
+export interface MarkdownTableColumnInsertionOptions {
+  readonly columnIndex?: number;
+}
+
+export function createMarkdownTableEmptyBodyRow(columnCount: number): string {
+  return serializeMarkdownTableRow(Array.from({ length: Math.max(1, columnCount) }, () => ""));
+}
+
+export function createMarkdownTableWithInsertedColumn(
+  tableBlock: MarkdownTableBlockState,
+  options: MarkdownTableColumnInsertionOptions = {}
+): readonly string[] {
+  const columnCount = Math.max(1, tableBlock.headerCells.length);
+  const columnIndex = clampTableColumnInsertionIndex(
+    options.columnIndex ?? columnCount,
+    columnCount
+  );
+  const headerCells = normalizeTableCells(tableBlock.headerCells, columnCount);
+  const alignments = insertTableArrayItem(
+    normalizeTableAlignments(tableBlock.alignments, columnCount),
+    columnIndex,
+    "default"
+  );
+
+  return [
+    serializeMarkdownTableRow(insertTableArrayItem(headerCells, columnIndex, "")),
+    serializeMarkdownTableDelimiterRow(alignments),
+    ...tableBlock.bodyRows.map((row) =>
+      serializeMarkdownTableRow(insertTableArrayItem(normalizeTableCells(row, columnCount), columnIndex, ""))
+    )
+  ];
 }
 
 export function shouldIgnorePreviewEventTarget(tagName: string | undefined): boolean {
@@ -1089,6 +1125,97 @@ function readMarkdownTableColumnAlignment(delimiter: string): MarkdownTableColum
   return "default";
 }
 
+function serializeMarkdownTableRow(cells: readonly string[]): string {
+  return `| ${cells.map((cell) => cell.trim()).join(" | ")} |`;
+}
+
+function serializeMarkdownTableDelimiterRow(alignments: readonly MarkdownTableColumnAlignment[]): string {
+  return serializeMarkdownTableRow(alignments.map(serializeMarkdownTableDelimiterCell));
+}
+
+function serializeMarkdownTableDelimiterCell(alignment: MarkdownTableColumnAlignment): string {
+  if (alignment === "left") {
+    return ":---";
+  }
+
+  if (alignment === "right") {
+    return "---:";
+  }
+
+  if (alignment === "center") {
+    return ":---:";
+  }
+
+  return "---";
+}
+
+function clampTableColumnInsertionIndex(columnIndex: number, columnCount: number): number {
+  if (!Number.isFinite(columnIndex)) {
+    return columnCount;
+  }
+
+  return Math.max(0, Math.min(Math.trunc(columnIndex), columnCount));
+}
+
+function normalizeTableCells(cells: readonly string[], columnCount: number): readonly string[] {
+  return Array.from({ length: columnCount }, (_, index) => cells[index] ?? "");
+}
+
+function normalizeTableAlignments(
+  alignments: readonly MarkdownTableColumnAlignment[],
+  columnCount: number
+): readonly MarkdownTableColumnAlignment[] {
+  return Array.from({ length: columnCount }, (_, index) => alignments[index] ?? "default");
+}
+
+function insertTableArrayItem<T>(items: readonly T[], index: number, item: T): readonly T[] {
+  return [...items.slice(0, index), item, ...items.slice(index)];
+}
+
+function readCurrentMarkdownTableBlock(view: EditorView, startLine: number): MarkdownTableBlockState | undefined {
+  const table = readMarkdownTableFromSource({
+    lineCount: view.state.doc.lines,
+    readLine: (lineNumber) => view.state.doc.line(lineNumber).text,
+    startLine
+  });
+
+  return table?.states[0]?.tableBlock;
+}
+
+function insertMarkdownTableRowBelow(view: EditorView, tableBlock: MarkdownTableBlockState): void {
+  const currentTableBlock = readCurrentMarkdownTableBlock(view, tableBlock.blockStart);
+  if (!currentTableBlock) {
+    return;
+  }
+
+  const blockEndLine = view.state.doc.line(currentTableBlock.blockEnd);
+  const row = createMarkdownTableEmptyBodyRow(currentTableBlock.headerCells.length);
+  const insert = `\n${row}`;
+
+  view.dispatch({
+    changes: { from: blockEndLine.to, insert },
+    selection: { anchor: blockEndLine.to + Math.min(3, insert.length) }
+  });
+  view.focus();
+}
+
+function insertMarkdownTableColumnRight(view: EditorView, tableBlock: MarkdownTableBlockState): void {
+  const currentTableBlock = readCurrentMarkdownTableBlock(view, tableBlock.blockStart);
+  if (!currentTableBlock) {
+    return;
+  }
+
+  const startLine = view.state.doc.line(currentTableBlock.blockStart);
+  const endLine = view.state.doc.line(currentTableBlock.blockEnd);
+  const replacement = createMarkdownTableWithInsertedColumn(currentTableBlock).join("\n");
+
+  view.dispatch({
+    changes: { from: startLine.from, to: endLine.to, insert: replacement },
+    selection: { anchor: startLine.from }
+  });
+  view.focus();
+}
+
 class MarkdownTableBlockWidget extends WidgetType {
   constructor(private readonly tableBlock: MarkdownTableBlockState) {
     super();
@@ -1099,11 +1226,40 @@ class MarkdownTableBlockWidget extends WidgetType {
       serializeTableBlock(widget.tableBlock) === serializeTableBlock(this.tableBlock);
   }
 
-  override toDOM(): HTMLElement {
+  override toDOM(view: EditorView): HTMLElement {
     const wrapper = document.createElement("span");
     wrapper.className = "tp-editor-table-preview";
     wrapper.setAttribute("aria-label", "Table preview");
     wrapper.setAttribute("role", "group");
+
+    const toolbar = document.createElement("span");
+    toolbar.className = "tp-editor-table-toolbar";
+
+    const label = document.createElement("span");
+    label.className = "tp-editor-table-label";
+    label.textContent = "Table";
+
+    const actions = document.createElement("span");
+    actions.className = "tp-editor-table-actions";
+    actions.append(
+      createTableToolButton({
+        className: "tp-editor-table-insert-row",
+        text: "Row +",
+        title: "Insert row below",
+        onClick: () => insertMarkdownTableRowBelow(view, this.tableBlock)
+      }),
+      createTableToolButton({
+        className: "tp-editor-table-insert-column",
+        text: "Col +",
+        title: "Insert column right",
+        onClick: () => insertMarkdownTableColumnRight(view, this.tableBlock)
+      })
+    );
+
+    toolbar.append(label, actions);
+
+    const scroll = document.createElement("span");
+    scroll.className = "tp-editor-table-scroll";
 
     const table = document.createElement("table");
     const thead = document.createElement("thead");
@@ -1139,18 +1295,46 @@ class MarkdownTableBlockWidget extends WidgetType {
       table.append(tbody);
     }
 
-    wrapper.append(table);
+    scroll.append(table);
+    wrapper.append(toolbar, scroll);
     return wrapper;
   }
 
   override get estimatedHeight(): number {
-    return tablePreviewHeaderEstimatedHeight +
+    return tablePreviewToolbarEstimatedHeight + tablePreviewHeaderEstimatedHeight +
       Math.max(1, this.tableBlock.bodyRows.length) * tablePreviewRowEstimatedHeight;
   }
 
-  override ignoreEvent(): boolean {
-    return false;
+  override ignoreEvent(event: Event): boolean {
+    return isPreviewInteractiveEvent(event);
   }
+}
+
+interface TableToolButtonOptions {
+  readonly className: string;
+  readonly onClick: () => void;
+  readonly text: string;
+  readonly title: string;
+}
+
+function createTableToolButton(options: TableToolButtonOptions): HTMLButtonElement {
+  const button = document.createElement("button");
+  button.className = `tp-editor-table-tool ${options.className}`;
+  button.type = "button";
+  button.textContent = options.text;
+  button.title = options.title;
+  button.setAttribute("aria-label", options.title);
+  button.addEventListener("mousedown", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+  });
+  button.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    options.onClick();
+  });
+
+  return button;
 }
 
 function setTableCellAlignment(cell: HTMLTableCellElement, alignment: MarkdownTableColumnAlignment | undefined): void {
@@ -1735,16 +1919,69 @@ function markdownEditorTheme(configuration: MarkdownEditorConfiguration): Extens
       paddingBottom: "4px"
     },
     ".tp-editor-table-preview": {
-      display: "block",
+      display: "flex",
+      flexDirection: "column",
       width: "100%",
       boxSizing: "border-box",
-      overflowX: "auto",
+      overflow: "hidden",
       border: "1px solid var(--tp-color-table-border)",
       borderLeft: "3px solid var(--tp-color-table-border)",
       borderRadius: "var(--tp-radius-control)",
       backgroundColor: "var(--tp-color-table-row)",
       color: "var(--tp-color-text)",
       fontFamily: "var(--tp-font-ui)"
+    },
+    ".tp-editor-table-toolbar": {
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: "10px",
+      width: "100%",
+      minHeight: `${tablePreviewToolbarEstimatedHeight}px`,
+      boxSizing: "border-box",
+      padding: "6px 8px",
+      borderBottom: "1px solid var(--tp-color-table-border)",
+      backgroundColor: "var(--tp-color-table-header)",
+      color: "var(--tp-color-text-muted)",
+      fontSize: "12px",
+      lineHeight: "1"
+    },
+    ".tp-editor-table-label": {
+      minWidth: "0",
+      overflow: "hidden",
+      textOverflow: "ellipsis",
+      whiteSpace: "nowrap",
+      fontWeight: "650",
+      letterSpacing: "0"
+    },
+    ".tp-editor-table-actions": {
+      display: "flex",
+      alignItems: "center",
+      gap: "6px",
+      flex: "0 0 auto"
+    },
+    ".tp-editor-table-tool": {
+      minWidth: `${tableToolButtonMinWidthPx}px`,
+      height: `${tableToolButtonHeightPx}px`,
+      padding: "0 8px",
+      border: "1px solid var(--tp-color-table-border)",
+      borderRadius: "6px",
+      backgroundColor: "var(--tp-color-surface-raised)",
+      color: "var(--tp-color-text-muted)",
+      font: "inherit",
+      fontWeight: "650",
+      letterSpacing: "0",
+      cursor: "pointer",
+      transition: "background-color var(--tp-motion-fast) ease, color var(--tp-motion-fast) ease"
+    },
+    ".tp-editor-table-tool:hover": {
+      color: "var(--tp-color-accent-strong)",
+      backgroundColor: "var(--tp-color-surface)"
+    },
+    ".tp-editor-table-scroll": {
+      display: "block",
+      width: "100%",
+      overflowX: "auto"
     },
     ".tp-editor-table-preview table": {
       width: "100%",
