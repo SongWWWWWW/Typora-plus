@@ -3,6 +3,10 @@ import {
   createMermaidMarkdownRendererProvider,
   workbenchMermaidRendererId
 } from "./mermaidMarkdownRenderer";
+import {
+  createStatusMarkdownRendererProvider,
+  workbenchStatusRendererId
+} from "./statusMarkdownRenderer";
 import { defaultWorkbenchExtensionManifest } from "./workbenchContributions";
 
 export function createWorkbenchExtensionActivationHandler(): ExtensionActivationHandler {
@@ -14,6 +18,12 @@ export function createWorkbenchExtensionActivationHandler(): ExtensionActivation
     if (request.activationEvent === `onMarkdownRenderer:${workbenchMermaidRendererId}`) {
       request.context.subscriptions.add(
         request.context.markdown.registerRendererProvider(createMermaidMarkdownRendererProvider())
+      );
+    }
+
+    if (request.activationEvent === `onMarkdownRenderer:${workbenchStatusRendererId}`) {
+      request.context.subscriptions.add(
+        request.context.markdown.registerRendererProvider(createStatusMarkdownRendererProvider())
       );
     }
   };

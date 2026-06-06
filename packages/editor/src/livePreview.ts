@@ -3995,6 +3995,40 @@ function markdownEditorTheme(configuration: MarkdownEditorConfiguration): Extens
       objectFit: "contain",
       verticalAlign: "-0.18em"
     },
+    ".tp-editor-inline-renderer-preview .tp-renderer-status": {
+      display: "inline-flex",
+      alignItems: "center",
+      gap: "5px",
+      maxWidth: "100%",
+      overflow: "hidden",
+      textOverflow: "ellipsis",
+      whiteSpace: "nowrap",
+      fontWeight: "650",
+      letterSpacing: "0"
+    },
+    ".tp-editor-inline-renderer-preview .tp-renderer-status::before": {
+      content: "\"\"",
+      flex: "0 0 auto",
+      width: "6px",
+      height: "6px",
+      borderRadius: "50%",
+      backgroundColor: "currentColor"
+    },
+    ".tp-editor-inline-renderer-preview .tp-renderer-status-success": {
+      color: "var(--tp-color-accent-strong)"
+    },
+    ".tp-editor-inline-renderer-preview .tp-renderer-status-info": {
+      color: "var(--tp-color-accent)"
+    },
+    ".tp-editor-inline-renderer-preview .tp-renderer-status-warning": {
+      color: "var(--tp-color-warning)"
+    },
+    ".tp-editor-inline-renderer-preview .tp-renderer-status-danger": {
+      color: "var(--tp-color-danger)"
+    },
+    ".tp-editor-inline-renderer-preview .tp-renderer-status-neutral": {
+      color: "var(--tp-color-text-muted)"
+    },
     ".tp-editor-math-preview-empty, .tp-editor-math-preview-error": {
       justifyContent: "flex-start",
       color: "var(--tp-color-text-muted)",

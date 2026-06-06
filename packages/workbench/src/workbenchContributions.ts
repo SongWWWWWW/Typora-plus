@@ -9,6 +9,10 @@ import {
   workbenchMermaidRendererId,
   workbenchMermaidRendererLanguage
 } from "./mermaidMarkdownRenderer";
+import {
+  workbenchStatusRendererId,
+  workbenchStatusRendererLanguage
+} from "./statusMarkdownRenderer";
 
 export const defaultWorkbenchExtensionManifest = {
   id: "typora-plus.workbench",
@@ -203,6 +207,13 @@ export const defaultWorkbenchExtensionManifest = {
         label: "Mermaid",
         kind: "block",
         language: workbenchMermaidRendererLanguage,
+        priority: 100
+      },
+      {
+        id: workbenchStatusRendererId,
+        label: "Status",
+        kind: "inline",
+        language: workbenchStatusRendererLanguage,
         priority: 100
       }
     ],

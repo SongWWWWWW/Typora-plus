@@ -8,6 +8,9 @@ import { toDisposable, type IDisposable } from "@typora-plus/base";
 import {
   workbenchMermaidRendererId
 } from "./mermaidMarkdownRenderer";
+import {
+  workbenchStatusRendererId
+} from "./statusMarkdownRenderer";
 import { createWorkbenchExtensionActivationHandler } from "./workbenchExtensionActivation";
 import { defaultWorkbenchExtensionManifest } from "./workbenchContributions";
 
@@ -32,6 +35,29 @@ describe("Workbench extension activation", () => {
     });
 
     expect(providerId).toBe(workbenchMermaidRendererId);
+    expect(subscriptions).toHaveLength(1);
+  });
+
+  it("registers the built-in Status provider on renderer activation", async () => {
+    const subscriptions: IDisposable[] = [];
+    let providerId: string | undefined;
+    const handler = createWorkbenchExtensionActivationHandler();
+
+    await handler({
+      activationEvent: `onMarkdownRenderer:${workbenchStatusRendererId}`,
+      context: createActivationContext({
+        addSubscription(disposable) {
+          subscriptions.push(disposable);
+        },
+        registerRendererProvider(id) {
+          providerId = id;
+          return toDisposable(() => undefined);
+        }
+      }),
+      extension: createRegisteredExtension(defaultWorkbenchExtensionManifest.id)
+    });
+
+    expect(providerId).toBe(workbenchStatusRendererId);
     expect(subscriptions).toHaveLength(1);
   });
 

@@ -9,6 +9,10 @@ import {
   workbenchMermaidRendererId,
   workbenchMermaidRendererLanguage
 } from "./mermaidMarkdownRenderer";
+import {
+  workbenchStatusRendererId,
+  workbenchStatusRendererLanguage
+} from "./statusMarkdownRenderer";
 
 describe("workbench contributions", () => {
   it("contributes titlebar actions in stable command order", () => {
@@ -68,13 +72,20 @@ describe("workbench contributions", () => {
     expect(Object.keys(themes[0]?.tokens ?? {}).every((token) => token.startsWith("--tp-"))).toBe(true);
   });
 
-  it("contributes the built-in Mermaid Markdown renderer", () => {
+  it("contributes built-in Markdown renderers", () => {
     expect(defaultWorkbenchExtensionManifest.contributes.markdownRenderers).toEqual([
       {
         id: workbenchMermaidRendererId,
         kind: "block",
         label: "Mermaid",
         language: workbenchMermaidRendererLanguage,
+        priority: 100
+      },
+      {
+        id: workbenchStatusRendererId,
+        kind: "inline",
+        label: "Status",
+        language: workbenchStatusRendererLanguage,
         priority: 100
       }
     ]);
