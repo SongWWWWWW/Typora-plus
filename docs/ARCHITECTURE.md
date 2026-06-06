@@ -69,7 +69,7 @@ Current features:
 - heading/quote/list/fence line styling
 - inactive Markdown marker soft hiding for headings, lists, quotes, fences, links, and strong emphasis
 - code fence block styling with visible-range-aware fence state tracking and inactive language/copy widgets
-- table block styling with code-fence-aware table detection
+- table block styling with code-fence-aware table detection and inactive table previews
 - standalone image preview cards with workspace-backed local image resolution and direct inline/blob rendering
 - KaTeX-backed display math preview blocks
 - KaTeX-backed inline math previews for inactive lines
@@ -79,9 +79,9 @@ Current features:
 
 Next editor work:
 
-- richer table editing affordances
 - richer math editing affordances
 - viewport-aware block analysis refinements
+- richer table editing affordances
 - viewport-safe large document behavior tests
 - parser-backed position mapping
 

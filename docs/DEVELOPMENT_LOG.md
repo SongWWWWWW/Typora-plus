@@ -475,3 +475,33 @@ Known limitations:
 
 - Clipboard contents could not be asserted in the in-app browser because its virtual clipboard is unavailable; button presence and stable click behavior were verified without console errors.
 - Code fence parsing remains scanner-based pending parser-backed position mapping.
+
+## 2026-06-06 - P2 Table Preview Widgets
+
+Completed:
+
+- Added table block state with header cells, body rows, alignments, block range, and visible preview line metadata.
+- Rendered inactive Markdown tables as compact table previews.
+- Kept full Markdown table source visible whenever the cursor is inside the table block.
+- Preserved code-fence and display-math precedence so table-like text inside those blocks is not restyled.
+- Added focused tests for table metadata and inactive/active replacement rules.
+
+Quality gate:
+
+- `npm run verify`: passed
+- `npm test`: passed, 57 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- Production browser preview: passed at `http://127.0.0.1:4173`
+- Desktop 1280px and mobile 390px checks: passed without horizontal overflow or console errors
+
+Review:
+
+- Table preview remains an editor decoration and does not alter the Markdown text model.
+- Workbench, platform, and file services remain unaware of Markdown table syntax.
+- Table styling reuses existing theme tokens; preview dimensions are centralized in named editor constants.
+- Visible preview line metadata keeps large table rendering usable when the header is not the first visible table line.
+
+Known limitations:
+
+- Table parsing remains lightweight and does not yet handle escaped pipes.
+- Structural table editing controls such as row/column insert and alignment menus are still future work.
