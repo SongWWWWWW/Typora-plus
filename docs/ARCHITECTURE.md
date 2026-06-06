@@ -37,7 +37,7 @@ The editor package does not know about files, windows, Electron, or sidebars. Th
 
 Current services:
 
-- `IConfigurationService`: centralized appearance, editor, workspace defaults
+- `IConfigurationService`: centralized and persisted appearance, editor, and workspace defaults
 - `ICommandService`: command registration and execution
 - `IKeybindingService`: keybinding registration, keyboard event resolution, and command dispatch
 - `ITextFileService`: active Markdown model, dirty state, conflict-aware save lifecycle
@@ -59,6 +59,8 @@ Successful workspace saves refresh the saved file's index record through `IIndex
 `WorkspaceIndexService` owns scan orchestration and status updates. Indexed storage and query behavior sit behind `WorkspaceIndexProvider`; `InMemoryWorkspaceIndexProvider` is the default provider for the current stage, and a future SQLite provider should implement the same storage/query contract without changing Workbench consumers.
 
 Keyboard shortcuts are resolved through `IKeybindingService` instead of hard-coded Workbench key checks. Workbench registers its default shortcuts as keybinding rules and dispatches resolved commands through `ICommandService`; command palette rows can read labels from the same service.
+
+User preferences are owned by `IConfigurationService`. The service reads and writes validated configuration through an injected storage boundary, so Workbench commands update preferences through the service without accessing browser storage directly.
 
 Planned services:
 

@@ -1195,3 +1195,32 @@ Known limitations:
 
 - Keybindings are registered as Workbench defaults only; user-customizable keybinding persistence is not implemented yet.
 - Shortcut conflict handling uses deterministic rule weight/order, but there is no user-facing conflict editor yet.
+
+## 2026-06-06 - P2 Persisted Configuration Service
+
+Completed:
+
+- Added a configuration storage boundary to `ConfigurationService`.
+- Persisted appearance, editor, and workspace preferences through the configuration service.
+- Restored stored configuration on service startup while merging against centralized defaults.
+- Added validation so invalid stored values do not replace known-good defaults.
+- Added platform tests for persisted updates, reload restoration, and invalid stored configuration handling.
+
+Quality gate:
+
+- `npm run test -- --run packages/platform/src/platform.test.ts`: passed, 25 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 108 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- Browser regression: toggling theme through the command palette changed `data-theme` from `dark` to `light`, reload preserved `light`, and no console errors or page horizontal overflow occurred.
+
+Review:
+
+- Workbench still updates preferences only through `IConfigurationService`; it does not touch browser storage.
+- Configuration defaults remain centralized, and persisted data is merged over defaults rather than replacing the full schema blindly.
+- Invalid persisted values are ignored at the field level, keeping future schema changes safer.
+
+Known limitations:
+
+- Configuration storage is browser-local for now; native app-level settings storage is still planned.
+- There is no dedicated settings UI yet; preferences are currently changed by existing commands and defaults.
