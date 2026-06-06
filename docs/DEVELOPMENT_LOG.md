@@ -1018,3 +1018,34 @@ Known limitations:
 
 - Browser verification covers the no-workspace fallback; full inbound-link navigation still depends on native workspace fixture coverage or future Workbench component tests.
 - Backlinks are based on the current in-memory index, so saved-file updates still rely on workspace refresh/watch until SQLite persistence and incremental indexing land.
+
+## 2026-06-06 - P2 Workspace Tag Queries
+
+Completed:
+
+- Extended `IIndexService` with `getTags()` for indexed tag summaries.
+- Added `getTaggedResources(tag)` for case-insensitive exact tag lookups.
+- Preserved first-seen tag casing in summaries while sorting summaries by normalized tag text.
+- Sorted tagged resources by source relative path and line number for stable future UI navigation.
+- Added platform tests for tag summaries, tagged resource lookup, inline-code exclusion, missing tags, and clear-state behavior.
+
+Quality gate:
+
+- `npm run test -- --run packages/platform/src/platform.test.ts`: passed, 18 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 99 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed
+- Browser verification: not required for this stage because no Workbench or UI behavior changed.
+
+Review:
+
+- Tag aggregation remains in `packages/platform` behind `IIndexService`; future tag UI should not process raw metadata arrays directly.
+- The service contract keeps casing, normalization, grouping, and ordering rules in one provider-owned place.
+- The implementation reuses indexed metadata and introduces no new filesystem access paths or hard-coded workspace paths.
+- SQLite persistence can implement the same tag query contract without Workbench API churn.
+
+Known limitations:
+
+- Tag queries are still backed by the in-memory index.
+- Tag extraction remains scanner-based and should be parser-backed for more complex Markdown syntax.
