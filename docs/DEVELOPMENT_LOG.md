@@ -2495,3 +2495,37 @@ Known limitations:
 - The cache is in-memory only; previews are recomputed after app reload.
 - Cache size is an internal adapter default; there is no user-facing setting yet.
 - Inline renderer contributions are registered by the platform but are not connected to an editor preview surface yet.
+
+## 2026-06-07 - P2 Configurable Renderer Preview Cache
+
+Completed:
+
+- Added `editor.rendererPreviewCacheEntries` to persisted platform configuration.
+- Moved the Workbench renderer preview cache default to platform configuration instead of a Workbench-only constant.
+- Wired the configured cache limit into the Markdown code-fence renderer adapter.
+- Added a searchable `Renderer Cache` numeric setting with platform-derived bounds.
+- Allowed `0` cache entries as a validated setting so caching can be disabled for diagnostics.
+- Aligned numeric setting steps with default values so Settings sliders and number inputs display the same values.
+- Added tests for persisted cache configuration, invalid value filtering, clamping, searchable settings metadata, default cache ownership, and default numeric step alignment.
+
+Quality gate:
+
+- `npm run typecheck`: passed
+- `npm run test -- --run packages/platform/src/platform.test.ts packages/workbench/src/settingsModel.test.ts packages/workbench/src/markdownRendererPreview.test.ts`: passed, 110 tests
+- `npm run verify`: passed, 237 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Browser smoke check at `http://127.0.0.1:5173/`: Settings opened, `renderer cache` search showed the new editor setting, cache value controls rendered consistently, auto-save delay and line-height sliders matched their number inputs, no horizontal overflow, and no console errors.
+
+Review:
+
+- Renderer cache sizing now follows the same configuration boundary as other editor behavior defaults.
+- Workbench consumes the cache limit through configuration and still keeps the cache adapter-scoped and in-memory.
+- Settings uses platform constraints rather than local UI bounds, keeping persisted validation and controls aligned.
+- No new dependency, storage path, visual token, renderer-specific editor dependency, or extra documentation file was introduced.
+
+Known limitations:
+
+- The cache is still in-memory only; previews are recomputed after app reload.
+- Inline renderer contributions are registered by the platform but are not connected to an editor preview surface yet.
+- Mermaid remains isolated behind lazy loading, but its lazy chunk still needs future lower-end machine measurement.
