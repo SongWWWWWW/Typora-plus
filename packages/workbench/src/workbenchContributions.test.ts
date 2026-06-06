@@ -5,6 +5,10 @@ import {
   defaultWorkbenchKeybindings,
   defaultWorkbenchMenuItems
 } from "./workbenchContributions";
+import {
+  workbenchMermaidRendererId,
+  workbenchMermaidRendererLanguage
+} from "./mermaidMarkdownRenderer";
 
 describe("workbench contributions", () => {
   it("contributes titlebar actions in stable command order", () => {
@@ -62,6 +66,18 @@ describe("workbench contributions", () => {
     expect(themes.map((theme) => theme.id)).toEqual(["typora-plus.theme.ink"]);
     expect(new Set(themes.map((theme) => theme.id)).size).toBe(themes.length);
     expect(Object.keys(themes[0]?.tokens ?? {}).every((token) => token.startsWith("--tp-"))).toBe(true);
+  });
+
+  it("contributes the built-in Mermaid Markdown renderer", () => {
+    expect(defaultWorkbenchExtensionManifest.contributes.markdownRenderers).toEqual([
+      {
+        id: workbenchMermaidRendererId,
+        kind: "block",
+        label: "Mermaid",
+        language: workbenchMermaidRendererLanguage,
+        priority: 100
+      }
+    ]);
   });
 
   it("keeps built-in workbench command handlers outside the manifest", () => {

@@ -1043,6 +1043,27 @@ describe("sanitizeMarkdownRendererHtml", () => {
       );
     });
   });
+
+  it("keeps safe renderer data images", () => {
+    withDom(() => {
+      const html = [
+        "<img class=\"tp-renderer-mermaid-image external\" ",
+        "src=\"data:image/svg+xml;charset=utf-8,%3Csvg%20id%3D'node-1'(~*)%3E%3C%2Fsvg%3E\" ",
+        "alt=\"Mermaid diagram\" onclick=\"run()\">"
+      ].join("");
+
+      expect(renderSanitizedHtml(html)).toBe(
+        "<img class=\"tp-renderer-mermaid-image\" src=\"data:image/svg+xml;charset=utf-8,%3Csvg%20id%3D'node-1'(~*)%3E%3C%2Fsvg%3E\" alt=\"Mermaid diagram\">"
+      );
+    });
+  });
+
+  it("drops unencoded renderer data images", () => {
+    withDom(() => {
+      expect(renderSanitizedHtml("<img src=\"data:image/svg+xml,<svg><script>x</script></svg>\" alt=\"Bad\">"))
+        .toBe("");
+    });
+  });
 });
 
 function renderSanitizedHtml(html: string): string {

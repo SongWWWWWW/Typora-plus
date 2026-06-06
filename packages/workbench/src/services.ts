@@ -52,6 +52,7 @@ import {
   type IThemeService as ThemeServiceContract,
   type IWorkspaceService as WorkspaceServiceContract
 } from "@typora-plus/platform";
+import { createWorkbenchExtensionActivationHandler } from "./workbenchExtensionActivation";
 import { defaultWorkbenchExtensionManifest } from "./workbenchContributions";
 
 export interface WorkbenchServices {
@@ -135,6 +136,7 @@ export function createWorkbenchServices(): WorkbenchServices {
   });
   serviceCollection.set(ICommandService, commandService);
   extensionService = new ExtensionService(commandService, menuService, keybindingService, {
+    activationHandler: createWorkbenchExtensionActivationHandler(),
     contextKeyService,
     exportService,
     markdownRendererService,

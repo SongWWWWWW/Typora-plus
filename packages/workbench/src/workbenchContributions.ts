@@ -5,6 +5,10 @@ import {
   type KeybindingRule,
   type MenuItem
 } from "@typora-plus/platform";
+import {
+  workbenchMermaidRendererId,
+  workbenchMermaidRendererLanguage
+} from "./mermaidMarkdownRenderer";
 
 export const defaultWorkbenchExtensionManifest = {
   id: "typora-plus.workbench",
@@ -191,6 +195,15 @@ export const defaultWorkbenchExtensionManifest = {
       {
         command: "file.exportHtml",
         keybinding: { key: "e", primary: true, shift: true }
+      }
+    ],
+    markdownRenderers: [
+      {
+        id: workbenchMermaidRendererId,
+        label: "Mermaid",
+        kind: "block",
+        language: workbenchMermaidRendererLanguage,
+        priority: 100
       }
     ],
     themes: [

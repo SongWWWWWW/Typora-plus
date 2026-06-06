@@ -5,6 +5,28 @@ import { defineConfig } from "vite";
 
 const appRoot = fileURLToPath(new URL(".", import.meta.url));
 const workspaceRoot = path.resolve(appRoot, "../..");
+const mermaidChunkPackageNames = [
+  "@braintree/sanitize-url",
+  "@iconify",
+  "@mermaid-js",
+  "@upsetjs",
+  "cytoscape",
+  "cytoscape-cose-bilkent",
+  "cytoscape-fcose",
+  "d3",
+  "d3-",
+  "dagre-d3-es",
+  "dayjs",
+  "dompurify",
+  "es-toolkit",
+  "elkjs",
+  "khroma",
+  "mermaid",
+  "roughjs",
+  "stylis",
+  "ts-dedent",
+  "uuid"
+];
 
 export default defineConfig({
   plugins: [react()],
@@ -34,6 +56,10 @@ export default defineConfig({
             return undefined;
           }
 
+          if (isMermaidChunkModule(id)) {
+            return "mermaid";
+          }
+
           if (id.includes("@codemirror/view") || id.includes("@codemirror/state")) {
             return "cm-core";
           }
@@ -56,3 +82,11 @@ export default defineConfig({
     }
   }
 });
+
+function isMermaidChunkModule(id: string): boolean {
+  const normalizedId = id.replaceAll("\\", "/");
+
+  return mermaidChunkPackageNames.some((packageName) =>
+    normalizedId.includes(`/node_modules/${packageName}`)
+  );
+}

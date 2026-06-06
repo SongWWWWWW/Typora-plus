@@ -21,6 +21,7 @@
     "@typora-plus/platform": "0.1.0",
     "@typora-plus/theme": "0.1.0",
     "lucide-react": "^0.511.0",
+    "mermaid": "^11.15.0",
     "react": "^19.0.0"
   },
   "peerDependencies": {

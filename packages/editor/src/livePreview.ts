@@ -2351,6 +2351,10 @@ function sanitizeMarkdownRendererNode(node: Node): Node | undefined {
   const element = document.createElement(tagName);
   copySafeRendererAttributes(node, element);
 
+  if (tagName === "img" && !element.hasAttribute("src")) {
+    return undefined;
+  }
+
   for (const child of Array.from(node.childNodes)) {
     const sanitized = sanitizeMarkdownRendererNode(child);
 
@@ -2378,6 +2382,7 @@ const allowedRendererHtmlTags = new Set([
   "figure",
   "hr",
   "i",
+  "img",
   "li",
   "ol",
   "p",
@@ -2407,11 +2412,13 @@ const blockedRendererHtmlTags = new Set([
 const allowedRendererHtmlAttributes = new Set([
   "aria-label",
   "aria-labelledby",
+  "alt",
   "class",
   "colspan",
   "data-align",
   "role",
   "rowspan",
+  "src",
   "title"
 ]);
 
@@ -2431,12 +2438,28 @@ function copySafeRendererAttributes(source: Element, target: HTMLElement): void 
       continue;
     }
 
+    if (name === "src" && (!isRendererImageElement(target) || !isSafeRendererImageSource(attribute.value))) {
+      continue;
+    }
+
+    if (name === "alt" && !isRendererImageElement(target)) {
+      continue;
+    }
+
     if ((name === "colspan" || name === "rowspan") && !/^[1-9][0-9]?$/.test(attribute.value)) {
       continue;
     }
 
     target.setAttribute(name, attribute.value);
   }
+}
+
+function isRendererImageElement(element: HTMLElement): boolean {
+  return element.tagName.toLowerCase() === "img";
+}
+
+function isSafeRendererImageSource(value: string): boolean {
+  return /^data:image\/(?:svg\+xml|png|gif|jpeg|webp);[A-Za-z0-9+/,;:=._%!'()*~-]+$/i.test(value.trim());
 }
 
 function sanitizeRendererClassName(value: string): string {
@@ -3185,6 +3208,34 @@ function markdownEditorTheme(configuration: MarkdownEditorConfiguration): Extens
     },
     ".tp-editor-renderer-html code, .tp-editor-renderer-source code": {
       fontFamily: "ui-monospace, SFMono-Regular, Consolas, monospace"
+    },
+    ".tp-editor-renderer-html img": {
+      display: "block",
+      maxWidth: "100%",
+      height: "auto"
+    },
+    ".tp-editor-renderer-html .tp-renderer-mermaid": {
+      display: "flex",
+      flexDirection: "column",
+      alignItems: "center",
+      gap: "8px"
+    },
+    ".tp-editor-renderer-html .tp-renderer-mermaid-image": {
+      width: "auto",
+      height: "auto",
+      maxWidth: "100%",
+      maxHeight: "420px",
+      objectFit: "contain"
+    },
+    ".tp-editor-renderer-html .tp-renderer-mermaid-label": {
+      width: "100%",
+      overflow: "hidden",
+      color: "var(--tp-color-text-muted)",
+      fontSize: "12px",
+      lineHeight: "1.3",
+      textAlign: "center",
+      textOverflow: "ellipsis",
+      whiteSpace: "nowrap"
     },
     ".tp-editor-renderer-html table": {
       width: "100%",
