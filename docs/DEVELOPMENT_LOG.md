@@ -1889,3 +1889,38 @@ Known limitations:
 
 - Native save dialog interaction is still not covered by an automated desktop test; native asset writing is verified through type/build checks and contract-level tests.
 - Export assets are written as sibling files, not zipped or streamed; a future provider can add archive packaging behind the same `IExportService` boundary.
+
+## 2026-06-07 - P2 Workbench Menu Contributions
+
+Completed:
+
+- Added `IMenuService` and `MenuService` for menu/action contribution registration, stable ordering, change events, and disposable removal.
+- Moved Workbench titlebar and activitybar action definitions into `workbenchContributions.ts`.
+- Moved default Workbench keybinding contributions into the same contribution module.
+- Updated Workbench service creation to register default menu and keybinding contributions through platform services.
+- Updated `Titlebar` and `ActivityBar` to render menu items from `IMenuService` instead of fixed button lists.
+- Kept icon rendering in Workbench with icon ids, so the platform menu service remains renderer-agnostic.
+- Added platform coverage for menu registration, ordering, change events, and disposal.
+- Added Workbench coverage for default menu contribution order, unique menu item ids, and default keybinding contribution uniqueness.
+
+Quality gate:
+
+- `npm run test -- --run packages/workbench/src/workbenchContributions.test.ts packages/platform/src/platform.test.ts`: passed, 48 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 160 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Browser desktop smoke check at `http://127.0.0.1:5173`: titlebar actions and activitybar actions rendered in the expected order, no horizontal overflow, and no console errors.
+- Browser 390px viewport smoke check: compact titlebar actions were hidden as expected, activitybar actions rendered, no horizontal overflow, and no console errors.
+
+Review:
+
+- Command execution, keybinding dispatch, and menu rendering are now separate contribution points, matching the VS Code-style direction already used by export and index providers.
+- Workbench React components still own visual rendering and icon mapping, while platform menu data remains serializable and UI-framework independent.
+- The ordering regression found during browser smoke testing was fixed by encoding default contribution group order and by making tests assert the `MenuService` sorted output rather than raw array order.
+- No new packages, storage paths, or documentation files were introduced.
+
+Known limitations:
+
+- Menu item visibility only supports static contributions and simple toggle context; a future context-key service can add dynamic `when` clauses for extension menus.
+- Extension-contributed menus are still architectural direction only until `IExtensionService` is implemented.
