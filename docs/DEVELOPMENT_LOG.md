@@ -1350,4 +1350,35 @@ Review:
 Known limitations:
 
 - The keybinding editor still records single-stroke shortcuts only; multi-step chord shortcuts remain future work.
-- Conflict confirmation is scoped to the recorded active shortcut; a broader keybinding search/filter view is not implemented yet.
+
+## 2026-06-06 - P2 Keybinding Settings Search
+
+Completed:
+
+- Added a searchable Keybindings section in Settings.
+- Filtered keybinding commands by command title, category, and command id.
+- Added a clear action and compact empty state for unmatched searches.
+- Kept filtering logic in `keybindingSettings.ts` instead of embedding search rules in `SettingsDialog`.
+- Added focused Workbench tests for keybinding command filtering.
+
+Quality gate:
+
+- `npm run test -- --run packages/workbench/src/keybindingSettings.test.ts`: passed, 5 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 121 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed
+- Browser regression: searching `quick` reduced the list to Quick Open, clearing restored all 16 command rows, searching `ZZZ` showed the empty state, and no console errors occurred.
+- Mobile 390px viewport check: keybinding search and empty state had no horizontal overflow.
+
+Review:
+
+- Search rules use the same command data already supplied by `ICommandService`; no duplicated command registry was introduced.
+- Settings keeps local query state only and does not write search data into persistent configuration.
+- Filtering, override updates, and recordable shortcut constraints remain centralized in the Workbench keybinding settings model.
+- The added controls reuse existing compact settings styling and theme tokens.
+
+Known limitations:
+
+- The keybinding editor still records single-stroke shortcuts only; multi-step chord shortcuts remain future work.
+- Search is simple substring matching; fuzzy ranking can be added later if the command surface grows substantially.

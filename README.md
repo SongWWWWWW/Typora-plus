@@ -44,7 +44,7 @@ P2 main progress is implemented:
 - workspace index storage and query behavior sit behind a provider boundary, with the current in-memory provider ready to be replaced by SQLite
 - platform-level keybinding service for command execution, with Workbench shortcut defaults, active shortcut labels, user-editable overrides, and conflict confirmation
 - persisted configuration service for appearance, editor, and workspace preferences, with Electron native storage and browser fallback
-- Settings preferences dialog for appearance, editor, workspace, and keybinding options, opened from the activity bar, command palette, or `Ctrl+,`
+- Settings preferences dialog for appearance, editor, workspace, and searchable keybinding options, opened from the activity bar, command palette, or `Ctrl+,`
 
 ## Commands
 

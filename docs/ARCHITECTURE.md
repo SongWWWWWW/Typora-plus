@@ -62,7 +62,7 @@ Keyboard shortcuts are resolved through `IKeybindingService` instead of hard-cod
 
 User preferences are owned by `IConfigurationService`. The service reads and writes validated configuration through an injected storage boundary, so Workbench commands update preferences through the service without accessing storage directly. In Electron, the preload bridge routes configuration storage to a main-process file under the app data directory; browser builds fall back to browser storage.
 
-The settings UI is a Workbench contribution, not a storage owner. `SettingsDialog` renders appearance, editor, workspace, and keybinding controls, then sends partial updates to `IConfigurationService`. Numeric setting bounds, asset-folder normalization, and keybinding override list updates live in focused Workbench models so the dialog can grow without scattering UI constants. When a recorded shortcut is already active for another command, Settings shows an inline conflict confirmation before writing the override.
+The settings UI is a Workbench contribution, not a storage owner. `SettingsDialog` renders appearance, editor, workspace, and keybinding controls, then sends partial updates to `IConfigurationService`. Numeric setting bounds, asset-folder normalization, keybinding filtering, and keybinding override list updates live in focused Workbench models so the dialog can grow without scattering UI constants. When a recorded shortcut is already active for another command, Settings shows an inline conflict confirmation before writing the override.
 
 Planned services:
 
