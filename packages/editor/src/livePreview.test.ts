@@ -704,6 +704,24 @@ describe("Markdown table editing helpers", () => {
     ]);
   });
 
+  it("deletes a requested body row index", () => {
+    const tableBlock = analyzeMarkdownLineBlocks([
+      "| Name | Count |",
+      "| --- | ---: |",
+      "| Alpha | 1 |",
+      "| Beta | 2 |",
+      "| Gamma | 3 |"
+    ]).find((state) => state.tableBlock)?.tableBlock;
+
+    expect(tableBlock).toBeDefined();
+    expect(createMarkdownTableWithDeletedBodyRow(tableBlock!, { rowIndex: 1 })).toEqual([
+      "| Name | Count |",
+      "| --- | ---: |",
+      "| Alpha | 1 |",
+      "| Gamma | 3 |"
+    ]);
+  });
+
   it("deletes a requested body row with a clamped row index", () => {
     const tableBlock = analyzeMarkdownLineBlocks([
       "| Name | Count |",

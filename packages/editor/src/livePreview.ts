@@ -1395,13 +1395,24 @@ function insertMarkdownTableRowBelow(view: EditorView, tableBlock: MarkdownTable
   view.focus();
 }
 
-function deleteMarkdownTableBodyRow(view: EditorView, tableBlock: MarkdownTableBlockState): void {
+function deleteMarkdownTableBodyRow(
+  view: EditorView,
+  tableBlock: MarkdownTableBlockState,
+  rowIndex?: number
+): void {
   const currentTableBlock = readCurrentMarkdownTableBlock(view, tableBlock.blockStart);
   if (!currentTableBlock) {
     return;
   }
 
-  replaceMarkdownTableBlock(view, currentTableBlock, createMarkdownTableWithDeletedBodyRow(currentTableBlock));
+  replaceMarkdownTableBlock(
+    view,
+    currentTableBlock,
+    createMarkdownTableWithDeletedBodyRow(
+      currentTableBlock,
+      rowIndex === undefined ? {} : { rowIndex }
+    )
+  );
 }
 
 function replaceMarkdownTableBlock(
@@ -1428,13 +1439,24 @@ function insertMarkdownTableColumnRight(view: EditorView, tableBlock: MarkdownTa
   replaceMarkdownTableBlock(view, currentTableBlock, createMarkdownTableWithInsertedColumn(currentTableBlock));
 }
 
-function deleteMarkdownTableColumn(view: EditorView, tableBlock: MarkdownTableBlockState): void {
+function deleteMarkdownTableColumn(
+  view: EditorView,
+  tableBlock: MarkdownTableBlockState,
+  columnIndex?: number
+): void {
   const currentTableBlock = readCurrentMarkdownTableBlock(view, tableBlock.blockStart);
   if (!currentTableBlock) {
     return;
   }
 
-  replaceMarkdownTableBlock(view, currentTableBlock, createMarkdownTableWithDeletedColumn(currentTableBlock));
+  replaceMarkdownTableBlock(
+    view,
+    currentTableBlock,
+    createMarkdownTableWithDeletedColumn(
+      currentTableBlock,
+      columnIndex === undefined ? {} : { columnIndex }
+    )
+  );
 }
 
 function updateMarkdownTableColumnAlignment(
@@ -1530,11 +1552,24 @@ class MarkdownTableBlockWidget extends WidgetType {
       label.className = "tp-editor-table-header-label";
       label.textContent = readMarkdownTableCellPreviewText(cell);
 
-      content.append(label, createTableAlignmentButton({
-        alignment: this.tableBlock.alignments[index] ?? "default",
-        columnIndex: index,
-        onClick: (alignment) => updateMarkdownTableColumnAlignment(view, this.tableBlock, index, alignment)
-      }));
+      const controls = document.createElement("span");
+      controls.className = "tp-editor-table-header-controls";
+      controls.append(
+        createTableAlignmentButton({
+          alignment: this.tableBlock.alignments[index] ?? "default",
+          columnIndex: index,
+          onClick: (alignment) => updateMarkdownTableColumnAlignment(view, this.tableBlock, index, alignment)
+        }),
+        createTableInlineButton({
+          className: "tp-editor-table-delete-column-inline",
+          disabled: this.tableBlock.headerCells.length <= markdownTableMinimumColumnCount,
+          text: "-",
+          title: `Delete column ${index + 1}`,
+          onClick: () => deleteMarkdownTableColumn(view, this.tableBlock, index)
+        })
+      );
+
+      content.append(label, controls);
       headerCell.append(content);
       headerRow.append(headerCell);
     });
@@ -1545,13 +1580,32 @@ class MarkdownTableBlockWidget extends WidgetType {
     if (this.tableBlock.bodyRows.length > 0) {
       const tbody = document.createElement("tbody");
 
-      for (const row of this.tableBlock.bodyRows) {
+      for (const [rowIndex, row] of this.tableBlock.bodyRows.entries()) {
         const bodyRow = document.createElement("tr");
 
         row.forEach((cell, index) => {
           const bodyCell = document.createElement("td");
-          bodyCell.textContent = readMarkdownTableCellPreviewText(cell);
           setTableCellAlignment(bodyCell, this.tableBlock.alignments[index]);
+
+          if (index === 0) {
+            const content = document.createElement("span");
+            content.className = "tp-editor-table-cell-content";
+
+            const label = document.createElement("span");
+            label.className = "tp-editor-table-cell-label";
+            label.textContent = readMarkdownTableCellPreviewText(cell);
+
+            content.append(label, createTableInlineButton({
+              className: "tp-editor-table-delete-row-inline",
+              text: "-",
+              title: `Delete row ${rowIndex + 1}`,
+              onClick: () => deleteMarkdownTableBodyRow(view, this.tableBlock, rowIndex)
+            }));
+            bodyCell.append(content);
+          } else {
+            bodyCell.textContent = readMarkdownTableCellPreviewText(cell);
+          }
+
           bodyRow.append(bodyCell);
         });
 
@@ -1592,15 +1646,28 @@ function createTableToolButton(options: TableToolButtonOptions): HTMLButtonEleme
   button.textContent = options.text;
   button.title = options.title;
   button.setAttribute("aria-label", options.title);
-  button.addEventListener("mousedown", (event) => {
-    event.preventDefault();
-    event.stopPropagation();
-  });
-  button.addEventListener("click", (event) => {
-    event.preventDefault();
-    event.stopPropagation();
-    options.onClick();
-  });
+  addPreviewButtonHandlers(button, options.onClick);
+
+  return button;
+}
+
+interface TableInlineButtonOptions {
+  readonly className: string;
+  readonly disabled?: boolean;
+  readonly onClick: () => void;
+  readonly text: string;
+  readonly title: string;
+}
+
+function createTableInlineButton(options: TableInlineButtonOptions): HTMLButtonElement {
+  const button = document.createElement("button");
+  button.className = `tp-editor-table-inline-tool ${options.className}`;
+  button.type = "button";
+  button.disabled = options.disabled ?? false;
+  button.textContent = options.text;
+  button.title = options.title;
+  button.setAttribute("aria-label", options.title);
+  addPreviewButtonHandlers(button, options.onClick);
 
   return button;
 }
@@ -1621,6 +1688,12 @@ function createTableAlignmentButton(options: TableAlignmentButtonOptions): HTMLB
   button.title = title;
   button.dataset.align = options.alignment;
   button.setAttribute("aria-label", title);
+  addPreviewButtonHandlers(button, () => options.onClick(nextAlignment));
+
+  return button;
+}
+
+function addPreviewButtonHandlers(button: HTMLButtonElement, onClick: () => void): void {
   button.addEventListener("mousedown", (event) => {
     event.preventDefault();
     event.stopPropagation();
@@ -1628,10 +1701,8 @@ function createTableAlignmentButton(options: TableAlignmentButtonOptions): HTMLB
   button.addEventListener("click", (event) => {
     event.preventDefault();
     event.stopPropagation();
-    options.onClick(nextAlignment);
+    onClick();
   });
-
-  return button;
 }
 
 function readTableAlignmentButtonText(alignment: MarkdownTableColumnAlignment): string {
@@ -2379,7 +2450,27 @@ function markdownEditorTheme(configuration: MarkdownEditorConfiguration): Extens
       gap: "6px",
       minWidth: "0"
     },
+    ".tp-editor-table-header-controls": {
+      display: "flex",
+      alignItems: "center",
+      gap: "4px",
+      flex: "0 0 auto"
+    },
     ".tp-editor-table-header-label": {
+      minWidth: "0",
+      overflow: "hidden",
+      textOverflow: "ellipsis",
+      whiteSpace: "nowrap",
+      textAlign: "inherit"
+    },
+    ".tp-editor-table-cell-content": {
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: "8px",
+      minWidth: "0"
+    },
+    ".tp-editor-table-cell-label": {
       minWidth: "0",
       overflow: "hidden",
       textOverflow: "ellipsis",
@@ -2406,6 +2497,33 @@ function markdownEditorTheme(configuration: MarkdownEditorConfiguration): Extens
     ".tp-editor-table-align:hover": {
       color: "var(--tp-color-accent-strong)",
       backgroundColor: "var(--tp-color-surface)"
+    },
+    ".tp-editor-table-inline-tool": {
+      flex: "0 0 auto",
+      width: `${tableAlignmentButtonHeightPx}px`,
+      height: `${tableAlignmentButtonHeightPx}px`,
+      padding: "0",
+      border: "1px solid var(--tp-color-table-border)",
+      borderRadius: "6px",
+      backgroundColor: "var(--tp-color-surface-raised)",
+      color: "var(--tp-color-text-subtle)",
+      font: "inherit",
+      fontSize: "13px",
+      fontWeight: "700",
+      lineHeight: "1",
+      letterSpacing: "0",
+      cursor: "pointer",
+      transition: "background-color var(--tp-motion-fast) ease, color var(--tp-motion-fast) ease"
+    },
+    ".tp-editor-table-inline-tool:hover": {
+      color: "var(--tp-color-accent-strong)",
+      backgroundColor: "var(--tp-color-surface)"
+    },
+    ".tp-editor-table-inline-tool:disabled, .tp-editor-table-inline-tool:disabled:hover": {
+      color: "var(--tp-color-text-subtle)",
+      backgroundColor: "var(--tp-color-table-row)",
+      cursor: "default",
+      opacity: "0.72"
     },
     ".tp-editor-table-preview td": {
       color: "var(--tp-color-text-muted)"
