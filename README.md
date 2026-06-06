@@ -38,6 +38,7 @@ P2 main progress is implemented:
 - trusted recent workspace reopening
 - workspace-wide search, Markdown metadata collection, backlink queries, and tag queries through an index service boundary
 - current-note backlinks sidebar backed by the workspace index service
+- workspace tags sidebar backed by the workspace index service
 - workspace-backed image preview resource resolution
 
 ## Commands

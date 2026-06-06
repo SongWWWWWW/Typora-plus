@@ -1049,3 +1049,34 @@ Known limitations:
 
 - Tag queries are still backed by the in-memory index.
 - Tag extraction remains scanner-based and should be parser-backed for more complex Markdown syntax.
+
+## 2026-06-06 - P2 Tags Sidebar
+
+Completed:
+
+- Added a Tags activity bar entry and sidebar view.
+- Wired tag summaries to `IIndexService.getTags()` and selected-tag resources to `IIndexService.getTaggedResources(tag)`.
+- Added automatic selected-tag stabilization when the index updates or the workspace changes.
+- Added tagged resource navigation that opens the source note and scrolls to the indexed line.
+- Added compact tag-row styling with count badges while reusing the existing result-list surface for matching notes.
+
+Quality gate:
+
+- `npm run verify`: passed, 99 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed
+- Browser Tags regression: activity entry rendered, sidebar title switched to `Tags`, empty state rendered, and no console errors occurred.
+- Browser search regression: current-note search for `topic` returned line 3 with `Alpha searchable topic`.
+- Browser layout check: desktop preview and 390px mobile viewport had no page horizontal overflow.
+
+Review:
+
+- Workbench consumes tag service queries and does not group, normalize, or sort raw metadata itself.
+- The new view follows the existing activity bar/sidebar pattern, keeping navigation surfaces consistent.
+- Tag selection state is local UI state; indexing, normalization, and resource lookup remain provider-owned.
+- Visual additions use existing theme tokens and fixed row dimensions; no hard-coded workspace paths or platform assumptions were introduced.
+
+Known limitations:
+
+- Browser verification covers the no-workspace fallback; full tagged-resource navigation still depends on native workspace fixture coverage or future Workbench component tests.
+- Tags are based on the current in-memory index, so saved-file updates still rely on workspace refresh/watch until SQLite persistence and incremental indexing land.
