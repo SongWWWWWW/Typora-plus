@@ -101,6 +101,13 @@ export interface MarkdownMathRenderResult {
   readonly status: MarkdownMathRenderStatus;
 }
 
+export interface MarkdownMathBlockSourceRange {
+  readonly fromColumn: number;
+  readonly fromLine: number;
+  readonly toColumn: number;
+  readonly toLine: number;
+}
+
 export interface MarkdownLineClassificationState {
   readonly codeFence?: MarkdownCodeFenceBlockState;
   readonly codeFenceRole?: MarkdownCodeFenceLineRole;
@@ -551,6 +558,47 @@ export function renderMarkdownMathExpression(
       status: "error"
     };
   }
+}
+
+export function findMarkdownMathBlockSourceRange(
+  lines: readonly string[]
+): MarkdownMathBlockSourceRange | undefined {
+  const openLine = lines[0];
+
+  if (openLine === undefined || !isMarkdownMathFence(openLine)) {
+    return undefined;
+  }
+
+  const closeLineIndex = lines.findIndex((line, index) => index > 0 && isMarkdownMathFence(line));
+  const contentStartIndex = 1;
+  const contentEndIndexExclusive = closeLineIndex >= 0 ? closeLineIndex : lines.length;
+
+  if (contentStartIndex < contentEndIndexExclusive) {
+    const contentEndIndex = contentEndIndexExclusive - 1;
+
+    return {
+      fromColumn: 0,
+      fromLine: contentStartIndex + 1,
+      toColumn: lines[contentEndIndex]?.length ?? 0,
+      toLine: contentEndIndex + 1
+    };
+  }
+
+  if (closeLineIndex >= 0) {
+    return {
+      fromColumn: 0,
+      fromLine: closeLineIndex + 1,
+      toColumn: 0,
+      toLine: closeLineIndex + 1
+    };
+  }
+
+  return {
+    fromColumn: openLine.length,
+    fromLine: 1,
+    toColumn: openLine.length,
+    toLine: 1
+  };
 }
 
 function buildDecorations(
@@ -2200,10 +2248,13 @@ class MarkdownMathBlockWidget extends WidgetType {
   }
 
   override eq(widget: WidgetType): boolean {
-    return widget instanceof MarkdownMathBlockWidget && widget.math.expression === this.math.expression;
+    return widget instanceof MarkdownMathBlockWidget &&
+      widget.math.blockEnd === this.math.blockEnd &&
+      widget.math.blockStart === this.math.blockStart &&
+      widget.math.expression === this.math.expression;
   }
 
-  override toDOM(): HTMLElement {
+  override toDOM(view: EditorView): HTMLElement {
     const renderResult = renderMarkdownMathExpression(this.math.expression, true);
     const block = document.createElement("span");
     block.className = `tp-editor-math-preview tp-editor-math-preview-state-${renderResult.status}`;
@@ -2231,6 +2282,7 @@ class MarkdownMathBlockWidget extends WidgetType {
 
     const body = document.createElement("span");
     body.className = "tp-editor-math-body";
+    addMathBlockSourceNavigation(body, view, this.math);
 
     if (renderResult.status === "empty") {
       body.textContent = "Empty math block";
@@ -2257,8 +2309,57 @@ class MarkdownMathBlockWidget extends WidgetType {
   }
 
   override ignoreEvent(event: Event): boolean {
-    return isPreviewInteractiveEvent(event);
+    return isPreviewInteractiveEvent(event) || isMathBlockSourceNavigationEvent(event);
   }
+}
+
+function addMathBlockSourceNavigation(
+  body: HTMLElement,
+  view: EditorView,
+  math: MarkdownMathBlockState
+): void {
+  body.dataset.mathBlockSource = "true";
+  body.title = "Edit TeX source";
+  body.addEventListener("mousedown", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+  });
+  body.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    focusMarkdownMathBlockSource(view, math);
+  });
+}
+
+function focusMarkdownMathBlockSource(view: EditorView, math: MarkdownMathBlockState): void {
+  if (math.blockStart < 1 || math.blockEnd > view.state.doc.lines || math.blockStart > math.blockEnd) {
+    return;
+  }
+
+  const blockLines: string[] = [];
+  for (let lineNumber = math.blockStart; lineNumber <= math.blockEnd; lineNumber += 1) {
+    blockLines.push(view.state.doc.line(lineNumber).text);
+  }
+
+  const sourceRange = findMarkdownMathBlockSourceRange(blockLines);
+  if (!sourceRange) {
+    return;
+  }
+
+  const fromLine = view.state.doc.line(math.blockStart + sourceRange.fromLine - 1);
+  const toLine = view.state.doc.line(math.blockStart + sourceRange.toLine - 1);
+  const from = fromLine.from + Math.min(sourceRange.fromColumn, fromLine.length);
+  const to = toLine.from + Math.min(sourceRange.toColumn, toLine.length);
+
+  view.dispatch({
+    selection: { anchor: from, head: to },
+    scrollIntoView: true
+  });
+  view.focus();
+}
+
+function isMathBlockSourceNavigationEvent(event: Event): boolean {
+  return event.target instanceof Element && Boolean(event.target.closest("[data-math-block-source='true']"));
 }
 
 class MarkdownInlineMathWidget extends WidgetType {
@@ -2928,7 +3029,8 @@ function markdownEditorTheme(configuration: MarkdownEditorConfiguration): Extens
       justifyContent: "center",
       width: "100%",
       minHeight: `${mathPreviewBodyMinHeightPx}px`,
-      overflowX: "auto"
+      overflowX: "auto",
+      cursor: "text"
     },
     ".tp-editor-math-preview math": {
       maxWidth: "100%"

@@ -14,6 +14,7 @@ import {
   createMarkdownTableWithInsertedColumn,
   createMarkdownTableWithUpdatedColumnAlignment,
   findMarkdownTableCellSourceRange,
+  findMarkdownMathBlockSourceRange,
   findInactiveMarkdownInlineMathRanges,
   findInactiveMarkdownSyntaxMarkers,
   getNextMarkdownTableColumnAlignment,
@@ -370,6 +371,40 @@ describe("renderMarkdownMathExpression", () => {
     expect(result.status).toBe("error");
     expect(result.source).toBe("\\frac{");
     expect(result.error).toEqual(expect.any(String));
+  });
+});
+
+describe("findMarkdownMathBlockSourceRange", () => {
+  it("finds the TeX source inside a closed display math block", () => {
+    expect(findMarkdownMathBlockSourceRange([
+      "$$",
+      "E = mc^2",
+      "$$"
+    ])).toEqual({ fromColumn: 0, fromLine: 2, toColumn: 8, toLine: 2 });
+  });
+
+  it("keeps multiline display math source ranges", () => {
+    expect(findMarkdownMathBlockSourceRange([
+      "$$",
+      "\\begin{aligned}",
+      "x &= y + z",
+      "\\end{aligned}",
+      "$$"
+    ])).toEqual({ fromColumn: 0, fromLine: 2, toColumn: 13, toLine: 4 });
+  });
+
+  it("places empty display math insertion before the closing fence", () => {
+    expect(findMarkdownMathBlockSourceRange([
+      "$$",
+      "$$"
+    ])).toEqual({ fromColumn: 0, fromLine: 2, toColumn: 0, toLine: 2 });
+  });
+
+  it("does not find a source range for non-math blocks", () => {
+    expect(findMarkdownMathBlockSourceRange([
+      "not math",
+      "E = mc^2"
+    ])).toBeUndefined();
   });
 });
 
