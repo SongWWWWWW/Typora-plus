@@ -2095,3 +2095,36 @@ Known limitations:
 - There is still no out-of-process extension host, extension code execution, or runtime API surface.
 - Command dispatch does not yet auto-activate metadata-only extension commands; it needs a future command activation bridge to call `activateByEvent("onCommand:<id>")` before retrying execution.
 - Extension-owned context mutation remains future extension runtime work.
+
+## 2026-06-07 - P2 Command Activation Bridge
+
+Completed:
+
+- Made `ICommandService.executeCommand()` asynchronous so command execution can wait for activation work before running handlers.
+- Added an injected command activation handler to `CommandService`.
+- Updated metadata-only command execution to trigger activation, retry handler lookup, and then fail with a no-handler error only when activation did not register a handler.
+- Wired Workbench command activation to `IExtensionService.activateByEvent("onCommand:<command>")`.
+- Updated `IKeybindingService.dispatch()` and Workbench command UI paths to handle asynchronous command execution without delaying keyboard default prevention.
+- Added platform coverage for metadata-only command activation and extension command contribution activation before execution.
+
+Quality gate:
+
+- `npm run test -- --run packages/platform/src/platform.test.ts packages/workbench/src/commandPaletteModel.test.ts packages/workbench/src/workbenchContributions.test.ts`: passed, 73 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 182 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Browser desktop smoke check at `http://127.0.0.1:5173`: command palette opened through `Ctrl+Shift+P`, 17 commands rendered, theme command executed, no status error, no horizontal overflow, and no console errors.
+- Browser 390px viewport smoke check: no horizontal overflow and no console errors.
+
+Review:
+
+- Command activation is now a platform boundary; Workbench only wires services and does not know extension internals.
+- Metadata-only extension commands can become executable after activation without placeholder handlers or command metadata replacement.
+- Keyboard and UI command paths now share the same asynchronous execution helper, reducing drift between palette, menu, and shortcut behavior.
+- The implementation still avoids dynamic code execution, direct DOM access by extensions, new packages, storage paths, visual tokens, and extra documentation files.
+
+Known limitations:
+
+- Activation still delegates to an injected handler; there is no out-of-process extension host, runtime API surface, or extension code loading yet.
+- Extension-owned context mutation remains future extension runtime work.
