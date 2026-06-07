@@ -3280,3 +3280,34 @@ Known limitations:
 
 - Parser-backed table mapping remains planned for deeper nested inline syntax and full document-aware reference resolution.
 - Parser-backed math mapping remains planned for additional delimiter variants and deeper inline edge cases.
+
+## 2026-06-07 - P2 Table Inline Math Pipe Mapping
+
+Completed:
+
+- Made the shared Markdown table scanner preserve `|` inside inline math expressions such as `$a | b$`.
+- Extracted inline math range detection into a private reader shared by inactive inline math previews and table parsing.
+- Kept inline-math-only pipes from making ordinary text look like a Markdown table.
+- Preserved inline math cells through table preview, source-cell navigation, column insertion, and column deletion.
+- Added focused tests for inline math preview parsing, non-table detection, source ranges, and column edits.
+
+Quality gate:
+
+- `npm run typecheck`: passed
+- `npx vitest run packages/editor/src/livePreview.test.ts`: passed, 117 tests
+- `npm run verify`: passed, 347 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Browser smoke check: not run because this stage changes pure table source mapping and is covered by unit and full build verification.
+
+Review:
+
+- Table parsing remains isolated in `packages/editor`; no Workbench, platform, Electron, DOM, or filesystem dependency was added.
+- Inline math range detection now has one implementation shared by preview rendering and table cell splitting.
+- Preview rendering, source navigation, and pure table transforms still share one scanner path.
+- No new dependency, configuration value, storage path, visual token, extra documentation file, or hard-coded platform assumption was introduced.
+
+Known limitations:
+
+- Parser-backed table mapping remains planned for deeper nested inline syntax and full document-aware reference resolution.
+- Parser-backed math mapping remains planned for additional delimiter variants and deeper inline edge cases.
