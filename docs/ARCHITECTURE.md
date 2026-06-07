@@ -108,7 +108,7 @@ Current features:
 - table block styling with code-fence-aware table detection, escaped-pipe-, inline-code-, inline-math-, and full/collapsed/shortcut link-image-syntax-aware inactive previews, targeted row/column insertion and deletion controls, column alignment controls, and source-focused cell navigation
 - standalone image preview cards with workspace-backed local image resolution and direct inline/blob rendering
 - KaTeX-backed multiline and single-line display math preview blocks for `$$` and `\[` delimiters, with TeX copy controls, render diagnostics, and trimmed source-focused click editing
-- KaTeX-backed inline math previews with render diagnostics and source-focused click editing for inactive lines
+- KaTeX-backed inline math previews for `$` and `\(` delimiters, with render diagnostics and source-focused click editing for inactive lines
 - focus mode dimming
 - typewriter mode top spacing
 - imperative line scrolling for outline and search
@@ -116,7 +116,7 @@ Current features:
 Next editor work:
 
 - parser-backed table position mapping for remaining nested inline syntax
-- parser-backed math position mapping for broader delimiter variants and inline edge cases
+- parser-backed math position mapping for deeper inline edge cases
 
 ## Extension Direction
 

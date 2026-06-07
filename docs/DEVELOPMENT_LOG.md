@@ -3310,4 +3310,36 @@ Review:
 Known limitations:
 
 - Parser-backed table mapping remains planned for deeper nested inline syntax and full document-aware reference resolution.
-- Parser-backed math mapping remains planned for additional delimiter variants and deeper inline edge cases.
+- Parser-backed math mapping remained planned for additional inline delimiter variants until the later bracket-inline stage, and remains planned for deeper inline edge cases.
+
+## 2026-06-07 - P2 Bracket Inline Math Preview
+
+Completed:
+
+- Added inactive-line inline math preview support for bracket delimiters such as `\(x+y\)`.
+- Generalized inline math delimiter scanning so `$...$` and `\(...\)` use one range reader.
+- Kept bracket-delimited inline math out of code spans and active lines through the existing preview gates.
+- Updated inline math source navigation so preview clicks select the TeX expression inside either one-character or two-character delimiters.
+- Reused the same range reader for table cell splitting, so `\(a | b\)` stays one table cell.
+- Added focused tests for bracket-delimited inline ranges, code-span exclusion, table parsing, source ranges, and column edits.
+
+Quality gate:
+
+- `npm run typecheck`: passed
+- `npx vitest run packages/editor/src/livePreview.test.ts`: passed, 119 tests
+- `npm run verify`: passed, 349 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Browser smoke check: not run because this stage changes pure inline math range detection and source mapping covered by unit and full build verification.
+
+Review:
+
+- Inline math parsing remains isolated in `packages/editor`; no Workbench, platform, Electron, DOM, or filesystem dependency was added.
+- `$...$` and `\(...\)` share one scanner and one preview widget, keeping delimiter growth out of the UI layer.
+- Source navigation now receives explicit expression ranges instead of assuming one-character delimiters.
+- No new dependency, configuration value, storage path, visual token, extra documentation file, or hard-coded platform assumption was introduced.
+
+Known limitations:
+
+- Parser-backed math mapping remains planned for deeper inline edge cases.
+- Parser-backed table mapping remains planned for deeper nested inline syntax and full document-aware reference resolution.

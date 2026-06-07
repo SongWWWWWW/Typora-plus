@@ -17,7 +17,7 @@ P0/P1 are implemented:
 - Markdown table block styling with escaped-pipe-, inline-code-, inline-math-, and full/collapsed/shortcut link-image-syntax-aware inactive previews, targeted row/column insertion and deletion controls, column alignment controls, and source-focused cell navigation
 - standalone image preview cards
 - KaTeX-backed multiline and single-line display math preview blocks for `$$` and `\[` delimiters, with TeX copy controls, error diagnostics, and trimmed source-focused click editing
-- KaTeX-backed inline math previews with error diagnostics and source-focused click editing
+- KaTeX-backed inline math previews for `$` and `\(` delimiters, with error diagnostics and source-focused click editing
 - focus mode and typewriter mode
 - command palette with command/category/shortcut search, keyboard list navigation, sidebar, outline, current-note search
 - browser draft persistence
