@@ -3343,3 +3343,33 @@ Known limitations:
 
 - Parser-backed math mapping remains planned for deeper inline edge cases.
 - Parser-backed table mapping remains planned for deeper nested inline syntax and full document-aware reference resolution.
+
+## 2026-06-07 - P2 Inline Math Expression Range Model
+
+Completed:
+
+- Added `expressionFrom` and `expressionTo` to inline math range records so the parser owns the editable TeX source span.
+- Trimmed bracket-delimited inline math expression ranges such as `\(  x+y  \)` while preserving the full replacement range.
+- Updated inline math preview widgets to consume parsed expression ranges instead of deriving delimiter lengths in UI code.
+- Added focused tests for `$...$`, `\(...\)`, trimmed bracket-delimited expressions, repeated ranges, and code-span exclusion.
+
+Quality gate:
+
+- `npm run typecheck`: passed
+- `npx vitest run packages/editor/src/livePreview.test.ts`: passed, 120 tests
+- `npm run verify`: passed, 350 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Browser smoke check: not run because this stage changes parser-owned source mapping and is covered by unit and full build verification.
+
+Review:
+
+- Inline math source mapping remains isolated in `packages/editor`; no Workbench, platform, Electron, DOM, or filesystem dependency was added.
+- The widget now consumes parser-owned expression ranges, so future delimiter variants do not require UI-specific offset rules.
+- The full source range is still retained for decoration replacement and table protected-range behavior.
+- No new dependency, configuration value, storage path, visual token, extra documentation file, or hard-coded platform assumption was introduced.
+
+Known limitations:
+
+- Parser-backed math mapping remains planned for deeper inline edge cases.
+- Parser-backed table mapping remains planned for deeper nested inline syntax and full document-aware reference resolution.
