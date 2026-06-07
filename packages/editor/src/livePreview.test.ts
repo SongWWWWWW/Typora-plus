@@ -936,6 +936,22 @@ describe("analyzeMarkdownTableLines", () => {
     ]);
   });
 
+  it("keeps HTML processing instruction and declaration pipes inside table cells", () => {
+    const tableBlock = analyzeMarkdownLineBlocks([
+      "| Markup | Status |",
+      "| --- | --- |",
+      "| <?pi a|b?> | Ready |",
+      "| <!DOCTYPE html|svg> | Hold |"
+    ]).find((state) => state.tableBlock)?.tableBlock;
+
+    expect(tableBlock).toBeDefined();
+    expect(tableBlock?.headerCells).toEqual(["Markup", "Status"]);
+    expect(tableBlock?.bodyRows).toEqual([
+      ["<?pi a|b?>", "Ready"],
+      ["<!DOCTYPE html|svg>", "Hold"]
+    ]);
+  });
+
   it("supports tables without outer pipes", () => {
     expect(analyzeMarkdownTableLines([
       "Name | Value",
@@ -1020,6 +1036,13 @@ describe("analyzeMarkdownTableLines", () => {
     ])).toEqual([]);
   });
 
+  it("does not treat HTML-processing-instruction-or-declaration-only pipes as table separators", () => {
+    expect(analyzeMarkdownTableLines([
+      "Name <?pi a|b?> Value",
+      "--- <!DOCTYPE html|svg> ---"
+    ])).toEqual([]);
+  });
+
   it("does not protect invalid angle-bracket text as autolinks", () => {
     expect(analyzeMarkdownTableLines([
       "Name <A|B> | Value",
@@ -1041,6 +1064,24 @@ describe("analyzeMarkdownTableLines", () => {
     ])).toEqual([]);
     expect(analyzeMarkdownTableLines([
       "Name <![CDATA[x|y | Value",
+      "--- | ---"
+    ])).toEqual([]);
+  });
+
+  it("does not protect unclosed processing instructions or declarations", () => {
+    expect(analyzeMarkdownTableLines([
+      "Name <?pi a|b | Value",
+      "--- | ---"
+    ])).toEqual([]);
+    expect(analyzeMarkdownTableLines([
+      "Name <!DOCTYPE html|svg | Value",
+      "--- | ---"
+    ])).toEqual([]);
+  });
+
+  it("does not protect invalid HTML declarations", () => {
+    expect(analyzeMarkdownTableLines([
+      "Name <!doctype|html> | Value",
       "--- | ---"
     ])).toEqual([]);
   });
@@ -1145,6 +1186,18 @@ describe("Markdown table editing helpers", () => {
     expect(commentRange ? commentLine.slice(commentRange.from, commentRange.to) : "").toBe("<!-- a|b -->");
     expect(cdataRange).toEqual({ from: 2, to: 17 });
     expect(cdataRange ? cdataLine.slice(cdataRange.from, cdataRange.to) : "").toBe("<![CDATA[a|b]]>");
+  });
+
+  it("keeps HTML processing instruction and declaration pipes inside source cell ranges", () => {
+    const instructionLine = "| <?pi a|b?> | Status |";
+    const declarationLine = "| <!DOCTYPE html|svg> | Status |";
+    const instructionRange = findMarkdownTableCellSourceRange(instructionLine, 0);
+    const declarationRange = findMarkdownTableCellSourceRange(declarationLine, 0);
+
+    expect(instructionRange).toEqual({ from: 2, to: 12 });
+    expect(instructionRange ? instructionLine.slice(instructionRange.from, instructionRange.to) : "").toBe("<?pi a|b?>");
+    expect(declarationRange).toEqual({ from: 2, to: 21 });
+    expect(declarationRange ? declarationLine.slice(declarationRange.from, declarationRange.to) : "").toBe("<!DOCTYPE html|svg>");
   });
 
   it("does not find a table cell range for escaped-only separators", () => {
@@ -1406,6 +1459,26 @@ describe("Markdown table editing helpers", () => {
       "| Markup | Status |",
       "| :--- | :---: |",
       "| <!-- a|b --> | <![CDATA[x|y]]> |"
+    ]);
+  });
+
+  it("preserves HTML processing instruction and declaration pipe cell source while editing columns", () => {
+    const tableBlock = analyzeMarkdownLineBlocks([
+      "| Markup | Count | Status |",
+      "| :--- | ---: | :---: |",
+      "| <?pi a|b?> | 1 | <!DOCTYPE html|svg> |"
+    ]).find((state) => state.tableBlock)?.tableBlock;
+
+    expect(tableBlock).toBeDefined();
+    expect(createMarkdownTableWithInsertedColumn(tableBlock!, { columnIndex: 1 })).toEqual([
+      "| Markup |  | Count | Status |",
+      "| :--- | --- | ---: | :---: |",
+      "| <?pi a|b?> |  | 1 | <!DOCTYPE html|svg> |"
+    ]);
+    expect(createMarkdownTableWithDeletedColumn(tableBlock!, { columnIndex: 1 })).toEqual([
+      "| Markup | Status |",
+      "| :--- | :---: |",
+      "| <?pi a|b?> | <!DOCTYPE html|svg> |"
     ]);
   });
 

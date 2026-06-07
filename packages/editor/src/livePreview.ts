@@ -1537,7 +1537,8 @@ const markdownInlineHtmlOpeningTagPattern =
 const markdownInlineHtmlClosingTagPattern = /^<\/[A-Za-z][A-Za-z0-9-]*\s*>$/;
 const markdownInlineHtmlDelimitedSyntaxes = [
   { close: "-->", open: "<!--" },
-  { close: "]]>", open: "<![CDATA[" }
+  { close: "]]>", open: "<![CDATA[" },
+  { close: "?>", open: "<?" }
 ] as const;
 
 function readMarkdownCodeSpanRanges(text: string): readonly MarkdownCodeSpanRange[] {
@@ -1788,6 +1789,71 @@ function findClosingMarkdownInlineHtmlDelimitedSyntax(
     if (
       text.startsWith(open.marker.close, index) &&
       !isMarkdownRangeOverlappingRanges({ from: index, to: index + open.marker.close.length }, ignoredRanges)
+    ) {
+      return index;
+    }
+  }
+
+  return -1;
+}
+
+function readMarkdownInlineHtmlDeclarationSyntaxRanges(
+  text: string,
+  ignoredRanges: readonly MarkdownSyntaxMarkerRange[]
+): readonly MarkdownSyntaxMarkerRange[] {
+  const ranges: MarkdownSyntaxMarkerRange[] = [];
+  let cursor = 0;
+
+  while (cursor < text.length) {
+    const open = findNextMarkdownInlineHtmlDeclarationOpen(text, cursor, ignoredRanges);
+
+    if (open === -1) {
+      break;
+    }
+
+    const close = findClosingMarkdownInlineHtmlDeclaration(text, open, ignoredRanges);
+
+    if (close === -1) {
+      cursor = open + 2;
+      continue;
+    }
+
+    ranges.push({ from: open, to: close + 1 });
+    cursor = close + 1;
+  }
+
+  return ranges;
+}
+
+function findNextMarkdownInlineHtmlDeclarationOpen(
+  text: string,
+  from: number,
+  ignoredRanges: readonly MarkdownSyntaxMarkerRange[]
+): number {
+  for (let index = from; index < text.length - 2; index += 1) {
+    if (
+      text.startsWith("<!", index) &&
+      !isEscaped(text, index) &&
+      !isIndexInsideMarkdownRange(index, ignoredRanges) &&
+      /[A-Z]/.test(text[index + 2] ?? "")
+    ) {
+      return index;
+    }
+  }
+
+  return -1;
+}
+
+function findClosingMarkdownInlineHtmlDeclaration(
+  text: string,
+  open: number,
+  ignoredRanges: readonly MarkdownSyntaxMarkerRange[]
+): number {
+  for (let index = open + 3; index < text.length; index += 1) {
+    if (
+      text[index] === ">" &&
+      !isEscaped(text, index) &&
+      !isIndexInsideMarkdownRange(index, ignoredRanges)
     ) {
       return index;
     }
@@ -2204,7 +2270,8 @@ function readMarkdownTableCellSpans(text: string): readonly MarkdownTableCellSou
     ...readMarkdownInlineLinkSyntaxRanges(text, codeSpanRanges),
     ...readMarkdownAutolinkSyntaxRanges(text, codeSpanRanges),
     ...readMarkdownInlineHtmlTagSyntaxRanges(text, codeSpanRanges),
-    ...readMarkdownInlineHtmlDelimitedSyntaxRanges(text, codeSpanRanges)
+    ...readMarkdownInlineHtmlDelimitedSyntaxRanges(text, codeSpanRanges),
+    ...readMarkdownInlineHtmlDeclarationSyntaxRanges(text, codeSpanRanges)
   ];
   const cells: MarkdownTableCellSourceSpan[] = [];
   let current = "";
