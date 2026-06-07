@@ -55,6 +55,7 @@ import {
 import { updateSavedFileIndex } from "./savedFileIndexing";
 import { SettingsDialog } from "./SettingsDialog";
 import type { WorkbenchServices } from "./services";
+import { editorTaskCommandMetadata } from "./workbenchContributions";
 
 type SideView = "files" | "search" | "outline" | "backlinks" | "tags";
 
@@ -404,6 +405,14 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
           typewriterMode: !configuration.editor.typewriterMode
         }
       })
+    }));
+    disposables.add(services.commandService.registerCommand({
+      ...editorTaskCommandMetadata.toggleTaskLines,
+      run: () => editorRef.current?.toggleTaskListLines() ?? false
+    }));
+    disposables.add(services.commandService.registerCommand({
+      ...editorTaskCommandMetadata.removeTaskMarkers,
+      run: () => editorRef.current?.removeTaskListMarkers() ?? false
     }));
     disposables.add(services.commandService.registerCommand({
       id: "theme.toggle",

@@ -38,7 +38,9 @@ export interface PastedEditorImage {
 
 export interface MarkdownEditorHandle {
   focus(): void;
+  removeTaskListMarkers(): boolean;
   scrollToLine(line: number): void;
+  toggleTaskListLines(): boolean;
 }
 
 export interface MarkdownEditorProps {
@@ -73,6 +75,21 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
       focus() {
         viewRef.current?.focus();
       },
+      removeTaskListMarkers() {
+        const view = viewRef.current;
+
+        if (!view) {
+          return false;
+        }
+
+        const handled = removeMarkdownTaskListMarkersAtSelection(view);
+
+        if (handled) {
+          view.focus();
+        }
+
+        return handled;
+      },
       scrollToLine(line: number) {
         const view = viewRef.current;
         if (!view) {
@@ -86,6 +103,21 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
           effects: EditorView.scrollIntoView(docLine.from, { y: "center" })
         });
         view.focus();
+      },
+      toggleTaskListLines() {
+        const view = viewRef.current;
+
+        if (!view) {
+          return false;
+        }
+
+        const handled = toggleMarkdownTaskListLineAtSelection(view);
+
+        if (handled) {
+          view.focus();
+        }
+
+        return handled;
       }
     }));
 

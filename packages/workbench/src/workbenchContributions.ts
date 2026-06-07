@@ -1,5 +1,6 @@
 import {
   parseContextKeyExpression,
+  type CommandMetadata,
   type ExtensionManifest,
   type ExtensionMenuContribution,
   type KeybindingRule,
@@ -13,6 +14,19 @@ import {
   workbenchStatusRendererId,
   workbenchStatusRendererLanguage
 } from "./statusMarkdownRenderer";
+
+export const editorTaskCommandMetadata = {
+  removeTaskMarkers: {
+    id: "editor.task.removeMarkers",
+    title: "Remove Task Markers",
+    category: "Editor"
+  },
+  toggleTaskLines: {
+    id: "editor.task.toggleLines",
+    title: "Toggle Task Lines",
+    category: "Editor"
+  }
+} satisfies Record<string, CommandMetadata>;
 
 export const defaultWorkbenchExtensionManifest = {
   id: "typora-plus.workbench",
