@@ -1540,6 +1540,7 @@ const markdownInlineHtmlDelimitedSyntaxes = [
   { close: "]]>", open: "<![CDATA[" },
   { close: "?>", open: "<?" }
 ] as const;
+const markdownStrongEmphasisDelimiters = ["**", "__"] as const;
 
 function readMarkdownCodeSpanRanges(text: string): readonly MarkdownCodeSpanRange[] {
   const ranges: MarkdownCodeSpanRange[] = [];
@@ -1568,6 +1569,78 @@ function readMarkdownCodeSpanRanges(text: string): readonly MarkdownCodeSpanRang
   }
 
   return ranges;
+}
+
+function readMarkdownStrongEmphasisSyntaxRanges(
+  text: string,
+  ignoredRanges: readonly MarkdownSyntaxMarkerRange[]
+): readonly MarkdownSyntaxMarkerRange[] {
+  const ranges: MarkdownSyntaxMarkerRange[] = [];
+  let cursor = 0;
+
+  while (cursor < text.length) {
+    const open = findNextMarkdownStrongEmphasisDelimiter(text, cursor, ignoredRanges);
+
+    if (!open) {
+      break;
+    }
+
+    const close = findClosingMarkdownStrongEmphasisDelimiter(text, open.to, open.marker, ignoredRanges);
+
+    if (!close) {
+      cursor = open.to;
+      continue;
+    }
+
+    if (open.to < close.from) {
+      ranges.push({ from: open.from, to: close.to });
+    }
+
+    cursor = close.to;
+  }
+
+  return ranges;
+}
+
+function findNextMarkdownStrongEmphasisDelimiter(
+  text: string,
+  from: number,
+  ignoredRanges: readonly MarkdownSyntaxMarkerRange[]
+): { readonly from: number; readonly marker: typeof markdownStrongEmphasisDelimiters[number]; readonly to: number } | undefined {
+  for (let index = from; index < text.length; index += 1) {
+    if (isEscaped(text, index) || isIndexInsideMarkdownRange(index, ignoredRanges)) {
+      continue;
+    }
+
+    const marker = markdownStrongEmphasisDelimiters.find((delimiter) => text.startsWith(delimiter, index));
+
+    if (marker) {
+      return { from: index, marker, to: index + marker.length };
+    }
+  }
+
+  return undefined;
+}
+
+function findClosingMarkdownStrongEmphasisDelimiter(
+  text: string,
+  from: number,
+  marker: typeof markdownStrongEmphasisDelimiters[number],
+  ignoredRanges: readonly MarkdownSyntaxMarkerRange[]
+): { readonly from: number; readonly to: number } | undefined {
+  for (let index = from; index <= text.length - marker.length; index += 1) {
+    const range = { from: index, to: index + marker.length };
+
+    if (
+      text.startsWith(marker, index) &&
+      !isEscaped(text, index) &&
+      !isMarkdownRangeOverlappingRanges(range, ignoredRanges)
+    ) {
+      return range;
+    }
+  }
+
+  return undefined;
 }
 
 function readMarkdownAutolinkSyntaxRanges(
@@ -2266,6 +2339,7 @@ function readMarkdownTableCellSpans(text: string): readonly MarkdownTableCellSou
   const codeSpanRanges = readMarkdownCodeSpanRanges(text);
   const protectedRanges = [
     ...codeSpanRanges,
+    ...readMarkdownStrongEmphasisSyntaxRanges(text, codeSpanRanges),
     ...readMarkdownInlineMathRanges(text, codeSpanRanges),
     ...readMarkdownInlineLinkSyntaxRanges(text, codeSpanRanges),
     ...readMarkdownAutolinkSyntaxRanges(text, codeSpanRanges),

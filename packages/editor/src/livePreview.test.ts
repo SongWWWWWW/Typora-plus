@@ -798,6 +798,22 @@ describe("analyzeMarkdownTableLines", () => {
     ]);
   });
 
+  it("keeps strong emphasis pipes inside table cells", () => {
+    const tableBlock = analyzeMarkdownLineBlocks([
+      "| Text | Status |",
+      "| --- | --- |",
+      "| **left | right** | Ready |",
+      "| __alpha | beta__ | Hold |"
+    ]).find((state) => state.tableBlock)?.tableBlock;
+
+    expect(tableBlock).toBeDefined();
+    expect(tableBlock?.headerCells).toEqual(["Text", "Status"]);
+    expect(tableBlock?.bodyRows).toEqual([
+      ["**left | right**", "Ready"],
+      ["__alpha | beta__", "Hold"]
+    ]);
+  });
+
   it("keeps inline math pipes inside table cells", () => {
     const tableBlock = analyzeMarkdownLineBlocks([
       "| Expression | Status |",
@@ -987,6 +1003,23 @@ describe("analyzeMarkdownTableLines", () => {
     ])).toEqual([]);
   });
 
+  it("does not treat strong-emphasis-only pipes as table separators", () => {
+    expect(analyzeMarkdownTableLines([
+      "Name **a|b** Value",
+      "--- | ---"
+    ])).toEqual([]);
+  });
+
+  it("does not protect unclosed strong emphasis from table separators", () => {
+    expect(analyzeMarkdownTableLines([
+      "Name **a|b Value",
+      "--- | ---"
+    ])).toEqual([
+      { first: true, last: false, line: 1, role: "header" },
+      { first: false, last: true, line: 2, role: "delimiter" }
+    ]);
+  });
+
   it("does not treat inline-math-only pipes as table separators", () => {
     expect(analyzeMarkdownTableLines([
       "Name $a|b$ Value",
@@ -1118,6 +1151,14 @@ describe("Markdown table editing helpers", () => {
 
     expect(range).toEqual({ from: 2, to: 16 });
     expect(range ? line.slice(range.from, range.to) : "").toBe("`left | right`");
+  });
+
+  it("keeps strong emphasis pipes inside source cell ranges", () => {
+    const line = "| **a | b** | Status |";
+    const range = findMarkdownTableCellSourceRange(line, 0);
+
+    expect(range).toEqual({ from: 2, to: 11 });
+    expect(range ? line.slice(range.from, range.to) : "").toBe("**a | b**");
   });
 
   it("keeps inline math pipes inside source cell ranges", () => {
@@ -1319,6 +1360,26 @@ describe("Markdown table editing helpers", () => {
       "| Expression | Status |",
       "| :--- | :---: |",
       "| `a | b` | Ready |"
+    ]);
+  });
+
+  it("preserves strong emphasis pipe cell source while editing columns", () => {
+    const tableBlock = analyzeMarkdownLineBlocks([
+      "| Text | Count | Status |",
+      "| :--- | ---: | :---: |",
+      "| **a | b** | 1 | __c | d__ |"
+    ]).find((state) => state.tableBlock)?.tableBlock;
+
+    expect(tableBlock).toBeDefined();
+    expect(createMarkdownTableWithInsertedColumn(tableBlock!, { columnIndex: 1 })).toEqual([
+      "| Text |  | Count | Status |",
+      "| :--- | --- | ---: | :---: |",
+      "| **a | b** |  | 1 | __c | d__ |"
+    ]);
+    expect(createMarkdownTableWithDeletedColumn(tableBlock!, { columnIndex: 1 })).toEqual([
+      "| Text | Status |",
+      "| :--- | :---: |",
+      "| **a | b** | __c | d__ |"
     ]);
   });
 
