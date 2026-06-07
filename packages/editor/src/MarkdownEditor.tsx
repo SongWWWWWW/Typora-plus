@@ -23,6 +23,12 @@ import {
   type MarkdownInlineRenderer
 } from "./livePreview";
 
+interface MarkdownTaskListLineToggleChange {
+  readonly from: number;
+  readonly insert: string;
+  readonly to: number;
+}
+
 export interface PastedEditorImage {
   readonly name: string;
   readonly mimeType: string;
@@ -157,6 +163,7 @@ MarkdownEditor.displayName = "MarkdownEditor";
 function baseEditorExtensions(): Extension[] {
   return [
     history(),
+    EditorState.allowMultipleSelections.of(true),
     drawSelection(),
     dropCursor(),
     rectangularSelection(),
@@ -178,23 +185,43 @@ function baseEditorExtensions(): Extension[] {
 }
 
 export function toggleMarkdownTaskListLineAtSelection(view: EditorView): boolean {
-  const selection = view.state.selection.main;
-  const line = view.state.doc.lineAt(selection.head);
-  const taskMarker = findMarkdownTaskListMarkerRange(line.text);
+  const changes = getMarkdownTaskListLineToggleChanges(view.state);
 
-  if (!taskMarker) {
+  if (changes.length === 0) {
     return false;
   }
 
   view.dispatch({
-    changes: {
-      from: line.from + taskMarker.from,
-      to: line.from + taskMarker.to,
-      insert: taskMarker.checked ? "[ ]" : "[x]"
-    }
+    changes
   });
 
   return true;
+}
+
+function getMarkdownTaskListLineToggleChanges(state: EditorState): readonly MarkdownTaskListLineToggleChange[] {
+  const changesByLine = new Map<number, MarkdownTaskListLineToggleChange>();
+
+  for (const range of state.selection.ranges) {
+    const line = state.doc.lineAt(range.head);
+
+    if (changesByLine.has(line.from)) {
+      continue;
+    }
+
+    const taskMarker = findMarkdownTaskListMarkerRange(line.text);
+
+    if (!taskMarker) {
+      continue;
+    }
+
+    changesByLine.set(line.from, {
+      from: line.from + taskMarker.from,
+      to: line.from + taskMarker.to,
+      insert: taskMarker.checked ? "[ ]" : "[x]"
+    });
+  }
+
+  return [...changesByLine.values()].sort((left, right) => left.from - right.from);
 }
 
 function imagePasteExtension(

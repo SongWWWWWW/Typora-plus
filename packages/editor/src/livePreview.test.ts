@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { JSDOM } from "jsdom";
-import { EditorState } from "@codemirror/state";
+import { EditorSelection, EditorState } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import {
   analyzeMarkdownCodeFenceLines,
@@ -2059,6 +2059,72 @@ describe("toggleMarkdownTaskListLineAtSelection", () => {
         expect(view.state.doc.toString()).toBe("Intro\n- [x] Todo\nDone");
         expect(toggleMarkdownTaskListLineAtSelection(view)).toBe(true);
         expect(view.state.doc.toString()).toBe("Intro\n- [ ] Todo\nDone");
+      } finally {
+        view.destroy();
+      }
+    });
+  });
+
+  it("toggles task markers for each selected task line", () => {
+    withDom(() => {
+      const parent = document.createElement("div");
+      document.body.append(parent);
+      const doc = [
+        "- [ ] First",
+        "- [x] Second",
+        "Text [ ] Third",
+        "- [ ] Fourth"
+      ].join("\n");
+      const view = new EditorView({
+        parent,
+        state: EditorState.create({
+          doc,
+          selection: EditorSelection.create([
+            EditorSelection.cursor(doc.indexOf("First")),
+            EditorSelection.cursor(doc.indexOf("Second")),
+            EditorSelection.cursor(doc.indexOf("Third")),
+            EditorSelection.cursor(doc.indexOf("Fourth"))
+          ]),
+          extensions: [EditorState.allowMultipleSelections.of(true)]
+        })
+      });
+
+      try {
+        expect(toggleMarkdownTaskListLineAtSelection(view)).toBe(true);
+        expect(view.state.doc.toString()).toBe([
+          "- [x] First",
+          "- [ ] Second",
+          "Text [ ] Third",
+          "- [x] Fourth"
+        ].join("\n"));
+      } finally {
+        view.destroy();
+      }
+    });
+  });
+
+  it("toggles a selected task line only once when multiple ranges share it", () => {
+    withDom(() => {
+      const parent = document.createElement("div");
+      document.body.append(parent);
+      const doc = "- [ ] Todo\n- [ ] Next";
+      const todoPosition = doc.indexOf("Todo");
+      const view = new EditorView({
+        parent,
+        state: EditorState.create({
+          doc,
+          selection: EditorSelection.create([
+            EditorSelection.cursor(todoPosition),
+            EditorSelection.cursor(todoPosition + 2),
+            EditorSelection.cursor(doc.indexOf("Next"))
+          ]),
+          extensions: [EditorState.allowMultipleSelections.of(true)]
+        })
+      });
+
+      try {
+        expect(toggleMarkdownTaskListLineAtSelection(view)).toBe(true);
+        expect(view.state.doc.toString()).toBe("- [x] Todo\n- [x] Next");
       } finally {
         view.destroy();
       }
