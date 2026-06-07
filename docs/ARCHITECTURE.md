@@ -105,7 +105,7 @@ Current features:
 - provider-backed inline renderer previews for language-qualified inline code spans, using inline-only sanitized HTML and source-focused click editing
 - built-in Status inline badge preview for `` `status:done` ``, `` `status:blocked: Waiting on API` ``, and configuration-backed workflow markers through the Markdown renderer provider path
 - built-in Mermaid preview for inactive `mermaid` code fences through the Markdown renderer provider path
-- table block styling with code-fence-aware table detection, escaped-pipe- and inline-code-aware inactive previews, targeted row/column insertion and deletion controls, column alignment controls, and source-focused cell navigation
+- table block styling with code-fence-aware table detection, escaped-pipe-, inline-code-, and link/image-target-aware inactive previews, targeted row/column insertion and deletion controls, column alignment controls, and source-focused cell navigation
 - standalone image preview cards with workspace-backed local image resolution and direct inline/blob rendering
 - KaTeX-backed display math preview blocks with TeX copy controls, render diagnostics, and source-focused click editing
 - KaTeX-backed inline math previews with render diagnostics and source-focused click editing for inactive lines
@@ -115,7 +115,7 @@ Current features:
 
 Next editor work:
 
-- parser-backed table position mapping for more complex inline syntax
+- parser-backed table position mapping for remaining complex inline syntax such as reference links and link labels
 - parser-backed math position mapping
 
 ## Extension Direction

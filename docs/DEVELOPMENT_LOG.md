@@ -3099,3 +3099,32 @@ Known limitations:
 - External extension package loading is still not implemented.
 - A concrete worker/process/Electron IPC extension host adapter is still not implemented.
 - Future production adapters still need runtime-specific lifecycle and trust handling.
+
+## 2026-06-07 - P2 Table Link Target Pipe Mapping
+
+Completed:
+
+- Made the shared Markdown table cell scanner ignore `|` inside inline link and image target parentheses, including title text.
+- Added balanced label and target scanning so nested brackets or parentheses do not split table cells prematurely.
+- Preserved link and image target cells through table preview, source-cell navigation, column insertion, and column deletion.
+- Added focused tests for link/image target pipes, link-target-only non-table lines, source ranges, and column edits.
+
+Quality gate:
+
+- `npm run typecheck`: passed
+- `npx vitest run packages/editor/src/livePreview.test.ts`: passed, 93 tests
+- `npm run verify`: passed, 323 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Browser smoke check: not run because this stage changes pure table source mapping and is covered by unit and full build verification.
+
+Review:
+
+- Table parsing remains isolated in `packages/editor`; no Workbench, platform, Electron, DOM, or filesystem dependency was added.
+- Preview rendering, source navigation, and pure table transforms still share one scanner path, avoiding divergent hard-coded table behavior.
+- No new dependency, configuration value, storage path, visual token, extra documentation file, or hard-coded platform assumption was introduced.
+
+Known limitations:
+
+- Pipes in link labels and reference-style links still rely on the planned parser-backed table mapping pass.
+- Parser-backed math position mapping remains planned.
