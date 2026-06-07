@@ -57,6 +57,15 @@ interface MarkdownInlineLinkSyntaxOptions {
   readonly includeShortcutReferencesWithSeparators?: boolean;
 }
 
+interface MarkdownCoreInlineSyntaxRanges {
+  readonly autolinkRanges: readonly MarkdownSyntaxMarkerRange[];
+  readonly codeSpanRanges: readonly MarkdownCodeSpanRange[];
+  readonly emphasisRanges: readonly MarkdownSyntaxMarkerRange[];
+  readonly linkSyntaxRanges: readonly MarkdownInlineLinkSyntaxRange[];
+  readonly strikethroughRanges: readonly MarkdownSyntaxMarkerRange[];
+  readonly strongEmphasisRanges: readonly MarkdownSyntaxMarkerRange[];
+}
+
 export type MarkdownCodeFenceLineRole = "open" | "content" | "close";
 
 export interface MarkdownCodeFenceLineState {
@@ -547,24 +556,15 @@ export function findInactiveMarkdownSyntaxMarkers(text: string, active: boolean)
   }
 
   const ranges: MarkdownSyntaxMarkerRange[] = [];
-  const codeSpanRanges = readMarkdownCodeSpanRanges(text);
-  const strongEmphasisRanges = readMarkdownStrongEmphasisSyntaxRanges(text, codeSpanRanges);
-  const strikethroughRanges = readMarkdownStrikethroughSyntaxRanges(text, codeSpanRanges);
-  const linkSyntaxRanges = readMarkdownInlineLinkSyntaxRanges(text, codeSpanRanges);
-  const autolinkRanges = readMarkdownAutolinkSyntaxRanges(text, codeSpanRanges);
-  const emphasisRanges = readMarkdownEmphasisSyntaxRanges(text, [
-    ...codeSpanRanges,
-    ...strongEmphasisRanges,
-    ...strikethroughRanges
-  ]);
+  const syntaxRanges = readMarkdownCoreInlineSyntaxRanges(text);
 
   collectBlockMarkers(text, ranges);
-  collectCodeSpanMarkers(ranges, codeSpanRanges);
-  collectPairedSyntaxRangeMarkers(text, ranges, strongEmphasisRanges, markdownStrongEmphasisDelimiters);
-  collectPairedSyntaxRangeMarkers(text, ranges, strikethroughRanges, markdownStrikethroughDelimiters);
-  collectPairedSyntaxRangeMarkers(text, ranges, emphasisRanges, markdownEmphasisDelimiters);
-  collectLinkMarkers(ranges, linkSyntaxRanges);
-  collectEnclosedSyntaxRangeMarkers(text, ranges, autolinkRanges, "<", ">");
+  collectCodeSpanMarkers(ranges, syntaxRanges.codeSpanRanges);
+  collectPairedSyntaxRangeMarkers(text, ranges, syntaxRanges.strongEmphasisRanges, markdownStrongEmphasisDelimiters);
+  collectPairedSyntaxRangeMarkers(text, ranges, syntaxRanges.strikethroughRanges, markdownStrikethroughDelimiters);
+  collectPairedSyntaxRangeMarkers(text, ranges, syntaxRanges.emphasisRanges, markdownEmphasisDelimiters);
+  collectLinkMarkers(ranges, syntaxRanges.linkSyntaxRanges);
+  collectEnclosedSyntaxRangeMarkers(text, ranges, syntaxRanges.autolinkRanges, "<", ">");
 
   return normalizeRanges(ranges);
 }
@@ -1569,6 +1569,29 @@ const markdownStrongEmphasisDelimiters = ["**", "__"] as const;
 const markdownStrikethroughDelimiters = ["~~"] as const;
 const markdownEmphasisDelimiters = ["*", "_"] as const;
 
+function readMarkdownCoreInlineSyntaxRanges(
+  text: string,
+  linkOptions?: MarkdownInlineLinkSyntaxOptions
+): MarkdownCoreInlineSyntaxRanges {
+  const codeSpanRanges = readMarkdownCodeSpanRanges(text);
+  const strongEmphasisRanges = readMarkdownStrongEmphasisSyntaxRanges(text, codeSpanRanges);
+  const strikethroughRanges = readMarkdownStrikethroughSyntaxRanges(text, codeSpanRanges);
+  const emphasisRanges = readMarkdownEmphasisSyntaxRanges(text, [
+    ...codeSpanRanges,
+    ...strongEmphasisRanges,
+    ...strikethroughRanges
+  ]);
+
+  return {
+    autolinkRanges: readMarkdownAutolinkSyntaxRanges(text, codeSpanRanges),
+    codeSpanRanges,
+    emphasisRanges,
+    linkSyntaxRanges: readMarkdownInlineLinkSyntaxRanges(text, codeSpanRanges, linkOptions),
+    strikethroughRanges,
+    strongEmphasisRanges
+  };
+}
+
 function readMarkdownCodeSpanRanges(text: string): readonly MarkdownCodeSpanRange[] {
   const ranges: MarkdownCodeSpanRange[] = [];
   let cursor = 0;
@@ -2551,21 +2574,20 @@ function readMarkdownTableCellSpans(text: string): readonly MarkdownTableCellSou
     return undefined;
   }
 
-  const codeSpanRanges = readMarkdownCodeSpanRanges(text);
-  const strongEmphasisRanges = readMarkdownStrongEmphasisSyntaxRanges(text, codeSpanRanges);
-  const strikethroughRanges = readMarkdownStrikethroughSyntaxRanges(text, codeSpanRanges);
-  const emphasisIgnoredRanges = [...codeSpanRanges, ...strongEmphasisRanges, ...strikethroughRanges];
+  const syntaxRanges = readMarkdownCoreInlineSyntaxRanges(text, {
+    includeShortcutReferencesWithSeparators: true
+  });
   const protectedRanges = [
-    ...codeSpanRanges,
-    ...strongEmphasisRanges,
-    ...strikethroughRanges,
-    ...readMarkdownEmphasisSyntaxRanges(text, emphasisIgnoredRanges),
-    ...readMarkdownInlineMathRanges(text, codeSpanRanges),
-    ...readMarkdownInlineLinkSyntaxRanges(text, codeSpanRanges, { includeShortcutReferencesWithSeparators: true }),
-    ...readMarkdownAutolinkSyntaxRanges(text, codeSpanRanges),
-    ...readMarkdownInlineHtmlTagSyntaxRanges(text, codeSpanRanges),
-    ...readMarkdownInlineHtmlDelimitedSyntaxRanges(text, codeSpanRanges),
-    ...readMarkdownInlineHtmlDeclarationSyntaxRanges(text, codeSpanRanges)
+    ...syntaxRanges.codeSpanRanges,
+    ...syntaxRanges.strongEmphasisRanges,
+    ...syntaxRanges.strikethroughRanges,
+    ...syntaxRanges.emphasisRanges,
+    ...readMarkdownInlineMathRanges(text, syntaxRanges.codeSpanRanges),
+    ...syntaxRanges.linkSyntaxRanges,
+    ...syntaxRanges.autolinkRanges,
+    ...readMarkdownInlineHtmlTagSyntaxRanges(text, syntaxRanges.codeSpanRanges),
+    ...readMarkdownInlineHtmlDelimitedSyntaxRanges(text, syntaxRanges.codeSpanRanges),
+    ...readMarkdownInlineHtmlDeclarationSyntaxRanges(text, syntaxRanges.codeSpanRanges)
   ];
   const cells: MarkdownTableCellSourceSpan[] = [];
   let current = "";
