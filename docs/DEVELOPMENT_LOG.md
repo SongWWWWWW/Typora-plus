@@ -3998,4 +3998,34 @@ Review:
 
 Known limitations:
 
-- The command does not remove task markers to return a task item to an ordinary list item; that reversible formatting behavior remains future editor work.
+- Task marker removal remained future editor work until the later selected task marker removal stage.
+
+## 2026-06-07 - P2 Selected Task Marker Removal
+
+Completed:
+
+- Added an editor-local `Mod-Shift-Enter` key binding for returning task items to ordinary list items.
+- Added `removeMarkdownTaskListMarkersAtSelection()` so marker removal is testable without React or Workbench.
+- Reused the existing selection line enumeration and parsed task marker range helper for single cursor, multi-cursor, and range selections.
+- Removed task markers plus trailing marker padding while preserving the list prefix and content text.
+- Added focused JSDOM coverage for single-line removal, range removal, duplicate same-line selections, padding normalization, and non-task selections.
+
+Quality gate:
+
+- `npx vitest run packages/editor/src/livePreview.test.ts`: passed, 189 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 419 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Browser smoke check: passed at `http://127.0.0.1:5173`; editor mounted, no console errors, and no horizontal overflow.
+
+Review:
+
+- Task marker removal remains isolated in `packages/editor`; no Workbench command, platform keybinding, Electron, storage, or filesystem dependency was added.
+- The removal command consumes scanner-owned task marker ranges rather than using UI-side bracket matching.
+- The edit path dispatches one ordered CodeMirror transaction with bounded marker deletions, keeping Markdown source as the single source of truth.
+- No new dependency, configuration value, storage path, visual token, extra documentation file, or hard-coded platform assumption was introduced.
+
+Known limitations:
+
+- Task shortcuts remain editor-local; a future command contribution can expose them in the command palette once editor command routing is formalized.
