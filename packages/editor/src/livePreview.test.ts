@@ -1870,6 +1870,12 @@ describe("findInactiveMarkdownSyntaxMarkers", () => {
       { from: 20, to: 21 },
       { from: 23, to: 24 }
     ]);
+    expect(findInactiveMarkdownSyntaxMarkers("Code `[Guide](x)` and [ok](y)", false)).toEqual([
+      { from: 22, to: 23 },
+      { from: 25, to: 26 },
+      { from: 26, to: 27 },
+      { from: 28, to: 29 }
+    ]);
     expect(findInactiveMarkdownSyntaxMarkers("Name a_b_c", false)).toEqual([]);
   });
 
@@ -1881,6 +1887,32 @@ describe("findInactiveMarkdownSyntaxMarkers", () => {
       { from: 26, to: 27 }
     ]);
     expect(findInactiveMarkdownSyntaxMarkers("![Alt](image.png)", false)[0]).toEqual({ from: 0, to: 1 });
+  });
+
+  it("marks reference-style link and image punctuation", () => {
+    expect(findInactiveMarkdownSyntaxMarkers("See [Guide][docs]", false)).toEqual([
+      { from: 4, to: 5 },
+      { from: 10, to: 11 },
+      { from: 11, to: 12 },
+      { from: 16, to: 17 }
+    ]);
+    expect(findInactiveMarkdownSyntaxMarkers("See [Guide][]", false)).toEqual([
+      { from: 4, to: 5 },
+      { from: 10, to: 11 },
+      { from: 11, to: 12 },
+      { from: 12, to: 13 }
+    ]);
+    expect(findInactiveMarkdownSyntaxMarkers("![Alt][image]", false)).toEqual([
+      { from: 0, to: 1 },
+      { from: 1, to: 2 },
+      { from: 5, to: 6 },
+      { from: 6, to: 7 },
+      { from: 12, to: 13 }
+    ]);
+  });
+
+  it("does not mark shortcut-reference-looking labels without table context", () => {
+    expect(findInactiveMarkdownSyntaxMarkers("See [Guide|Docs]", false)).toEqual([]);
   });
 });
 

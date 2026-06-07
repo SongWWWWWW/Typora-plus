@@ -46,6 +46,17 @@ export interface MarkdownTableCellSourceRange {
   readonly to: number;
 }
 
+type MarkdownInlineLinkSyntaxKind = "inline" | "reference" | "collapsed-reference" | "shortcut-reference";
+
+interface MarkdownInlineLinkSyntaxRange extends MarkdownSyntaxMarkerRange {
+  readonly kind: MarkdownInlineLinkSyntaxKind;
+  readonly markerRanges: readonly MarkdownSyntaxMarkerRange[];
+}
+
+interface MarkdownInlineLinkSyntaxOptions {
+  readonly includeShortcutReferencesWithSeparators?: boolean;
+}
+
 export type MarkdownCodeFenceLineRole = "open" | "content" | "close";
 
 export interface MarkdownCodeFenceLineState {
@@ -539,6 +550,7 @@ export function findInactiveMarkdownSyntaxMarkers(text: string, active: boolean)
   const codeSpanRanges = readMarkdownCodeSpanRanges(text);
   const strongEmphasisRanges = readMarkdownStrongEmphasisSyntaxRanges(text, codeSpanRanges);
   const strikethroughRanges = readMarkdownStrikethroughSyntaxRanges(text, codeSpanRanges);
+  const linkSyntaxRanges = readMarkdownInlineLinkSyntaxRanges(text, codeSpanRanges);
   const emphasisRanges = readMarkdownEmphasisSyntaxRanges(text, [
     ...codeSpanRanges,
     ...strongEmphasisRanges,
@@ -549,7 +561,7 @@ export function findInactiveMarkdownSyntaxMarkers(text: string, active: boolean)
   collectPairedSyntaxRangeMarkers(text, ranges, strongEmphasisRanges, markdownStrongEmphasisDelimiters);
   collectPairedSyntaxRangeMarkers(text, ranges, strikethroughRanges, markdownStrikethroughDelimiters);
   collectPairedSyntaxRangeMarkers(text, ranges, emphasisRanges, markdownEmphasisDelimiters);
-  collectLinkMarkers(text, ranges);
+  collectLinkMarkers(ranges, linkSyntaxRanges);
 
   return normalizeRanges(ranges);
 }
@@ -2086,9 +2098,10 @@ function findClosingMarkdownInlineHtmlDeclaration(
 
 function readMarkdownInlineLinkSyntaxRanges(
   text: string,
-  ignoredRanges: readonly MarkdownSyntaxMarkerRange[]
-): readonly MarkdownSyntaxMarkerRange[] {
-  const ranges: MarkdownSyntaxMarkerRange[] = [];
+  ignoredRanges: readonly MarkdownSyntaxMarkerRange[],
+  options: MarkdownInlineLinkSyntaxOptions = {}
+): readonly MarkdownInlineLinkSyntaxRange[] {
+  const ranges: MarkdownInlineLinkSyntaxRange[] = [];
   let cursor = 0;
 
   while (cursor < text.length) {
@@ -2105,7 +2118,13 @@ function readMarkdownInlineLinkSyntaxRanges(
       continue;
     }
 
-    const syntaxFrom = openBracket;
+    const imageBang = readMarkdownImageBangIndex(text, openBracket, ignoredRanges);
+    const syntaxFrom = imageBang ?? openBracket;
+    const labelMarkerRanges = [
+      ...createOptionalMarkdownSyntaxMarkerRange(imageBang),
+      { from: openBracket, to: openBracket + 1 },
+      { from: closeBracket, to: closeBracket + 1 }
+    ];
     const openParen = closeBracket + 1;
 
     if (
@@ -2120,7 +2139,16 @@ function readMarkdownInlineLinkSyntaxRanges(
         continue;
       }
 
-      ranges.push({ from: syntaxFrom, to: closeParen + 1 });
+      ranges.push({
+        from: syntaxFrom,
+        kind: "inline",
+        markerRanges: [
+          ...labelMarkerRanges,
+          { from: openParen, to: openParen + 1 },
+          { from: closeParen, to: closeParen + 1 }
+        ],
+        to: closeParen + 1
+      });
       cursor = closeParen + 1;
       continue;
     }
@@ -2143,13 +2171,30 @@ function readMarkdownInlineLinkSyntaxRanges(
         continue;
       }
 
-      ranges.push({ from: syntaxFrom, to: referenceCloseBracket + 1 });
+      ranges.push({
+        from: syntaxFrom,
+        kind: referenceOpenBracket + 1 === referenceCloseBracket ? "collapsed-reference" : "reference",
+        markerRanges: [
+          ...labelMarkerRanges,
+          { from: referenceOpenBracket, to: referenceOpenBracket + 1 },
+          { from: referenceCloseBracket, to: referenceCloseBracket + 1 }
+        ],
+        to: referenceCloseBracket + 1
+      });
       cursor = referenceCloseBracket + 1;
       continue;
     }
 
-    if (containsMarkdownTableCellSeparator(text, openBracket + 1, closeBracket, ignoredRanges)) {
-      ranges.push({ from: syntaxFrom, to: closeBracket + 1 });
+    if (
+      options.includeShortcutReferencesWithSeparators &&
+      containsMarkdownTableCellSeparator(text, openBracket + 1, closeBracket, ignoredRanges)
+    ) {
+      ranges.push({
+        from: syntaxFrom,
+        kind: "shortcut-reference",
+        markerRanges: labelMarkerRanges,
+        to: closeBracket + 1
+      });
       cursor = closeBracket + 1;
       continue;
     }
@@ -2158,6 +2203,24 @@ function readMarkdownInlineLinkSyntaxRanges(
   }
 
   return ranges;
+}
+
+function readMarkdownImageBangIndex(
+  text: string,
+  openBracket: number,
+  ignoredRanges: readonly MarkdownSyntaxMarkerRange[]
+): number | undefined {
+  const index = openBracket - 1;
+
+  return text[index] === "!" &&
+    !isEscaped(text, index) &&
+    !isIndexInsideMarkdownRange(index, ignoredRanges)
+    ? index
+    : undefined;
+}
+
+function createOptionalMarkdownSyntaxMarkerRange(index: number | undefined): readonly MarkdownSyntaxMarkerRange[] {
+  return index === undefined ? [] : [{ from: index, to: index + 1 }];
 }
 
 function containsMarkdownTableCellSeparator(
@@ -2495,7 +2558,7 @@ function readMarkdownTableCellSpans(text: string): readonly MarkdownTableCellSou
     ...strikethroughRanges,
     ...readMarkdownEmphasisSyntaxRanges(text, emphasisIgnoredRanges),
     ...readMarkdownInlineMathRanges(text, codeSpanRanges),
-    ...readMarkdownInlineLinkSyntaxRanges(text, codeSpanRanges),
+    ...readMarkdownInlineLinkSyntaxRanges(text, codeSpanRanges, { includeShortcutReferencesWithSeparators: true }),
     ...readMarkdownAutolinkSyntaxRanges(text, codeSpanRanges),
     ...readMarkdownInlineHtmlTagSyntaxRanges(text, codeSpanRanges),
     ...readMarkdownInlineHtmlDelimitedSyntaxRanges(text, codeSpanRanges),
@@ -4227,24 +4290,16 @@ function hasMarkdownDelimitedSyntaxContent(
     !/\s/.test(text[contentTo - 1] ?? "");
 }
 
-function collectLinkMarkers(text: string, ranges: MarkdownSyntaxMarkerRange[]): void {
-  const expression = /!?\[[^\]\n]+\]\([^)]+\)/g;
-
-  for (const match of text.matchAll(expression)) {
-    const value = match[0];
-    const start = match.index ?? 0;
-    const bangLength = value.startsWith("!") ? 1 : 0;
-    const closeBracket = value.indexOf("]");
-    const closeParen = value.length - 1;
-
-    if (bangLength > 0) {
-      ranges.push({ from: start, to: start + 1 });
+function collectLinkMarkers(
+  ranges: MarkdownSyntaxMarkerRange[],
+  syntaxRanges: readonly MarkdownInlineLinkSyntaxRange[]
+): void {
+  for (const syntaxRange of syntaxRanges) {
+    if (syntaxRange.kind === "shortcut-reference") {
+      continue;
     }
 
-    ranges.push({ from: start + bangLength, to: start + bangLength + 1 });
-    ranges.push({ from: start + closeBracket, to: start + closeBracket + 1 });
-    ranges.push({ from: start + closeBracket + 1, to: start + closeBracket + 2 });
-    ranges.push({ from: start + closeParen, to: start + closeParen + 1 });
+    ranges.push(...syntaxRange.markerRanges);
   }
 }
 
