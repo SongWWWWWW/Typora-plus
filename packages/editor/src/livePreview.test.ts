@@ -888,6 +888,22 @@ describe("analyzeMarkdownTableLines", () => {
     ]);
   });
 
+  it("keeps autolink pipes inside table cells", () => {
+    const tableBlock = analyzeMarkdownLineBlocks([
+      "| Reference | Status |",
+      "| --- | --- |",
+      "| <https://example.com/a|b?q=1|2> | Ready |",
+      "| <user|name@example.com> | Hold |"
+    ]).find((state) => state.tableBlock)?.tableBlock;
+
+    expect(tableBlock).toBeDefined();
+    expect(tableBlock?.headerCells).toEqual(["Reference", "Status"]);
+    expect(tableBlock?.bodyRows).toEqual([
+      ["<https://example.com/a|b?q=1|2>", "Ready"],
+      ["<user|name@example.com>", "Hold"]
+    ]);
+  });
+
   it("supports tables without outer pipes", () => {
     expect(analyzeMarkdownTableLines([
       "Name | Value",
@@ -948,6 +964,20 @@ describe("analyzeMarkdownTableLines", () => {
     expect(analyzeMarkdownTableLines([
       "Name [A|B] Value",
       "--- [C|D] ---"
+    ])).toEqual([]);
+  });
+
+  it("does not treat autolink-only pipes as table separators", () => {
+    expect(analyzeMarkdownTableLines([
+      "Name <https://a|b.example> Value",
+      "--- <user|name@example.com> ---"
+    ])).toEqual([]);
+  });
+
+  it("does not protect invalid angle-bracket text as autolinks", () => {
+    expect(analyzeMarkdownTableLines([
+      "Name <A|B> | Value",
+      "--- | ---"
     ])).toEqual([]);
   });
 });
@@ -1023,6 +1053,14 @@ describe("Markdown table editing helpers", () => {
 
     expect(range).toEqual({ from: 2, to: 7 });
     expect(range ? line.slice(range.from, range.to) : "").toBe("[A|B]");
+  });
+
+  it("keeps autolink pipes inside source cell ranges", () => {
+    const line = "| <https://a|b.example> | Status |";
+    const range = findMarkdownTableCellSourceRange(line, 0);
+
+    expect(range).toEqual({ from: 2, to: 23 });
+    expect(range ? line.slice(range.from, range.to) : "").toBe("<https://a|b.example>");
   });
 
   it("does not find a table cell range for escaped-only separators", () => {
@@ -1224,6 +1262,26 @@ describe("Markdown table editing helpers", () => {
       "| Reference | Status |",
       "| :--- | :---: |",
       "| [A|B] | ![Alt|Text] |"
+    ]);
+  });
+
+  it("preserves autolink pipe cell source while editing columns", () => {
+    const tableBlock = analyzeMarkdownLineBlocks([
+      "| Reference | Count | Status |",
+      "| :--- | ---: | :---: |",
+      "| <https://example.com/a|b> | 1 | <user|name@example.com> |"
+    ]).find((state) => state.tableBlock)?.tableBlock;
+
+    expect(tableBlock).toBeDefined();
+    expect(createMarkdownTableWithInsertedColumn(tableBlock!, { columnIndex: 1 })).toEqual([
+      "| Reference |  | Count | Status |",
+      "| :--- | --- | ---: | :---: |",
+      "| <https://example.com/a|b> |  | 1 | <user|name@example.com> |"
+    ]);
+    expect(createMarkdownTableWithDeletedColumn(tableBlock!, { columnIndex: 1 })).toEqual([
+      "| Reference | Status |",
+      "| :--- | :---: |",
+      "| <https://example.com/a|b> | <user|name@example.com> |"
     ]);
   });
 
