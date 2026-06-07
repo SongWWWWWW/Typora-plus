@@ -100,12 +100,12 @@ Current features:
 - history, search, selection, bracket matching
 - unified live preview block-state analysis with normalized visible editor ranges
 - heading/quote/list/fence line styling
-- inactive Markdown marker soft hiding for headings, lists, quotes, fences, links, and strong emphasis
+- inactive Markdown marker soft hiding for headings, lists, quotes, fences, links, strong emphasis, and strikethrough
 - code fence block styling with visible-range-aware fence state tracking, inactive language/copy widgets, and provider-backed previews for matching code-fence languages with sanitized HTML and source-focused click editing
 - provider-backed inline renderer previews for language-qualified inline code spans, using inline-only sanitized HTML and source-focused click editing
 - built-in Status inline badge preview for `` `status:done` ``, `` `status:blocked: Waiting on API` ``, and configuration-backed workflow markers through the Markdown renderer provider path
 - built-in Mermaid preview for inactive `mermaid` code fences through the Markdown renderer provider path
-- table block styling with code-fence-aware table detection, inactive previews that preserve escaped pipes, inline code, emphasis, inline math, autolinks, inline HTML syntax, and full/collapsed/shortcut link-image syntax, targeted row/column insertion and deletion controls, column alignment controls, and source-focused cell navigation
+- table block styling with code-fence-aware table detection, inactive previews that preserve escaped pipes, inline code, emphasis, strikethrough, inline math, autolinks, inline HTML syntax, and full/collapsed/shortcut link-image syntax, targeted row/column insertion and deletion controls, column alignment controls, and source-focused cell navigation
 - standalone image preview cards with workspace-backed local image resolution and direct inline/blob rendering
 - KaTeX-backed multiline and single-line display math preview blocks for `$$` and `\[` delimiters, with TeX copy controls, render diagnostics, and trimmed source-focused click editing
 - KaTeX-backed inline math previews for `$` and `\(` delimiters, with render diagnostics, parser-owned expression source ranges, scanner recovery after unclosed delimiters, and source-focused click editing for inactive lines

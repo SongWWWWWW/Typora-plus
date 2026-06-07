@@ -3522,6 +3522,37 @@ Known limitations:
 
 - Parser-backed table mapping remains planned for deeper nested inline syntax and full document-aware reference resolution.
 
+## 2026-06-07 - P2 Table Strikethrough Pipe Mapping
+
+Completed:
+
+- Added inactive-line marker soft hiding for paired strikethrough delimiters such as `~~done~~`.
+- Made the shared Markdown table scanner preserve `|` inside strikethrough spans such as `~~left | right~~`.
+- Refactored the strong-emphasis protected-range reader into a reusable paired-delimiter reader and reused it for strikethrough.
+- Kept unclosed strikethrough unprotected, so incomplete syntax does not hide real table separators while editing.
+- Preserved strikethrough cells through table preview, source-cell navigation, column insertion, and column deletion.
+- Added focused tests for marker hiding, preview parsing, strikethrough-only non-table lines, unclosed syntax, source ranges, and column edits.
+
+Quality gate:
+
+- `npm run typecheck`: passed
+- `npx vitest run packages/editor/src/livePreview.test.ts`: passed, 159 tests
+- `npm run verify`: passed, 389 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Browser smoke check: not run because this stage changes pure marker/table source mapping and is covered by unit and full build verification.
+
+Review:
+
+- Strikethrough handling remains isolated in `packages/editor`; no Workbench, platform, Electron, DOM, or filesystem dependency was added.
+- Paired delimiter handling is now shared by strong emphasis and strikethrough, reducing duplicated scanner mechanics.
+- Preview rendering, source navigation, and pure table transforms still share one protected-range scanner path.
+- No new dependency, configuration value, storage path, visual token, extra documentation file, or hard-coded platform assumption was introduced.
+
+Known limitations:
+
+- Parser-backed table mapping remains planned for deeper nested inline syntax and full document-aware reference resolution.
+
 ## 2026-06-07 - P2 Inline Math Expression Range Model
 
 Completed:
