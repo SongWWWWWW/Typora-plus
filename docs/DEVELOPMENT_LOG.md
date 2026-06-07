@@ -3493,6 +3493,35 @@ Known limitations:
 
 - Parser-backed block marker mapping remains planned for deeper CommonMark edge cases.
 
+## 2026-06-07 - P2 Task List Marker Soft Hiding
+
+Completed:
+
+- Added inactive-line marker soft hiding for task-list state markers such as `[ ]`, `[x]`, and `[X]`.
+- Kept task marker detection inside the existing list block marker branch, so it only applies after a valid bullet or ordered-list prefix.
+- Required a following space or line end after the task marker so malformed `- [x]Done` remains visible source text.
+- Added focused tests for bullet tasks, ordered tasks, empty task lines, malformed task markers, and ordinary paragraph brackets.
+
+Quality gate:
+
+- `npx vitest run packages/editor/src/livePreview.test.ts`: passed, 169 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 399 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Browser smoke check: not run because this stage changes pure marker-range detection and is covered by unit and full build verification.
+
+Review:
+
+- Task list marker detection remains isolated in `packages/editor`; no Workbench, platform, Electron, DOM, or filesystem dependency was added.
+- The block marker collector continues to own list syntax, keeping task-state handling near the list prefix rule instead of scattering it across UI code.
+- Ordinary paragraph brackets and malformed task markers stay visible, avoiding a broad hard-coded bracket rule.
+- No new dependency, configuration value, storage path, visual token, extra documentation file, or hard-coded platform assumption was introduced.
+
+Known limitations:
+
+- Task list states are still source-backed soft markers; interactive checkbox widgets remain future work.
+
 ## 2026-06-07 - P2 Table Autolink Pipe Mapping
 
 Completed:
