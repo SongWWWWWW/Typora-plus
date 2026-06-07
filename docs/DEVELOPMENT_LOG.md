@@ -3553,6 +3553,36 @@ Known limitations:
 
 - Parser-backed table mapping remains planned for deeper nested inline syntax and full document-aware reference resolution.
 
+## 2026-06-07 - P2 Emphasis Marker Soft Hiding
+
+Completed:
+
+- Added inactive-line marker soft hiding for paired ordinary emphasis delimiters such as `*it*` and `_it_`.
+- Reworked inline delimiter marker hiding to consume the same range scanners used by table source mapping instead of doing independent raw string searches.
+- Skipped inline code spans when hiding emphasis, strong-emphasis, and strikethrough markers.
+- Avoided treating intraword underscores such as `a_b_c` as emphasis markers.
+- Added focused tests for ordinary emphasis markers, inline-code exclusion, and intraword underscores.
+
+Quality gate:
+
+- `npm run typecheck`: passed
+- `npx vitest run packages/editor/src/livePreview.test.ts`: passed, 161 tests
+- `npm run verify`: passed, 391 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Browser smoke check: not run because this stage changes pure marker-range detection and is covered by unit and full build verification.
+
+Review:
+
+- Marker detection remains isolated in `packages/editor`; no Workbench, platform, Electron, DOM, or filesystem dependency was added.
+- Marker hiding and table source mapping now share delimiter range scanners, reducing drift between preview styling and table parsing.
+- The change avoids broad hard-coded delimiter matching inside code spans or identifier-like words.
+- No new dependency, configuration value, storage path, visual token, extra documentation file, or hard-coded platform assumption was introduced.
+
+Known limitations:
+
+- Parser-backed inline marker mapping remains planned for deeper nested emphasis edge cases.
+
 ## 2026-06-07 - P2 Inline Math Expression Range Model
 
 Completed:
