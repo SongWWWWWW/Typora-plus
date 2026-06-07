@@ -904,6 +904,22 @@ describe("analyzeMarkdownTableLines", () => {
     ]);
   });
 
+  it("keeps inline HTML tag pipes inside table cells", () => {
+    const tableBlock = analyzeMarkdownLineBlocks([
+      "| Markup | Status |",
+      "| --- | --- |",
+      "| <span data-value=\"a|b\">Alpha</span> | Ready |",
+      "| <input value='x|y' /> | Hold |"
+    ]).find((state) => state.tableBlock)?.tableBlock;
+
+    expect(tableBlock).toBeDefined();
+    expect(tableBlock?.headerCells).toEqual(["Markup", "Status"]);
+    expect(tableBlock?.bodyRows).toEqual([
+      ["<span data-value=\"a|b\">Alpha</span>", "Ready"],
+      ["<input value='x|y' />", "Hold"]
+    ]);
+  });
+
   it("supports tables without outer pipes", () => {
     expect(analyzeMarkdownTableLines([
       "Name | Value",
@@ -974,9 +990,23 @@ describe("analyzeMarkdownTableLines", () => {
     ])).toEqual([]);
   });
 
+  it("does not treat inline-html-tag-only pipes as table separators", () => {
+    expect(analyzeMarkdownTableLines([
+      "Name <span data-value=\"a|b\">Alpha</span> Value",
+      "--- <input value='x|y' /> ---"
+    ])).toEqual([]);
+  });
+
   it("does not protect invalid angle-bracket text as autolinks", () => {
     expect(analyzeMarkdownTableLines([
       "Name <A|B> | Value",
+      "--- | ---"
+    ])).toEqual([]);
+  });
+
+  it("does not protect invalid closing tags as inline HTML", () => {
+    expect(analyzeMarkdownTableLines([
+      "Name </span data-value=\"a|b\"> | Value",
       "--- | ---"
     ])).toEqual([]);
   });
@@ -1061,6 +1091,14 @@ describe("Markdown table editing helpers", () => {
 
     expect(range).toEqual({ from: 2, to: 23 });
     expect(range ? line.slice(range.from, range.to) : "").toBe("<https://a|b.example>");
+  });
+
+  it("keeps inline HTML tag pipes inside source cell ranges", () => {
+    const line = "| <span data-value=\"a|b\">Alpha</span> | Status |";
+    const range = findMarkdownTableCellSourceRange(line, 0);
+
+    expect(range).toEqual({ from: 2, to: 37 });
+    expect(range ? line.slice(range.from, range.to) : "").toBe("<span data-value=\"a|b\">Alpha</span>");
   });
 
   it("does not find a table cell range for escaped-only separators", () => {
@@ -1282,6 +1320,26 @@ describe("Markdown table editing helpers", () => {
       "| Reference | Status |",
       "| :--- | :---: |",
       "| <https://example.com/a|b> | <user|name@example.com> |"
+    ]);
+  });
+
+  it("preserves inline HTML tag pipe cell source while editing columns", () => {
+    const tableBlock = analyzeMarkdownLineBlocks([
+      "| Markup | Count | Status |",
+      "| :--- | ---: | :---: |",
+      "| <span data-value=\"a|b\">Alpha</span> | 1 | <input value='x|y' /> |"
+    ]).find((state) => state.tableBlock)?.tableBlock;
+
+    expect(tableBlock).toBeDefined();
+    expect(createMarkdownTableWithInsertedColumn(tableBlock!, { columnIndex: 1 })).toEqual([
+      "| Markup |  | Count | Status |",
+      "| :--- | --- | ---: | :---: |",
+      "| <span data-value=\"a|b\">Alpha</span> |  | 1 | <input value='x|y' /> |"
+    ]);
+    expect(createMarkdownTableWithDeletedColumn(tableBlock!, { columnIndex: 1 })).toEqual([
+      "| Markup | Status |",
+      "| :--- | :---: |",
+      "| <span data-value=\"a|b\">Alpha</span> | <input value='x|y' /> |"
     ]);
   });
 

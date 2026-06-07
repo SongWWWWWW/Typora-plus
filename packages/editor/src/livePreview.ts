@@ -1532,6 +1532,9 @@ interface MarkdownCodeSpanRange extends MarkdownSyntaxMarkerRange {
 const markdownAutolinkUriPattern = /^[A-Za-z][A-Za-z0-9.+-]{1,31}:[^\s<>]*$/;
 const markdownAutolinkEmailPattern =
   /^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+$/;
+const markdownInlineHtmlOpeningTagPattern =
+  /^<[A-Za-z][A-Za-z0-9-]*(?:\s+[A-Za-z_:][A-Za-z0-9:._-]*(?:\s*=\s*(?:"[^"]*"|'[^']*'|[^\s"'=<>`]+))?)*\s*\/?>$/;
+const markdownInlineHtmlClosingTagPattern = /^<\/[A-Za-z][A-Za-z0-9-]*\s*>$/;
 
 function readMarkdownCodeSpanRanges(text: string): readonly MarkdownCodeSpanRange[] {
   const ranges: MarkdownCodeSpanRange[] = [];
@@ -1633,6 +1636,95 @@ function findClosingMarkdownAutolinkAngle(
 
 function isMarkdownAutolinkContent(content: string): boolean {
   return markdownAutolinkUriPattern.test(content) || markdownAutolinkEmailPattern.test(content);
+}
+
+function readMarkdownInlineHtmlTagSyntaxRanges(
+  text: string,
+  ignoredRanges: readonly MarkdownSyntaxMarkerRange[]
+): readonly MarkdownSyntaxMarkerRange[] {
+  const ranges: MarkdownSyntaxMarkerRange[] = [];
+  let cursor = 0;
+
+  while (cursor < text.length) {
+    const openAngle = findNextMarkdownInlineHtmlTagOpen(text, cursor, ignoredRanges);
+
+    if (openAngle === -1) {
+      break;
+    }
+
+    const closeAngle = findClosingMarkdownInlineHtmlTagAngle(text, openAngle, ignoredRanges);
+
+    if (closeAngle === -1) {
+      cursor = openAngle + 1;
+      continue;
+    }
+
+    const source = text.slice(openAngle, closeAngle + 1);
+
+    if (isMarkdownInlineHtmlTag(source)) {
+      ranges.push({ from: openAngle, to: closeAngle + 1 });
+    }
+
+    cursor = closeAngle + 1;
+  }
+
+  return ranges;
+}
+
+function findNextMarkdownInlineHtmlTagOpen(
+  text: string,
+  from: number,
+  ignoredRanges: readonly MarkdownSyntaxMarkerRange[]
+): number {
+  for (let index = from; index < text.length; index += 1) {
+    if (
+      text[index] === "<" &&
+      !isEscaped(text, index) &&
+      !isIndexInsideMarkdownRange(index, ignoredRanges)
+    ) {
+      return index;
+    }
+  }
+
+  return -1;
+}
+
+function findClosingMarkdownInlineHtmlTagAngle(
+  text: string,
+  openAngle: number,
+  ignoredRanges: readonly MarkdownSyntaxMarkerRange[]
+): number {
+  let quote: "'" | "\"" | undefined;
+
+  for (let index = openAngle + 1; index < text.length; index += 1) {
+    const character = text[index];
+
+    if (isIndexInsideMarkdownRange(index, ignoredRanges)) {
+      continue;
+    }
+
+    if (quote) {
+      if (character === quote) {
+        quote = undefined;
+      }
+      continue;
+    }
+
+    if (character === "'" || character === "\"") {
+      quote = character;
+      continue;
+    }
+
+    if (character === ">" && !isEscaped(text, index)) {
+      return index;
+    }
+  }
+
+  return -1;
+}
+
+function isMarkdownInlineHtmlTag(source: string): boolean {
+  return markdownInlineHtmlOpeningTagPattern.test(source) || markdownInlineHtmlClosingTagPattern.test(source);
 }
 
 function readMarkdownInlineLinkSyntaxRanges(
@@ -2034,7 +2126,8 @@ function readMarkdownTableCellSpans(text: string): readonly MarkdownTableCellSou
     ...codeSpanRanges,
     ...readMarkdownInlineMathRanges(text, codeSpanRanges),
     ...readMarkdownInlineLinkSyntaxRanges(text, codeSpanRanges),
-    ...readMarkdownAutolinkSyntaxRanges(text, codeSpanRanges)
+    ...readMarkdownAutolinkSyntaxRanges(text, codeSpanRanges),
+    ...readMarkdownInlineHtmlTagSyntaxRanges(text, codeSpanRanges)
   ];
   const cells: MarkdownTableCellSourceSpan[] = [];
   let current = "";
