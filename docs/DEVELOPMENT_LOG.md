@@ -4028,4 +4028,34 @@ Review:
 
 Known limitations:
 
-- Task shortcuts remain editor-local; a future command contribution can expose them in the command palette once editor command routing is formalized.
+- Task shortcuts remained editor-local until the later Workbench editor task command stage exposed command palette entries through `MarkdownEditorHandle`.
+
+## 2026-06-07 - P2 Workbench Editor Task Commands
+
+Completed:
+
+- Added `MarkdownEditorHandle` methods for toggling list/task lines and removing task markers.
+- Registered Workbench command handlers for `editor.task.toggleLines` and `editor.task.removeMarkers`.
+- Added shared command metadata so command palette and Settings command surfaces can discover the editor task actions.
+- Kept default `Mod-Enter` and `Mod-Shift-Enter` handling editor-local to avoid duplicate global and CodeMirror dispatch.
+- Added Workbench contribution coverage for the task command metadata.
+
+Quality gate:
+
+- `npx vitest run packages/editor/src/livePreview.test.ts packages/workbench/src/workbenchContributions.test.ts`: passed, 198 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 420 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Browser smoke check: passed at `http://127.0.0.1:5173`; editor mounted, command palette showed `Toggle Task Lines` and `Remove Task Markers`, no console errors, and no horizontal overflow.
+
+Review:
+
+- Workbench consumes `MarkdownEditorHandle`; it does not parse Markdown or calculate marker ranges.
+- Command metadata is centralized in Workbench contributions, while executable handlers remain in `Application.tsx`, matching the existing command metadata/handler split.
+- No global keybinding was added for these editor actions, preserving CodeMirror ownership of focused editor shortcuts until keybinding context rules can prevent duplicate dispatch.
+- No new dependency, configuration value, storage path, visual token, extra documentation file, or hard-coded platform assumption was introduced.
+
+Known limitations:
+
+- The task commands are command-palette discoverable but do not yet show shortcut labels because their default shortcuts remain editor-local.
