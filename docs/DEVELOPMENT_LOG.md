@@ -3065,3 +3065,37 @@ Known limitations:
 - External extension package loading is still not implemented.
 - A concrete worker/process/Electron IPC extension host adapter is still not implemented.
 - Future production adapters still need runtime-specific lifecycle and trust handling.
+
+## 2026-06-07 - P2 Extension Host Protocol Handshake
+
+Completed:
+
+- Added protocol handshake request/result messages carrying protocol version and bounded capability ids.
+- Added protocol validation for handshake version ranges, capability count, capability length, capability syntax, and duplicate capability normalization.
+- Added reusable `ExtensionHostProtocolSession.handshake()` with response identity checks, protocol version checks, required capability checks, and retry after failed handshakes.
+- Added `requireHandshake` session/host option so future transport-backed hosts can require compatibility checks before activation.
+- Added runtime-side automatic handshake responses and incompatible-version API error responses.
+- Updated linked transport integration to activate through a required handshake path.
+- Added tests for handshake serialization, invalid handshake payloads, session handshake reuse, forced handshake-before-activation, retry after handshake failure, runtime success/error responses, and linked host/runtime integration.
+
+Quality gate:
+
+- `npm run typecheck`: passed
+- `npx vitest run packages/platform/src/extensionHostProtocol.test.ts packages/platform/src/extensionHostProtocolSession.test.ts packages/platform/src/extensionHostProtocolRuntime.test.ts packages/platform/src/extensionHostProtocolTransport.test.ts packages/platform/src/extensionHostProtocolWireTransport.test.ts`: passed, 47 tests
+- `npm run verify`: passed, 318 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Browser smoke check: not run because this stage only changes platform protocol compatibility code and documentation.
+
+Review:
+
+- Handshake is optional by default for existing in-process and test flows, but can be required by future transport adapters before activation.
+- Protocol compatibility now fails with explicit version/capability errors rather than relying only on request timeouts.
+- The implementation remains platform-only and does not depend on Workbench, Electron IPC, DOM APIs, Node streams, dynamic imports, or external extension package loading.
+- No new dependency, storage path, visual token, user-facing Settings surface, or extra documentation file was introduced.
+
+Known limitations:
+
+- External extension package loading is still not implemented.
+- A concrete worker/process/Electron IPC extension host adapter is still not implemented.
+- Future production adapters still need runtime-specific lifecycle and trust handling.
