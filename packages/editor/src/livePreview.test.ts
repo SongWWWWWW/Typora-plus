@@ -1841,6 +1841,20 @@ describe("findInactiveMarkdownSyntaxMarkers", () => {
     expect(findInactiveMarkdownSyntaxMarkers("```ts", false)).toEqual([{ from: 0, to: 3 }]);
   });
 
+  it("marks closing heading markers without treating literal trailing hashes as syntax", () => {
+    expect(findInactiveMarkdownSyntaxMarkers("## Heading ##", false)).toEqual([
+      { from: 0, to: 2 },
+      { from: 11, to: 13 }
+    ]);
+    expect(findInactiveMarkdownSyntaxMarkers("# Heading #   ", false)).toEqual([
+      { from: 0, to: 1 },
+      { from: 10, to: 11 }
+    ]);
+    expect(findInactiveMarkdownSyntaxMarkers("## Heading#", false)).toEqual([{ from: 0, to: 2 }]);
+    expect(findInactiveMarkdownSyntaxMarkers("## Heading #1", false)).toEqual([{ from: 0, to: 2 }]);
+    expect(findInactiveMarkdownSyntaxMarkers("## Heading ### text", false)).toEqual([{ from: 0, to: 2 }]);
+  });
+
   it("marks paired strong emphasis delimiters", () => {
     expect(findInactiveMarkdownSyntaxMarkers("A **bold** word", false)).toEqual([
       { from: 2, to: 4 },

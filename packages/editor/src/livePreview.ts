@@ -4260,6 +4260,10 @@ function collectBlockMarkers(text: string, ranges: MarkdownSyntaxMarkerRange[]):
   const heading = /^(#{1,6})(?=\s+)/.exec(text);
   if (heading?.[1]) {
     ranges.push({ from: 0, to: heading[1].length });
+    const closingMarker = readClosingAtxHeadingMarkerRange(text, heading[1].length);
+    if (closingMarker) {
+      ranges.push(closingMarker);
+    }
     return;
   }
 
@@ -4279,6 +4283,21 @@ function collectBlockMarkers(text: string, ranges: MarkdownSyntaxMarkerRange[]):
   if (fence?.[1] !== undefined && fence[2]) {
     ranges.push({ from: fence[1].length, to: fence[1].length + fence[2].length });
   }
+}
+
+function readClosingAtxHeadingMarkerRange(
+  text: string,
+  openingMarkerLength: number
+): MarkdownSyntaxMarkerRange | undefined {
+  const match = /(?:^|\s)(#{1,})\s*$/.exec(text);
+
+  if (!match?.[1] || match.index === undefined) {
+    return undefined;
+  }
+
+  const from = match.index + match[0].indexOf(match[1]);
+
+  return from > openingMarkerLength ? { from, to: from + match[1].length } : undefined;
 }
 
 function collectPairedSyntaxRangeMarkers(
