@@ -551,6 +551,7 @@ export function findInactiveMarkdownSyntaxMarkers(text: string, active: boolean)
   const strongEmphasisRanges = readMarkdownStrongEmphasisSyntaxRanges(text, codeSpanRanges);
   const strikethroughRanges = readMarkdownStrikethroughSyntaxRanges(text, codeSpanRanges);
   const linkSyntaxRanges = readMarkdownInlineLinkSyntaxRanges(text, codeSpanRanges);
+  const autolinkRanges = readMarkdownAutolinkSyntaxRanges(text, codeSpanRanges);
   const emphasisRanges = readMarkdownEmphasisSyntaxRanges(text, [
     ...codeSpanRanges,
     ...strongEmphasisRanges,
@@ -562,6 +563,7 @@ export function findInactiveMarkdownSyntaxMarkers(text: string, active: boolean)
   collectPairedSyntaxRangeMarkers(text, ranges, strikethroughRanges, markdownStrikethroughDelimiters);
   collectPairedSyntaxRangeMarkers(text, ranges, emphasisRanges, markdownEmphasisDelimiters);
   collectLinkMarkers(ranges, linkSyntaxRanges);
+  collectEnclosedSyntaxRangeMarkers(text, ranges, autolinkRanges, "<", ">");
 
   return normalizeRanges(ranges);
 }
@@ -4274,6 +4276,33 @@ function collectPairedSyntaxRangeMarkers(
 
     ranges.push({ from: syntaxRange.from, to: syntaxRange.from + delimiter.length });
     ranges.push({ from: syntaxRange.to - delimiter.length, to: syntaxRange.to });
+  }
+}
+
+function collectEnclosedSyntaxRangeMarkers(
+  text: string,
+  ranges: MarkdownSyntaxMarkerRange[],
+  syntaxRanges: readonly MarkdownSyntaxMarkerRange[],
+  openDelimiter: string,
+  closeDelimiter: string
+): void {
+  for (const syntaxRange of syntaxRanges) {
+    if (
+      !text.startsWith(openDelimiter, syntaxRange.from) ||
+      !text.startsWith(closeDelimiter, syntaxRange.to - closeDelimiter.length)
+    ) {
+      continue;
+    }
+
+    const contentFrom = syntaxRange.from + openDelimiter.length;
+    const contentTo = syntaxRange.to - closeDelimiter.length;
+
+    if (contentTo <= contentFrom) {
+      continue;
+    }
+
+    ranges.push({ from: syntaxRange.from, to: contentFrom });
+    ranges.push({ from: contentTo, to: syntaxRange.to });
   }
 }
 

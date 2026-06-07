@@ -1911,6 +1911,39 @@ describe("findInactiveMarkdownSyntaxMarkers", () => {
     ]);
   });
 
+  it("marks autolink angle brackets", () => {
+    const uri = "Visit <https://example.com/a>";
+    const uriOpen = uri.indexOf("<");
+    const uriClose = uri.indexOf(">");
+
+    expect(findInactiveMarkdownSyntaxMarkers(uri, false)).toEqual([
+      { from: uriOpen, to: uriOpen + 1 },
+      { from: uriClose, to: uriClose + 1 }
+    ]);
+
+    const email = "Mail <user@example.com>";
+    const emailOpen = email.indexOf("<");
+    const emailClose = email.indexOf(">");
+
+    expect(findInactiveMarkdownSyntaxMarkers(email, false)).toEqual([
+      { from: emailOpen, to: emailOpen + 1 },
+      { from: emailClose, to: emailClose + 1 }
+    ]);
+  });
+
+  it("does not mark autolinks inside code spans or invalid angle text", () => {
+    const line = "Code `<https://example.com>` and <mailto:user@example.com>";
+    const open = line.lastIndexOf("<");
+    const close = line.lastIndexOf(">");
+
+    expect(findInactiveMarkdownSyntaxMarkers(line, false)).toEqual([
+      { from: open, to: open + 1 },
+      { from: close, to: close + 1 }
+    ]);
+
+    expect(findInactiveMarkdownSyntaxMarkers("Text <not a link> and <span data-x=\"a\">", false)).toEqual([]);
+  });
+
   it("does not mark shortcut-reference-looking labels without table context", () => {
     expect(findInactiveMarkdownSyntaxMarkers("See [Guide|Docs]", false)).toEqual([]);
   });
