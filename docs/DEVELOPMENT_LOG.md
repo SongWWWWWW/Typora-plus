@@ -3580,7 +3580,37 @@ Review:
 
 Known limitations:
 
-- Global command-based task toggling from arbitrary cursor positions remains future work.
+- Cursor-line task toggling remained future work until the later editor-local `Mod-Enter` stage.
+
+## 2026-06-07 - P2 Cursor Task Line Toggle
+
+Completed:
+
+- Added an editor-local `Mod-Enter` key binding that toggles the task marker on the current cursor line.
+- Added a reusable `findMarkdownTaskListMarkerRange()` helper for source-backed task behavior independent of inactive-line rendering.
+- Added `toggleMarkdownTaskListLineAtSelection()` so the task-line edit path is testable without React or Workbench.
+- Preserved the existing behavior that non-task lines do not consume the shortcut.
+- Added focused JSDOM coverage for toggling unchecked and checked task lines from the cursor and ignoring ordinary paragraph brackets.
+
+Quality gate:
+
+- `npx vitest run packages/editor/src/livePreview.test.ts`: passed, 177 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 407 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Browser smoke check: not run because this stage changes editor-local keymap behavior covered by JSDOM interaction tests and full build verification.
+
+Review:
+
+- Cursor task toggling remains isolated in `packages/editor`; no Workbench command, platform keybinding, Electron, storage, or filesystem dependency was added.
+- `Mod-Enter` is registered inside the editor keymap, preserving the platform keybinding service for application-level commands.
+- The edit path consumes the same parsed task marker model as inactive checkboxes, keeping Markdown source as the single source of truth.
+- No new dependency, configuration value, storage path, visual token, extra documentation file, or hard-coded platform assumption was introduced.
+
+Known limitations:
+
+- Multi-cursor batch task toggling remains future work.
 
 ## 2026-06-07 - P2 Table Autolink Pipe Mapping
 
