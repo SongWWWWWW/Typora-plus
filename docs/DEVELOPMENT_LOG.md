@@ -3158,3 +3158,33 @@ Known limitations:
 
 - Shortcut reference links and broader nested inline edge cases still rely on the planned parser-backed table mapping pass.
 - Parser-backed math position mapping remains planned.
+
+## 2026-06-07 - P2 Math Source Range Refinement
+
+Completed:
+
+- Trimmed display math source ranges so clicking an inactive math preview selects the actual TeX content instead of leading or trailing blank padding.
+- Kept whitespace-only display math blocks editable by placing the insertion point on the first content line.
+- Preserved existing closed, multiline, empty, and unclosed math block source behavior.
+- Added focused tests for padded and whitespace-only display math source ranges.
+
+Quality gate:
+
+- `npm run typecheck`: passed
+- `npx vitest run packages/editor/src/livePreview.test.ts`: passed, 100 tests
+- `npm run verify`: passed, 330 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Browser smoke check: not run because this stage changes pure math source mapping and is covered by unit and full build verification.
+
+Review:
+
+- Math source mapping remains isolated in `packages/editor`; no Workbench, platform, Electron, DOM, or filesystem dependency was added.
+- The range helper reuses existing whitespace index utilities instead of adding a parallel hard-coded column calculation path.
+- The Markdown text model remains the source of truth; preview clicks still dispatch only CodeMirror selection changes.
+- No new dependency, configuration value, storage path, visual token, extra documentation file, or hard-coded platform assumption was introduced.
+
+Known limitations:
+
+- Display math detection still targets fenced `$$` blocks; broader inline/display math edge cases remain planned for parser-backed mapping.
+- Parser-backed table mapping for shortcut references and nested inline edge cases remains planned.
