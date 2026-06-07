@@ -1541,6 +1541,7 @@ const markdownInlineHtmlDelimitedSyntaxes = [
   { close: "?>", open: "<?" }
 ] as const;
 const markdownStrongEmphasisDelimiters = ["**", "__"] as const;
+const markdownEmphasisDelimiters = ["*", "_"] as const;
 
 function readMarkdownCodeSpanRanges(text: string): readonly MarkdownCodeSpanRange[] {
   const ranges: MarkdownCodeSpanRange[] = [];
@@ -1641,6 +1642,127 @@ function findClosingMarkdownStrongEmphasisDelimiter(
   }
 
   return undefined;
+}
+
+function readMarkdownEmphasisSyntaxRanges(
+  text: string,
+  ignoredRanges: readonly MarkdownSyntaxMarkerRange[]
+): readonly MarkdownSyntaxMarkerRange[] {
+  const ranges: MarkdownSyntaxMarkerRange[] = [];
+  let cursor = 0;
+
+  while (cursor < text.length) {
+    const open = findNextMarkdownEmphasisDelimiter(text, cursor, ignoredRanges);
+
+    if (!open) {
+      break;
+    }
+
+    if (!canOpenMarkdownEmphasis(text, open.from, open.marker)) {
+      cursor = open.to;
+      continue;
+    }
+
+    const close = findClosingMarkdownEmphasisDelimiter(text, open.to, open.marker, ignoredRanges);
+
+    if (!close) {
+      cursor = open.to;
+      continue;
+    }
+
+    if (open.to < close.from) {
+      ranges.push({ from: open.from, to: close.to });
+    }
+
+    cursor = close.to;
+  }
+
+  return ranges;
+}
+
+function findNextMarkdownEmphasisDelimiter(
+  text: string,
+  from: number,
+  ignoredRanges: readonly MarkdownSyntaxMarkerRange[]
+): { readonly from: number; readonly marker: typeof markdownEmphasisDelimiters[number]; readonly to: number } | undefined {
+  for (let index = from; index < text.length; index += 1) {
+    if (isEscaped(text, index) || isIndexInsideMarkdownRange(index, ignoredRanges)) {
+      continue;
+    }
+
+    const marker = markdownEmphasisDelimiters.find((delimiter) => text[index] === delimiter);
+
+    if (marker && isSingleMarkdownEmphasisDelimiter(text, index, marker)) {
+      return { from: index, marker, to: index + marker.length };
+    }
+  }
+
+  return undefined;
+}
+
+function findClosingMarkdownEmphasisDelimiter(
+  text: string,
+  from: number,
+  marker: typeof markdownEmphasisDelimiters[number],
+  ignoredRanges: readonly MarkdownSyntaxMarkerRange[]
+): { readonly from: number; readonly to: number } | undefined {
+  for (let index = from; index <= text.length - marker.length; index += 1) {
+    const range = { from: index, to: index + marker.length };
+
+    if (
+      text[index] === marker &&
+      isSingleMarkdownEmphasisDelimiter(text, index, marker) &&
+      canCloseMarkdownEmphasis(text, index, marker) &&
+      !isEscaped(text, index) &&
+      !isMarkdownRangeOverlappingRanges(range, ignoredRanges)
+    ) {
+      return range;
+    }
+  }
+
+  return undefined;
+}
+
+function isSingleMarkdownEmphasisDelimiter(
+  text: string,
+  index: number,
+  marker: typeof markdownEmphasisDelimiters[number]
+): boolean {
+  return text[index - 1] !== marker && text[index + 1] !== marker;
+}
+
+function canOpenMarkdownEmphasis(
+  text: string,
+  index: number,
+  marker: typeof markdownEmphasisDelimiters[number]
+): boolean {
+  const previous = text[index - 1];
+  const next = text[index + 1];
+
+  if (!next || /\s/.test(next)) {
+    return false;
+  }
+
+  return marker !== "_" || !isMarkdownWordCharacter(previous) || !isMarkdownWordCharacter(next);
+}
+
+function canCloseMarkdownEmphasis(
+  text: string,
+  index: number,
+  marker: typeof markdownEmphasisDelimiters[number]
+): boolean {
+  const previous = text[index - 1];
+  const next = text[index + 1];
+
+  if (!previous || /\s/.test(previous)) {
+    return false;
+  }
+
+  return marker !== "_" || !isMarkdownWordCharacter(previous) || !isMarkdownWordCharacter(next);
+}
+
+function isMarkdownWordCharacter(character: string | undefined): boolean {
+  return Boolean(character && /[A-Za-z0-9]/.test(character));
 }
 
 function readMarkdownAutolinkSyntaxRanges(
@@ -2337,9 +2459,12 @@ function readMarkdownTableCellSpans(text: string): readonly MarkdownTableCellSou
   }
 
   const codeSpanRanges = readMarkdownCodeSpanRanges(text);
+  const strongEmphasisRanges = readMarkdownStrongEmphasisSyntaxRanges(text, codeSpanRanges);
+  const emphasisIgnoredRanges = [...codeSpanRanges, ...strongEmphasisRanges];
   const protectedRanges = [
     ...codeSpanRanges,
-    ...readMarkdownStrongEmphasisSyntaxRanges(text, codeSpanRanges),
+    ...strongEmphasisRanges,
+    ...readMarkdownEmphasisSyntaxRanges(text, emphasisIgnoredRanges),
     ...readMarkdownInlineMathRanges(text, codeSpanRanges),
     ...readMarkdownInlineLinkSyntaxRanges(text, codeSpanRanges),
     ...readMarkdownAutolinkSyntaxRanges(text, codeSpanRanges),
