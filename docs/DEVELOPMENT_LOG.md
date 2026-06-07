@@ -3344,6 +3344,35 @@ Known limitations:
 - Parser-backed math mapping remains planned for deeper inline edge cases.
 - Parser-backed table mapping remains planned for deeper nested inline syntax and full document-aware reference resolution.
 
+## 2026-06-07 - P2 Table Autolink Pipe Mapping
+
+Completed:
+
+- Made the shared Markdown table scanner preserve `|` inside URI and email autolinks such as `<https://example.com/a|b>` and `<user|name@example.com>`.
+- Validated angle-bracket content before protecting it, so invalid text such as `<A|B>` does not change table detection.
+- Preserved autolink cells through table preview, source-cell navigation, column insertion, and column deletion.
+- Added focused tests for autolink preview parsing, autolink-only non-table lines, invalid angle text, source ranges, and column edits.
+
+Quality gate:
+
+- `npm run typecheck`: passed
+- `npx vitest run packages/editor/src/livePreview.test.ts`: passed, 126 tests
+- `npm run verify`: passed, 356 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Browser smoke check: not run because this stage changes pure table source mapping and is covered by unit and full build verification.
+
+Review:
+
+- Table autolink range detection remains isolated in `packages/editor`; no Workbench, platform, Electron, DOM, or filesystem dependency was added.
+- Autolink validation avoids a blanket hard-coded rule for every angle-bracket span.
+- Preview rendering, source navigation, and pure table transforms still share one scanner path.
+- No new dependency, configuration value, storage path, visual token, extra documentation file, or hard-coded platform assumption was introduced.
+
+Known limitations:
+
+- Parser-backed table mapping remains planned for deeper nested inline syntax and full document-aware reference resolution.
+
 ## 2026-06-07 - P2 Inline Math Expression Range Model
 
 Completed:
