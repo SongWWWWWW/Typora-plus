@@ -3520,7 +3520,38 @@ Review:
 
 Known limitations:
 
-- Task list states are still source-backed soft markers; interactive checkbox widgets remain future work.
+- Task list states remained source-backed soft markers until the later checkbox preview stage.
+
+## 2026-06-07 - P2 Task List Checkbox Preview
+
+Completed:
+
+- Rendered inactive task-list state markers as compact source-backed checkbox widgets.
+- Added click-to-toggle behavior that replaces only the parsed `[ ]`, `[x]`, or `[X]` marker source with `[x]` or `[ ]`.
+- Kept active lines as editable Markdown source so the writer can still edit the raw task marker directly.
+- Added a public task-marker range reader with checked state for focused testing and future task-list behavior.
+- Added JSDOM coverage proving an inactive task checkbox renders and toggles the backing Markdown text.
+
+Quality gate:
+
+- `npx vitest run packages/editor/src/livePreview.test.ts`: passed, 173 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 403 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Browser smoke check: reloaded the local app, verified the editor mounted, no console errors were reported, and the current document contained no task markers to render.
+
+Review:
+
+- Task checkbox rendering remains isolated in `packages/editor`; no Workbench, platform, Electron, storage, or filesystem dependency was added.
+- The widget consumes scanner-owned task marker ranges and dispatches a bounded text edit, keeping Markdown source as the single source of truth.
+- Marker hiding filters out task ranges when the checkbox widget is active, preventing overlapping soft markers and replacement widgets.
+- The generic syntax marker normalizer now strips scanner-specific metadata from public marker ranges, avoiding accidental state leakage.
+- No new dependency, configuration value, storage path, extra documentation file, or hard-coded platform assumption was introduced.
+
+Known limitations:
+
+- Task checkbox interaction is currently mouse/click oriented; richer keyboard task toggling remains future work.
 
 ## 2026-06-07 - P2 Table Autolink Pipe Mapping
 

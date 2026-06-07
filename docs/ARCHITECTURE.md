@@ -101,6 +101,7 @@ Current features:
 - unified live preview block-state analysis with normalized visible editor ranges
 - heading/quote/list/fence line styling
 - inactive Markdown marker soft hiding for heading prefixes and closing markers, list and task-list state markers, quotes, fences, inline code, inline/reference links and images, autolinks, emphasis, and strikethrough, with inline-code-safe marker scanning
+- source-backed inactive task list checkbox widgets that replace only parsed task markers and dispatch bounded text edits back to the Markdown source
 - shared core inline syntax range scanning for marker hiding and table source mapping, while table-only shortcut-reference protection remains an explicit table scanner option
 - code fence block styling with visible-range-aware fence state tracking, inactive language/copy widgets, and provider-backed previews for matching code-fence languages with sanitized HTML and source-focused click editing
 - provider-backed inline renderer previews for language-qualified inline code spans, using inline-only sanitized HTML and source-focused click editing
