@@ -535,20 +535,26 @@ describe("findMarkdownMathBlockSourceRange", () => {
 describe("findInactiveMarkdownInlineMathRanges", () => {
   it("finds inline math ranges on inactive lines", () => {
     expect(findInactiveMarkdownInlineMathRanges("A $x+y$ note", false)).toEqual([
-      { expression: "x+y", from: 2, to: 7 }
+      { expression: "x+y", expressionFrom: 3, expressionTo: 6, from: 2, to: 7 }
     ]);
   });
 
   it("finds bracket-delimited inline math ranges on inactive lines", () => {
     expect(findInactiveMarkdownInlineMathRanges("A \\(x+y\\) note", false)).toEqual([
-      { expression: "x+y", from: 2, to: 9 }
+      { expression: "x+y", expressionFrom: 4, expressionTo: 7, from: 2, to: 9 }
+    ]);
+  });
+
+  it("trims bracket-delimited inline math source ranges", () => {
+    expect(findInactiveMarkdownInlineMathRanges("A \\(  x+y  \\) note", false)).toEqual([
+      { expression: "x+y", expressionFrom: 6, expressionTo: 9, from: 2, to: 13 }
     ]);
   });
 
   it("keeps repeated inline math source ranges distinct", () => {
     expect(findInactiveMarkdownInlineMathRanges("$x$ and \\(y\\)", false)).toEqual([
-      { expression: "x", from: 0, to: 3 },
-      { expression: "y", from: 8, to: 13 }
+      { expression: "x", expressionFrom: 1, expressionTo: 2, from: 0, to: 3 },
+      { expression: "y", expressionFrom: 10, expressionTo: 11, from: 8, to: 13 }
     ]);
   });
 
@@ -569,7 +575,7 @@ describe("findInactiveMarkdownInlineMathRanges", () => {
 
   it("ignores math-like text inside inline code spans", () => {
     expect(findInactiveMarkdownInlineMathRanges("`$x$` and `\\(y\\)` and \\(z\\)", false)).toEqual([
-      { expression: "z", from: 22, to: 27 }
+      { expression: "z", expressionFrom: 24, expressionTo: 25, from: 22, to: 27 }
     ]);
   });
 });

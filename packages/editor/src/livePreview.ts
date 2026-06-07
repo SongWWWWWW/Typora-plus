@@ -25,6 +25,8 @@ export interface MarkdownSyntaxMarkerRange {
 
 export interface MarkdownInlineMathRange {
   readonly expression: string;
+  readonly expressionFrom: number;
+  readonly expressionTo: number;
   readonly from: number;
   readonly to: number;
 }
@@ -592,9 +594,21 @@ function readMarkdownInlineMathRanges(
       return ranges;
     }
 
-    const expression = text.slice(start.to, end.from).trim();
+    const rawExpression = text.slice(start.to, end.from);
+    const leadingWhitespaceLength = rawExpression.match(/^\s*/)?.[0].length ?? 0;
+    const trailingWhitespaceLength = rawExpression.match(/\s*$/)?.[0].length ?? 0;
+    const expressionFrom = start.to + leadingWhitespaceLength;
+    const expressionTo = Math.max(expressionFrom, end.from - trailingWhitespaceLength);
+    const expression = text.slice(expressionFrom, expressionTo);
+
     if (expression) {
-      ranges.push({ expression, from: start.from, to: end.to });
+      ranges.push({
+        expression,
+        expressionFrom,
+        expressionTo,
+        from: start.from,
+        to: end.to
+      });
     }
 
     cursor = end.to;
@@ -869,8 +883,8 @@ function buildDecorations(
               inlineMath,
               line.from + inlineMath.from,
               line.from + inlineMath.to,
-              line.from + readInlineMathExpressionFrom(line.text, inlineMath),
-              line.from + readInlineMathExpressionTo(line.text, inlineMath)
+              line.from + inlineMath.expressionFrom,
+              line.from + inlineMath.expressionTo
             )
           }),
           from: line.from + inlineMath.from,
@@ -3432,14 +3446,6 @@ class MarkdownInlineMathWidget extends WidgetType {
   override ignoreEvent(event: Event): boolean {
     return isInlineMathSourceNavigationEvent(event);
   }
-}
-
-function readInlineMathExpressionFrom(text: string, range: MarkdownInlineMathRange): number {
-  return text.slice(range.from, range.from + 2) === "\\(" ? range.from + 2 : range.from + 1;
-}
-
-function readInlineMathExpressionTo(text: string, range: MarkdownInlineMathRange): number {
-  return text.slice(range.to - 2, range.to) === "\\)" ? range.to - 2 : range.to - 1;
 }
 
 function focusMarkdownInlineMathSource(view: EditorView, expressionFrom: number, expressionTo: number): void {
