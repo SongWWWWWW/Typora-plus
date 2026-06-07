@@ -1535,6 +1535,10 @@ const markdownAutolinkEmailPattern =
 const markdownInlineHtmlOpeningTagPattern =
   /^<[A-Za-z][A-Za-z0-9-]*(?:\s+[A-Za-z_:][A-Za-z0-9:._-]*(?:\s*=\s*(?:"[^"]*"|'[^']*'|[^\s"'=<>`]+))?)*\s*\/?>$/;
 const markdownInlineHtmlClosingTagPattern = /^<\/[A-Za-z][A-Za-z0-9-]*\s*>$/;
+const markdownInlineHtmlDelimitedSyntaxes = [
+  { close: "-->", open: "<!--" },
+  { close: "]]>", open: "<![CDATA[" }
+] as const;
 
 function readMarkdownCodeSpanRanges(text: string): readonly MarkdownCodeSpanRange[] {
   const ranges: MarkdownCodeSpanRange[] = [];
@@ -1725,6 +1729,71 @@ function findClosingMarkdownInlineHtmlTagAngle(
 
 function isMarkdownInlineHtmlTag(source: string): boolean {
   return markdownInlineHtmlOpeningTagPattern.test(source) || markdownInlineHtmlClosingTagPattern.test(source);
+}
+
+function readMarkdownInlineHtmlDelimitedSyntaxRanges(
+  text: string,
+  ignoredRanges: readonly MarkdownSyntaxMarkerRange[]
+): readonly MarkdownSyntaxMarkerRange[] {
+  const ranges: MarkdownSyntaxMarkerRange[] = [];
+  let cursor = 0;
+
+  while (cursor < text.length) {
+    const open = findNextMarkdownInlineHtmlDelimitedOpen(text, cursor, ignoredRanges);
+
+    if (!open) {
+      break;
+    }
+
+    const close = findClosingMarkdownInlineHtmlDelimitedSyntax(text, open, ignoredRanges);
+
+    if (close === -1) {
+      cursor = open.from + open.marker.open.length;
+      continue;
+    }
+
+    ranges.push({ from: open.from, to: close + open.marker.close.length });
+    cursor = close + open.marker.close.length;
+  }
+
+  return ranges;
+}
+
+function findNextMarkdownInlineHtmlDelimitedOpen(
+  text: string,
+  from: number,
+  ignoredRanges: readonly MarkdownSyntaxMarkerRange[]
+): { readonly from: number; readonly marker: typeof markdownInlineHtmlDelimitedSyntaxes[number] } | undefined {
+  for (let index = from; index < text.length; index += 1) {
+    if (isEscaped(text, index) || isIndexInsideMarkdownRange(index, ignoredRanges)) {
+      continue;
+    }
+
+    const marker = markdownInlineHtmlDelimitedSyntaxes.find((syntax) => text.startsWith(syntax.open, index));
+
+    if (marker) {
+      return { from: index, marker };
+    }
+  }
+
+  return undefined;
+}
+
+function findClosingMarkdownInlineHtmlDelimitedSyntax(
+  text: string,
+  open: { readonly from: number; readonly marker: typeof markdownInlineHtmlDelimitedSyntaxes[number] },
+  ignoredRanges: readonly MarkdownSyntaxMarkerRange[]
+): number {
+  for (let index = open.from + open.marker.open.length; index <= text.length - open.marker.close.length; index += 1) {
+    if (
+      text.startsWith(open.marker.close, index) &&
+      !isMarkdownRangeOverlappingRanges({ from: index, to: index + open.marker.close.length }, ignoredRanges)
+    ) {
+      return index;
+    }
+  }
+
+  return -1;
 }
 
 function readMarkdownInlineLinkSyntaxRanges(
@@ -1996,6 +2065,13 @@ function rangesOverlap(
   return first.from < second.to && second.from < first.to;
 }
 
+function isMarkdownRangeOverlappingRanges(
+  range: Pick<MarkdownSyntaxMarkerRange, "from" | "to">,
+  ranges: readonly Pick<MarkdownSyntaxMarkerRange, "from" | "to">[]
+): boolean {
+  return ranges.some((candidate) => rangesOverlap(range, candidate));
+}
+
 interface MarkdownTableReadResult {
   readonly nextLine: number;
   readonly states: readonly MarkdownTableReadLineResult[];
@@ -2127,7 +2203,8 @@ function readMarkdownTableCellSpans(text: string): readonly MarkdownTableCellSou
     ...readMarkdownInlineMathRanges(text, codeSpanRanges),
     ...readMarkdownInlineLinkSyntaxRanges(text, codeSpanRanges),
     ...readMarkdownAutolinkSyntaxRanges(text, codeSpanRanges),
-    ...readMarkdownInlineHtmlTagSyntaxRanges(text, codeSpanRanges)
+    ...readMarkdownInlineHtmlTagSyntaxRanges(text, codeSpanRanges),
+    ...readMarkdownInlineHtmlDelimitedSyntaxRanges(text, codeSpanRanges)
   ];
   const cells: MarkdownTableCellSourceSpan[] = [];
   let current = "";

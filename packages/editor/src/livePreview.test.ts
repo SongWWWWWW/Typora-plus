@@ -920,6 +920,22 @@ describe("analyzeMarkdownTableLines", () => {
     ]);
   });
 
+  it("keeps HTML comment and CDATA pipes inside table cells", () => {
+    const tableBlock = analyzeMarkdownLineBlocks([
+      "| Markup | Status |",
+      "| --- | --- |",
+      "| <!-- a|b --> | Ready |",
+      "| <![CDATA[x|y]]> | Hold |"
+    ]).find((state) => state.tableBlock)?.tableBlock;
+
+    expect(tableBlock).toBeDefined();
+    expect(tableBlock?.headerCells).toEqual(["Markup", "Status"]);
+    expect(tableBlock?.bodyRows).toEqual([
+      ["<!-- a|b -->", "Ready"],
+      ["<![CDATA[x|y]]>", "Hold"]
+    ]);
+  });
+
   it("supports tables without outer pipes", () => {
     expect(analyzeMarkdownTableLines([
       "Name | Value",
@@ -997,6 +1013,13 @@ describe("analyzeMarkdownTableLines", () => {
     ])).toEqual([]);
   });
 
+  it("does not treat HTML-comment-or-CDATA-only pipes as table separators", () => {
+    expect(analyzeMarkdownTableLines([
+      "Name <!-- a|b --> Value",
+      "--- <![CDATA[x|y]]> ---"
+    ])).toEqual([]);
+  });
+
   it("does not protect invalid angle-bracket text as autolinks", () => {
     expect(analyzeMarkdownTableLines([
       "Name <A|B> | Value",
@@ -1007,6 +1030,17 @@ describe("analyzeMarkdownTableLines", () => {
   it("does not protect invalid closing tags as inline HTML", () => {
     expect(analyzeMarkdownTableLines([
       "Name </span data-value=\"a|b\"> | Value",
+      "--- | ---"
+    ])).toEqual([]);
+  });
+
+  it("does not protect unclosed HTML comments or CDATA sections", () => {
+    expect(analyzeMarkdownTableLines([
+      "Name <!-- a|b | Value",
+      "--- | ---"
+    ])).toEqual([]);
+    expect(analyzeMarkdownTableLines([
+      "Name <![CDATA[x|y | Value",
       "--- | ---"
     ])).toEqual([]);
   });
@@ -1099,6 +1133,18 @@ describe("Markdown table editing helpers", () => {
 
     expect(range).toEqual({ from: 2, to: 37 });
     expect(range ? line.slice(range.from, range.to) : "").toBe("<span data-value=\"a|b\">Alpha</span>");
+  });
+
+  it("keeps HTML comment and CDATA pipes inside source cell ranges", () => {
+    const commentLine = "| <!-- a|b --> | Status |";
+    const cdataLine = "| <![CDATA[a|b]]> | Status |";
+    const commentRange = findMarkdownTableCellSourceRange(commentLine, 0);
+    const cdataRange = findMarkdownTableCellSourceRange(cdataLine, 0);
+
+    expect(commentRange).toEqual({ from: 2, to: 14 });
+    expect(commentRange ? commentLine.slice(commentRange.from, commentRange.to) : "").toBe("<!-- a|b -->");
+    expect(cdataRange).toEqual({ from: 2, to: 17 });
+    expect(cdataRange ? cdataLine.slice(cdataRange.from, cdataRange.to) : "").toBe("<![CDATA[a|b]]>");
   });
 
   it("does not find a table cell range for escaped-only separators", () => {
@@ -1340,6 +1386,26 @@ describe("Markdown table editing helpers", () => {
       "| Markup | Status |",
       "| :--- | :---: |",
       "| <span data-value=\"a|b\">Alpha</span> | <input value='x|y' /> |"
+    ]);
+  });
+
+  it("preserves HTML comment and CDATA pipe cell source while editing columns", () => {
+    const tableBlock = analyzeMarkdownLineBlocks([
+      "| Markup | Count | Status |",
+      "| :--- | ---: | :---: |",
+      "| <!-- a|b --> | 1 | <![CDATA[x|y]]> |"
+    ]).find((state) => state.tableBlock)?.tableBlock;
+
+    expect(tableBlock).toBeDefined();
+    expect(createMarkdownTableWithInsertedColumn(tableBlock!, { columnIndex: 1 })).toEqual([
+      "| Markup |  | Count | Status |",
+      "| :--- | --- | ---: | :---: |",
+      "| <!-- a|b --> |  | 1 | <![CDATA[x|y]]> |"
+    ]);
+    expect(createMarkdownTableWithDeletedColumn(tableBlock!, { columnIndex: 1 })).toEqual([
+      "| Markup | Status |",
+      "| :--- | :---: |",
+      "| <!-- a|b --> | <![CDATA[x|y]]> |"
     ]);
   });
 
