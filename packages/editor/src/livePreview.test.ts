@@ -423,6 +423,24 @@ describe("findMarkdownMathBlockSourceRange", () => {
     ])).toEqual({ fromColumn: 0, fromLine: 2, toColumn: 13, toLine: 4 });
   });
 
+  it("trims display math source padding for click ranges", () => {
+    expect(findMarkdownMathBlockSourceRange([
+      "$$",
+      "",
+      "  E = mc^2  ",
+      "",
+      "$$"
+    ])).toEqual({ fromColumn: 2, fromLine: 3, toColumn: 10, toLine: 3 });
+  });
+
+  it("places whitespace-only display math insertion at the first content line", () => {
+    expect(findMarkdownMathBlockSourceRange([
+      "$$",
+      "   ",
+      "$$"
+    ])).toEqual({ fromColumn: 0, fromLine: 2, toColumn: 0, toLine: 2 });
+  });
+
   it("places empty display math insertion before the closing fence", () => {
     expect(findMarkdownMathBlockSourceRange([
       "$$",

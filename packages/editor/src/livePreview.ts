@@ -652,14 +652,7 @@ export function findMarkdownMathBlockSourceRange(
   const contentEndIndexExclusive = closeLineIndex >= 0 ? closeLineIndex : lines.length;
 
   if (contentStartIndex < contentEndIndexExclusive) {
-    const contentEndIndex = contentEndIndexExclusive - 1;
-
-    return {
-      fromColumn: 0,
-      fromLine: contentStartIndex + 1,
-      toColumn: lines[contentEndIndex]?.length ?? 0,
-      toLine: contentEndIndex + 1
-    };
+    return findMarkdownMathContentSourceRange(lines, contentStartIndex, contentEndIndexExclusive);
   }
 
   if (closeLineIndex >= 0) {
@@ -676,6 +669,49 @@ export function findMarkdownMathBlockSourceRange(
     fromLine: 1,
     toColumn: openLine.length,
     toLine: 1
+  };
+}
+
+function findMarkdownMathContentSourceRange(
+  lines: readonly string[],
+  contentStartIndex: number,
+  contentEndIndexExclusive: number
+): MarkdownMathBlockSourceRange {
+  let firstContentIndex = contentStartIndex;
+
+  while (
+    firstContentIndex < contentEndIndexExclusive &&
+    (lines[firstContentIndex]?.trim() ?? "") === ""
+  ) {
+    firstContentIndex += 1;
+  }
+
+  if (firstContentIndex >= contentEndIndexExclusive) {
+    return {
+      fromColumn: 0,
+      fromLine: contentStartIndex + 1,
+      toColumn: 0,
+      toLine: contentStartIndex + 1
+    };
+  }
+
+  let lastContentIndex = contentEndIndexExclusive - 1;
+
+  while (
+    lastContentIndex > firstContentIndex &&
+    (lines[lastContentIndex]?.trim() ?? "") === ""
+  ) {
+    lastContentIndex -= 1;
+  }
+
+  const firstLine = lines[firstContentIndex] ?? "";
+  const lastLine = lines[lastContentIndex] ?? "";
+
+  return {
+    fromColumn: readFirstNonWhitespaceIndex(firstLine),
+    fromLine: firstContentIndex + 1,
+    toColumn: readLastNonWhitespaceIndex(lastLine) + 1,
+    toLine: lastContentIndex + 1
   };
 }
 
