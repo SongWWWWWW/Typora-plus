@@ -3968,4 +3968,34 @@ Review:
 
 Known limitations:
 
-- The command toggles existing task markers; converting arbitrary selected list items into tasks remains future editor work.
+- Converting arbitrary selected list items into tasks remained future editor work until the later list-item task conversion stage.
+
+## 2026-06-07 - P2 List Item Task Conversion
+
+Completed:
+
+- Added a reusable Markdown list item content-start scanner for editor source operations.
+- Reused that scanner in task marker detection, marker hiding, and editor-local `Mod-Enter` task behavior.
+- Updated `Mod-Enter` so ordinary bullet or ordered-list items become unchecked task items by inserting `[ ] ` at the parsed content start.
+- Preserved existing task marker toggling for checked and unchecked task lines.
+- Added focused tests for list content-start scanning, single-list-item conversion, and mixed range selections containing ordinary list items, existing task items, and non-list text.
+
+Quality gate:
+
+- `npx vitest run packages/editor/src/livePreview.test.ts`: passed, 184 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 414 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Browser smoke check: passed at `http://127.0.0.1:5173`; editor mounted, no console errors, and no horizontal overflow.
+
+Review:
+
+- List item task conversion remains isolated in `packages/editor`; no Workbench command, platform keybinding, Electron, storage, or filesystem dependency was added.
+- The command consumes scanner-owned list content positions instead of duplicating UI-side list prefix parsing.
+- Existing task toggling and new task insertion both dispatch bounded CodeMirror text edits, keeping Markdown source as the single source of truth.
+- No new dependency, configuration value, storage path, visual token, extra documentation file, or hard-coded platform assumption was introduced.
+
+Known limitations:
+
+- The command does not remove task markers to return a task item to an ordinary list item; that reversible formatting behavior remains future editor work.
