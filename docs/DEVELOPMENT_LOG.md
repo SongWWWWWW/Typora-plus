@@ -3186,5 +3186,36 @@ Review:
 
 Known limitations:
 
-- Display math detection still targets fenced `$$` blocks; broader inline/display math edge cases remain planned for parser-backed mapping.
+- Display math detection now covers fenced `$$` blocks and the follow-up single-line `$$ ... $$` stage; broader delimiter and inline edge cases remain planned for parser-backed mapping.
+- Parser-backed table mapping for shortcut references and nested inline edge cases remains planned.
+
+## 2026-06-07 - P2 Single-Line Display Math Preview
+
+Completed:
+
+- Added single-line display math detection for lines such as `$$ E = mc^2 $$`.
+- Routed single-line display math through the existing math block preview widget instead of adding a parallel UI path.
+- Added source-range mapping for single-line display math so preview clicks select the TeX between the delimiters.
+- Kept whitespace-only single-line display math editable by placing the insertion point immediately after the opening delimiter.
+- Added focused tests for single-line math block analysis and source range behavior.
+
+Quality gate:
+
+- `npm run typecheck`: passed
+- `npx vitest run packages/editor/src/livePreview.test.ts`: passed, 103 tests
+- `npm run verify`: passed, 333 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Browser smoke check: not run because this stage changes pure math block analysis and is covered by unit and full build verification.
+
+Review:
+
+- Math detection remains isolated in `packages/editor`; no Workbench, platform, Electron, DOM, or filesystem dependency was added.
+- Single-line and multiline display math now share the same block state, KaTeX render path, source navigation, and copy control.
+- The helper derives source columns from delimiters and whitespace rather than hard-coded offsets outside the parser boundary.
+- No new dependency, configuration value, storage path, visual token, extra documentation file, or hard-coded platform assumption was introduced.
+
+Known limitations:
+
+- Parser-backed math mapping is still planned for broader delimiter variants and deeper inline edge cases.
 - Parser-backed table mapping for shortcut references and nested inline edge cases remains planned.
