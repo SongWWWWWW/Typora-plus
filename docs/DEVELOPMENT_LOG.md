@@ -3462,6 +3462,36 @@ Known limitations:
 
 - Parser-backed table mapping remains planned for deeper nested inline syntax and full document-aware reference resolution.
 
+## 2026-06-07 - P2 Table Strong Emphasis Pipe Mapping
+
+Completed:
+
+- Made the shared Markdown table scanner preserve `|` inside strong emphasis spans such as `**left | right**` and `__alpha | beta__`.
+- Added a delimiter-driven strong-emphasis range reader for table protected ranges instead of duplicating individual `**` and `__` branches.
+- Kept unclosed strong emphasis unprotected, so incomplete syntax does not hide real table separators while editing.
+- Preserved strong-emphasis cells through table preview, source-cell navigation, column insertion, and column deletion.
+- Added focused tests for preview parsing, strong-emphasis-only non-table lines, unclosed syntax, source ranges, and column edits.
+
+Quality gate:
+
+- `npm run typecheck`: passed
+- `npx vitest run packages/editor/src/livePreview.test.ts`: passed, 147 tests
+- `npm run verify`: passed, 377 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Browser smoke check: not run because this stage changes pure table source mapping and is covered by unit and full build verification.
+
+Review:
+
+- Strong-emphasis range detection remains isolated in `packages/editor`; no Workbench, platform, Electron, DOM, or filesystem dependency was added.
+- The scanner reuses a delimiter definition list and skips code spans, avoiding scattered syntax-specific table branches.
+- Preview rendering, source navigation, and pure table transforms still share one protected-range scanner path.
+- No new dependency, configuration value, storage path, visual token, extra documentation file, or hard-coded platform assumption was introduced.
+
+Known limitations:
+
+- Parser-backed table mapping remains planned for deeper nested inline syntax and full document-aware reference resolution.
+
 ## 2026-06-07 - P2 Inline Math Expression Range Model
 
 Completed:
