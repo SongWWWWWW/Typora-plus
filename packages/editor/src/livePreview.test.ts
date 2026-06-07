@@ -17,6 +17,7 @@ import {
   createMarkdownTableWithInsertedColumn,
   createMarkdownTableWithUpdatedColumnAlignment,
   findMarkdownCodeFenceSourceRange,
+  findMarkdownTaskListMarkerRange,
   findMarkdownTableCellSourceRange,
   findMarkdownMathBlockSourceRange,
   findInactiveMarkdownInlineMathRanges,
@@ -30,7 +31,8 @@ import {
   sanitizeMarkdownRendererHtml,
   shouldReplaceInactiveCodeFenceLine,
   shouldIgnorePreviewEventTarget,
-  shouldReplaceInactiveTableLine
+  shouldReplaceInactiveTableLine,
+  toggleMarkdownTaskListLineAtSelection
 } from "./index";
 
 describe("classifyMarkdownLine", () => {
@@ -2010,6 +2012,12 @@ describe("findInactiveMarkdownSyntaxMarkers", () => {
 });
 
 describe("findInactiveMarkdownTaskListMarkerRanges", () => {
+  it("finds task markers independently from inactive-line rendering", () => {
+    expect(findMarkdownTaskListMarkerRange("  - [ ] Todo")).toEqual({ checked: false, from: 4, to: 7 });
+    expect(findMarkdownTaskListMarkerRange("1. [X] Done")).toEqual({ checked: true, from: 3, to: 6 });
+    expect(findMarkdownTaskListMarkerRange("Text [ ] Todo")).toBeUndefined();
+  });
+
   it("keeps task markers editable on active lines", () => {
     expect(findInactiveMarkdownTaskListMarkerRanges("- [ ] Todo", true)).toEqual([]);
   });
@@ -2030,6 +2038,52 @@ describe("findInactiveMarkdownTaskListMarkerRanges", () => {
     expect(findInactiveMarkdownTaskListMarkerRanges("- [] Todo", false)).toEqual([]);
     expect(findInactiveMarkdownTaskListMarkerRanges("- [x]Done", false)).toEqual([]);
     expect(findInactiveMarkdownTaskListMarkerRanges("Text [ ] Todo", false)).toEqual([]);
+  });
+});
+
+describe("toggleMarkdownTaskListLineAtSelection", () => {
+  it("toggles the task marker on the selected line", () => {
+    withDom(() => {
+      const parent = document.createElement("div");
+      document.body.append(parent);
+      const view = new EditorView({
+        parent,
+        state: EditorState.create({
+          doc: "Intro\n- [ ] Todo\nDone",
+          selection: { anchor: "Intro\n- [ ] To".length }
+        })
+      });
+
+      try {
+        expect(toggleMarkdownTaskListLineAtSelection(view)).toBe(true);
+        expect(view.state.doc.toString()).toBe("Intro\n- [x] Todo\nDone");
+        expect(toggleMarkdownTaskListLineAtSelection(view)).toBe(true);
+        expect(view.state.doc.toString()).toBe("Intro\n- [ ] Todo\nDone");
+      } finally {
+        view.destroy();
+      }
+    });
+  });
+
+  it("ignores selections outside task list lines", () => {
+    withDom(() => {
+      const parent = document.createElement("div");
+      document.body.append(parent);
+      const view = new EditorView({
+        parent,
+        state: EditorState.create({
+          doc: "Intro\nText [ ] Todo",
+          selection: { anchor: "Intro\nText".length }
+        })
+      });
+
+      try {
+        expect(toggleMarkdownTaskListLineAtSelection(view)).toBe(false);
+        expect(view.state.doc.toString()).toBe("Intro\nText [ ] Todo");
+      } finally {
+        view.destroy();
+      }
+    });
   });
 });
 

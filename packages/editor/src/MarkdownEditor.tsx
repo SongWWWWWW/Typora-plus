@@ -15,6 +15,7 @@ import {
 } from "@codemirror/view";
 import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
 import {
+  findMarkdownTaskListMarkerRange,
   livePreviewExtension,
   type MarkdownCodeFenceRenderer,
   type MarkdownEditorConfiguration,
@@ -167,8 +168,33 @@ function baseEditorExtensions(): Extension[] {
     markdown(),
     placeholder(editorPlaceholder),
     EditorView.lineWrapping,
-    keymap.of([...defaultKeymap, ...historyKeymap, ...searchKeymap])
+    keymap.of([
+      { key: "Mod-Enter", run: toggleMarkdownTaskListLineAtSelection },
+      ...defaultKeymap,
+      ...historyKeymap,
+      ...searchKeymap
+    ])
   ];
+}
+
+export function toggleMarkdownTaskListLineAtSelection(view: EditorView): boolean {
+  const selection = view.state.selection.main;
+  const line = view.state.doc.lineAt(selection.head);
+  const taskMarker = findMarkdownTaskListMarkerRange(line.text);
+
+  if (!taskMarker) {
+    return false;
+  }
+
+  view.dispatch({
+    changes: {
+      from: line.from + taskMarker.from,
+      to: line.from + taskMarker.to,
+      insert: taskMarker.checked ? "[ ]" : "[x]"
+    }
+  });
+
+  return true;
 }
 
 function imagePasteExtension(

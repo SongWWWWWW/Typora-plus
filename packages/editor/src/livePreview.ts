@@ -581,15 +581,19 @@ export function findInactiveMarkdownTaskListMarkerRanges(
     return [];
   }
 
+  const marker = findMarkdownTaskListMarkerRange(text);
+
+  return marker ? [marker] : [];
+}
+
+export function findMarkdownTaskListMarkerRange(text: string): MarkdownTaskListMarkerRange | undefined {
   const list = /^(\s*)([-*+]|\d+[.)])(\s+)/.exec(text);
 
   if (list?.[1] === undefined || !list[2] || !list[3]) {
-    return [];
+    return undefined;
   }
 
-  const marker = readTaskListMarkerRange(text, list[1].length + list[2].length + list[3].length);
-
-  return marker ? [marker] : [];
+  return readTaskListMarkerRange(text, list[1].length + list[2].length + list[3].length);
 }
 
 export function findInactiveMarkdownInlineMathRanges(text: string, active: boolean): readonly MarkdownInlineMathRange[] {
