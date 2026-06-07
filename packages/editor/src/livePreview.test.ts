@@ -1847,11 +1847,30 @@ describe("findInactiveMarkdownSyntaxMarkers", () => {
     ]);
   });
 
+  it("marks paired emphasis delimiters", () => {
+    expect(findInactiveMarkdownSyntaxMarkers("A *it* word", false)).toEqual([
+      { from: 2, to: 3 },
+      { from: 5, to: 6 }
+    ]);
+    expect(findInactiveMarkdownSyntaxMarkers("A _it_ word", false)).toEqual([
+      { from: 2, to: 3 },
+      { from: 5, to: 6 }
+    ]);
+  });
+
   it("marks paired strikethrough delimiters", () => {
     expect(findInactiveMarkdownSyntaxMarkers("A ~~done~~ word", false)).toEqual([
       { from: 2, to: 4 },
       { from: 8, to: 10 }
     ]);
+  });
+
+  it("does not mark inline code or intraword emphasis delimiters", () => {
+    expect(findInactiveMarkdownSyntaxMarkers("Code `**bold**` and *ok*", false)).toEqual([
+      { from: 20, to: 21 },
+      { from: 23, to: 24 }
+    ]);
+    expect(findInactiveMarkdownSyntaxMarkers("Name a_b_c", false)).toEqual([]);
   });
 
   it("marks link and image punctuation", () => {

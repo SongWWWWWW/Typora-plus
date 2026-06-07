@@ -536,10 +536,19 @@ export function findInactiveMarkdownSyntaxMarkers(text: string, active: boolean)
   }
 
   const ranges: MarkdownSyntaxMarkerRange[] = [];
+  const codeSpanRanges = readMarkdownCodeSpanRanges(text);
+  const strongEmphasisRanges = readMarkdownStrongEmphasisSyntaxRanges(text, codeSpanRanges);
+  const strikethroughRanges = readMarkdownStrikethroughSyntaxRanges(text, codeSpanRanges);
+  const emphasisRanges = readMarkdownEmphasisSyntaxRanges(text, [
+    ...codeSpanRanges,
+    ...strongEmphasisRanges,
+    ...strikethroughRanges
+  ]);
+
   collectBlockMarkers(text, ranges);
-  collectDelimitedMarkers(text, ranges, "**");
-  collectDelimitedMarkers(text, ranges, "__");
-  collectDelimitedMarkers(text, ranges, "~~");
+  collectPairedSyntaxRangeMarkers(text, ranges, strongEmphasisRanges, markdownStrongEmphasisDelimiters);
+  collectPairedSyntaxRangeMarkers(text, ranges, strikethroughRanges, markdownStrikethroughDelimiters);
+  collectPairedSyntaxRangeMarkers(text, ranges, emphasisRanges, markdownEmphasisDelimiters);
   collectLinkMarkers(text, ranges);
 
   return normalizeRanges(ranges);
@@ -4184,28 +4193,38 @@ function collectBlockMarkers(text: string, ranges: MarkdownSyntaxMarkerRange[]):
   }
 }
 
-function collectDelimitedMarkers(text: string, ranges: MarkdownSyntaxMarkerRange[], delimiter: string): void {
-  let cursor = 0;
+function collectPairedSyntaxRangeMarkers(
+  text: string,
+  ranges: MarkdownSyntaxMarkerRange[],
+  syntaxRanges: readonly MarkdownSyntaxMarkerRange[],
+  delimiters: readonly string[]
+): void {
+  for (const syntaxRange of syntaxRanges) {
+    const delimiter = delimiters.find((candidate) => (
+      text.startsWith(candidate, syntaxRange.from) &&
+      text.startsWith(candidate, syntaxRange.to - candidate.length)
+    ));
 
-  while (cursor < text.length) {
-    const start = text.indexOf(delimiter, cursor);
-    if (start === -1) {
-      return;
+    if (!delimiter || !hasMarkdownDelimitedSyntaxContent(text, syntaxRange, delimiter)) {
+      continue;
     }
 
-    const contentStart = start + delimiter.length;
-    const end = text.indexOf(delimiter, contentStart);
-    if (end === -1) {
-      return;
-    }
-
-    if (end > contentStart && !/\s/.test(text[contentStart] ?? "") && !/\s/.test(text[end - 1] ?? "")) {
-      ranges.push({ from: start, to: contentStart });
-      ranges.push({ from: end, to: end + delimiter.length });
-    }
-
-    cursor = end + delimiter.length;
+    ranges.push({ from: syntaxRange.from, to: syntaxRange.from + delimiter.length });
+    ranges.push({ from: syntaxRange.to - delimiter.length, to: syntaxRange.to });
   }
+}
+
+function hasMarkdownDelimitedSyntaxContent(
+  text: string,
+  syntaxRange: MarkdownSyntaxMarkerRange,
+  delimiter: string
+): boolean {
+  const contentFrom = syntaxRange.from + delimiter.length;
+  const contentTo = syntaxRange.to - delimiter.length;
+
+  return contentTo > contentFrom &&
+    !/\s/.test(text[contentFrom] ?? "") &&
+    !/\s/.test(text[contentTo - 1] ?? "");
 }
 
 function collectLinkMarkers(text: string, ranges: MarkdownSyntaxMarkerRange[]): void {
