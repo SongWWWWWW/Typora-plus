@@ -3373,3 +3373,32 @@ Known limitations:
 
 - Parser-backed math mapping remains planned for deeper inline edge cases.
 - Parser-backed table mapping remains planned for deeper nested inline syntax and full document-aware reference resolution.
+
+## 2026-06-07 - P2 Inline Math Scanner Recovery
+
+Completed:
+
+- Let inline math scanning continue after an unclosed `$` or `\(` delimiter instead of stopping the rest of the inactive line.
+- Preserved the existing behavior that an isolated unclosed expression does not render a preview.
+- Added focused tests showing later valid `$...$` or `\(...\)` expressions still preview after an earlier incomplete expression.
+
+Quality gate:
+
+- `npm run typecheck`: passed
+- `npx vitest run packages/editor/src/livePreview.test.ts`: passed, 121 tests
+- `npm run verify`: passed, 351 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Browser smoke check: not run because this stage changes pure inline math scanner recovery and is covered by unit and full build verification.
+
+Review:
+
+- Inline math recovery remains isolated in `packages/editor`; no Workbench, platform, Electron, DOM, or filesystem dependency was added.
+- Recovery happens inside the shared range reader, so inline preview and table protected-range behavior stay aligned.
+- The change improves typing resilience without adding UI-specific fallback behavior.
+- No new dependency, configuration value, storage path, visual token, extra documentation file, or hard-coded platform assumption was introduced.
+
+Known limitations:
+
+- Parser-backed math mapping remains planned for deeper inline edge cases.
+- Parser-backed table mapping remains planned for deeper nested inline syntax and full document-aware reference resolution.
