@@ -3128,3 +3128,33 @@ Known limitations:
 
 - Pipes in link labels and reference-style links still rely on the planned parser-backed table mapping pass.
 - Parser-backed math position mapping remains planned.
+
+## 2026-06-07 - P2 Table Linked Label Pipe Mapping
+
+Completed:
+
+- Promoted table protected ranges from link/image targets to complete inline and reference-style link/image syntax.
+- Kept `|` inside linked labels, reference-style link labels, and image alt text from splitting Markdown table cells.
+- Preserved linked-label cells through table preview, source-cell navigation, column insertion, and column deletion.
+- Added focused tests for inline linked-label pipes, reference-style link/image pipes, linked-label-only non-table lines, source ranges, and column edits.
+
+Quality gate:
+
+- `npm run typecheck`: passed
+- `npx vitest run packages/editor/src/livePreview.test.ts`: passed, 98 tests
+- `npm run verify`: passed, 328 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Browser smoke check: not run because this stage changes pure table source mapping and is covered by unit and full build verification.
+
+Review:
+
+- Table parsing remains isolated in `packages/editor`; no Workbench, platform, Electron, DOM, or filesystem dependency was added.
+- The scanner only protects bracket spans that resolve to inline `(...)` or reference-style `[...]` link/image syntax, avoiding an unconditional hard-coded bracket rule.
+- Preview rendering, source navigation, and pure table transforms still share one scanner path.
+- No new dependency, configuration value, storage path, visual token, extra documentation file, or hard-coded platform assumption was introduced.
+
+Known limitations:
+
+- Shortcut reference links and broader nested inline edge cases still rely on the planned parser-backed table mapping pass.
+- Parser-backed math position mapping remains planned.
