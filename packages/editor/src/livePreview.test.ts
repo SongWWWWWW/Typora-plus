@@ -2068,6 +2068,45 @@ describe("task list live preview widgets", () => {
       }
     });
   });
+
+  it("toggles inactive task markers from focused checkbox keys", () => {
+    withDom(() => {
+      const parent = document.createElement("div");
+      document.body.append(parent);
+      const view = new EditorView({
+        parent,
+        state: EditorState.create({
+          doc: "- [x] Done\n\nNext",
+          selection: { anchor: "- [x] Done\n\nNext".length },
+          extensions: [
+            livePreviewExtension({
+              focusMode: false,
+              fontSize: 16,
+              lineHeight: 1.5,
+              maxWidth: 720,
+              typewriterMode: false
+            })
+          ]
+        })
+      });
+
+      try {
+        const checkbox = parent.querySelector<HTMLInputElement>(".tp-editor-task-checkbox");
+        expect(checkbox).not.toBeNull();
+        expect(checkbox?.checked).toBe(true);
+
+        checkbox?.dispatchEvent(new KeyboardEvent("keydown", {
+          bubbles: true,
+          cancelable: true,
+          key: "Enter"
+        }));
+
+        expect(view.state.doc.toString()).toBe("- [ ] Done\n\nNext");
+      } finally {
+        view.destroy();
+      }
+    });
+  });
 });
 
 describe("sanitizeMarkdownRendererHtml", () => {
@@ -2173,6 +2212,7 @@ function withDom<T>(run: () => T): T {
   const previousHTMLElement = Reflect.get(globalThis, "HTMLElement");
   const previousMutationObserver = Reflect.get(globalThis, "MutationObserver");
   const previousMouseEvent = Reflect.get(globalThis, "MouseEvent");
+  const previousKeyboardEvent = Reflect.get(globalThis, "KeyboardEvent");
   const previousRequestAnimationFrame = Reflect.get(globalThis, "requestAnimationFrame");
   const previousCancelAnimationFrame = Reflect.get(globalThis, "cancelAnimationFrame");
 
@@ -2183,6 +2223,7 @@ function withDom<T>(run: () => T): T {
   setGlobal("HTMLElement", dom.window.HTMLElement);
   setGlobal("MutationObserver", dom.window.MutationObserver);
   setGlobal("MouseEvent", dom.window.MouseEvent);
+  setGlobal("KeyboardEvent", dom.window.KeyboardEvent);
   setGlobal("requestAnimationFrame", dom.window.requestAnimationFrame);
   setGlobal("cancelAnimationFrame", dom.window.cancelAnimationFrame);
 
@@ -2196,6 +2237,7 @@ function withDom<T>(run: () => T): T {
     restoreGlobal("HTMLElement", previousHTMLElement);
     restoreGlobal("MutationObserver", previousMutationObserver);
     restoreGlobal("MouseEvent", previousMouseEvent);
+    restoreGlobal("KeyboardEvent", previousKeyboardEvent);
     restoreGlobal("requestAnimationFrame", previousRequestAnimationFrame);
     restoreGlobal("cancelAnimationFrame", previousCancelAnimationFrame);
     dom.window.close();

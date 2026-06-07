@@ -4098,6 +4098,15 @@ class MarkdownTaskListMarkerWidget extends WidgetType {
       event.stopPropagation();
       toggleMarkdownTaskListMarker(view, this.sourceFrom, this.sourceTo, this.checked);
     });
+    checkbox.addEventListener("keydown", (event) => {
+      if (event.key !== " " && event.key !== "Enter") {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+      toggleMarkdownTaskListMarker(view, this.sourceFrom, this.sourceTo, this.checked);
+    });
 
     return checkbox;
   }
