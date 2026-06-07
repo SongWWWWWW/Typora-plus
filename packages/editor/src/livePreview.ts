@@ -1336,6 +1336,128 @@ function readMarkdownCodeSpanRanges(text: string): readonly MarkdownCodeSpanRang
   return ranges;
 }
 
+function readMarkdownInlineLinkTargetRanges(
+  text: string,
+  ignoredRanges: readonly MarkdownSyntaxMarkerRange[]
+): readonly MarkdownSyntaxMarkerRange[] {
+  const ranges: MarkdownSyntaxMarkerRange[] = [];
+  let cursor = 0;
+
+  while (cursor < text.length) {
+    const openBracket = findNextMarkdownLinkLabelOpen(text, cursor, ignoredRanges);
+
+    if (openBracket === -1) {
+      break;
+    }
+
+    const closeBracket = findClosingMarkdownLinkLabelBracket(text, openBracket, ignoredRanges);
+
+    if (closeBracket === -1) {
+      cursor = openBracket + 1;
+      continue;
+    }
+
+    const openParen = closeBracket + 1;
+
+    if (
+      text[openParen] !== "(" ||
+      isEscaped(text, openParen) ||
+      isIndexInsideMarkdownRange(openParen, ignoredRanges)
+    ) {
+      cursor = closeBracket + 1;
+      continue;
+    }
+
+    const closeParen = findClosingMarkdownLinkTargetParen(text, openParen, ignoredRanges);
+
+    if (closeParen === -1) {
+      cursor = closeBracket + 1;
+      continue;
+    }
+
+    ranges.push({ from: openParen, to: closeParen + 1 });
+    cursor = closeParen + 1;
+  }
+
+  return ranges;
+}
+
+function findNextMarkdownLinkLabelOpen(
+  text: string,
+  from: number,
+  ignoredRanges: readonly MarkdownSyntaxMarkerRange[]
+): number {
+  for (let index = from; index < text.length; index += 1) {
+    if (
+      text[index] === "[" &&
+      !isEscaped(text, index) &&
+      !isIndexInsideMarkdownRange(index, ignoredRanges)
+    ) {
+      return index;
+    }
+  }
+
+  return -1;
+}
+
+function findClosingMarkdownLinkLabelBracket(
+  text: string,
+  openBracket: number,
+  ignoredRanges: readonly MarkdownSyntaxMarkerRange[]
+): number {
+  let depth = 1;
+
+  for (let index = openBracket + 1; index < text.length; index += 1) {
+    if (isEscaped(text, index) || isIndexInsideMarkdownRange(index, ignoredRanges)) {
+      continue;
+    }
+
+    if (text[index] === "[") {
+      depth += 1;
+      continue;
+    }
+
+    if (text[index] === "]") {
+      depth -= 1;
+
+      if (depth === 0) {
+        return index;
+      }
+    }
+  }
+
+  return -1;
+}
+
+function findClosingMarkdownLinkTargetParen(
+  text: string,
+  openParen: number,
+  ignoredRanges: readonly MarkdownSyntaxMarkerRange[]
+): number {
+  let depth = 1;
+
+  for (let index = openParen + 1; index < text.length; index += 1) {
+    if (isEscaped(text, index) || isIndexInsideMarkdownRange(index, ignoredRanges)) {
+      continue;
+    }
+
+    if (text[index] === "(") {
+      depth += 1;
+      continue;
+    }
+
+    if (text[index] === ")") {
+      depth -= 1;
+
+      if (depth === 0) {
+        return index;
+      }
+    }
+  }
+
+  return -1;
+}
+
 function readMarkdownInlineRendererRange(
   text: string,
   codeSpan: MarkdownCodeSpanRange
@@ -1564,6 +1686,10 @@ function readMarkdownTableCellSpans(text: string): readonly MarkdownTableCellSou
   }
 
   const codeSpanRanges = readMarkdownCodeSpanRanges(text);
+  const protectedRanges = [
+    ...codeSpanRanges,
+    ...readMarkdownInlineLinkTargetRanges(text, codeSpanRanges)
+  ];
   const cells: MarkdownTableCellSourceSpan[] = [];
   let current = "";
   let cellStart = trimmedStart;
@@ -1571,7 +1697,7 @@ function readMarkdownTableCellSpans(text: string): readonly MarkdownTableCellSou
   for (let index = trimmedStart; index < trimmedEnd; index += 1) {
     const character = text[index];
 
-    if (isMarkdownTableCellSeparator(text, index, codeSpanRanges)) {
+    if (isMarkdownTableCellSeparator(text, index, protectedRanges)) {
       cells.push({ from: cellStart, to: index, value: current });
       current = "";
       cellStart = index + 1;

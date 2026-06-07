@@ -682,6 +682,34 @@ describe("analyzeMarkdownTableLines", () => {
     ]);
   });
 
+  it("keeps link target pipes inside table cells", () => {
+    const tableBlock = analyzeMarkdownLineBlocks([
+      "| Reference | Status |",
+      "| --- | --- |",
+      "| [Guide](docs/a|b.md \"A|B\") | Ready |"
+    ]).find((state) => state.tableBlock)?.tableBlock;
+
+    expect(tableBlock).toBeDefined();
+    expect(tableBlock?.headerCells).toEqual(["Reference", "Status"]);
+    expect(tableBlock?.bodyRows).toEqual([
+      ["[Guide](docs/a|b.md \"A|B\")", "Ready"]
+    ]);
+  });
+
+  it("keeps image target pipes inside table cells", () => {
+    const tableBlock = analyzeMarkdownLineBlocks([
+      "| Image | Status |",
+      "| --- | --- |",
+      "| ![Alt](assets/a|b.png) | Ready |"
+    ]).find((state) => state.tableBlock)?.tableBlock;
+
+    expect(tableBlock).toBeDefined();
+    expect(tableBlock?.headerCells).toEqual(["Image", "Status"]);
+    expect(tableBlock?.bodyRows).toEqual([
+      ["![Alt](assets/a|b.png)", "Ready"]
+    ]);
+  });
+
   it("supports tables without outer pipes", () => {
     expect(analyzeMarkdownTableLines([
       "Name | Value",
@@ -714,6 +742,13 @@ describe("analyzeMarkdownTableLines", () => {
     expect(analyzeMarkdownTableLines([
       "Name `|` Value",
       "--- `|` ---"
+    ])).toEqual([]);
+  });
+
+  it("does not treat link-target-only pipes as table separators", () => {
+    expect(analyzeMarkdownTableLines([
+      "Name [A](a|b) Value",
+      "--- [B](c|d) ---"
     ])).toEqual([]);
   });
 });
@@ -749,6 +784,14 @@ describe("Markdown table editing helpers", () => {
 
     expect(range).toEqual({ from: 2, to: 16 });
     expect(range ? line.slice(range.from, range.to) : "").toBe("`left | right`");
+  });
+
+  it("keeps link target pipes inside source cell ranges", () => {
+    const line = "| [A](docs/a|b.md) | Status |";
+    const range = findMarkdownTableCellSourceRange(line, 0);
+
+    expect(range).toEqual({ from: 2, to: 18 });
+    expect(range ? line.slice(range.from, range.to) : "").toBe("[A](docs/a|b.md)");
   });
 
   it("does not find a table cell range for escaped-only separators", () => {
@@ -870,6 +913,26 @@ describe("Markdown table editing helpers", () => {
       "| Expression | Status |",
       "| :--- | :---: |",
       "| `a | b` | Ready |"
+    ]);
+  });
+
+  it("preserves link and image target pipe cell source while editing columns", () => {
+    const tableBlock = analyzeMarkdownLineBlocks([
+      "| Reference | Count | Status |",
+      "| :--- | ---: | :---: |",
+      "| [A](docs/a|b.md) | 1 | ![Alt](assets/a|b.png) |"
+    ]).find((state) => state.tableBlock)?.tableBlock;
+
+    expect(tableBlock).toBeDefined();
+    expect(createMarkdownTableWithInsertedColumn(tableBlock!, { columnIndex: 1 })).toEqual([
+      "| Reference |  | Count | Status |",
+      "| :--- | --- | ---: | :---: |",
+      "| [A](docs/a|b.md) |  | 1 | ![Alt](assets/a|b.png) |"
+    ]);
+    expect(createMarkdownTableWithDeletedColumn(tableBlock!, { columnIndex: 1 })).toEqual([
+      "| Reference | Status |",
+      "| :--- | :---: |",
+      "| [A](docs/a|b.md) | ![Alt](assets/a|b.png) |"
     ]);
   });
 
