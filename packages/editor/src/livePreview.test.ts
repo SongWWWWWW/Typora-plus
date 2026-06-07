@@ -569,6 +569,15 @@ describe("findInactiveMarkdownInlineMathRanges", () => {
     expect(findInactiveMarkdownInlineMathRanges("Inline \\(x+y stays source", false)).toEqual([]);
   });
 
+  it("continues scanning after unclosed inline math delimiters", () => {
+    expect(findInactiveMarkdownInlineMathRanges("Draft \\(x+y then $z$", false)).toEqual([
+      { expression: "z", expressionFrom: 18, expressionTo: 19, from: 17, to: 20 }
+    ]);
+    expect(findInactiveMarkdownInlineMathRanges("Draft $x+y then \\(z\\)", false)).toEqual([
+      { expression: "z", expressionFrom: 18, expressionTo: 19, from: 16, to: 21 }
+    ]);
+  });
+
   it("does not treat common currency text as math", () => {
     expect(findInactiveMarkdownInlineMathRanges("Price $5 and $10 stay source", false)).toEqual([]);
   });

@@ -591,7 +591,8 @@ function readMarkdownInlineMathRanges(
     }
 
     if (!end) {
-      return ranges;
+      cursor = start.to;
+      continue;
     }
 
     const rawExpression = text.slice(start.to, end.from);
