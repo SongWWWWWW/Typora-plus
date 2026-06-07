@@ -1548,10 +1548,31 @@ function readMarkdownInlineLinkSyntaxRanges(
       continue;
     }
 
+    if (containsMarkdownTableCellSeparator(text, openBracket + 1, closeBracket, ignoredRanges)) {
+      ranges.push({ from: syntaxFrom, to: closeBracket + 1 });
+      cursor = closeBracket + 1;
+      continue;
+    }
+
     cursor = closeBracket + 1;
   }
 
   return ranges;
+}
+
+function containsMarkdownTableCellSeparator(
+  text: string,
+  from: number,
+  to: number,
+  ignoredRanges: readonly MarkdownSyntaxMarkerRange[]
+): boolean {
+  for (let index = from; index < to; index += 1) {
+    if (isMarkdownTableCellSeparator(text, index, ignoredRanges)) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 function findNextMarkdownLinkLabelOpen(

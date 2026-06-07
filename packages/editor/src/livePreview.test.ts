@@ -834,6 +834,22 @@ describe("analyzeMarkdownTableLines", () => {
     ]);
   });
 
+  it("keeps shortcut reference pipes inside table cells", () => {
+    const tableBlock = analyzeMarkdownLineBlocks([
+      "| Reference | Status |",
+      "| --- | --- |",
+      "| [Guide|Docs] | Ready |",
+      "| ![Alt|Text] | Hold |"
+    ]).find((state) => state.tableBlock)?.tableBlock;
+
+    expect(tableBlock).toBeDefined();
+    expect(tableBlock?.headerCells).toEqual(["Reference", "Status"]);
+    expect(tableBlock?.bodyRows).toEqual([
+      ["[Guide|Docs]", "Ready"],
+      ["![Alt|Text]", "Hold"]
+    ]);
+  });
+
   it("supports tables without outer pipes", () => {
     expect(analyzeMarkdownTableLines([
       "Name | Value",
@@ -880,6 +896,13 @@ describe("analyzeMarkdownTableLines", () => {
     expect(analyzeMarkdownTableLines([
       "Name [A|B](a) Value",
       "--- [C|D][ref] ---"
+    ])).toEqual([]);
+  });
+
+  it("does not treat shortcut-reference-only pipes as table separators", () => {
+    expect(analyzeMarkdownTableLines([
+      "Name [A|B] Value",
+      "--- [C|D] ---"
     ])).toEqual([]);
   });
 });
@@ -931,6 +954,14 @@ describe("Markdown table editing helpers", () => {
 
     expect(range).toEqual({ from: 2, to: 14 });
     expect(range ? line.slice(range.from, range.to) : "").toBe("[A|B][guide]");
+  });
+
+  it("keeps shortcut reference pipes inside source cell ranges", () => {
+    const line = "| [A|B] | Status |";
+    const range = findMarkdownTableCellSourceRange(line, 0);
+
+    expect(range).toEqual({ from: 2, to: 7 });
+    expect(range ? line.slice(range.from, range.to) : "").toBe("[A|B]");
   });
 
   it("does not find a table cell range for escaped-only separators", () => {
@@ -1092,6 +1123,26 @@ describe("Markdown table editing helpers", () => {
       "| Reference | Status |",
       "| :--- | :---: |",
       "| [A|B][guide] | ![Alt|Text](assets/a.png) |"
+    ]);
+  });
+
+  it("preserves shortcut reference pipe cell source while editing columns", () => {
+    const tableBlock = analyzeMarkdownLineBlocks([
+      "| Reference | Count | Status |",
+      "| :--- | ---: | :---: |",
+      "| [A|B] | 1 | ![Alt|Text] |"
+    ]).find((state) => state.tableBlock)?.tableBlock;
+
+    expect(tableBlock).toBeDefined();
+    expect(createMarkdownTableWithInsertedColumn(tableBlock!, { columnIndex: 1 })).toEqual([
+      "| Reference |  | Count | Status |",
+      "| :--- | --- | ---: | :---: |",
+      "| [A|B] |  | 1 | ![Alt|Text] |"
+    ]);
+    expect(createMarkdownTableWithDeletedColumn(tableBlock!, { columnIndex: 1 })).toEqual([
+      "| Reference | Status |",
+      "| :--- | :---: |",
+      "| [A|B] | ![Alt|Text] |"
     ]);
   });
 
