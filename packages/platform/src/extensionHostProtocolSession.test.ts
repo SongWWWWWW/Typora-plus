@@ -10,6 +10,7 @@ import {
   createExtensionHostApiResultMessage,
   createExtensionHostCommandExecuteRequestMessage,
   createExtensionHostCommandRegisterRequestMessage,
+  createExtensionHostHandshakeResultMessage,
   extensionHostProtocolMessageTypes,
   readExtensionHostProtocolMessage,
   type ExtensionHostProtocolMessage
@@ -77,6 +78,98 @@ describe("extension host protocol session", () => {
     transport.receive(createExtensionHostActivationResultMessage("activate-2", "other.remote"));
 
     await expect(mismatchedActivation).rejects.toThrow("extension id mismatch");
+  });
+
+  it("performs protocol handshakes and reuses successful results", async () => {
+    const transport = createMemoryTransport();
+    const { context } = createSessionTestContext();
+    const session = new ExtensionHostProtocolSession(transport, context, {
+      createRequestId: createSequentialRequestId()
+    });
+    const handshake = session.handshake();
+
+    expect(transport.sent).toEqual([{
+      type: extensionHostProtocolMessageTypes.handshakeRequest,
+      requestId: "handshake-1",
+      extensionId: "notes.remote",
+      protocolVersion: 1,
+      capabilities: [
+        "activation",
+        "commands",
+        "contextKeys",
+        "exports",
+        "markdownRenderers",
+        "remoteCallbacks",
+        "unregister"
+      ]
+    }]);
+
+    transport.receive(createExtensionHostHandshakeResultMessage("handshake-1", "notes.remote"));
+
+    await expect(handshake).resolves.toMatchObject({
+      type: extensionHostProtocolMessageTypes.handshakeResult,
+      requestId: "handshake-1",
+      extensionId: "notes.remote"
+    });
+    await expect(session.handshake()).resolves.toMatchObject({
+      requestId: "handshake-1"
+    });
+    expect(transport.sent).toHaveLength(1);
+  });
+
+  it("requires handshake before activation when configured", async () => {
+    const transport = createMemoryTransport();
+    const { context } = createSessionTestContext();
+    const session = new ExtensionHostProtocolSession(transport, context, {
+      createRequestId: createSequentialRequestId(),
+      requireHandshake: true
+    });
+    const activation = session.activate({
+      activationEvent: "onStartup",
+      context,
+      extension: context.extension
+    });
+
+    expect(transport.sent[0]).toMatchObject({
+      type: extensionHostProtocolMessageTypes.handshakeRequest,
+      requestId: "handshake-1"
+    });
+    transport.receive(createExtensionHostHandshakeResultMessage("handshake-1", "notes.remote"));
+    await flushPromises();
+    await flushPromises();
+
+    expect(transport.sent[1]).toMatchObject({
+      type: extensionHostProtocolMessageTypes.activate,
+      requestId: "activate-2"
+    });
+    transport.receive(createExtensionHostActivationResultMessage("activate-2", "notes.remote"));
+
+    await expect(activation).resolves.toBeUndefined();
+  });
+
+  it("rejects incompatible handshake responses and can retry after failure", async () => {
+    const transport = createMemoryTransport();
+    const { context } = createSessionTestContext();
+    const session = new ExtensionHostProtocolSession(transport, context, {
+      createRequestId: createSequentialRequestId()
+    });
+    const firstHandshake = session.handshake();
+
+    transport.receive(createExtensionHostHandshakeResultMessage("handshake-1", "notes.remote", 2));
+
+    await expect(firstHandshake).rejects.toThrow("protocol version mismatch");
+
+    const missingCapabilityHandshake = session.handshake();
+    transport.receive(createExtensionHostHandshakeResultMessage("handshake-2", "notes.remote", 1, ["commands"]));
+
+    await expect(missingCapabilityHandshake).rejects.toThrow("missing required capability");
+
+    const secondHandshake = session.handshake();
+    transport.receive(createExtensionHostHandshakeResultMessage("handshake-3", "notes.remote"));
+
+    await expect(secondHandshake).resolves.toMatchObject({
+      requestId: "handshake-3"
+    });
   });
 
   it("rejects activation requests that miss the configured timeout", async () => {

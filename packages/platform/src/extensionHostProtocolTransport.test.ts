@@ -19,7 +19,8 @@ describe("extension host protocol linked transport", () => {
     const host = new ExtensionHostProtocolHost({
       id: "protocol.host",
       canActivate: (extension) => extension.id === "notes.remote",
-      createTransport: () => pair.main
+      createTransport: () => pair.main,
+      requireHandshake: true
     });
     const runtime = new ExtensionHostProtocolRuntime(pair.extensionHost, {
       activate(request) {

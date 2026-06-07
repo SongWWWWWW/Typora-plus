@@ -2,9 +2,14 @@ import { Disposable, toDisposable, type Event, type IDisposable } from "@typora-
 import type { ExtensionActivationRequest, ExtensionContext } from "./extensions";
 import {
   createExtensionHostActivationRequestMessage,
+  createExtensionHostHandshakeRequestMessage,
   extensionHostProtocolMessageTypes,
+  extensionHostProtocolVersion,
+  requiredExtensionHostProtocolCapabilities,
   readExtensionHostProtocolMessage,
   type ExtensionHostActivationErrorMessage,
+  type ExtensionHostApiErrorMessage,
+  type ExtensionHostHandshakeResultMessage,
   type ExtensionHostProtocolError,
   type ExtensionHostProtocolMessage
 } from "./extensionHostProtocol";
@@ -20,6 +25,7 @@ import {
 
 export type ExtensionHostProtocolSessionRequestKind =
   | "activate"
+  | "handshake"
   | ExtensionHostRuntimeBrokerRequestKind;
 
 export interface ExtensionHostProtocolTransport {
@@ -30,6 +36,7 @@ export interface ExtensionHostProtocolTransport {
 export interface ExtensionHostProtocolSessionOptions {
   readonly createRequestId?: (kind: ExtensionHostProtocolSessionRequestKind) => string;
   readonly onError?: (error: Error, message?: ExtensionHostProtocolMessage) => void;
+  readonly requireHandshake?: boolean;
   readonly requestTimer?: ExtensionHostProtocolRequestTimer;
   readonly requestTimeoutMs?: number;
 }
@@ -46,6 +53,7 @@ export class ExtensionHostProtocolSession extends Disposable {
   private readonly pendingRequests = new Map<string, PendingProtocolRequest>();
   private readonly requestTimer: ExtensionHostProtocolRequestTimer;
   private readonly requestTimeoutMs: number | undefined;
+  private handshakePromise: Promise<ExtensionHostHandshakeResultMessage> | undefined;
   private requestCounter = 0;
   private disposed = false;
 
@@ -80,6 +88,10 @@ export class ExtensionHostProtocolSession extends Disposable {
       );
     }
 
+    if (this.options.requireHandshake) {
+      await this.handshake();
+    }
+
     const requestId = this.nextRequestId("activate");
     const response = await this.sendRequest(createExtensionHostActivationRequestMessage(request, requestId));
 
@@ -93,6 +105,17 @@ export class ExtensionHostProtocolSession extends Disposable {
       default:
         throw new Error(`Expected extension host activation response but received: ${response.type}`);
     }
+  }
+
+  async handshake(): Promise<ExtensionHostHandshakeResultMessage> {
+    if (!this.handshakePromise) {
+      this.handshakePromise = this.performHandshake().catch((error: unknown) => {
+        this.handshakePromise = undefined;
+        throw error;
+      });
+    }
+
+    return await this.handshakePromise;
   }
 
   override dispose(): void {
@@ -182,6 +205,41 @@ export class ExtensionHostProtocolSession extends Disposable {
         reject(toErrorLike(error));
       }
     });
+  }
+
+  private async performHandshake(): Promise<ExtensionHostHandshakeResultMessage> {
+    const requestId = this.nextRequestId("handshake");
+    const response = await this.sendRequest(createExtensionHostHandshakeRequestMessage(
+      requestId,
+      this.context.extension.id
+    ));
+
+    assertResponseIdentity(response, requestId, this.context.extension.id);
+
+    switch (response.type) {
+      case extensionHostProtocolMessageTypes.handshakeResult:
+        return this.readHandshakeResult(response);
+      case extensionHostProtocolMessageTypes.apiError:
+        throw toError((response as ExtensionHostApiErrorMessage).error);
+      default:
+        throw new Error(`Expected extension host handshake response but received: ${response.type}`);
+    }
+  }
+
+  private readHandshakeResult(message: ExtensionHostHandshakeResultMessage): ExtensionHostHandshakeResultMessage {
+    if (message.protocolVersion !== extensionHostProtocolVersion) {
+      throw new Error(
+        `Extension host protocol version mismatch: expected ${extensionHostProtocolVersion}, got ${message.protocolVersion}`
+      );
+    }
+
+    for (const capability of requiredExtensionHostProtocolCapabilities) {
+      if (!message.capabilities.includes(capability)) {
+        throw new Error(`Extension host protocol missing required capability: ${capability}`);
+      }
+    }
+
+    return message;
   }
 
   private armPendingRequestTimeout(requestId: string, pending: PendingProtocolRequest): void {

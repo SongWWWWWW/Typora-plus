@@ -17,6 +17,8 @@ import {
   createExtensionHostExportDocumentResultMessage,
   createExtensionHostExportProviderRegisterRequestMessage,
   createExtensionHostExportProviderUnregisterRequestMessage,
+  createExtensionHostHandshakeRequestMessage,
+  createExtensionHostHandshakeResultMessage,
   createExtensionHostMarkdownRendererRegisterRequestMessage,
   createExtensionHostMarkdownRendererRenderRequestMessage,
   createExtensionHostMarkdownRendererRenderResultMessage,
@@ -78,6 +80,37 @@ describe("extension host protocol", () => {
     expect(message.error.name).toBe("ActivationError");
     expect(message.error.message).toHaveLength(extensionHostProtocolLimits.errorMessageLength);
     expect(deserializeExtensionHostProtocolMessage(serializeExtensionHostProtocolMessage(message))).toEqual(message);
+  });
+
+  it("serializes handshake messages with bounded protocol capabilities", () => {
+    const request = createExtensionHostHandshakeRequestMessage(" request-4 ", " notes.main ", 1, [
+      "activation",
+      "commands",
+      "commands"
+    ]);
+    const result = createExtensionHostHandshakeResultMessage("request-4", "notes.main");
+
+    expect(request).toEqual({
+      type: extensionHostProtocolMessageTypes.handshakeRequest,
+      requestId: "request-4",
+      extensionId: "notes.main",
+      protocolVersion: 1,
+      capabilities: ["activation", "commands"]
+    });
+    expect(deserializeExtensionHostProtocolMessage(serializeExtensionHostProtocolMessage(request))).toEqual(request);
+    expect(deserializeExtensionHostProtocolMessage(serializeExtensionHostProtocolMessage(result))).toEqual(result);
+
+    expect(() => createExtensionHostHandshakeRequestMessage("request-5", "notes.main", 0)).toThrow("protocol version");
+    expect(() => createExtensionHostHandshakeResultMessage("request-6", "notes.main", 1, ["bad capability"])).toThrow(
+      "capabilities item is invalid"
+    );
+    expect(() => readExtensionHostProtocolMessage({
+      type: extensionHostProtocolMessageTypes.handshakeRequest,
+      requestId: "request-7",
+      extensionId: "notes.main",
+      protocolVersion: 1,
+      capabilities: new Array(extensionHostProtocolLimits.capabilityCount + 1).fill("activation")
+    })).toThrow("must contain at most");
   });
 
   it("reads activation request messages from unknown input", () => {

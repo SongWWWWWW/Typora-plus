@@ -28,15 +28,18 @@ import {
   createExtensionHostExportDocumentRequestMessage,
   createExtensionHostExportProviderRegisterRequestMessage,
   createExtensionHostExportProviderUnregisterRequestMessage,
+  createExtensionHostHandshakeResultMessage,
   createExtensionHostMarkdownRendererRegisterRequestMessage,
   createExtensionHostMarkdownRendererRenderResultMessage,
   createExtensionHostMarkdownRendererUnregisterRequestMessage,
+  extensionHostProtocolVersion,
   extensionHostProtocolMessageTypes,
   readExtensionHostProtocolMessage,
   type ExtensionHostActivationRequestMessage,
   type ExtensionHostApiErrorMessage,
   type ExtensionHostApiResultMessage,
   type ExtensionHostExportDocumentResultMessage,
+  type ExtensionHostHandshakeRequestMessage,
   type ExtensionHostMarkdownRendererRenderResultMessage,
   type ExtensionHostProtocolError,
   type ExtensionHostProtocolMessage
@@ -158,6 +161,9 @@ export class ExtensionHostProtocolRuntime extends Disposable {
 
     try {
       switch (message.type) {
+        case extensionHostProtocolMessageTypes.handshakeRequest:
+          await this.respondToHandshake(message);
+          return;
         case extensionHostProtocolMessageTypes.activate:
           await this.activateExtension(message);
           return;
@@ -182,6 +188,21 @@ export class ExtensionHostProtocolRuntime extends Disposable {
     } catch (error) {
       this.reportError(toErrorLike(error), message);
     }
+  }
+
+  private async respondToHandshake(message: ExtensionHostHandshakeRequestMessage): Promise<void> {
+    if (message.protocolVersion !== extensionHostProtocolVersion) {
+      await this.sendRuntimeApiError(
+        message.requestId,
+        message.extensionId,
+        new Error(
+          `Unsupported extension host protocol version: expected ${extensionHostProtocolVersion}, got ${message.protocolVersion}`
+        )
+      );
+      return;
+    }
+
+    await this.transport.send(createExtensionHostHandshakeResultMessage(message.requestId, message.extensionId));
   }
 
   private async activateExtension(message: ExtensionHostActivationRequestMessage): Promise<void> {

@@ -7,6 +7,7 @@ import {
   createExtensionHostApiResultMessage,
   createExtensionHostCommandExecuteRequestMessage,
   createExtensionHostExportDocumentRequestMessage,
+  createExtensionHostHandshakeRequestMessage,
   createExtensionHostMarkdownRendererRenderRequestMessage,
   extensionHostProtocolMessageTypes,
   readExtensionHostProtocolMessage,
@@ -20,6 +21,59 @@ import type { ExtensionHostProtocolTransport } from "./extensionHostProtocolSess
 import type { ExtensionHostProtocolRequestTimer } from "./extensionHostProtocolRequestTimer";
 
 describe("extension host protocol runtime", () => {
+  it("responds to protocol handshake requests", async () => {
+    const transport = createMemoryTransport();
+    new ExtensionHostProtocolRuntime(transport, {
+      activate() {
+        return undefined;
+      }
+    });
+
+    transport.receive(createExtensionHostHandshakeRequestMessage("handshake-1", "notes.remote"));
+    await flushPromises();
+
+    expect(transport.sent).toEqual([{
+      type: extensionHostProtocolMessageTypes.handshakeResult,
+      requestId: "handshake-1",
+      extensionId: "notes.remote",
+      protocolVersion: 1,
+      capabilities: [
+        "activation",
+        "commands",
+        "contextKeys",
+        "exports",
+        "markdownRenderers",
+        "remoteCallbacks",
+        "unregister"
+      ]
+    }]);
+  });
+
+  it("rejects unsupported protocol handshake versions", async () => {
+    const transport = createMemoryTransport();
+    new ExtensionHostProtocolRuntime(transport, {
+      activate() {
+        return undefined;
+      }
+    });
+
+    transport.receive(createExtensionHostHandshakeRequestMessage("handshake-2", "notes.remote", 2));
+    await flushPromises();
+
+    expect(transport.sent).toEqual([{
+      type: extensionHostProtocolMessageTypes.apiError,
+      requestId: "handshake-2",
+      extensionId: "notes.remote",
+      error: {
+        message: "Unsupported extension host protocol version: expected 1, got 2",
+        name: "Error",
+        stack: transport.sent[0]?.type === extensionHostProtocolMessageTypes.apiError
+          ? transport.sent[0].error.stack
+          : undefined
+      }
+    }]);
+  });
+
   it("activates with a proxy context and sends runtime contribution requests", async () => {
     const transport = createMemoryTransport();
     let activatedContext: ExtensionContext | undefined;

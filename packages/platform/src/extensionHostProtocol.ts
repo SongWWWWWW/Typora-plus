@@ -25,15 +25,35 @@ export const extensionHostProtocolMessageTypes = {
   exportDocumentResult: "extensionHost/export/documentResult",
   exportProviderRegister: "extensionHost/export/providerRegister",
   exportProviderUnregister: "extensionHost/export/providerUnregister",
+  handshakeRequest: "extensionHost/handshake/request",
+  handshakeResult: "extensionHost/handshake/result",
   markdownRendererRegister: "extensionHost/markdownRenderer/register",
   markdownRendererRender: "extensionHost/markdownRenderer/render",
   markdownRendererRenderResult: "extensionHost/markdownRenderer/renderResult",
   markdownRendererUnregister: "extensionHost/markdownRenderer/unregister"
 } as const;
 
+export const extensionHostProtocolVersion = 1;
+
+export const extensionHostProtocolCapabilities = [
+  "activation",
+  "commands",
+  "contextKeys",
+  "exports",
+  "markdownRenderers",
+  "remoteCallbacks",
+  "unregister"
+] as const;
+
+export const requiredExtensionHostProtocolCapabilities = [
+  "activation"
+] as const;
+
 export const extensionHostProtocolLimits = {
   activationEventLength: 256,
   activationEvents: 200,
+  capabilityCount: 40,
+  capabilityLength: 80,
   commandArgumentCount: 20,
   commandIdLength: 256,
   commandTitleLength: 160,
@@ -65,6 +85,7 @@ export const extensionHostProtocolLimits = {
   markdownRendererPriorityMax: 100000,
   markdownRendererPriorityMin: -100000,
   markdownRendererValueLength: 1000000,
+  protocolVersionMax: 1000,
   requestIdLength: 120
 } as const;
 
@@ -84,6 +105,8 @@ export type ExtensionHostProtocolMessage =
   | ExtensionHostExportDocumentResultMessage
   | ExtensionHostExportProviderRegisterRequestMessage
   | ExtensionHostExportProviderUnregisterRequestMessage
+  | ExtensionHostHandshakeRequestMessage
+  | ExtensionHostHandshakeResultMessage
   | ExtensionHostMarkdownRendererRegisterRequestMessage
   | ExtensionHostMarkdownRendererRenderRequestMessage
   | ExtensionHostMarkdownRendererRenderResultMessage
@@ -129,6 +152,22 @@ export interface ExtensionHostApiErrorMessage {
   readonly requestId: string;
   readonly extensionId: string;
   readonly error: ExtensionHostProtocolError;
+}
+
+export interface ExtensionHostHandshakeRequestMessage {
+  readonly type: typeof extensionHostProtocolMessageTypes.handshakeRequest;
+  readonly requestId: string;
+  readonly extensionId: string;
+  readonly protocolVersion: number;
+  readonly capabilities: readonly string[];
+}
+
+export interface ExtensionHostHandshakeResultMessage {
+  readonly type: typeof extensionHostProtocolMessageTypes.handshakeResult;
+  readonly requestId: string;
+  readonly extensionId: string;
+  readonly protocolVersion: number;
+  readonly capabilities: readonly string[];
 }
 
 export interface ExtensionHostCommandRegisterRequestMessage {
@@ -368,6 +407,36 @@ export function createExtensionHostApiErrorMessage(
   };
 }
 
+export function createExtensionHostHandshakeRequestMessage(
+  requestId: string,
+  extensionId: string,
+  protocolVersion = extensionHostProtocolVersion,
+  capabilities: readonly string[] = extensionHostProtocolCapabilities
+): ExtensionHostHandshakeRequestMessage {
+  return {
+    type: extensionHostProtocolMessageTypes.handshakeRequest,
+    requestId: normalizeRequestId(requestId, "Extension host handshake request id"),
+    extensionId: normalizeExtensionId(extensionId, "Extension host handshake request extension id"),
+    protocolVersion: normalizeProtocolVersion(protocolVersion, "Extension host handshake request protocol version"),
+    capabilities: normalizeProtocolCapabilities(capabilities, "Extension host handshake request capabilities")
+  };
+}
+
+export function createExtensionHostHandshakeResultMessage(
+  requestId: string,
+  extensionId: string,
+  protocolVersion = extensionHostProtocolVersion,
+  capabilities: readonly string[] = extensionHostProtocolCapabilities
+): ExtensionHostHandshakeResultMessage {
+  return {
+    type: extensionHostProtocolMessageTypes.handshakeResult,
+    requestId: normalizeRequestId(requestId, "Extension host handshake result request id"),
+    extensionId: normalizeExtensionId(extensionId, "Extension host handshake result extension id"),
+    protocolVersion: normalizeProtocolVersion(protocolVersion, "Extension host handshake result protocol version"),
+    capabilities: normalizeProtocolCapabilities(capabilities, "Extension host handshake result capabilities")
+  };
+}
+
 export function createExtensionHostCommandRegisterRequestMessage(
   requestId: string,
   extensionId: string,
@@ -591,6 +660,10 @@ export function readExtensionHostProtocolMessage(value: unknown): ExtensionHostP
       return readApiResultMessage(record);
     case extensionHostProtocolMessageTypes.apiError:
       return readApiErrorMessage(record);
+    case extensionHostProtocolMessageTypes.handshakeRequest:
+      return readHandshakeRequestMessage(record);
+    case extensionHostProtocolMessageTypes.handshakeResult:
+      return readHandshakeResultMessage(record);
     case extensionHostProtocolMessageTypes.commandRegister:
       return readCommandRegisterRequestMessage(record);
     case extensionHostProtocolMessageTypes.commandExecute:
@@ -691,6 +764,26 @@ function readApiErrorMessage(record: UnknownRecord): ExtensionHostApiErrorMessag
     requestId: normalizeRequestId(record.requestId, "Extension host API error request id"),
     extensionId: normalizeExtensionId(record.extensionId, "Extension host API error extension id"),
     error: readProtocolError(record.error)
+  };
+}
+
+function readHandshakeRequestMessage(record: UnknownRecord): ExtensionHostHandshakeRequestMessage {
+  return {
+    type: extensionHostProtocolMessageTypes.handshakeRequest,
+    requestId: normalizeRequestId(record.requestId, "Extension host handshake request id"),
+    extensionId: normalizeExtensionId(record.extensionId, "Extension host handshake request extension id"),
+    protocolVersion: normalizeProtocolVersion(record.protocolVersion, "Extension host handshake request protocol version"),
+    capabilities: normalizeProtocolCapabilities(record.capabilities, "Extension host handshake request capabilities")
+  };
+}
+
+function readHandshakeResultMessage(record: UnknownRecord): ExtensionHostHandshakeResultMessage {
+  return {
+    type: extensionHostProtocolMessageTypes.handshakeResult,
+    requestId: normalizeRequestId(record.requestId, "Extension host handshake result request id"),
+    extensionId: normalizeExtensionId(record.extensionId, "Extension host handshake result extension id"),
+    protocolVersion: normalizeProtocolVersion(record.protocolVersion, "Extension host handshake result protocol version"),
+    capabilities: normalizeProtocolCapabilities(record.capabilities, "Extension host handshake result capabilities")
   };
 }
 
@@ -1314,6 +1407,44 @@ function normalizeExtensionId(value: unknown, label: string): string {
 
 function normalizeRequestId(value: unknown, label: string): string {
   return normalizeRequiredProtocolString(value, label, extensionHostProtocolLimits.requestIdLength);
+}
+
+function normalizeProtocolVersion(value: unknown, label: string): number {
+  if (typeof value !== "number" || !Number.isInteger(value)) {
+    throw new Error(`${label} must be an integer`);
+  }
+
+  if (value < 1 || value > extensionHostProtocolLimits.protocolVersionMax) {
+    throw new Error(`${label} must be between 1 and ${extensionHostProtocolLimits.protocolVersionMax}`);
+  }
+
+  return value;
+}
+
+function normalizeProtocolCapabilities(value: unknown, label: string): readonly string[] {
+  const capabilities = normalizeProtocolStringArray(
+    value,
+    label,
+    extensionHostProtocolLimits.capabilityCount,
+    extensionHostProtocolLimits.capabilityLength
+  );
+  const seen = new Set<string>();
+  const result: string[] = [];
+
+  for (const capability of capabilities) {
+    if (!/^[A-Za-z0-9][A-Za-z0-9_.:-]*$/.test(capability)) {
+      throw new Error(`${label} item is invalid: ${capability}`);
+    }
+
+    if (seen.has(capability)) {
+      continue;
+    }
+
+    seen.add(capability);
+    result.push(capability);
+  }
+
+  return result;
 }
 
 function normalizeExtensionOwnedContextKey(extensionId: string, value: unknown): string {
