@@ -24,6 +24,7 @@ import {
   findInactiveMarkdownInlineRendererRanges,
   findInactiveMarkdownSyntaxMarkers,
   findInactiveMarkdownTaskListMarkerRanges,
+  findMarkdownListItemContentStart,
   getNextMarkdownTableColumnAlignment,
   livePreviewExtension,
   renderMarkdownMathExpression,
@@ -2012,6 +2013,13 @@ describe("findInactiveMarkdownSyntaxMarkers", () => {
 });
 
 describe("findInactiveMarkdownTaskListMarkerRanges", () => {
+  it("finds list item content starts for task insertion", () => {
+    expect(findMarkdownListItemContentStart("  - Todo")).toBe(4);
+    expect(findMarkdownListItemContentStart("10) Ordered")).toBe(4);
+    expect(findMarkdownListItemContentStart("Text - Todo")).toBeUndefined();
+    expect(findMarkdownListItemContentStart("-Todo")).toBeUndefined();
+  });
+
   it("finds task markers independently from inactive-line rendering", () => {
     expect(findMarkdownTaskListMarkerRange("  - [ ] Todo")).toEqual({ checked: false, from: 4, to: 7 });
     expect(findMarkdownTaskListMarkerRange("1. [X] Done")).toEqual({ checked: true, from: 3, to: 6 });
@@ -2042,6 +2050,27 @@ describe("findInactiveMarkdownTaskListMarkerRanges", () => {
 });
 
 describe("toggleMarkdownTaskListLineAtSelection", () => {
+  it("converts the selected list line into an unchecked task line", () => {
+    withDom(() => {
+      const parent = document.createElement("div");
+      document.body.append(parent);
+      const view = new EditorView({
+        parent,
+        state: EditorState.create({
+          doc: "Intro\n- Todo\nDone",
+          selection: { anchor: "Intro\n- To".length }
+        })
+      });
+
+      try {
+        expect(toggleMarkdownTaskListLineAtSelection(view)).toBe(true);
+        expect(view.state.doc.toString()).toBe("Intro\n- [ ] Todo\nDone");
+      } finally {
+        view.destroy();
+      }
+    });
+  });
+
   it("toggles the task marker on the selected line", () => {
     withDom(() => {
       const parent = document.createElement("div");
@@ -2131,6 +2160,42 @@ describe("toggleMarkdownTaskListLineAtSelection", () => {
           "Text [ ] Third",
           "- [ ] Second",
           "- [x] Fourth",
+          "Done"
+        ].join("\n"));
+      } finally {
+        view.destroy();
+      }
+    });
+  });
+
+  it("converts selected list lines while toggling selected task lines", () => {
+    withDom(() => {
+      const parent = document.createElement("div");
+      document.body.append(parent);
+      const doc = [
+        "Intro",
+        "- First",
+        "2. [x] Second",
+        "Text [ ] Third",
+        "* Fourth",
+        "Done"
+      ].join("\n");
+      const view = new EditorView({
+        parent,
+        state: EditorState.create({
+          doc,
+          selection: EditorSelection.range(doc.indexOf("First"), doc.indexOf("Fourth") + "Fourth".length)
+        })
+      });
+
+      try {
+        expect(toggleMarkdownTaskListLineAtSelection(view)).toBe(true);
+        expect(view.state.doc.toString()).toBe([
+          "Intro",
+          "- [ ] First",
+          "2. [ ] Second",
+          "Text [ ] Third",
+          "* [ ] Fourth",
           "Done"
         ].join("\n"));
       } finally {

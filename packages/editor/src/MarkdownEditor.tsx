@@ -15,6 +15,7 @@ import {
 } from "@codemirror/view";
 import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
 import {
+  findMarkdownListItemContentStart,
   findMarkdownTaskListMarkerRange,
   livePreviewExtension,
   type MarkdownCodeFenceRenderer,
@@ -210,6 +211,17 @@ function getMarkdownTaskListLineToggleChanges(state: EditorState): readonly Mark
       const taskMarker = findMarkdownTaskListMarkerRange(line.text);
 
       if (!taskMarker) {
+        const listContentStart = findMarkdownListItemContentStart(line.text);
+
+        if (listContentStart === undefined) {
+          continue;
+        }
+
+        changesByLine.set(line.from, {
+          from: line.from + listContentStart,
+          to: line.from + listContentStart,
+          insert: "[ ] "
+        });
         continue;
       }
 

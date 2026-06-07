@@ -587,13 +587,19 @@ export function findInactiveMarkdownTaskListMarkerRanges(
 }
 
 export function findMarkdownTaskListMarkerRange(text: string): MarkdownTaskListMarkerRange | undefined {
+  const contentStart = findMarkdownListItemContentStart(text);
+
+  return contentStart === undefined ? undefined : readTaskListMarkerRange(text, contentStart);
+}
+
+export function findMarkdownListItemContentStart(text: string): number | undefined {
   const list = /^(\s*)([-*+]|\d+[.)])(\s+)/.exec(text);
 
   if (list?.[1] === undefined || !list[2] || !list[3]) {
     return undefined;
   }
 
-  return readTaskListMarkerRange(text, list[1].length + list[2].length + list[3].length);
+  return list[1].length + list[2].length + list[3].length;
 }
 
 export function findInactiveMarkdownInlineMathRanges(text: string, active: boolean): readonly MarkdownInlineMathRange[] {
@@ -4391,8 +4397,14 @@ function collectBlockMarkers(text: string, ranges: MarkdownSyntaxMarkerRange[]):
 
   const list = /^(\s*)([-*+]|\d+[.)])(\s+)/.exec(text);
   if (list?.[1] !== undefined && list[2] && list[3]) {
+    const contentStart = findMarkdownListItemContentStart(text);
+
+    if (contentStart === undefined) {
+      return;
+    }
+
     ranges.push({ from: list[1].length, to: list[1].length + list[2].length });
-    const taskMarker = readTaskListMarkerRange(text, list[1].length + list[2].length + list[3].length);
+    const taskMarker = readTaskListMarkerRange(text, contentStart);
     if (taskMarker) {
       ranges.push(taskMarker);
     }
