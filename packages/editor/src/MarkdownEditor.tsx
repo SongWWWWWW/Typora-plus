@@ -2,7 +2,7 @@ import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import { markdown } from "@codemirror/lang-markdown";
 import { bracketMatching, defaultHighlightStyle, syntaxHighlighting } from "@codemirror/language";
 import { highlightSelectionMatches, searchKeymap } from "@codemirror/search";
-import { Compartment, EditorState, type Extension } from "@codemirror/state";
+import { Compartment, EditorState, type Extension, type Line, type SelectionRange } from "@codemirror/state";
 import {
   crosshairCursor,
   drawSelection,
@@ -202,26 +202,42 @@ function getMarkdownTaskListLineToggleChanges(state: EditorState): readonly Mark
   const changesByLine = new Map<number, MarkdownTaskListLineToggleChange>();
 
   for (const range of state.selection.ranges) {
-    const line = state.doc.lineAt(range.head);
+    for (const line of getSelectionLines(state, range)) {
+      if (changesByLine.has(line.from)) {
+        continue;
+      }
 
-    if (changesByLine.has(line.from)) {
-      continue;
+      const taskMarker = findMarkdownTaskListMarkerRange(line.text);
+
+      if (!taskMarker) {
+        continue;
+      }
+
+      changesByLine.set(line.from, {
+        from: line.from + taskMarker.from,
+        to: line.from + taskMarker.to,
+        insert: taskMarker.checked ? "[ ]" : "[x]"
+      });
     }
-
-    const taskMarker = findMarkdownTaskListMarkerRange(line.text);
-
-    if (!taskMarker) {
-      continue;
-    }
-
-    changesByLine.set(line.from, {
-      from: line.from + taskMarker.from,
-      to: line.from + taskMarker.to,
-      insert: taskMarker.checked ? "[ ]" : "[x]"
-    });
   }
 
   return [...changesByLine.values()].sort((left, right) => left.from - right.from);
+}
+
+function getSelectionLines(state: EditorState, range: SelectionRange): readonly Line[] {
+  if (range.empty) {
+    return [state.doc.lineAt(range.head)];
+  }
+
+  const fromLine = state.doc.lineAt(range.from);
+  const toLine = state.doc.lineAt(Math.max(range.from, range.to - 1));
+  const lines: Line[] = [];
+
+  for (let lineNumber = fromLine.number; lineNumber <= toLine.number; lineNumber += 1) {
+    lines.push(state.doc.line(lineNumber));
+  }
+
+  return lines;
 }
 
 function imagePasteExtension(

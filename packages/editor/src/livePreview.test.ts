@@ -2103,6 +2103,72 @@ describe("toggleMarkdownTaskListLineAtSelection", () => {
     });
   });
 
+  it("toggles every task line covered by a range selection", () => {
+    withDom(() => {
+      const parent = document.createElement("div");
+      document.body.append(parent);
+      const doc = [
+        "Intro",
+        "- [ ] First",
+        "Text [ ] Third",
+        "- [x] Second",
+        "- [ ] Fourth",
+        "Done"
+      ].join("\n");
+      const view = new EditorView({
+        parent,
+        state: EditorState.create({
+          doc,
+          selection: EditorSelection.range(doc.indexOf("First"), doc.indexOf("Fourth") + "Fourth".length)
+        })
+      });
+
+      try {
+        expect(toggleMarkdownTaskListLineAtSelection(view)).toBe(true);
+        expect(view.state.doc.toString()).toBe([
+          "Intro",
+          "- [x] First",
+          "Text [ ] Third",
+          "- [ ] Second",
+          "- [x] Fourth",
+          "Done"
+        ].join("\n"));
+      } finally {
+        view.destroy();
+      }
+    });
+  });
+
+  it("does not toggle a trailing task line when a range ends at that line start", () => {
+    withDom(() => {
+      const parent = document.createElement("div");
+      document.body.append(parent);
+      const doc = [
+        "- [ ] First",
+        "- [x] Second",
+        "- [ ] Third"
+      ].join("\n");
+      const view = new EditorView({
+        parent,
+        state: EditorState.create({
+          doc,
+          selection: EditorSelection.range(doc.indexOf("First"), doc.indexOf("- [ ] Third"))
+        })
+      });
+
+      try {
+        expect(toggleMarkdownTaskListLineAtSelection(view)).toBe(true);
+        expect(view.state.doc.toString()).toBe([
+          "- [x] First",
+          "- [ ] Second",
+          "- [ ] Third"
+        ].join("\n"));
+      } finally {
+        view.destroy();
+      }
+    });
+  });
+
   it("toggles a selected task line only once when multiple ranges share it", () => {
     withDom(() => {
       const parent = document.createElement("div");
