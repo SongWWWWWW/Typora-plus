@@ -830,6 +830,20 @@ describe("analyzeMarkdownTableLines", () => {
     ]);
   });
 
+  it("keeps strikethrough pipes inside table cells", () => {
+    const tableBlock = analyzeMarkdownLineBlocks([
+      "| Text | Status |",
+      "| --- | --- |",
+      "| ~~left | right~~ | Ready |"
+    ]).find((state) => state.tableBlock)?.tableBlock;
+
+    expect(tableBlock).toBeDefined();
+    expect(tableBlock?.headerCells).toEqual(["Text", "Status"]);
+    expect(tableBlock?.bodyRows).toEqual([
+      ["~~left | right~~", "Ready"]
+    ]);
+  });
+
   it("keeps inline math pipes inside table cells", () => {
     const tableBlock = analyzeMarkdownLineBlocks([
       "| Expression | Status |",
@@ -1067,6 +1081,23 @@ describe("analyzeMarkdownTableLines", () => {
     ]);
   });
 
+  it("does not treat strikethrough-only pipes as table separators", () => {
+    expect(analyzeMarkdownTableLines([
+      "Name ~~a|b~~ Value",
+      "--- | ---"
+    ])).toEqual([]);
+  });
+
+  it("does not protect unclosed strikethrough from table separators", () => {
+    expect(analyzeMarkdownTableLines([
+      "Name ~~a|b Value",
+      "--- | ---"
+    ])).toEqual([
+      { first: true, last: false, line: 1, role: "header" },
+      { first: false, last: true, line: 2, role: "delimiter" }
+    ]);
+  });
+
   it("does not treat inline-math-only pipes as table separators", () => {
     expect(analyzeMarkdownTableLines([
       "Name $a|b$ Value",
@@ -1214,6 +1245,14 @@ describe("Markdown table editing helpers", () => {
 
     expect(range).toEqual({ from: 2, to: 9 });
     expect(range ? line.slice(range.from, range.to) : "").toBe("*a | b*");
+  });
+
+  it("keeps strikethrough pipes inside source cell ranges", () => {
+    const line = "| ~~a | b~~ | Status |";
+    const range = findMarkdownTableCellSourceRange(line, 0);
+
+    expect(range).toEqual({ from: 2, to: 11 });
+    expect(range ? line.slice(range.from, range.to) : "").toBe("~~a | b~~");
   });
 
   it("keeps inline math pipes inside source cell ranges", () => {
@@ -1455,6 +1494,26 @@ describe("Markdown table editing helpers", () => {
       "| Text | Status |",
       "| :--- | :---: |",
       "| *a | b* | _c | d_ |"
+    ]);
+  });
+
+  it("preserves strikethrough pipe cell source while editing columns", () => {
+    const tableBlock = analyzeMarkdownLineBlocks([
+      "| Text | Count | Status |",
+      "| :--- | ---: | :---: |",
+      "| ~~a | b~~ | 1 | Ready |"
+    ]).find((state) => state.tableBlock)?.tableBlock;
+
+    expect(tableBlock).toBeDefined();
+    expect(createMarkdownTableWithInsertedColumn(tableBlock!, { columnIndex: 1 })).toEqual([
+      "| Text |  | Count | Status |",
+      "| :--- | --- | ---: | :---: |",
+      "| ~~a | b~~ |  | 1 | Ready |"
+    ]);
+    expect(createMarkdownTableWithDeletedColumn(tableBlock!, { columnIndex: 1 })).toEqual([
+      "| Text | Status |",
+      "| :--- | :---: |",
+      "| ~~a | b~~ | Ready |"
     ]);
   });
 
@@ -1783,6 +1842,13 @@ describe("findInactiveMarkdownSyntaxMarkers", () => {
 
   it("marks paired strong emphasis delimiters", () => {
     expect(findInactiveMarkdownSyntaxMarkers("A **bold** word", false)).toEqual([
+      { from: 2, to: 4 },
+      { from: 8, to: 10 }
+    ]);
+  });
+
+  it("marks paired strikethrough delimiters", () => {
+    expect(findInactiveMarkdownSyntaxMarkers("A ~~done~~ word", false)).toEqual([
       { from: 2, to: 4 },
       { from: 8, to: 10 }
     ]);

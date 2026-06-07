@@ -539,6 +539,7 @@ export function findInactiveMarkdownSyntaxMarkers(text: string, active: boolean)
   collectBlockMarkers(text, ranges);
   collectDelimitedMarkers(text, ranges, "**");
   collectDelimitedMarkers(text, ranges, "__");
+  collectDelimitedMarkers(text, ranges, "~~");
   collectLinkMarkers(text, ranges);
 
   return normalizeRanges(ranges);
@@ -1541,6 +1542,7 @@ const markdownInlineHtmlDelimitedSyntaxes = [
   { close: "?>", open: "<?" }
 ] as const;
 const markdownStrongEmphasisDelimiters = ["**", "__"] as const;
+const markdownStrikethroughDelimiters = ["~~"] as const;
 const markdownEmphasisDelimiters = ["*", "_"] as const;
 
 function readMarkdownCodeSpanRanges(text: string): readonly MarkdownCodeSpanRange[] {
@@ -1576,17 +1578,32 @@ function readMarkdownStrongEmphasisSyntaxRanges(
   text: string,
   ignoredRanges: readonly MarkdownSyntaxMarkerRange[]
 ): readonly MarkdownSyntaxMarkerRange[] {
+  return readMarkdownPairedDelimiterSyntaxRanges(text, ignoredRanges, markdownStrongEmphasisDelimiters);
+}
+
+function readMarkdownStrikethroughSyntaxRanges(
+  text: string,
+  ignoredRanges: readonly MarkdownSyntaxMarkerRange[]
+): readonly MarkdownSyntaxMarkerRange[] {
+  return readMarkdownPairedDelimiterSyntaxRanges(text, ignoredRanges, markdownStrikethroughDelimiters);
+}
+
+function readMarkdownPairedDelimiterSyntaxRanges(
+  text: string,
+  ignoredRanges: readonly MarkdownSyntaxMarkerRange[],
+  delimiters: readonly string[]
+): readonly MarkdownSyntaxMarkerRange[] {
   const ranges: MarkdownSyntaxMarkerRange[] = [];
   let cursor = 0;
 
   while (cursor < text.length) {
-    const open = findNextMarkdownStrongEmphasisDelimiter(text, cursor, ignoredRanges);
+    const open = findNextMarkdownPairedSyntaxDelimiter(text, cursor, ignoredRanges, delimiters);
 
     if (!open) {
       break;
     }
 
-    const close = findClosingMarkdownStrongEmphasisDelimiter(text, open.to, open.marker, ignoredRanges);
+    const close = findClosingMarkdownPairedSyntaxDelimiter(text, open.to, open.marker, ignoredRanges);
 
     if (!close) {
       cursor = open.to;
@@ -1603,17 +1620,18 @@ function readMarkdownStrongEmphasisSyntaxRanges(
   return ranges;
 }
 
-function findNextMarkdownStrongEmphasisDelimiter(
+function findNextMarkdownPairedSyntaxDelimiter(
   text: string,
   from: number,
-  ignoredRanges: readonly MarkdownSyntaxMarkerRange[]
-): { readonly from: number; readonly marker: typeof markdownStrongEmphasisDelimiters[number]; readonly to: number } | undefined {
+  ignoredRanges: readonly MarkdownSyntaxMarkerRange[],
+  delimiters: readonly string[]
+): { readonly from: number; readonly marker: string; readonly to: number } | undefined {
   for (let index = from; index < text.length; index += 1) {
     if (isEscaped(text, index) || isIndexInsideMarkdownRange(index, ignoredRanges)) {
       continue;
     }
 
-    const marker = markdownStrongEmphasisDelimiters.find((delimiter) => text.startsWith(delimiter, index));
+    const marker = delimiters.find((delimiter) => text.startsWith(delimiter, index));
 
     if (marker) {
       return { from: index, marker, to: index + marker.length };
@@ -1623,10 +1641,10 @@ function findNextMarkdownStrongEmphasisDelimiter(
   return undefined;
 }
 
-function findClosingMarkdownStrongEmphasisDelimiter(
+function findClosingMarkdownPairedSyntaxDelimiter(
   text: string,
   from: number,
-  marker: typeof markdownStrongEmphasisDelimiters[number],
+  marker: string,
   ignoredRanges: readonly MarkdownSyntaxMarkerRange[]
 ): { readonly from: number; readonly to: number } | undefined {
   for (let index = from; index <= text.length - marker.length; index += 1) {
@@ -2460,10 +2478,12 @@ function readMarkdownTableCellSpans(text: string): readonly MarkdownTableCellSou
 
   const codeSpanRanges = readMarkdownCodeSpanRanges(text);
   const strongEmphasisRanges = readMarkdownStrongEmphasisSyntaxRanges(text, codeSpanRanges);
-  const emphasisIgnoredRanges = [...codeSpanRanges, ...strongEmphasisRanges];
+  const strikethroughRanges = readMarkdownStrikethroughSyntaxRanges(text, codeSpanRanges);
+  const emphasisIgnoredRanges = [...codeSpanRanges, ...strongEmphasisRanges, ...strikethroughRanges];
   const protectedRanges = [
     ...codeSpanRanges,
     ...strongEmphasisRanges,
+    ...strikethroughRanges,
     ...readMarkdownEmphasisSyntaxRanges(text, emphasisIgnoredRanges),
     ...readMarkdownInlineMathRanges(text, codeSpanRanges),
     ...readMarkdownInlineLinkSyntaxRanges(text, codeSpanRanges),
