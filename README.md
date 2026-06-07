@@ -14,7 +14,7 @@ P0/P1 are implemented:
 - unified live preview block-state analysis
 - inactive Markdown marker soft hiding
 - code fence block styling with inactive language/copy widgets
-- Markdown table block styling with inactive previews that preserve escaped pipes, inline code, strong emphasis, inline math, autolinks, inline HTML syntax, and full/collapsed/shortcut link-image syntax, plus targeted row/column insertion and deletion controls, column alignment controls, and source-focused cell navigation
+- Markdown table block styling with inactive previews that preserve escaped pipes, inline code, emphasis, inline math, autolinks, inline HTML syntax, and full/collapsed/shortcut link-image syntax, plus targeted row/column insertion and deletion controls, column alignment controls, and source-focused cell navigation
 - standalone image preview cards
 - KaTeX-backed multiline and single-line display math preview blocks for `$$` and `\[` delimiters, with TeX copy controls, error diagnostics, and trimmed source-focused click editing
 - KaTeX-backed inline math previews for `$` and `\(` delimiters, with error diagnostics and source-focused click editing

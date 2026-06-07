@@ -3492,6 +3492,36 @@ Known limitations:
 
 - Parser-backed table mapping remains planned for deeper nested inline syntax and full document-aware reference resolution.
 
+## 2026-06-07 - P2 Table Emphasis Pipe Mapping
+
+Completed:
+
+- Made the shared Markdown table scanner preserve `|` inside ordinary emphasis spans such as `*left | right*` and `_alpha | beta_`.
+- Added a delimiter-driven emphasis range reader that ignores code spans and previously detected strong-emphasis ranges.
+- Kept unclosed emphasis unprotected, and avoided treating intraword underscores such as `a_b|c_d` as emphasis.
+- Preserved emphasis cells through table preview, source-cell navigation, column insertion, and column deletion.
+- Added focused tests for preview parsing, emphasis-only non-table lines, unclosed syntax, intraword underscores, source ranges, and column edits.
+
+Quality gate:
+
+- `npm run typecheck`: passed
+- `npx vitest run packages/editor/src/livePreview.test.ts`: passed, 153 tests
+- `npm run verify`: passed, 383 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Browser smoke check: not run because this stage changes pure table source mapping and is covered by unit and full build verification.
+
+Review:
+
+- Emphasis range detection remains isolated in `packages/editor`; no Workbench, platform, Electron, DOM, or filesystem dependency was added.
+- The scanner shares the protected-range pipeline with code spans, strong emphasis, math, links, autolinks, and inline HTML syntax.
+- Underscore handling avoids a broad hard-coded rule that would hide separators inside ordinary identifier-like words.
+- No new dependency, configuration value, storage path, visual token, extra documentation file, or hard-coded platform assumption was introduced.
+
+Known limitations:
+
+- Parser-backed table mapping remains planned for deeper nested inline syntax and full document-aware reference resolution.
+
 ## 2026-06-07 - P2 Inline Math Expression Range Model
 
 Completed:
