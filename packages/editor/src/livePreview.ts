@@ -548,6 +548,13 @@ export function findInactiveMarkdownInlineMathRanges(text: string, active: boole
   }
 
   const codeSpanRanges = readMarkdownCodeSpanRanges(text);
+  return readMarkdownInlineMathRanges(text, codeSpanRanges);
+}
+
+function readMarkdownInlineMathRanges(
+  text: string,
+  codeSpanRanges: readonly MarkdownSyntaxMarkerRange[]
+): readonly MarkdownInlineMathRange[] {
   const ranges: MarkdownInlineMathRange[] = [];
   let cursor = 0;
 
@@ -1881,6 +1888,7 @@ function readMarkdownTableCellSpans(text: string): readonly MarkdownTableCellSou
   const codeSpanRanges = readMarkdownCodeSpanRanges(text);
   const protectedRanges = [
     ...codeSpanRanges,
+    ...readMarkdownInlineMathRanges(text, codeSpanRanges),
     ...readMarkdownInlineLinkSyntaxRanges(text, codeSpanRanges)
   ];
   const cells: MarkdownTableCellSourceSpan[] = [];
