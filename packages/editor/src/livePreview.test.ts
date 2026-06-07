@@ -696,6 +696,20 @@ describe("analyzeMarkdownTableLines", () => {
     ]);
   });
 
+  it("keeps link label pipes inside table cells", () => {
+    const tableBlock = analyzeMarkdownLineBlocks([
+      "| Reference | Status |",
+      "| --- | --- |",
+      "| [Guide|Docs](docs/guide.md) | Ready |"
+    ]).find((state) => state.tableBlock)?.tableBlock;
+
+    expect(tableBlock).toBeDefined();
+    expect(tableBlock?.headerCells).toEqual(["Reference", "Status"]);
+    expect(tableBlock?.bodyRows).toEqual([
+      ["[Guide|Docs](docs/guide.md)", "Ready"]
+    ]);
+  });
+
   it("keeps image target pipes inside table cells", () => {
     const tableBlock = analyzeMarkdownLineBlocks([
       "| Image | Status |",
@@ -707,6 +721,22 @@ describe("analyzeMarkdownTableLines", () => {
     expect(tableBlock?.headerCells).toEqual(["Image", "Status"]);
     expect(tableBlock?.bodyRows).toEqual([
       ["![Alt](assets/a|b.png)", "Ready"]
+    ]);
+  });
+
+  it("keeps reference link pipes inside table cells", () => {
+    const tableBlock = analyzeMarkdownLineBlocks([
+      "| Reference | Status |",
+      "| --- | --- |",
+      "| [Guide|Docs][guide] | Ready |",
+      "| ![Alt|Text][image] | Hold |"
+    ]).find((state) => state.tableBlock)?.tableBlock;
+
+    expect(tableBlock).toBeDefined();
+    expect(tableBlock?.headerCells).toEqual(["Reference", "Status"]);
+    expect(tableBlock?.bodyRows).toEqual([
+      ["[Guide|Docs][guide]", "Ready"],
+      ["![Alt|Text][image]", "Hold"]
     ]);
   });
 
@@ -751,6 +781,13 @@ describe("analyzeMarkdownTableLines", () => {
       "--- [B](c|d) ---"
     ])).toEqual([]);
   });
+
+  it("does not treat linked-label-only pipes as table separators", () => {
+    expect(analyzeMarkdownTableLines([
+      "Name [A|B](a) Value",
+      "--- [C|D][ref] ---"
+    ])).toEqual([]);
+  });
 });
 
 describe("Markdown table editing helpers", () => {
@@ -792,6 +829,14 @@ describe("Markdown table editing helpers", () => {
 
     expect(range).toEqual({ from: 2, to: 18 });
     expect(range ? line.slice(range.from, range.to) : "").toBe("[A](docs/a|b.md)");
+  });
+
+  it("keeps reference link pipes inside source cell ranges", () => {
+    const line = "| [A|B][guide] | Status |";
+    const range = findMarkdownTableCellSourceRange(line, 0);
+
+    expect(range).toEqual({ from: 2, to: 14 });
+    expect(range ? line.slice(range.from, range.to) : "").toBe("[A|B][guide]");
   });
 
   it("does not find a table cell range for escaped-only separators", () => {
@@ -933,6 +978,26 @@ describe("Markdown table editing helpers", () => {
       "| Reference | Status |",
       "| :--- | :---: |",
       "| [A](docs/a|b.md) | ![Alt](assets/a|b.png) |"
+    ]);
+  });
+
+  it("preserves linked label pipe cell source while editing columns", () => {
+    const tableBlock = analyzeMarkdownLineBlocks([
+      "| Reference | Count | Status |",
+      "| :--- | ---: | :---: |",
+      "| [A|B][guide] | 1 | ![Alt|Text](assets/a.png) |"
+    ]).find((state) => state.tableBlock)?.tableBlock;
+
+    expect(tableBlock).toBeDefined();
+    expect(createMarkdownTableWithInsertedColumn(tableBlock!, { columnIndex: 1 })).toEqual([
+      "| Reference |  | Count | Status |",
+      "| :--- | --- | ---: | :---: |",
+      "| [A|B][guide] |  | 1 | ![Alt|Text](assets/a.png) |"
+    ]);
+    expect(createMarkdownTableWithDeletedColumn(tableBlock!, { columnIndex: 1 })).toEqual([
+      "| Reference | Status |",
+      "| :--- | :---: |",
+      "| [A|B][guide] | ![Alt|Text](assets/a.png) |"
     ]);
   });
 

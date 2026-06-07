@@ -1336,7 +1336,7 @@ function readMarkdownCodeSpanRanges(text: string): readonly MarkdownCodeSpanRang
   return ranges;
 }
 
-function readMarkdownInlineLinkTargetRanges(
+function readMarkdownInlineLinkSyntaxRanges(
   text: string,
   ignoredRanges: readonly MarkdownSyntaxMarkerRange[]
 ): readonly MarkdownSyntaxMarkerRange[] {
@@ -1357,26 +1357,50 @@ function readMarkdownInlineLinkTargetRanges(
       continue;
     }
 
+    const syntaxFrom = openBracket;
     const openParen = closeBracket + 1;
 
     if (
-      text[openParen] !== "(" ||
-      isEscaped(text, openParen) ||
-      isIndexInsideMarkdownRange(openParen, ignoredRanges)
+      text[openParen] === "(" &&
+      !isEscaped(text, openParen) &&
+      !isIndexInsideMarkdownRange(openParen, ignoredRanges)
     ) {
-      cursor = closeBracket + 1;
+      const closeParen = findClosingMarkdownLinkTargetParen(text, openParen, ignoredRanges);
+
+      if (closeParen === -1) {
+        cursor = closeBracket + 1;
+        continue;
+      }
+
+      ranges.push({ from: syntaxFrom, to: closeParen + 1 });
+      cursor = closeParen + 1;
       continue;
     }
 
-    const closeParen = findClosingMarkdownLinkTargetParen(text, openParen, ignoredRanges);
+    const referenceOpenBracket = closeBracket + 1;
 
-    if (closeParen === -1) {
-      cursor = closeBracket + 1;
+    if (
+      text[referenceOpenBracket] === "[" &&
+      !isEscaped(text, referenceOpenBracket) &&
+      !isIndexInsideMarkdownRange(referenceOpenBracket, ignoredRanges)
+    ) {
+      const referenceCloseBracket = findClosingMarkdownLinkLabelBracket(
+        text,
+        referenceOpenBracket,
+        ignoredRanges
+      );
+
+      if (referenceCloseBracket === -1) {
+        cursor = closeBracket + 1;
+        continue;
+      }
+
+      ranges.push({ from: syntaxFrom, to: referenceCloseBracket + 1 });
+      cursor = referenceCloseBracket + 1;
       continue;
     }
 
-    ranges.push({ from: openParen, to: closeParen + 1 });
-    cursor = closeParen + 1;
+    cursor = closeBracket + 1;
   }
 
   return ranges;
@@ -1688,7 +1712,7 @@ function readMarkdownTableCellSpans(text: string): readonly MarkdownTableCellSou
   const codeSpanRanges = readMarkdownCodeSpanRanges(text);
   const protectedRanges = [
     ...codeSpanRanges,
-    ...readMarkdownInlineLinkTargetRanges(text, codeSpanRanges)
+    ...readMarkdownInlineLinkSyntaxRanges(text, codeSpanRanges)
   ];
   const cells: MarkdownTableCellSourceSpan[] = [];
   let current = "";
