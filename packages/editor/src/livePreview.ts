@@ -657,11 +657,15 @@ export function findMarkdownMathBlockSourceRange(
     };
   }
 
-  if (!isMarkdownMathFence(openLine)) {
+  const openingFence = readMarkdownMathOpeningFence(openLine);
+
+  if (!openingFence) {
     return undefined;
   }
 
-  const closeLineIndex = lines.findIndex((line, index) => index > 0 && isMarkdownMathFence(line));
+  const closeLineIndex = lines.findIndex((line, index) => (
+    index > 0 && isMarkdownMathClosingFence(line, openingFence)
+  ));
   const contentStartIndex = 1;
   const contentEndIndexExclusive = closeLineIndex >= 0 ? closeLineIndex : lines.length;
 
@@ -1255,6 +1259,11 @@ interface MarkdownMathReadResult {
   readonly states: readonly MarkdownMathBlockState[];
 }
 
+interface MarkdownMathFence {
+  readonly closeMarker: string;
+  readonly openMarker: string;
+}
+
 function readMarkdownMathBlockFromSource(source: {
   readonly lineCount: number;
   readonly readLine: (lineNumber: number) => string;
@@ -1276,7 +1285,9 @@ function readMarkdownMathBlockFromSource(source: {
     };
   }
 
-  if (!isMarkdownMathFence(startText)) {
+  const openingFence = readMarkdownMathOpeningFence(startText);
+
+  if (!openingFence) {
     return undefined;
   }
 
@@ -1287,7 +1298,7 @@ function readMarkdownMathBlockFromSource(source: {
   while (nextLine <= source.lineCount) {
     const text = source.readLine(nextLine);
 
-    if (isMarkdownMathFence(text)) {
+    if (isMarkdownMathClosingFence(text, openingFence)) {
       closeLine = nextLine;
       break;
     }
@@ -1333,38 +1344,72 @@ function readMarkdownMathBlockFromSource(source: {
   };
 }
 
-function isMarkdownMathFence(text: string): boolean {
-  return /^\s*\$\$\s*$/.test(text);
-}
-
 function readSingleLineMarkdownMath(
   text: string
 ): { readonly expression: string; readonly fromColumn: number; readonly toColumn: number } | undefined {
+  for (const fence of markdownMathFenceDefinitions) {
+    const range = readSingleLineMarkdownMathForFence(text, fence);
+
+    if (range) {
+      return range;
+    }
+  }
+
+  return undefined;
+}
+
+const markdownMathFenceDefinitions: readonly MarkdownMathFence[] = [
+  { closeMarker: "$$", openMarker: "$$" },
+  { closeMarker: "\\]", openMarker: "\\[" }
+];
+
+function readMarkdownMathOpeningFence(text: string): MarkdownMathFence | undefined {
+  return markdownMathFenceDefinitions.find((fence) => (
+    text.trim() === fence.openMarker
+  ));
+}
+
+function isMarkdownMathClosingFence(text: string, fence: MarkdownMathFence): boolean {
+  return text.trim() === fence.closeMarker;
+}
+
+function readSingleLineMarkdownMathForFence(
+  text: string,
+  fence: MarkdownMathFence
+): { readonly expression: string; readonly fromColumn: number; readonly toColumn: number } | undefined {
   const trimmedStart = readFirstNonWhitespaceIndex(text);
   const trimmedEnd = readLastNonWhitespaceIndex(text) + 1;
+  const openMarkerLength = fence.openMarker.length;
+  const closeMarkerLength = fence.closeMarker.length;
 
-  if (trimmedEnd - trimmedStart < 4 || text.slice(trimmedStart, trimmedStart + 2) !== "$$") {
+  if (
+    trimmedEnd - trimmedStart < openMarkerLength + closeMarkerLength ||
+    text.slice(trimmedStart, trimmedStart + openMarkerLength) !== fence.openMarker
+  ) {
     return undefined;
   }
 
-  const closeFrom = trimmedEnd - 2;
+  const closeFrom = trimmedEnd - closeMarkerLength;
 
-  if (closeFrom < trimmedStart + 2 || text.slice(closeFrom, trimmedEnd) !== "$$" || isEscaped(text, closeFrom)) {
+  if (
+    closeFrom < trimmedStart + openMarkerLength ||
+    text.slice(closeFrom, trimmedEnd) !== fence.closeMarker
+  ) {
     return undefined;
   }
 
-  const rawExpression = text.slice(trimmedStart + 2, closeFrom);
+  const rawExpression = text.slice(trimmedStart + openMarkerLength, closeFrom);
   if (rawExpression.trim() === "") {
     return {
       expression: "",
-      fromColumn: trimmedStart + 2,
-      toColumn: trimmedStart + 2
+      fromColumn: trimmedStart + openMarkerLength,
+      toColumn: trimmedStart + openMarkerLength
     };
   }
 
   const leadingWhitespaceLength = rawExpression.match(/^\s*/)?.[0].length ?? 0;
   const trailingWhitespaceLength = rawExpression.match(/\s*$/)?.[0].length ?? 0;
-  const fromColumn = trimmedStart + 2 + leadingWhitespaceLength;
+  const fromColumn = trimmedStart + openMarkerLength + leadingWhitespaceLength;
   const toColumn = Math.max(fromColumn, closeFrom - trailingWhitespaceLength);
 
   return {

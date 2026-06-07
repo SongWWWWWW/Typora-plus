@@ -367,9 +367,43 @@ describe("analyzeMarkdownMathBlocks", () => {
     ]);
   });
 
+  it("marks bracket-delimited display math lines", () => {
+    expect(analyzeMarkdownMathBlocks([
+      "before",
+      "\\[",
+      "E = mc^2",
+      "\\]",
+      "after"
+    ])).toEqual([
+      { blockEnd: 4, blockStart: 2, expression: "E = mc^2", line: 2, role: "open" },
+      { blockEnd: 4, blockStart: 2, expression: "E = mc^2", line: 3, role: "content" },
+      { blockEnd: 4, blockStart: 2, expression: "E = mc^2", line: 4, role: "close" }
+    ]);
+  });
+
+  it("marks single-line bracket-delimited display math", () => {
+    expect(analyzeMarkdownMathBlocks([
+      "before",
+      "\\[ E = mc^2 \\]",
+      "after"
+    ])).toEqual([
+      { blockEnd: 2, blockStart: 2, expression: "E = mc^2", line: 2, role: "open" }
+    ]);
+  });
+
   it("keeps unclosed display math content marked until the document ends", () => {
     expect(analyzeMarkdownMathBlocks([
       "$$",
+      "x + y"
+    ])).toEqual([
+      { blockEnd: 2, blockStart: 1, expression: "x + y", line: 1, role: "open" },
+      { blockEnd: 2, blockStart: 1, expression: "x + y", line: 2, role: "content" }
+    ]);
+  });
+
+  it("keeps unclosed bracket-delimited display math content marked until the document ends", () => {
+    expect(analyzeMarkdownMathBlocks([
+      "\\[",
       "x + y"
     ])).toEqual([
       { blockEnd: 2, blockStart: 1, expression: "x + y", line: 1, role: "open" },
@@ -421,9 +455,21 @@ describe("findMarkdownMathBlockSourceRange", () => {
     ])).toEqual({ fromColumn: 3, fromLine: 1, toColumn: 11, toLine: 1 });
   });
 
+  it("finds TeX source inside single-line bracket display math", () => {
+    expect(findMarkdownMathBlockSourceRange([
+      "\\[ E = mc^2 \\]"
+    ])).toEqual({ fromColumn: 3, fromLine: 1, toColumn: 11, toLine: 1 });
+  });
+
   it("places empty single-line display math insertion between delimiters", () => {
     expect(findMarkdownMathBlockSourceRange([
       "$$   $$"
+    ])).toEqual({ fromColumn: 2, fromLine: 1, toColumn: 2, toLine: 1 });
+  });
+
+  it("places empty single-line bracket display math insertion between delimiters", () => {
+    expect(findMarkdownMathBlockSourceRange([
+      "\\[   \\]"
     ])).toEqual({ fromColumn: 2, fromLine: 1, toColumn: 2, toLine: 1 });
   });
 
@@ -432,6 +478,14 @@ describe("findMarkdownMathBlockSourceRange", () => {
       "$$",
       "E = mc^2",
       "$$"
+    ])).toEqual({ fromColumn: 0, fromLine: 2, toColumn: 8, toLine: 2 });
+  });
+
+  it("finds the TeX source inside a closed bracket display math block", () => {
+    expect(findMarkdownMathBlockSourceRange([
+      "\\[",
+      "E = mc^2",
+      "\\]"
     ])).toEqual({ fromColumn: 0, fromLine: 2, toColumn: 8, toLine: 2 });
   });
 
