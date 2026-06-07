@@ -12,7 +12,7 @@ P0/P1 are implemented:
 - CodeMirror 6 Markdown editor
 - live-preview-oriented line styling
 - unified live preview block-state analysis
-- inactive Markdown marker soft hiding for block prefixes, inline/reference links and images, emphasis, and strikethrough
+- inactive Markdown marker soft hiding for block prefixes, inline/reference links and images, autolinks, emphasis, and strikethrough
 - code fence block styling with inactive language/copy widgets
 - Markdown table block styling with inactive previews that preserve escaped pipes, inline code, emphasis, strikethrough, inline math, autolinks, inline HTML syntax, and full/collapsed/shortcut link-image syntax, plus targeted row/column insertion and deletion controls, column alignment controls, and source-focused cell navigation
 - standalone image preview cards

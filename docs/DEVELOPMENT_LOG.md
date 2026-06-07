@@ -3375,6 +3375,36 @@ Known limitations:
 - Generic shortcut-reference marker hiding still needs document-aware reference resolution before ordinary `[label]` text can be hidden safely.
 - Parser-backed inline marker mapping remains planned for deeper nested link and emphasis edge cases.
 
+## 2026-06-07 - P2 Autolink Marker Soft Hiding
+
+Completed:
+
+- Added inactive-line marker soft hiding for URI and email autolink angle brackets such as `<https://example.com>` and `<user@example.com>`.
+- Reused the existing validated autolink scanner instead of treating every angle-bracket span as Markdown syntax.
+- Added a small enclosed-marker collector for delimiters whose opening and closing markers differ.
+- Skipped autolinks inside inline code spans through the shared ignored-range path.
+- Added focused tests for URI autolinks, email autolinks, code-span exclusion, invalid angle text, and inline HTML tags.
+
+Quality gate:
+
+- `npx vitest run packages/editor/src/livePreview.test.ts`: passed, 165 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 395 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Browser smoke check: not run because this stage changes pure marker-range detection and is covered by unit and full build verification.
+
+Review:
+
+- Autolink marker detection remains isolated in `packages/editor`; no Workbench, platform, Electron, DOM, or filesystem dependency was added.
+- The autolink validation path is shared with table source mapping, keeping preview marker hiding and table protected ranges aligned.
+- Invalid angle text and inline HTML remain visible source text, avoiding a broad hard-coded angle-bracket rule.
+- No new dependency, configuration value, storage path, visual token, extra documentation file, or hard-coded platform assumption was introduced.
+
+Known limitations:
+
+- Parser-backed inline marker mapping remains planned for deeper nested link and HTML edge cases.
+
 ## 2026-06-07 - P2 Table Autolink Pipe Mapping
 
 Completed:
