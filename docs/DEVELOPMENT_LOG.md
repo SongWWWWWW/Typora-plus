@@ -3373,6 +3373,35 @@ Known limitations:
 
 - Parser-backed table mapping remains planned for deeper nested inline syntax and full document-aware reference resolution.
 
+## 2026-06-07 - P2 Table Inline HTML Tag Pipe Mapping
+
+Completed:
+
+- Made the shared Markdown table scanner preserve `|` inside inline HTML tag attributes such as `<span data-value="a|b">`.
+- Added generic open/self-closing/closing tag validation instead of a fixed tag-name list or blanket angle-bracket rule.
+- Preserved inline HTML tag cells through table preview, source-cell navigation, column insertion, and column deletion.
+- Added focused tests for inline HTML tag preview parsing, tag-only non-table lines, invalid closing tags, source ranges, and column edits.
+
+Quality gate:
+
+- `npm run typecheck`: passed
+- `npx vitest run packages/editor/src/livePreview.test.ts`: passed, 131 tests
+- `npm run verify`: passed, 361 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Browser smoke check: not run because this stage changes pure table source mapping and is covered by unit and full build verification.
+
+Review:
+
+- Inline HTML tag detection remains isolated in `packages/editor`; no Workbench, platform, Electron, DOM, or filesystem dependency was added.
+- The scanner validates tag shape before protecting a range, so arbitrary angle-bracket text does not gain special table behavior.
+- Preview rendering, source navigation, and pure table transforms still share one scanner path.
+- No new dependency, configuration value, storage path, visual token, extra documentation file, or hard-coded platform assumption was introduced.
+
+Known limitations:
+
+- Parser-backed table mapping remains planned for deeper nested inline syntax, HTML comments/CDATA, and full document-aware reference resolution.
+
 ## 2026-06-07 - P2 Inline Math Expression Range Model
 
 Completed:
