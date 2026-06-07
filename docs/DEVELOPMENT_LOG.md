@@ -3551,7 +3551,36 @@ Review:
 
 Known limitations:
 
-- Task checkbox interaction is currently mouse/click oriented; richer keyboard task toggling remains future work.
+- Task checkbox interaction was mouse/click oriented until the later focused-keyboard toggle stage.
+
+## 2026-06-07 - P2 Task Checkbox Keyboard Toggle
+
+Completed:
+
+- Added focused-keyboard toggling for inactive task checkbox widgets.
+- Supported `Space` and `Enter` on the focused checkbox, dispatching the same bounded Markdown marker edit as mouse clicks.
+- Prevented the browser's default checkbox key behavior from racing the source-backed editor update.
+- Added JSDOM coverage proving a focused checked task checkbox can toggle back to `[ ]` through `Enter`.
+
+Quality gate:
+
+- `npx vitest run packages/editor/src/livePreview.test.ts`: passed, 174 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 404 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Browser smoke check: not run because this stage changes the same widget event path already covered by JSDOM interaction tests and full build verification.
+
+Review:
+
+- Keyboard task toggling remains isolated in `packages/editor`; no Workbench command, platform keybinding, Electron, storage, or filesystem dependency was added.
+- The widget owns only focused `Space`/`Enter` handling, preserving the broader Workbench keybinding architecture for app-level commands.
+- The source-backed edit path is shared with mouse toggling, so task marker state remains a Markdown text concern.
+- No new dependency, configuration value, storage path, visual token, extra documentation file, or hard-coded platform assumption was introduced.
+
+Known limitations:
+
+- Global command-based task toggling from arbitrary cursor positions remains future work.
 
 ## 2026-06-07 - P2 Table Autolink Pipe Mapping
 
