@@ -3032,3 +3032,36 @@ Known limitations:
 - External extension package loading is still not implemented.
 - A concrete worker/process/Electron IPC extension host adapter is still not implemented.
 - Future production adapters still need runtime-specific lifecycle, trust, and default timeout/message-size policy.
+
+## 2026-06-07 - P2 Extension Host Protocol Configuration Policy
+
+Completed:
+
+- Added an `extensionHost` platform configuration group for protocol request timeout and wire-message length policy.
+- Added platform-owned numeric constraints and defaults for extension host protocol policy.
+- Added sanitization, persistence, invalid-value rejection, and out-of-range clamping for extension host protocol configuration.
+- Added `ExtensionHostProtocolConfiguration` helpers that map configuration into session, runtime, and wire transport options.
+- Preserved explicit protocol adapter options ahead of configured defaults so tests and specialized hosts can override policy intentionally.
+- Added tests for default alignment, persistence, invalid stored values, out-of-range clamping, disabled zero values, and option precedence.
+
+Quality gate:
+
+- `npm run typecheck`: passed
+- `npx vitest run packages/platform/src/extensionHostProtocolConfiguration.test.ts packages/platform/src/platform.test.ts`: passed, 98 tests
+- `npm run verify`: passed, 312 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Browser smoke check: not run because this stage only changes platform configuration/protocol policy and documentation.
+
+Review:
+
+- Protocol timeout and message-size policy now lives in configuration instead of being scattered through future transport adapters.
+- The configuration mapper is platform-only and does not depend on Workbench, Electron IPC, DOM APIs, Node streams, dynamic imports, or external extension package loading.
+- Zero-valued policy disables the limit deliberately, while persisted invalid values are ignored and out-of-range values are clamped by the configuration layer.
+- No new dependency, storage path, visual token, user-facing Settings surface, or extra documentation file was introduced.
+
+Known limitations:
+
+- External extension package loading is still not implemented.
+- A concrete worker/process/Electron IPC extension host adapter is still not implemented.
+- Future production adapters still need runtime-specific lifecycle and trust handling.
