@@ -539,10 +539,16 @@ describe("findInactiveMarkdownInlineMathRanges", () => {
     ]);
   });
 
+  it("finds bracket-delimited inline math ranges on inactive lines", () => {
+    expect(findInactiveMarkdownInlineMathRanges("A \\(x+y\\) note", false)).toEqual([
+      { expression: "x+y", from: 2, to: 9 }
+    ]);
+  });
+
   it("keeps repeated inline math source ranges distinct", () => {
-    expect(findInactiveMarkdownInlineMathRanges("$x$ and $x$", false)).toEqual([
+    expect(findInactiveMarkdownInlineMathRanges("$x$ and \\(y\\)", false)).toEqual([
       { expression: "x", from: 0, to: 3 },
-      { expression: "x", from: 8, to: 11 }
+      { expression: "y", from: 8, to: 13 }
     ]);
   });
 
@@ -554,6 +560,7 @@ describe("findInactiveMarkdownInlineMathRanges", () => {
     expect(findInactiveMarkdownInlineMathRanges("Inline $$x+y$$ stays source", false)).toEqual([]);
     expect(findInactiveMarkdownInlineMathRanges("Inline $x+y stays source", false)).toEqual([]);
     expect(findInactiveMarkdownInlineMathRanges("Price \\$5 stays source", false)).toEqual([]);
+    expect(findInactiveMarkdownInlineMathRanges("Inline \\(x+y stays source", false)).toEqual([]);
   });
 
   it("does not treat common currency text as math", () => {
@@ -561,8 +568,8 @@ describe("findInactiveMarkdownInlineMathRanges", () => {
   });
 
   it("ignores math-like text inside inline code spans", () => {
-    expect(findInactiveMarkdownInlineMathRanges("`$x$` and $y$", false)).toEqual([
-      { expression: "y", from: 10, to: 13 }
+    expect(findInactiveMarkdownInlineMathRanges("`$x$` and `\\(y\\)` and \\(z\\)", false)).toEqual([
+      { expression: "z", from: 22, to: 27 }
     ]);
   });
 });
@@ -780,13 +787,15 @@ describe("analyzeMarkdownTableLines", () => {
     const tableBlock = analyzeMarkdownLineBlocks([
       "| Expression | Status |",
       "| --- | --- |",
-      "| $a | b$ | Ready |"
+      "| $a | b$ | Ready |",
+      "| \\(c | d\\) | Hold |"
     ]).find((state) => state.tableBlock)?.tableBlock;
 
     expect(tableBlock).toBeDefined();
     expect(tableBlock?.headerCells).toEqual(["Expression", "Status"]);
     expect(tableBlock?.bodyRows).toEqual([
-      ["$a | b$", "Ready"]
+      ["$a | b$", "Ready"],
+      ["\\(c | d\\)", "Hold"]
     ]);
   });
 
@@ -902,7 +911,7 @@ describe("analyzeMarkdownTableLines", () => {
   it("does not treat inline-math-only pipes as table separators", () => {
     expect(analyzeMarkdownTableLines([
       "Name $a|b$ Value",
-      "--- $c|d$ ---"
+      "--- \\(c|d\\) ---"
     ])).toEqual([]);
   });
 
@@ -967,6 +976,14 @@ describe("Markdown table editing helpers", () => {
 
     expect(range).toEqual({ from: 2, to: 9 });
     expect(range ? line.slice(range.from, range.to) : "").toBe("$a | b$");
+  });
+
+  it("keeps bracket inline math pipes inside source cell ranges", () => {
+    const line = "| \\(a | b\\) | Status |";
+    const range = findMarkdownTableCellSourceRange(line, 0);
+
+    expect(range).toEqual({ from: 2, to: 11 });
+    expect(range ? line.slice(range.from, range.to) : "").toBe("\\(a | b\\)");
   });
 
   it("keeps link target pipes inside source cell ranges", () => {
@@ -1119,19 +1136,19 @@ describe("Markdown table editing helpers", () => {
     const tableBlock = analyzeMarkdownLineBlocks([
       "| Expression | Count | Status |",
       "| :--- | ---: | :---: |",
-      "| $a | b$ | 1 | Ready |"
+      "| $a | b$ | 1 | \\(c | d\\) |"
     ]).find((state) => state.tableBlock)?.tableBlock;
 
     expect(tableBlock).toBeDefined();
     expect(createMarkdownTableWithInsertedColumn(tableBlock!, { columnIndex: 1 })).toEqual([
       "| Expression |  | Count | Status |",
       "| :--- | --- | ---: | :---: |",
-      "| $a | b$ |  | 1 | Ready |"
+      "| $a | b$ |  | 1 | \\(c | d\\) |"
     ]);
     expect(createMarkdownTableWithDeletedColumn(tableBlock!, { columnIndex: 1 })).toEqual([
       "| Expression | Status |",
       "| :--- | :---: |",
-      "| $a | b$ | Ready |"
+      "| $a | b$ | \\(c | d\\) |"
     ]);
   });
 

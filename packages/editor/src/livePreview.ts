@@ -559,45 +559,45 @@ function readMarkdownInlineMathRanges(
   let cursor = 0;
 
   while (cursor < text.length) {
-    const start = findNextInlineMathDelimiter(text, cursor, codeSpanRanges);
+    const start = findNextInlineMathOpeningDelimiter(text, cursor, codeSpanRanges);
 
-    if (start === -1) {
+    if (!start) {
       return ranges;
     }
 
-    if (!canOpenInlineMath(text, start)) {
-      cursor = start + 1;
+    if (!canOpenInlineMath(text, start.from, start.marker)) {
+      cursor = start.to;
       continue;
     }
 
-    let endCursor = start + 1;
-    let end = -1;
+    let endCursor = start.to;
+    let end: { readonly from: number; readonly to: number } | undefined;
 
     while (endCursor < text.length) {
-      const candidate = findNextInlineMathDelimiter(text, endCursor, codeSpanRanges);
+      const candidate = findNextInlineMathClosingDelimiter(text, endCursor, start.marker, codeSpanRanges);
 
-      if (candidate === -1) {
+      if (!candidate) {
         break;
       }
 
-      if (canCloseInlineMath(text, candidate)) {
+      if (canCloseInlineMath(text, candidate.from, start.marker)) {
         end = candidate;
         break;
       }
 
-      endCursor = candidate + 1;
+      endCursor = candidate.to;
     }
 
-    if (end === -1) {
+    if (!end) {
       return ranges;
     }
 
-    const expression = text.slice(start + 1, end).trim();
+    const expression = text.slice(start.to, end.from).trim();
     if (expression) {
-      ranges.push({ expression, from: start, to: end + 1 });
+      ranges.push({ expression, from: start.from, to: end.to });
     }
 
-    cursor = end + 1;
+    cursor = end.to;
   }
 
   return ranges;
@@ -868,7 +868,9 @@ function buildDecorations(
             widget: new MarkdownInlineMathWidget(
               inlineMath,
               line.from + inlineMath.from,
-              line.from + inlineMath.to
+              line.from + inlineMath.to,
+              line.from + readInlineMathExpressionFrom(line.text, inlineMath),
+              line.from + readInlineMathExpressionTo(line.text, inlineMath)
             )
           }),
           from: line.from + inlineMath.from,
@@ -1426,33 +1428,83 @@ function readSingleLineMarkdownMathForFence(
   };
 }
 
-function findNextInlineMathDelimiter(
+type MarkdownInlineMathDelimiter = "$" | "\\(";
+
+function findNextInlineMathOpeningDelimiter(
   text: string,
   from: number,
   codeSpanRanges: readonly MarkdownSyntaxMarkerRange[]
-): number {
+): { readonly from: number; readonly marker: MarkdownInlineMathDelimiter; readonly to: number } | undefined {
   for (let index = from; index < text.length; index += 1) {
+    if (isIndexInsideMarkdownRange(index, codeSpanRanges)) {
+      continue;
+    }
+
+    if (text[index] === "$" && isDollarInlineMathDelimiter(text, index)) {
+      return { from: index, marker: "$", to: index + 1 };
+    }
+
     if (
-      text[index] === "$" &&
-      !isEscaped(text, index) &&
-      text[index - 1] !== "$" &&
-      text[index + 1] !== "$" &&
-      !isIndexInsideMarkdownRange(index, codeSpanRanges)
+      text[index] === "\\" &&
+      text[index + 1] === "(" &&
+      !isEscaped(text, index)
     ) {
-      return index;
+      return { from: index, marker: "\\(", to: index + 2 };
     }
   }
 
-  return -1;
+  return undefined;
 }
 
-function canOpenInlineMath(text: string, index: number): boolean {
+function findNextInlineMathClosingDelimiter(
+  text: string,
+  from: number,
+  marker: MarkdownInlineMathDelimiter,
+  codeSpanRanges: readonly MarkdownSyntaxMarkerRange[]
+): { readonly from: number; readonly to: number } | undefined {
+  for (let index = from; index < text.length; index += 1) {
+    if (isIndexInsideMarkdownRange(index, codeSpanRanges)) {
+      continue;
+    }
+
+    if (marker === "$" && text[index] === "$" && isDollarInlineMathDelimiter(text, index)) {
+      return { from: index, to: index + 1 };
+    }
+
+    if (
+      marker === "\\(" &&
+      text[index] === "\\" &&
+      text[index + 1] === ")" &&
+      !isEscaped(text, index)
+    ) {
+      return { from: index, to: index + 2 };
+    }
+  }
+
+  return undefined;
+}
+
+function isDollarInlineMathDelimiter(text: string, index: number): boolean {
+  return !isEscaped(text, index) &&
+    text[index - 1] !== "$" &&
+    text[index + 1] !== "$";
+}
+
+function canOpenInlineMath(text: string, index: number, marker: MarkdownInlineMathDelimiter): boolean {
+  if (marker === "\\(") {
+    return true;
+  }
+
   const previous = text[index - 1];
   const next = text[index + 1];
   return Boolean(next && !/\s/.test(next) && !(/\d/.test(next) && (!previous || /\s/.test(previous))));
 }
 
-function canCloseInlineMath(text: string, index: number): boolean {
+function canCloseInlineMath(text: string, index: number, marker: MarkdownInlineMathDelimiter): boolean {
+  if (marker === "\\(") {
+    return true;
+  }
+
   const previous = text[index - 1];
   return Boolean(previous && !/\s/.test(previous));
 }
@@ -3332,7 +3384,9 @@ class MarkdownInlineMathWidget extends WidgetType {
   constructor(
     private readonly math: MarkdownInlineMathRange,
     private readonly sourceFrom: number,
-    private readonly sourceTo: number
+    private readonly sourceTo: number,
+    private readonly expressionFrom: number,
+    private readonly expressionTo: number
   ) {
     super();
   }
@@ -3341,7 +3395,9 @@ class MarkdownInlineMathWidget extends WidgetType {
     return widget instanceof MarkdownInlineMathWidget &&
       widget.math.expression === this.math.expression &&
       widget.sourceFrom === this.sourceFrom &&
-      widget.sourceTo === this.sourceTo;
+      widget.sourceTo === this.sourceTo &&
+      widget.expressionFrom === this.expressionFrom &&
+      widget.expressionTo === this.expressionTo;
   }
 
   override toDOM(view: EditorView): HTMLElement {
@@ -3360,7 +3416,7 @@ class MarkdownInlineMathWidget extends WidgetType {
     inline.addEventListener("click", (event) => {
       event.preventDefault();
       event.stopPropagation();
-      focusMarkdownInlineMathSource(view, this.sourceFrom, this.sourceTo);
+      focusMarkdownInlineMathSource(view, this.expressionFrom, this.expressionTo);
     });
 
     if (renderResult.status !== "valid") {
@@ -3378,13 +3434,22 @@ class MarkdownInlineMathWidget extends WidgetType {
   }
 }
 
-function focusMarkdownInlineMathSource(view: EditorView, sourceFrom: number, sourceTo: number): void {
-  if (sourceFrom < 0 || sourceTo > view.state.doc.length || sourceFrom >= sourceTo) {
+function readInlineMathExpressionFrom(text: string, range: MarkdownInlineMathRange): number {
+  return text.slice(range.from, range.from + 2) === "\\(" ? range.from + 2 : range.from + 1;
+}
+
+function readInlineMathExpressionTo(text: string, range: MarkdownInlineMathRange): number {
+  return text.slice(range.to - 2, range.to) === "\\)" ? range.to - 2 : range.to - 1;
+}
+
+function focusMarkdownInlineMathSource(view: EditorView, expressionFrom: number, expressionTo: number): void {
+  if (
+    expressionFrom < 0 ||
+    expressionTo > view.state.doc.length ||
+    expressionFrom > expressionTo
+  ) {
     return;
   }
-
-  const expressionFrom = sourceTo - sourceFrom > 2 ? sourceFrom + 1 : sourceFrom;
-  const expressionTo = sourceTo - sourceFrom > 2 ? sourceTo - 1 : sourceTo;
 
   view.dispatch({
     selection: { anchor: expressionFrom, head: expressionTo },
