@@ -3402,6 +3402,36 @@ Known limitations:
 
 - Parser-backed table mapping remains planned for deeper nested inline syntax, HTML comments/CDATA, and full document-aware reference resolution.
 
+## 2026-06-07 - P2 Table HTML Comment Pipe Mapping
+
+Completed:
+
+- Made the shared Markdown table scanner preserve `|` inside HTML comments and CDATA sections such as `<!-- a|b -->` and `<![CDATA[x|y]]>`.
+- Added a small delimited-inline-HTML range reader driven by open/close marker definitions instead of per-string special cases.
+- Kept unclosed comments and CDATA sections unprotected so incomplete syntax does not hide real table separators while editing.
+- Preserved comment and CDATA cells through table preview, source-cell navigation, column insertion, and column deletion.
+- Added focused tests for preview parsing, comment/CDATA-only non-table lines, unclosed syntax, source ranges, and column edits.
+
+Quality gate:
+
+- `npm run typecheck`: passed
+- `npx vitest run packages/editor/src/livePreview.test.ts`: passed, 136 tests
+- `npm run verify`: passed, 366 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Browser smoke check: not run because this stage changes pure table source mapping and is covered by unit and full build verification.
+
+Review:
+
+- HTML comment and CDATA range detection remains isolated in `packages/editor`; no Workbench, platform, Electron, DOM, or filesystem dependency was added.
+- The delimited syntax reader shares the same protected-range path as code spans, math, links, autolinks, and HTML tags, keeping preview rendering, source navigation, and pure table transforms aligned.
+- The implementation protects only closed marker ranges and ignores openings inside code spans, avoiding broad angle-bracket hard-coding.
+- No new dependency, configuration value, storage path, visual token, extra documentation file, or hard-coded platform assumption was introduced.
+
+Known limitations:
+
+- Parser-backed table mapping remains planned for deeper nested inline syntax, processing instructions/declarations, and full document-aware reference resolution.
+
 ## 2026-06-07 - P2 Inline Math Expression Range Model
 
 Completed:
