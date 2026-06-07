@@ -3187,7 +3187,7 @@ Review:
 Known limitations:
 
 - Display math detection covers fenced `$$` blocks and the follow-up single-line `$$ ... $$` stage; the later bracket-delimiter stage narrows delimiter coverage further, while broader inline edge cases remain planned for parser-backed mapping.
-- Parser-backed table mapping for shortcut references and nested inline edge cases remains planned.
+- Parser-backed table mapping remained planned for shortcut references until the later shortcut-reference stage, and remains planned for nested inline edge cases.
 
 ## 2026-06-07 - P2 Single-Line Display Math Preview
 
@@ -3218,7 +3218,7 @@ Review:
 Known limitations:
 
 - Parser-backed math mapping remains planned for additional delimiter variants and deeper inline edge cases; the follow-up bracket-delimiter stage narrows the current delimiter gap.
-- Parser-backed table mapping for shortcut references and nested inline edge cases remains planned.
+- Parser-backed table mapping remained planned for shortcut references until the later shortcut-reference stage, and remains planned for nested inline edge cases.
 
 ## 2026-06-07 - P2 Bracket Display Math Preview
 
@@ -3248,4 +3248,35 @@ Review:
 Known limitations:
 
 - Parser-backed math mapping remains planned for additional delimiter variants and deeper inline edge cases.
-- Parser-backed table mapping for shortcut references and nested inline edge cases remains planned.
+- Parser-backed table mapping remained planned for shortcut references until the later shortcut-reference stage, and remains planned for nested inline edge cases.
+
+## 2026-06-07 - P2 Table Shortcut Reference Pipe Mapping
+
+Completed:
+
+- Made the shared Markdown table scanner preserve `|` inside shortcut-reference-style labels such as `[Guide|Docs]`.
+- Covered shortcut image labels such as `![Alt|Text]` through the same protected-range path.
+- Kept shortcut-reference-only lines from being mistaken for tables when all visible pipes are inside protected labels.
+- Preserved shortcut reference cells through table preview, source-cell navigation, column insertion, and column deletion.
+- Added focused tests for shortcut reference preview parsing, non-table detection, source ranges, and column edits.
+
+Quality gate:
+
+- `npm run typecheck`: passed
+- `npx vitest run packages/editor/src/livePreview.test.ts`: passed, 113 tests
+- `npm run verify`: passed, 343 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Browser smoke check: not run because this stage changes pure table source mapping and is covered by unit and full build verification.
+
+Review:
+
+- Table parsing remains isolated in `packages/editor`; no Workbench, platform, Electron, DOM, or filesystem dependency was added.
+- The shortcut path only protects bracket labels that actually contain a table-separator candidate, avoiding a blanket rule for every bracketed span.
+- Preview rendering, source navigation, and pure table transforms still share one scanner path.
+- No new dependency, configuration value, storage path, visual token, extra documentation file, or hard-coded platform assumption was introduced.
+
+Known limitations:
+
+- Parser-backed table mapping remains planned for deeper nested inline syntax and full document-aware reference resolution.
+- Parser-backed math mapping remains planned for additional delimiter variants and deeper inline edge cases.
