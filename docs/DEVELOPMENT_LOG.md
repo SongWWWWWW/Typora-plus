@@ -3464,6 +3464,35 @@ Known limitations:
 
 - Parser-backed inline marker mapping remains planned for deeper nested inline syntax and full document-aware reference resolution.
 
+## 2026-06-07 - P2 Closing Heading Marker Soft Hiding
+
+Completed:
+
+- Added inactive-line marker soft hiding for optional ATX heading closing markers such as `## Title ##`.
+- Kept the existing heading prefix marker handling in the same block marker collector.
+- Required valid line-end closing markers with whitespace separation so literal trailing hashes such as `Heading#`, `#1`, or mid-line hashes remain visible source text.
+- Added focused tests for closed headings, trailing whitespace after closing markers, and literal trailing hash non-matches.
+
+Quality gate:
+
+- `npx vitest run packages/editor/src/livePreview.test.ts`: passed, 167 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 397 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Browser smoke check: not run because this stage changes pure marker-range detection and is covered by unit and full build verification.
+
+Review:
+
+- Heading marker detection remains isolated in `packages/editor`; no Workbench, platform, Electron, DOM, or filesystem dependency was added.
+- Closing marker detection stays in the block marker collector with the existing heading prefix logic, keeping block syntax handling centralized.
+- Literal trailing hashes remain visible unless they form a valid line-end ATX closing marker, avoiding a broad hard-coded `#` rule.
+- No new dependency, configuration value, storage path, visual token, extra documentation file, or hard-coded platform assumption was introduced.
+
+Known limitations:
+
+- Parser-backed block marker mapping remains planned for deeper CommonMark edge cases.
+
 ## 2026-06-07 - P2 Table Autolink Pipe Mapping
 
 Completed:
