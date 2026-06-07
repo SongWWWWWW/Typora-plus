@@ -100,7 +100,7 @@ Current features:
 - history, search, selection, bracket matching
 - unified live preview block-state analysis with normalized visible editor ranges
 - heading/quote/list/fence line styling
-- inactive Markdown marker soft hiding for headings, lists, quotes, fences, inline/reference links and images, autolinks, emphasis, and strikethrough, with inline-code-safe marker scanning
+- inactive Markdown marker soft hiding for headings, lists, quotes, fences, inline code, inline/reference links and images, autolinks, emphasis, and strikethrough, with inline-code-safe marker scanning
 - code fence block styling with visible-range-aware fence state tracking, inactive language/copy widgets, and provider-backed previews for matching code-fence languages with sanitized HTML and source-focused click editing
 - provider-backed inline renderer previews for language-qualified inline code spans, using inline-only sanitized HTML and source-focused click editing
 - built-in Status inline badge preview for `` `status:done` ``, `` `status:blocked: Waiting on API` ``, and configuration-backed workflow markers through the Markdown renderer provider path

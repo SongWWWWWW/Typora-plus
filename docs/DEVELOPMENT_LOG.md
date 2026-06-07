@@ -3405,6 +3405,36 @@ Known limitations:
 
 - Parser-backed inline marker mapping remains planned for deeper nested link and HTML edge cases.
 
+## 2026-06-07 - P2 Inline Code Marker Soft Hiding
+
+Completed:
+
+- Added inactive-line marker soft hiding for inline code backtick delimiters.
+- Reused the existing code span scanner and its parsed content boundaries instead of adding a second backtick parser.
+- Supported multi-backtick code spans through the same marker collector.
+- Preserved the behavior that unclosed backtick runs are not hidden while editing.
+- Updated focused tests for active-line exclusion, inline code delimiters, multi-backtick spans, unclosed spans, and syntax inside code spans.
+
+Quality gate:
+
+- `npx vitest run packages/editor/src/livePreview.test.ts`: passed, 166 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 396 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Browser smoke check: not run because this stage changes pure marker-range detection and is covered by unit and full build verification.
+
+Review:
+
+- Inline code marker detection remains isolated in `packages/editor`; no Workbench, platform, Electron, DOM, or filesystem dependency was added.
+- Marker hiding now uses the same code span ranges that table parsing, math/link exclusion, and inline renderer detection already consume.
+- The implementation only hides delimiters from closed code spans, avoiding hard-coded backtick matching while the user is still typing incomplete source.
+- No new dependency, configuration value, storage path, visual token, extra documentation file, or hard-coded platform assumption was introduced.
+
+Known limitations:
+
+- Parser-backed inline marker mapping remains planned for deeper nested inline syntax edge cases.
+
 ## 2026-06-07 - P2 Table Autolink Pipe Mapping
 
 Completed:
