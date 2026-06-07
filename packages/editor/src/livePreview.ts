@@ -643,7 +643,21 @@ export function findMarkdownMathBlockSourceRange(
 ): MarkdownMathBlockSourceRange | undefined {
   const openLine = lines[0];
 
-  if (openLine === undefined || !isMarkdownMathFence(openLine)) {
+  if (openLine === undefined) {
+    return undefined;
+  }
+
+  const singleLineMath = readSingleLineMarkdownMath(openLine);
+  if (singleLineMath) {
+    return {
+      fromColumn: singleLineMath.fromColumn,
+      fromLine: 1,
+      toColumn: singleLineMath.toColumn,
+      toLine: 1
+    };
+  }
+
+  if (!isMarkdownMathFence(openLine)) {
     return undefined;
   }
 
@@ -1246,7 +1260,23 @@ function readMarkdownMathBlockFromSource(source: {
   readonly readLine: (lineNumber: number) => string;
   readonly startLine: number;
 }): MarkdownMathReadResult | undefined {
-  if (!isMarkdownMathFence(source.readLine(source.startLine))) {
+  const startText = source.readLine(source.startLine);
+  const singleLineMath = readSingleLineMarkdownMath(startText);
+
+  if (singleLineMath) {
+    return {
+      nextLine: source.startLine + 1,
+      states: [{
+        blockEnd: source.startLine,
+        blockStart: source.startLine,
+        expression: singleLineMath.expression,
+        line: source.startLine,
+        role: "open"
+      }]
+    };
+  }
+
+  if (!isMarkdownMathFence(startText)) {
     return undefined;
   }
 
@@ -1305,6 +1335,43 @@ function readMarkdownMathBlockFromSource(source: {
 
 function isMarkdownMathFence(text: string): boolean {
   return /^\s*\$\$\s*$/.test(text);
+}
+
+function readSingleLineMarkdownMath(
+  text: string
+): { readonly expression: string; readonly fromColumn: number; readonly toColumn: number } | undefined {
+  const trimmedStart = readFirstNonWhitespaceIndex(text);
+  const trimmedEnd = readLastNonWhitespaceIndex(text) + 1;
+
+  if (trimmedEnd - trimmedStart < 4 || text.slice(trimmedStart, trimmedStart + 2) !== "$$") {
+    return undefined;
+  }
+
+  const closeFrom = trimmedEnd - 2;
+
+  if (closeFrom < trimmedStart + 2 || text.slice(closeFrom, trimmedEnd) !== "$$" || isEscaped(text, closeFrom)) {
+    return undefined;
+  }
+
+  const rawExpression = text.slice(trimmedStart + 2, closeFrom);
+  if (rawExpression.trim() === "") {
+    return {
+      expression: "",
+      fromColumn: trimmedStart + 2,
+      toColumn: trimmedStart + 2
+    };
+  }
+
+  const leadingWhitespaceLength = rawExpression.match(/^\s*/)?.[0].length ?? 0;
+  const trailingWhitespaceLength = rawExpression.match(/\s*$/)?.[0].length ?? 0;
+  const fromColumn = trimmedStart + 2 + leadingWhitespaceLength;
+  const toColumn = Math.max(fromColumn, closeFrom - trailingWhitespaceLength);
+
+  return {
+    expression: text.slice(fromColumn, toColumn),
+    fromColumn,
+    toColumn
+  };
 }
 
 function findNextInlineMathDelimiter(

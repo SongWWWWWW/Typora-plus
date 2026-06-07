@@ -357,6 +357,16 @@ describe("analyzeMarkdownMathBlocks", () => {
     ]);
   });
 
+  it("marks single-line display math", () => {
+    expect(analyzeMarkdownMathBlocks([
+      "before",
+      "$$ E = mc^2 $$",
+      "after"
+    ])).toEqual([
+      { blockEnd: 2, blockStart: 2, expression: "E = mc^2", line: 2, role: "open" }
+    ]);
+  });
+
   it("keeps unclosed display math content marked until the document ends", () => {
     expect(analyzeMarkdownMathBlocks([
       "$$",
@@ -405,6 +415,18 @@ describe("renderMarkdownMathExpression", () => {
 });
 
 describe("findMarkdownMathBlockSourceRange", () => {
+  it("finds TeX source inside single-line display math", () => {
+    expect(findMarkdownMathBlockSourceRange([
+      "$$ E = mc^2 $$"
+    ])).toEqual({ fromColumn: 3, fromLine: 1, toColumn: 11, toLine: 1 });
+  });
+
+  it("places empty single-line display math insertion between delimiters", () => {
+    expect(findMarkdownMathBlockSourceRange([
+      "$$   $$"
+    ])).toEqual({ fromColumn: 2, fromLine: 1, toColumn: 2, toLine: 1 });
+  });
+
   it("finds the TeX source inside a closed display math block", () => {
     expect(findMarkdownMathBlockSourceRange([
       "$$",
