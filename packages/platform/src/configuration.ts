@@ -39,6 +39,10 @@ export interface TyporaPlusConfiguration {
     readonly searchMaxFileSizeBytes: number;
     readonly searchMaxResults: number;
   };
+  readonly extensionHost: {
+    readonly requestTimeoutMs: number;
+    readonly wireMessageMaxLength: number;
+  };
   readonly markdown: {
     readonly statusBadges: readonly MarkdownStatusBadgeConfiguration[];
   };
@@ -78,6 +82,7 @@ export type PartialConfiguration = {
   readonly appearance?: PartialAppearanceConfiguration;
   readonly editor?: Partial<TyporaPlusConfiguration["editor"]>;
   readonly workspace?: Partial<TyporaPlusConfiguration["workspace"]>;
+  readonly extensionHost?: Partial<TyporaPlusConfiguration["extensionHost"]>;
   readonly markdown?: Partial<TyporaPlusConfiguration["markdown"]>;
   readonly keybindings?: Partial<TyporaPlusConfiguration["keybindings"]>;
 };
@@ -104,7 +109,13 @@ export const configurationNumberConstraints = {
     max: 20 * configurationBytesPerMegabyte,
     step: configurationBytesPerMegabyte
   },
-  workspaceSearchMaxResults: { min: 20, max: 500, step: 10 }
+  workspaceSearchMaxResults: { min: 20, max: 500, step: 10 },
+  extensionHostRequestTimeoutMs: { min: 0, max: 60_000, step: 500 },
+  extensionHostWireMessageMaxLength: {
+    min: 0,
+    max: 10 * configurationBytesPerMegabyte,
+    step: 64 * 1024
+  }
 } as const satisfies Record<string, ConfigurationNumberConstraint>;
 
 export const defaultMarkdownStatusBadges = [
@@ -159,6 +170,10 @@ export const defaultConfiguration: TyporaPlusConfiguration = {
     defaultAssetFolder: "assets",
     searchMaxFileSizeBytes: 2 * configurationBytesPerMegabyte,
     searchMaxResults: 120
+  },
+  extensionHost: {
+    requestTimeoutMs: 15_000,
+    wireMessageMaxLength: configurationBytesPerMegabyte
   },
   markdown: {
     statusBadges: defaultMarkdownStatusBadges
@@ -224,6 +239,10 @@ export function mergeConfiguration(
       ...base.workspace,
       ...value.workspace
     },
+    extensionHost: {
+      ...base.extensionHost,
+      ...value.extensionHost
+    },
     markdown: {
       ...base.markdown,
       ...value.markdown
@@ -279,6 +298,7 @@ function sanitizePartialConfiguration(value: unknown): PartialConfiguration {
     ...(isRecord(value.appearance) ? { appearance: sanitizeAppearanceConfiguration(value.appearance) } : {}),
     ...(isRecord(value.editor) ? { editor: sanitizeEditorConfiguration(value.editor) } : {}),
     ...(isRecord(value.workspace) ? { workspace: sanitizeWorkspaceConfiguration(value.workspace) } : {}),
+    ...(isRecord(value.extensionHost) ? { extensionHost: sanitizeExtensionHostConfiguration(value.extensionHost) } : {}),
     ...(isRecord(value.markdown) ? { markdown: sanitizeMarkdownConfiguration(value.markdown) } : {}),
     ...(isRecord(value.keybindings) ? { keybindings: sanitizeKeybindingsConfiguration(value.keybindings) } : {})
   };
@@ -327,6 +347,21 @@ function sanitizeWorkspaceConfiguration(value: Record<string, unknown>): Partial
       configurationNumberConstraints.workspaceSearchMaxFileSizeBytes
     ),
     ...sanitizeNumberProperty("searchMaxResults", value.searchMaxResults, configurationNumberConstraints.workspaceSearchMaxResults)
+  };
+}
+
+function sanitizeExtensionHostConfiguration(value: Record<string, unknown>): Partial<TyporaPlusConfiguration["extensionHost"]> {
+  return {
+    ...sanitizeNumberProperty(
+      "requestTimeoutMs",
+      value.requestTimeoutMs,
+      configurationNumberConstraints.extensionHostRequestTimeoutMs
+    ),
+    ...sanitizeNumberProperty(
+      "wireMessageMaxLength",
+      value.wireMessageMaxLength,
+      configurationNumberConstraints.extensionHostWireMessageMaxLength
+    )
   };
 }
 

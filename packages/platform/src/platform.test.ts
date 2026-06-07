@@ -85,6 +85,14 @@ describe("configuration", () => {
       defaultConfiguration.workspace.searchMaxResults,
       configurationNumberConstraints.workspaceSearchMaxResults
     );
+    expectConfigurationNumberAligned(
+      defaultConfiguration.extensionHost.requestTimeoutMs,
+      configurationNumberConstraints.extensionHostRequestTimeoutMs
+    );
+    expectConfigurationNumberAligned(
+      defaultConfiguration.extensionHost.wireMessageMaxLength,
+      configurationNumberConstraints.extensionHostWireMessageMaxLength
+    );
   });
 
   it("persists configuration updates through storage", () => {
@@ -103,6 +111,10 @@ describe("configuration", () => {
         focusMode: true,
         autoSaveDelayMs: 1250,
         rendererPreviewCacheEntries: 0
+      },
+      extensionHost: {
+        requestTimeoutMs: 20_000,
+        wireMessageMaxLength: 2 * 1024 * 1024
       },
       markdown: {
         statusBadges: [
@@ -127,6 +139,8 @@ describe("configuration", () => {
     expect(restored.getValue().editor.autoSave).toBe(true);
     expect(restored.getValue().editor.autoSaveDelayMs).toBe(1250);
     expect(restored.getValue().editor.rendererPreviewCacheEntries).toBe(0);
+    expect(restored.getValue().extensionHost.requestTimeoutMs).toBe(20_000);
+    expect(restored.getValue().extensionHost.wireMessageMaxLength).toBe(2 * 1024 * 1024);
     expect(restored.getValue().markdown.statusBadges).toEqual([
       {
         key: "shipped",
@@ -237,6 +251,10 @@ describe("configuration", () => {
       workspace: {
         searchMaxResults: 0
       },
+      extensionHost: {
+        requestTimeoutMs: -1,
+        wireMessageMaxLength: -1
+      },
       markdown: {
         statusBadges: [
           {
@@ -262,6 +280,10 @@ describe("configuration", () => {
     );
     expect(service.getValue().editor.typewriterMode).toBe(true);
     expect(service.getValue().workspace.searchMaxResults).toBe(120);
+    expect(service.getValue().extensionHost.requestTimeoutMs).toBe(defaultConfiguration.extensionHost.requestTimeoutMs);
+    expect(service.getValue().extensionHost.wireMessageMaxLength).toBe(
+      defaultConfiguration.extensionHost.wireMessageMaxLength
+    );
     expect(service.getValue().markdown.statusBadges).toEqual(defaultConfiguration.markdown.statusBadges);
   });
 
@@ -278,6 +300,10 @@ describe("configuration", () => {
       workspace: {
         searchMaxFileSizeBytes: 999 * 1024 * 1024,
         searchMaxResults: 9999
+      },
+      extensionHost: {
+        requestTimeoutMs: 999_999,
+        wireMessageMaxLength: 999 * 1024 * 1024
       }
     }));
 
@@ -297,6 +323,12 @@ describe("configuration", () => {
       configurationNumberConstraints.workspaceSearchMaxFileSizeBytes.max
     );
     expect(service.getValue().workspace.searchMaxResults).toBe(configurationNumberConstraints.workspaceSearchMaxResults.max);
+    expect(service.getValue().extensionHost.requestTimeoutMs).toBe(
+      configurationNumberConstraints.extensionHostRequestTimeoutMs.max
+    );
+    expect(service.getValue().extensionHost.wireMessageMaxLength).toBe(
+      configurationNumberConstraints.extensionHostWireMessageMaxLength.max
+    );
   });
 
   it("persists and validates keybinding overrides", () => {
