@@ -1841,6 +1841,27 @@ describe("findInactiveMarkdownSyntaxMarkers", () => {
     expect(findInactiveMarkdownSyntaxMarkers("```ts", false)).toEqual([{ from: 0, to: 3 }]);
   });
 
+  it("marks task list state markers after list prefixes", () => {
+    expect(findInactiveMarkdownSyntaxMarkers("- [ ] Todo", false)).toEqual([
+      { from: 0, to: 1 },
+      { from: 2, to: 5 }
+    ]);
+    expect(findInactiveMarkdownSyntaxMarkers("  10. [X] Done", false)).toEqual([
+      { from: 2, to: 5 },
+      { from: 6, to: 9 }
+    ]);
+    expect(findInactiveMarkdownSyntaxMarkers("* [x]", false)).toEqual([
+      { from: 0, to: 1 },
+      { from: 2, to: 5 }
+    ]);
+  });
+
+  it("does not mark malformed task list state markers", () => {
+    expect(findInactiveMarkdownSyntaxMarkers("- [] Todo", false)).toEqual([{ from: 0, to: 1 }]);
+    expect(findInactiveMarkdownSyntaxMarkers("- [x]Done", false)).toEqual([{ from: 0, to: 1 }]);
+    expect(findInactiveMarkdownSyntaxMarkers("Text [ ] Todo", false)).toEqual([]);
+  });
+
   it("marks closing heading markers without treating literal trailing hashes as syntax", () => {
     expect(findInactiveMarkdownSyntaxMarkers("## Heading ##", false)).toEqual([
       { from: 0, to: 2 },

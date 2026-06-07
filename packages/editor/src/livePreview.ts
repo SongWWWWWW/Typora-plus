@@ -4274,8 +4274,12 @@ function collectBlockMarkers(text: string, ranges: MarkdownSyntaxMarkerRange[]):
   }
 
   const list = /^(\s*)([-*+]|\d+[.)])(\s+)/.exec(text);
-  if (list?.[1] !== undefined && list[2]) {
+  if (list?.[1] !== undefined && list[2] && list[3]) {
     ranges.push({ from: list[1].length, to: list[1].length + list[2].length });
+    const taskMarker = readTaskListMarkerRange(text, list[1].length + list[2].length + list[3].length);
+    if (taskMarker) {
+      ranges.push(taskMarker);
+    }
     return;
   }
 
@@ -4283,6 +4287,12 @@ function collectBlockMarkers(text: string, ranges: MarkdownSyntaxMarkerRange[]):
   if (fence?.[1] !== undefined && fence[2]) {
     ranges.push({ from: fence[1].length, to: fence[1].length + fence[2].length });
   }
+}
+
+function readTaskListMarkerRange(text: string, from: number): MarkdownSyntaxMarkerRange | undefined {
+  const match = /^\[(?: |x|X)\](?=\s|$)/.exec(text.slice(from));
+
+  return match ? { from, to: from + match[0].length } : undefined;
 }
 
 function readClosingAtxHeadingMarkerRange(
