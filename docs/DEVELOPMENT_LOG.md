@@ -3432,6 +3432,36 @@ Known limitations:
 
 - Parser-backed table mapping remains planned for deeper nested inline syntax, processing instructions/declarations, and full document-aware reference resolution.
 
+## 2026-06-07 - P2 Table HTML Declaration Pipe Mapping
+
+Completed:
+
+- Made the shared Markdown table scanner preserve `|` inside HTML processing instructions and declarations such as `<?pi a|b?>` and `<!DOCTYPE html|svg>`.
+- Reused the delimited-inline-HTML range reader for processing instructions and added a declaration reader that only accepts `<!` followed by an uppercase ASCII declaration name.
+- Kept unclosed processing instructions, unclosed declarations, and invalid lowercase declarations unprotected so incomplete or invalid syntax does not hide real table separators.
+- Preserved processing-instruction and declaration cells through table preview, source-cell navigation, column insertion, and column deletion.
+- Added focused tests for preview parsing, processing-instruction/declaration-only non-table lines, unclosed syntax, invalid declarations, source ranges, and column edits.
+
+Quality gate:
+
+- `npm run typecheck`: passed
+- `npx vitest run packages/editor/src/livePreview.test.ts`: passed, 142 tests
+- `npm run verify`: passed, 372 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Browser smoke check: not run because this stage changes pure table source mapping and is covered by unit and full build verification.
+
+Review:
+
+- HTML processing-instruction and declaration range detection remains isolated in `packages/editor`; no Workbench, platform, Electron, DOM, or filesystem dependency was added.
+- The declaration scanner validates the declaration shape instead of treating every `<!...>` span as protected syntax.
+- Preview rendering, source navigation, and pure table transforms still share one protected-range scanner path.
+- No new dependency, configuration value, storage path, visual token, extra documentation file, or hard-coded platform assumption was introduced.
+
+Known limitations:
+
+- Parser-backed table mapping remains planned for deeper nested inline syntax and full document-aware reference resolution.
+
 ## 2026-06-07 - P2 Inline Math Expression Range Model
 
 Completed:
