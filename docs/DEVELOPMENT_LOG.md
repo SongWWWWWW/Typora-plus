@@ -3344,6 +3344,37 @@ Known limitations:
 - Parser-backed math mapping remains planned for deeper inline edge cases.
 - Parser-backed table mapping remains planned for deeper nested inline syntax and full document-aware reference resolution.
 
+## 2026-06-07 - P2 Structural Link Marker Soft Hiding
+
+Completed:
+
+- Replaced inactive link and image marker hiding's regex scan with structured inline link syntax ranges shared with table source mapping.
+- Added inactive marker soft hiding for reference-style and collapsed-reference link/image punctuation.
+- Skipped link and image punctuation inside inline code spans through the shared ignored-range path.
+- Kept shortcut-reference-looking labels out of generic marker hiding unless table parsing explicitly requests separator protection.
+- Added focused tests for inline-code exclusion, reference links, collapsed references, reference images, and shortcut-looking non-links.
+
+Quality gate:
+
+- `npx vitest run packages/editor/src/livePreview.test.ts`: passed, 163 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 393 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Browser smoke check: not run because this stage changes pure marker-range detection and is covered by unit and full build verification.
+
+Review:
+
+- Link marker detection remains isolated in `packages/editor`; no Workbench, platform, Electron, DOM, or filesystem dependency was added.
+- Marker hiding now consumes scanner-owned marker ranges instead of recalculating punctuation positions from a separate regular expression.
+- Table shortcut-reference pipe protection remains an explicit table-scanner option, avoiding a broad hard-coded rule that would fade ordinary bracket text.
+- No new dependency, configuration value, storage path, visual token, extra documentation file, or hard-coded platform assumption was introduced.
+
+Known limitations:
+
+- Generic shortcut-reference marker hiding still needs document-aware reference resolution before ordinary `[label]` text can be hidden safely.
+- Parser-backed inline marker mapping remains planned for deeper nested link and emphasis edge cases.
+
 ## 2026-06-07 - P2 Table Autolink Pipe Mapping
 
 Completed:
