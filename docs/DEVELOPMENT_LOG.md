@@ -3435,6 +3435,35 @@ Known limitations:
 
 - Parser-backed inline marker mapping remains planned for deeper nested inline syntax edge cases.
 
+## 2026-06-07 - P2 Shared Core Inline Syntax Ranges
+
+Completed:
+
+- Added a private `readMarkdownCoreInlineSyntaxRanges()` model for code spans, strong emphasis, strikethrough, emphasis, inline/reference links, and autolinks.
+- Rewired inactive marker hiding to consume the shared range model instead of rebuilding the same scan sequence locally.
+- Rewired Markdown table cell splitting to consume the same range model while still opting into table-only shortcut-reference pipe protection.
+- Kept inline math and inline HTML table protection on their existing specialized paths.
+
+Quality gate:
+
+- `npx vitest run packages/editor/src/livePreview.test.ts`: passed, 166 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 396 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Browser smoke check: not run because this stage refactors pure scanner composition and is covered by unit and full build verification.
+
+Review:
+
+- The shared scanner model remains isolated in `packages/editor`; no Workbench, platform, Electron, DOM, or filesystem dependency was added.
+- Marker hiding and table source mapping now share one core range construction path, reducing drift as inline Markdown syntax support grows.
+- Table-only shortcut-reference handling remains explicit through scanner options, avoiding broader hard-coded bracket handling in generic marker hiding.
+- No new dependency, configuration value, storage path, visual token, extra documentation file, or hard-coded platform assumption was introduced.
+
+Known limitations:
+
+- Parser-backed inline marker mapping remains planned for deeper nested inline syntax and full document-aware reference resolution.
+
 ## 2026-06-07 - P2 Table Autolink Pipe Mapping
 
 Completed:

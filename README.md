@@ -13,6 +13,7 @@ P0/P1 are implemented:
 - live-preview-oriented line styling
 - unified live preview block-state analysis
 - inactive Markdown marker soft hiding for block prefixes, inline code, inline/reference links and images, autolinks, emphasis, and strikethrough
+- shared core inline syntax scanning for marker hiding and table source mapping
 - code fence block styling with inactive language/copy widgets
 - Markdown table block styling with inactive previews that preserve escaped pipes, inline code, emphasis, strikethrough, inline math, autolinks, inline HTML syntax, and full/collapsed/shortcut link-image syntax, plus targeted row/column insertion and deletion controls, column alignment controls, and source-focused cell navigation
 - standalone image preview cards
