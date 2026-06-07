@@ -27,6 +27,7 @@ import {
   findMarkdownListItemContentStart,
   getNextMarkdownTableColumnAlignment,
   livePreviewExtension,
+  removeMarkdownTaskListMarkersAtSelection,
   renderMarkdownMathExpression,
   sanitizeMarkdownInlineRendererHtml,
   sanitizeMarkdownRendererHtml,
@@ -2277,6 +2278,133 @@ describe("toggleMarkdownTaskListLineAtSelection", () => {
       try {
         expect(toggleMarkdownTaskListLineAtSelection(view)).toBe(false);
         expect(view.state.doc.toString()).toBe("Intro\nText [ ] Todo");
+      } finally {
+        view.destroy();
+      }
+    });
+  });
+});
+
+describe("removeMarkdownTaskListMarkersAtSelection", () => {
+  it("removes the task marker from the selected task line", () => {
+    withDom(() => {
+      const parent = document.createElement("div");
+      document.body.append(parent);
+      const view = new EditorView({
+        parent,
+        state: EditorState.create({
+          doc: "Intro\n- [x] Todo\nDone",
+          selection: { anchor: "Intro\n- [x] To".length }
+        })
+      });
+
+      try {
+        expect(removeMarkdownTaskListMarkersAtSelection(view)).toBe(true);
+        expect(view.state.doc.toString()).toBe("Intro\n- Todo\nDone");
+      } finally {
+        view.destroy();
+      }
+    });
+  });
+
+  it("removes task markers across selected ranges while ignoring ordinary list lines", () => {
+    withDom(() => {
+      const parent = document.createElement("div");
+      document.body.append(parent);
+      const doc = [
+        "- [ ] First",
+        "- Plain",
+        "2. [x] Second",
+        "Text [ ] Third",
+        "* [ ] Fourth"
+      ].join("\n");
+      const view = new EditorView({
+        parent,
+        state: EditorState.create({
+          doc,
+          selection: EditorSelection.range(doc.indexOf("First"), doc.indexOf("Fourth") + "Fourth".length)
+        })
+      });
+
+      try {
+        expect(removeMarkdownTaskListMarkersAtSelection(view)).toBe(true);
+        expect(view.state.doc.toString()).toBe([
+          "- First",
+          "- Plain",
+          "2. Second",
+          "Text [ ] Third",
+          "* Fourth"
+        ].join("\n"));
+      } finally {
+        view.destroy();
+      }
+    });
+  });
+
+  it("removes task markers only once when multiple selections share a line", () => {
+    withDom(() => {
+      const parent = document.createElement("div");
+      document.body.append(parent);
+      const doc = "- [ ] Todo\n- [x] Next";
+      const todoPosition = doc.indexOf("Todo");
+      const view = new EditorView({
+        parent,
+        state: EditorState.create({
+          doc,
+          selection: EditorSelection.create([
+            EditorSelection.cursor(todoPosition),
+            EditorSelection.cursor(todoPosition + 2),
+            EditorSelection.cursor(doc.indexOf("Next"))
+          ]),
+          extensions: [EditorState.allowMultipleSelections.of(true)]
+        })
+      });
+
+      try {
+        expect(removeMarkdownTaskListMarkersAtSelection(view)).toBe(true);
+        expect(view.state.doc.toString()).toBe("- Todo\n- Next");
+      } finally {
+        view.destroy();
+      }
+    });
+  });
+
+  it("normalizes marker padding when removing task markers", () => {
+    withDom(() => {
+      const parent = document.createElement("div");
+      document.body.append(parent);
+      const view = new EditorView({
+        parent,
+        state: EditorState.create({
+          doc: "1. [X]   Done",
+          selection: { anchor: "1. [X]   Do".length }
+        })
+      });
+
+      try {
+        expect(removeMarkdownTaskListMarkersAtSelection(view)).toBe(true);
+        expect(view.state.doc.toString()).toBe("1. Done");
+      } finally {
+        view.destroy();
+      }
+    });
+  });
+
+  it("ignores selections without task markers", () => {
+    withDom(() => {
+      const parent = document.createElement("div");
+      document.body.append(parent);
+      const view = new EditorView({
+        parent,
+        state: EditorState.create({
+          doc: "Intro\n- Todo\nDone",
+          selection: { anchor: "Intro\n- To".length }
+        })
+      });
+
+      try {
+        expect(removeMarkdownTaskListMarkersAtSelection(view)).toBe(false);
+        expect(view.state.doc.toString()).toBe("Intro\n- Todo\nDone");
       } finally {
         view.destroy();
       }

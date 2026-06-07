@@ -24,7 +24,7 @@ import {
   type MarkdownInlineRenderer
 } from "./livePreview";
 
-interface MarkdownTaskListLineToggleChange {
+interface MarkdownTaskListLineChange {
   readonly from: number;
   readonly insert: string;
   readonly to: number;
@@ -177,6 +177,7 @@ function baseEditorExtensions(): Extension[] {
     placeholder(editorPlaceholder),
     EditorView.lineWrapping,
     keymap.of([
+      { key: "Mod-Shift-Enter", run: removeMarkdownTaskListMarkersAtSelection },
       { key: "Mod-Enter", run: toggleMarkdownTaskListLineAtSelection },
       ...defaultKeymap,
       ...historyKeymap,
@@ -199,8 +200,22 @@ export function toggleMarkdownTaskListLineAtSelection(view: EditorView): boolean
   return true;
 }
 
-function getMarkdownTaskListLineToggleChanges(state: EditorState): readonly MarkdownTaskListLineToggleChange[] {
-  const changesByLine = new Map<number, MarkdownTaskListLineToggleChange>();
+export function removeMarkdownTaskListMarkersAtSelection(view: EditorView): boolean {
+  const changes = getMarkdownTaskListLineRemovalChanges(view.state);
+
+  if (changes.length === 0) {
+    return false;
+  }
+
+  view.dispatch({
+    changes
+  });
+
+  return true;
+}
+
+function getMarkdownTaskListLineToggleChanges(state: EditorState): readonly MarkdownTaskListLineChange[] {
+  const changesByLine = new Map<number, MarkdownTaskListLineChange>();
 
   for (const range of state.selection.ranges) {
     for (const line of getSelectionLines(state, range)) {
@@ -234,6 +249,42 @@ function getMarkdownTaskListLineToggleChanges(state: EditorState): readonly Mark
   }
 
   return [...changesByLine.values()].sort((left, right) => left.from - right.from);
+}
+
+function getMarkdownTaskListLineRemovalChanges(state: EditorState): readonly MarkdownTaskListLineChange[] {
+  const changesByLine = new Map<number, MarkdownTaskListLineChange>();
+
+  for (const range of state.selection.ranges) {
+    for (const line of getSelectionLines(state, range)) {
+      if (changesByLine.has(line.from)) {
+        continue;
+      }
+
+      const taskMarker = findMarkdownTaskListMarkerRange(line.text);
+
+      if (!taskMarker) {
+        continue;
+      }
+
+      changesByLine.set(line.from, {
+        from: line.from + taskMarker.from,
+        to: line.from + getTaskListMarkerRemovalTo(line.text, taskMarker.to),
+        insert: ""
+      });
+    }
+  }
+
+  return [...changesByLine.values()].sort((left, right) => left.from - right.from);
+}
+
+function getTaskListMarkerRemovalTo(text: string, markerTo: number): number {
+  let to = markerTo;
+
+  while (to < text.length && (text[to] === " " || text[to] === "\t")) {
+    to += 1;
+  }
+
+  return to;
 }
 
 function getSelectionLines(state: EditorState, range: SelectionRange): readonly Line[] {
