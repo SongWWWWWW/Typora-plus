@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { JSDOM } from "jsdom";
+import { EditorState } from "@codemirror/state";
+import { EditorView } from "@codemirror/view";
 import {
   analyzeMarkdownCodeFenceLines,
   analyzeMarkdownImageBlocks,
@@ -20,7 +22,9 @@ import {
   findInactiveMarkdownInlineMathRanges,
   findInactiveMarkdownInlineRendererRanges,
   findInactiveMarkdownSyntaxMarkers,
+  findInactiveMarkdownTaskListMarkerRanges,
   getNextMarkdownTableColumnAlignment,
+  livePreviewExtension,
   renderMarkdownMathExpression,
   sanitizeMarkdownInlineRendererHtml,
   sanitizeMarkdownRendererHtml,
@@ -2005,6 +2009,67 @@ describe("findInactiveMarkdownSyntaxMarkers", () => {
   });
 });
 
+describe("findInactiveMarkdownTaskListMarkerRanges", () => {
+  it("keeps task markers editable on active lines", () => {
+    expect(findInactiveMarkdownTaskListMarkerRanges("- [ ] Todo", true)).toEqual([]);
+  });
+
+  it("finds unchecked and checked task markers after list prefixes", () => {
+    expect(findInactiveMarkdownTaskListMarkerRanges("- [ ] Todo", false)).toEqual([
+      { checked: false, from: 2, to: 5 }
+    ]);
+    expect(findInactiveMarkdownTaskListMarkerRanges("  2. [x] Done", false)).toEqual([
+      { checked: true, from: 5, to: 8 }
+    ]);
+    expect(findInactiveMarkdownTaskListMarkerRanges("* [X]", false)).toEqual([
+      { checked: true, from: 2, to: 5 }
+    ]);
+  });
+
+  it("ignores malformed task markers and ordinary paragraph brackets", () => {
+    expect(findInactiveMarkdownTaskListMarkerRanges("- [] Todo", false)).toEqual([]);
+    expect(findInactiveMarkdownTaskListMarkerRanges("- [x]Done", false)).toEqual([]);
+    expect(findInactiveMarkdownTaskListMarkerRanges("Text [ ] Todo", false)).toEqual([]);
+  });
+});
+
+describe("task list live preview widgets", () => {
+  it("toggles inactive task markers through source-backed checkboxes", () => {
+    withDom(() => {
+      const parent = document.createElement("div");
+      document.body.append(parent);
+      const view = new EditorView({
+        parent,
+        state: EditorState.create({
+          doc: "- [ ] Todo\n\nNext",
+          selection: { anchor: "- [ ] Todo\n\nNext".length },
+          extensions: [
+            livePreviewExtension({
+              focusMode: false,
+              fontSize: 16,
+              lineHeight: 1.5,
+              maxWidth: 720,
+              typewriterMode: false
+            })
+          ]
+        })
+      });
+
+      try {
+        const checkbox = parent.querySelector<HTMLInputElement>(".tp-editor-task-checkbox");
+        expect(checkbox).not.toBeNull();
+        expect(checkbox?.checked).toBe(false);
+
+        checkbox?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+
+        expect(view.state.doc.toString()).toBe("- [x] Todo\n\nNext");
+      } finally {
+        view.destroy();
+      }
+    });
+  });
+});
+
 describe("sanitizeMarkdownRendererHtml", () => {
   it("removes scripts, event handlers, style attributes, and unsafe classes", () => {
     withDom(() => {
@@ -2099,20 +2164,40 @@ function renderSanitizedInlineHtml(html: string): string {
 
 function withDom<T>(run: () => T): T {
   const dom = new JSDOM("<!doctype html><html><body></body></html>");
+  dom.window.requestAnimationFrame = (callback) => Number(setTimeout(() => callback(Date.now()), 0));
+  dom.window.cancelAnimationFrame = (handle) => clearTimeout(handle);
+  const previousWindow = Reflect.get(globalThis, "window");
   const previousDocument = Reflect.get(globalThis, "document");
   const previousNode = Reflect.get(globalThis, "Node");
   const previousElement = Reflect.get(globalThis, "Element");
+  const previousHTMLElement = Reflect.get(globalThis, "HTMLElement");
+  const previousMutationObserver = Reflect.get(globalThis, "MutationObserver");
+  const previousMouseEvent = Reflect.get(globalThis, "MouseEvent");
+  const previousRequestAnimationFrame = Reflect.get(globalThis, "requestAnimationFrame");
+  const previousCancelAnimationFrame = Reflect.get(globalThis, "cancelAnimationFrame");
 
+  setGlobal("window", dom.window);
   setGlobal("document", dom.window.document);
   setGlobal("Node", dom.window.Node);
   setGlobal("Element", dom.window.Element);
+  setGlobal("HTMLElement", dom.window.HTMLElement);
+  setGlobal("MutationObserver", dom.window.MutationObserver);
+  setGlobal("MouseEvent", dom.window.MouseEvent);
+  setGlobal("requestAnimationFrame", dom.window.requestAnimationFrame);
+  setGlobal("cancelAnimationFrame", dom.window.cancelAnimationFrame);
 
   try {
     return run();
   } finally {
+    restoreGlobal("window", previousWindow);
     restoreGlobal("document", previousDocument);
     restoreGlobal("Node", previousNode);
     restoreGlobal("Element", previousElement);
+    restoreGlobal("HTMLElement", previousHTMLElement);
+    restoreGlobal("MutationObserver", previousMutationObserver);
+    restoreGlobal("MouseEvent", previousMouseEvent);
+    restoreGlobal("requestAnimationFrame", previousRequestAnimationFrame);
+    restoreGlobal("cancelAnimationFrame", previousCancelAnimationFrame);
     dom.window.close();
   }
 }

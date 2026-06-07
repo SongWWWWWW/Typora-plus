@@ -46,6 +46,10 @@ export interface MarkdownTableCellSourceRange {
   readonly to: number;
 }
 
+export interface MarkdownTaskListMarkerRange extends MarkdownSyntaxMarkerRange {
+  readonly checked: boolean;
+}
+
 type MarkdownInlineLinkSyntaxKind = "inline" | "reference" | "collapsed-reference" | "shortcut-reference";
 
 interface MarkdownInlineLinkSyntaxRange extends MarkdownSyntaxMarkerRange {
@@ -566,7 +570,26 @@ export function findInactiveMarkdownSyntaxMarkers(text: string, active: boolean)
   collectLinkMarkers(ranges, syntaxRanges.linkSyntaxRanges);
   collectEnclosedSyntaxRangeMarkers(text, ranges, syntaxRanges.autolinkRanges, "<", ">");
 
-  return normalizeRanges(ranges);
+  return normalizeSyntaxMarkerRanges(ranges);
+}
+
+export function findInactiveMarkdownTaskListMarkerRanges(
+  text: string,
+  active: boolean
+): readonly MarkdownTaskListMarkerRange[] {
+  if (active) {
+    return [];
+  }
+
+  const list = /^(\s*)([-*+]|\d+[.)])(\s+)/.exec(text);
+
+  if (list?.[1] === undefined || !list[2] || !list[3]) {
+    return [];
+  }
+
+  const marker = readTaskListMarkerRange(text, list[1].length + list[2].length + list[3].length);
+
+  return marker ? [marker] : [];
 }
 
 export function findInactiveMarkdownInlineMathRanges(text: string, active: boolean): readonly MarkdownInlineMathRange[] {
@@ -903,6 +926,9 @@ function buildDecorations(
         const inlineRendererRanges = lineBlockState?.codeFenceRole || lineBlockState?.mathBlock || tableBlockIsActive
           ? []
           : findRenderableMarkdownInlineRendererRanges(line.text, lineIsActive, inlineRenderer);
+        const taskListMarkerRanges = lineBlockState?.codeFenceRole || lineBlockState?.mathBlock || tableBlockIsActive
+          ? []
+          : findInactiveMarkdownTaskListMarkerRanges(line.text, lineIsActive);
         const inlineDecorations = inlineMathRanges.map((inlineMath) => ({
           decoration: Decoration.replace({
             widget: new MarkdownInlineMathWidget(
@@ -930,11 +956,23 @@ function buildDecorations(
           from: line.from + range.from,
           to: line.from + range.to
         })) : [];
+        const taskListDecorations = taskListMarkerRanges.map((task) => ({
+          decoration: Decoration.replace({
+            widget: new MarkdownTaskListMarkerWidget(
+              task.checked,
+              line.from + task.from,
+              line.from + task.to
+            )
+          }),
+          from: line.from + task.from,
+          to: line.from + task.to
+        }));
         const sourceLineIsActive = lineIsActive || codeFenceIsActive || tableBlockIsActive;
         const markerDecorations = findInactiveMarkdownSyntaxMarkers(line.text, sourceLineIsActive)
           .filter((marker) =>
             !inlineMathRanges.some((inlineMath) => rangesOverlap(marker, inlineMath)) &&
-            !inlineRendererRanges.some((inlineRenderer) => rangesOverlap(marker, inlineRenderer))
+            !inlineRendererRanges.some((inlineRenderer) => rangesOverlap(marker, inlineRenderer)) &&
+            !taskListMarkerRanges.some((task) => rangesOverlap(marker, task))
           )
           .map((marker) => ({
             decoration: syntaxMarkerDecoration,
@@ -945,7 +983,8 @@ function buildDecorations(
         for (const decoration of [
           ...markerDecorations,
           ...inlineDecorations,
-          ...inlineRendererDecorations
+          ...inlineRendererDecorations,
+          ...taskListDecorations
         ].sort(compareLineDecorations)) {
           builder.add(decoration.from, decoration.to, decoration.decoration);
         }
@@ -4026,6 +4065,70 @@ function isMathBlockSourceNavigationEvent(event: Event): boolean {
   return event.target instanceof Element && Boolean(event.target.closest("[data-math-block-source='true']"));
 }
 
+class MarkdownTaskListMarkerWidget extends WidgetType {
+  constructor(
+    private readonly checked: boolean,
+    private readonly sourceFrom: number,
+    private readonly sourceTo: number
+  ) {
+    super();
+  }
+
+  override eq(widget: WidgetType): boolean {
+    return widget instanceof MarkdownTaskListMarkerWidget &&
+      widget.checked === this.checked &&
+      widget.sourceFrom === this.sourceFrom &&
+      widget.sourceTo === this.sourceTo;
+  }
+
+  override toDOM(view: EditorView): HTMLElement {
+    const checkbox = document.createElement("input");
+    checkbox.className = "tp-editor-task-checkbox";
+    checkbox.type = "checkbox";
+    checkbox.checked = this.checked;
+    checkbox.dataset.taskListMarker = "true";
+    checkbox.setAttribute("aria-label", this.checked ? "Mark task incomplete" : "Mark task complete");
+    checkbox.title = this.checked ? "Mark incomplete" : "Mark complete";
+    checkbox.addEventListener("mousedown", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+    });
+    checkbox.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      toggleMarkdownTaskListMarker(view, this.sourceFrom, this.sourceTo, this.checked);
+    });
+
+    return checkbox;
+  }
+
+  override ignoreEvent(event: Event): boolean {
+    return isTaskListMarkerEvent(event);
+  }
+}
+
+function toggleMarkdownTaskListMarker(
+  view: EditorView,
+  sourceFrom: number,
+  sourceTo: number,
+  checked: boolean
+): void {
+  if (sourceFrom < 0 || sourceTo > view.state.doc.length || sourceFrom >= sourceTo) {
+    return;
+  }
+
+  view.dispatch({
+    changes: { from: sourceFrom, to: sourceTo, insert: checked ? "[ ]" : "[x]" },
+    selection: { anchor: sourceFrom, head: sourceFrom + 3 },
+    scrollIntoView: true
+  });
+  view.focus();
+}
+
+function isTaskListMarkerEvent(event: Event): boolean {
+  return event.target instanceof Element && Boolean(event.target.closest("[data-task-list-marker='true']"));
+}
+
 class MarkdownInlineMathWidget extends WidgetType {
   constructor(
     private readonly math: MarkdownInlineMathRange,
@@ -4289,10 +4392,10 @@ function collectBlockMarkers(text: string, ranges: MarkdownSyntaxMarkerRange[]):
   }
 }
 
-function readTaskListMarkerRange(text: string, from: number): MarkdownSyntaxMarkerRange | undefined {
+function readTaskListMarkerRange(text: string, from: number): MarkdownTaskListMarkerRange | undefined {
   const match = /^\[(?: |x|X)\](?=\s|$)/.exec(text.slice(from));
 
-  return match ? { from, to: from + match[0].length } : undefined;
+  return match ? { checked: match[0][1]?.toLowerCase() === "x", from, to: from + match[0].length } : undefined;
 }
 
 function readClosingAtxHeadingMarkerRange(
@@ -4394,7 +4497,7 @@ function collectLinkMarkers(
   }
 }
 
-function normalizeRanges(ranges: readonly MarkdownSyntaxMarkerRange[]): readonly MarkdownSyntaxMarkerRange[] {
+function normalizeSyntaxMarkerRanges(ranges: readonly MarkdownSyntaxMarkerRange[]): readonly MarkdownSyntaxMarkerRange[] {
   const normalized: MarkdownSyntaxMarkerRange[] = [];
 
   for (const range of [...ranges].sort((first, second) => first.from - second.from || first.to - second.to)) {
@@ -4407,7 +4510,7 @@ function normalizeRanges(ranges: readonly MarkdownSyntaxMarkerRange[]): readonly
       continue;
     }
 
-    normalized.push(range);
+    normalized.push({ from: range.from, to: range.to });
   }
 
   return normalized;
@@ -5136,6 +5239,14 @@ function markdownEditorTheme(configuration: MarkdownEditorConfiguration): Extens
     ".tp-editor-markdown-marker": {
       color: "var(--tp-color-text-soft)",
       opacity: "var(--tp-opacity-markdown-marker)"
+    },
+    ".tp-editor-task-checkbox": {
+      width: "14px",
+      height: "14px",
+      margin: "0 2px 0 0",
+      verticalAlign: "-2px",
+      accentColor: "var(--tp-color-accent)",
+      cursor: "pointer"
     },
     ".tp-editor-passive-line": {
       opacity: "var(--tp-opacity-passive-line)"
