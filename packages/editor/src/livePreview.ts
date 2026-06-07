@@ -559,6 +559,7 @@ export function findInactiveMarkdownSyntaxMarkers(text: string, active: boolean)
   ]);
 
   collectBlockMarkers(text, ranges);
+  collectCodeSpanMarkers(ranges, codeSpanRanges);
   collectPairedSyntaxRangeMarkers(text, ranges, strongEmphasisRanges, markdownStrongEmphasisDelimiters);
   collectPairedSyntaxRangeMarkers(text, ranges, strikethroughRanges, markdownStrikethroughDelimiters);
   collectPairedSyntaxRangeMarkers(text, ranges, emphasisRanges, markdownEmphasisDelimiters);
@@ -4276,6 +4277,16 @@ function collectPairedSyntaxRangeMarkers(
 
     ranges.push({ from: syntaxRange.from, to: syntaxRange.from + delimiter.length });
     ranges.push({ from: syntaxRange.to - delimiter.length, to: syntaxRange.to });
+  }
+}
+
+function collectCodeSpanMarkers(
+  ranges: MarkdownSyntaxMarkerRange[],
+  codeSpanRanges: readonly MarkdownCodeSpanRange[]
+): void {
+  for (const codeSpanRange of codeSpanRanges) {
+    ranges.push({ from: codeSpanRange.from, to: codeSpanRange.contentFrom });
+    ranges.push({ from: codeSpanRange.contentTo, to: codeSpanRange.to });
   }
 }
 

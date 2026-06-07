@@ -1831,6 +1831,7 @@ describe("Markdown table editing helpers", () => {
 describe("findInactiveMarkdownSyntaxMarkers", () => {
   it("does not mark syntax on the active line", () => {
     expect(findInactiveMarkdownSyntaxMarkers("## Active", true)).toEqual([]);
+    expect(findInactiveMarkdownSyntaxMarkers("Use `code`", true)).toEqual([]);
   });
 
   it("marks heading, quote, list, and fence prefixes", () => {
@@ -1865,12 +1866,28 @@ describe("findInactiveMarkdownSyntaxMarkers", () => {
     ]);
   });
 
+  it("marks inline code delimiters", () => {
+    expect(findInactiveMarkdownSyntaxMarkers("Use `code` now", false)).toEqual([
+      { from: 4, to: 5 },
+      { from: 9, to: 10 }
+    ]);
+    expect(findInactiveMarkdownSyntaxMarkers("Use ``a`b`` now", false)).toEqual([
+      { from: 4, to: 6 },
+      { from: 9, to: 11 }
+    ]);
+    expect(findInactiveMarkdownSyntaxMarkers("Use `code", false)).toEqual([]);
+  });
+
   it("does not mark inline code or intraword emphasis delimiters", () => {
     expect(findInactiveMarkdownSyntaxMarkers("Code `**bold**` and *ok*", false)).toEqual([
+      { from: 5, to: 6 },
+      { from: 14, to: 15 },
       { from: 20, to: 21 },
       { from: 23, to: 24 }
     ]);
     expect(findInactiveMarkdownSyntaxMarkers("Code `[Guide](x)` and [ok](y)", false)).toEqual([
+      { from: 5, to: 6 },
+      { from: 16, to: 17 },
       { from: 22, to: 23 },
       { from: 25, to: 26 },
       { from: 26, to: 27 },
@@ -1933,10 +1950,14 @@ describe("findInactiveMarkdownSyntaxMarkers", () => {
 
   it("does not mark autolinks inside code spans or invalid angle text", () => {
     const line = "Code `<https://example.com>` and <mailto:user@example.com>";
+    const codeOpen = line.indexOf("`");
+    const codeClose = line.lastIndexOf("`");
     const open = line.lastIndexOf("<");
     const close = line.lastIndexOf(">");
 
     expect(findInactiveMarkdownSyntaxMarkers(line, false)).toEqual([
+      { from: codeOpen, to: codeOpen + 1 },
+      { from: codeClose, to: codeClose + 1 },
       { from: open, to: open + 1 },
       { from: close, to: close + 1 }
     ]);
