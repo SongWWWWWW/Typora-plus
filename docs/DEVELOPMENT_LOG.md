@@ -3938,4 +3938,34 @@ Review:
 
 Known limitations:
 
-- The current command toggles task lines touched by selection heads; range-wide task operations remain future editor work if broader block selection behavior is needed.
+- Range-wide task operations remained future editor work until the later selected task-line range stage.
+
+## 2026-06-07 - P2 Selected Task Line Range Toggle
+
+Completed:
+
+- Updated editor-local `Mod-Enter` task toggling so non-empty selections scan every covered document line.
+- Kept cursor-only behavior unchanged for single and multiple cursors.
+- Preserved line deduplication across overlapping cursors and selection ranges.
+- Avoided toggling a trailing task line when the selection ends exactly at that line's start.
+- Added focused JSDOM coverage for range-selected task lines and trailing line-start boundaries.
+
+Quality gate:
+
+- `npx vitest run packages/editor/src/livePreview.test.ts`: passed, 181 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 411 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Browser smoke check: passed at `http://127.0.0.1:5173`; editor mounted, no console errors, and no horizontal overflow.
+
+Review:
+
+- Selected-range task toggling remains isolated in `packages/editor`; no Workbench command, platform keybinding, Electron, storage, or filesystem dependency was added.
+- The range scan feeds the same parsed task marker helper and ordered CodeMirror transaction as cursor toggling, keeping Markdown source as the single source of truth.
+- Non-task lines inside the selection are ignored through the parser-owned task marker check rather than a UI-specific bracket rule.
+- No new dependency, configuration value, storage path, visual token, extra documentation file, or hard-coded platform assumption was introduced.
+
+Known limitations:
+
+- The command toggles existing task markers; converting arbitrary selected list items into tasks remains future editor work.
