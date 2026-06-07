@@ -3610,7 +3610,7 @@ Review:
 
 Known limitations:
 
-- Multi-cursor batch task toggling remains future work.
+- Multi-cursor batch task toggling remained future work until the later multi-selection task-line stage.
 
 ## 2026-06-07 - P2 Table Autolink Pipe Mapping
 
@@ -3909,3 +3909,33 @@ Known limitations:
 
 - Parser-backed math mapping remains planned for deeper inline edge cases.
 - Parser-backed table mapping remains planned for deeper nested inline syntax and full document-aware reference resolution.
+
+## 2026-06-07 - P2 Multi-Selection Task Line Toggle
+
+Completed:
+
+- Enabled CodeMirror multiple selections in the editor base extensions.
+- Updated editor-local `Mod-Enter` task toggling to scan every selection range instead of only the main cursor.
+- Deduplicated selected task lines before dispatching edits, so multiple cursors on one line do not flip the same marker twice.
+- Kept non-task selected lines ignored while still toggling any task lines in the same multi-selection command.
+- Added focused JSDOM coverage for multi-line task toggling and same-line selection deduplication.
+
+Quality gate:
+
+- `npx vitest run packages/editor/src/livePreview.test.ts`: passed, 179 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 409 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Browser smoke check: passed at `http://127.0.0.1:5173`; editor mounted, no console errors, and no horizontal overflow.
+
+Review:
+
+- Multi-selection task toggling remains isolated in `packages/editor`; no Workbench command, platform keybinding, Electron, storage, or filesystem dependency was added.
+- The batch edit path still consumes the parsed task marker helper, so Markdown source remains the single source of truth.
+- The command dispatches one ordered CodeMirror transaction with bounded marker replacements, avoiding cursor-position drift and duplicate same-line edits.
+- No new dependency, configuration value, storage path, visual token, extra documentation file, or hard-coded platform assumption was introduced.
+
+Known limitations:
+
+- The current command toggles task lines touched by selection heads; range-wide task operations remain future editor work if broader block selection behavior is needed.

@@ -97,11 +97,11 @@ The editor is backed by CodeMirror 6. The current P1 implementation styles Markd
 Current features:
 
 - Markdown language support
-- history, search, selection, bracket matching
+- history, search, multiple selections, bracket matching
 - unified live preview block-state analysis with normalized visible editor ranges
 - heading/quote/list/fence line styling
 - inactive Markdown marker soft hiding for heading prefixes and closing markers, list and task-list state markers, quotes, fences, inline code, inline/reference links and images, autolinks, emphasis, and strikethrough, with inline-code-safe marker scanning
-- source-backed task list toggling that replaces only parsed task markers through inactive checkbox widgets, focused checkbox keys, or editor-local `Mod-Enter` on the current task line
+- source-backed task list toggling that replaces only parsed task markers through inactive checkbox widgets, focused checkbox keys, or editor-local `Mod-Enter` on current or multi-selected task lines
 - shared core inline syntax range scanning for marker hiding and table source mapping, while table-only shortcut-reference protection remains an explicit table scanner option
 - code fence block styling with visible-range-aware fence state tracking, inactive language/copy widgets, and provider-backed previews for matching code-fence languages with sanitized HTML and source-focused click editing
 - provider-backed inline renderer previews for language-qualified inline code spans, using inline-only sanitized HTML and source-focused click editing
