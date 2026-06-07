@@ -107,7 +107,7 @@ Current features:
 - built-in Mermaid preview for inactive `mermaid` code fences through the Markdown renderer provider path
 - table block styling with code-fence-aware table detection, escaped-pipe-, inline-code-, and link/image-syntax-aware inactive previews, targeted row/column insertion and deletion controls, column alignment controls, and source-focused cell navigation
 - standalone image preview cards with workspace-backed local image resolution and direct inline/blob rendering
-- KaTeX-backed multiline and single-line display math preview blocks with TeX copy controls, render diagnostics, and trimmed source-focused click editing
+- KaTeX-backed multiline and single-line display math preview blocks for `$$` and `\[` delimiters, with TeX copy controls, render diagnostics, and trimmed source-focused click editing
 - KaTeX-backed inline math previews with render diagnostics and source-focused click editing for inactive lines
 - focus mode dimming
 - typewriter mode top spacing
@@ -116,7 +116,7 @@ Current features:
 Next editor work:
 
 - parser-backed table position mapping for shortcut reference links and remaining complex inline syntax
-- parser-backed math position mapping for broader delimiter and inline edge cases
+- parser-backed math position mapping for broader delimiter variants and inline edge cases
 
 ## Extension Direction
 
