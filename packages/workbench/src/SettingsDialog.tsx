@@ -450,6 +450,14 @@ export function SettingsDialog({
                     })}
                   />
                 ) : null}
+                {isSettingsEntryVisible("workspace.quickOpenMaxResults") ? (
+                  <NumberSetting
+                    label="Quick Open Results"
+                    value={configuration.workspace.quickOpenMaxResults}
+                    constraint={settingsNumberConstraints.workspaceQuickOpenMaxResults}
+                    onChange={(quickOpenMaxResults) => onUpdate({ workspace: { quickOpenMaxResults } })}
+                  />
+                ) : null}
                 {isSettingsEntryVisible("workspace.searchMaxResults") ? (
                   <NumberSetting
                     label="Search Results"

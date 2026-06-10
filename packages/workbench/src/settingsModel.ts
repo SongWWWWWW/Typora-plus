@@ -21,6 +21,7 @@ export type SettingsEntryId =
   | "editor.maxWidth"
   | "editor.rendererPreviewCacheEntries"
   | "workspace.defaultAssetFolder"
+  | "workspace.quickOpenMaxResults"
   | "workspace.searchMaxFileSize"
   | "workspace.searchMaxResults"
   | "keybindings.editor";
@@ -63,6 +64,7 @@ export const settingsEntries = [
   { id: "editor.maxWidth", sectionId: "editor", label: "Editor Width", keywords: ["width", "content"] },
   { id: "editor.rendererPreviewCacheEntries", sectionId: "editor", label: "Renderer Cache", keywords: ["preview", "renderer", "cache", "mermaid"] },
   { id: "workspace.defaultAssetFolder", sectionId: "workspace", label: "Asset Folder", keywords: ["assets", "images", "attachments", "folder"] },
+  { id: "workspace.quickOpenMaxResults", sectionId: "workspace", label: "Quick Open Results", keywords: ["quick open", "files", "results", "limit"] },
   { id: "workspace.searchMaxFileSize", sectionId: "workspace", label: "Search File Limit", keywords: ["search", "index", "file", "size", "limit"] },
   { id: "workspace.searchMaxResults", sectionId: "workspace", label: "Search Results", keywords: ["search", "results", "limit"] },
   { id: "keybindings.editor", sectionId: "keybindings", label: "Keybindings", keywords: ["keyboard", "shortcut", "shortcuts", "commands", "record", "reset"] }
@@ -79,6 +81,7 @@ export const settingsNumberConstraints = {
     max: configurationNumberConstraints.workspaceSearchMaxFileSizeBytes.max / configurationBytesPerMegabyte,
     step: configurationNumberConstraints.workspaceSearchMaxFileSizeBytes.step / configurationBytesPerMegabyte
   },
+  workspaceQuickOpenMaxResults: configurationNumberConstraints.workspaceQuickOpenMaxResults,
   workspaceSearchMaxResults: configurationNumberConstraints.workspaceSearchMaxResults
 } as const satisfies Record<string, NumberSettingConstraint>;
 

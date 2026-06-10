@@ -56,6 +56,7 @@ import { updateSavedFileIndex } from "./savedFileIndexing";
 import { SettingsDialog } from "./SettingsDialog";
 import type { WorkbenchServices } from "./services";
 import { editorTaskCommandMetadata } from "./workbenchContributions";
+import { filterQuickOpenFiles } from "./workbenchQuickOpenModel";
 
 type SideView = "files" | "search" | "outline" | "backlinks" | "tags";
 
@@ -634,6 +635,7 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
       <QuickOpen
         open={quickOpen}
         files={workspace.files?.files ?? []}
+        maxResults={configuration.workspace.quickOpenMaxResults}
         onClose={() => setQuickOpen(false)}
         onOpen={(entry) => {
           void runWorkbenchAction(async () => {
@@ -1441,18 +1443,23 @@ function CommandPalette({
 function QuickOpen({
   open,
   files,
+  maxResults,
   onClose,
   onOpen
 }: {
   readonly open: boolean;
   readonly files: readonly FileTreeEntry[];
+  readonly maxResults: number;
   readonly onClose: () => void;
   readonly onOpen: (entry: FileTreeEntry) => void;
 }) {
   const [query, setQuery] = useState("");
   const [activeIndex, setActiveIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement | null>(null);
-  const filteredFiles = useMemo(() => filterFiles(files, query), [files, query]);
+  const filteredFiles = useMemo(
+    () => filterQuickOpenFiles(files, query, { maxResults }),
+    [files, maxResults, query]
+  );
 
   useEffect(() => {
     if (!open) {
@@ -1593,52 +1600,6 @@ function formatBacklinkPreview(link: WorkspaceIndexedLink): string {
 
 function tagResourceKey(tag: WorkspaceIndexedTag, index: number): string {
   return `${tag.uri.toString()}-${tag.line}-${tag.tag}-${index}`;
-}
-
-function filterFiles(files: readonly FileTreeEntry[], query: string): FileTreeEntry[] {
-  const normalizedQuery = query.trim().toLowerCase();
-
-  if (!normalizedQuery) {
-    return files.slice(0, 80);
-  }
-
-  return files
-    .map((file) => ({
-      file,
-      score: scoreFile(file, normalizedQuery)
-    }))
-    .filter((result) => result.score > 0)
-    .sort((first, second) => second.score - first.score || first.file.relativePath.localeCompare(second.file.relativePath))
-    .slice(0, 80)
-    .map((result) => result.file);
-}
-
-function scoreFile(file: FileTreeEntry, query: string): number {
-  const path = file.relativePath.toLowerCase();
-  const name = file.name.toLowerCase();
-
-  if (name === query) {
-    return 100;
-  }
-
-  if (name.startsWith(query)) {
-    return 80;
-  }
-
-  if (path.includes(query)) {
-    return 60;
-  }
-
-  let cursor = 0;
-  for (const character of query) {
-    cursor = path.indexOf(character, cursor);
-    if (cursor === -1) {
-      return 0;
-    }
-    cursor += 1;
-  }
-
-  return 30;
 }
 
 function toggleSideView(

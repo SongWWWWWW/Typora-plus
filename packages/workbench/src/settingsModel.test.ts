@@ -44,6 +44,7 @@ describe("settings model", () => {
   it("matches complete sections and individual settings entries", () => {
     expect(createSettingsSearchResult("workspace").visibleEntries).toEqual([
       "workspace.defaultAssetFolder",
+      "workspace.quickOpenMaxResults",
       "workspace.searchMaxFileSize",
       "workspace.searchMaxResults"
     ]);
@@ -56,6 +57,7 @@ describe("settings model", () => {
       "workspace.searchMaxFileSize",
       "workspace.searchMaxResults"
     ]);
+    expect(createSettingsSearchResult("quick open").visibleEntries).toEqual(["workspace.quickOpenMaxResults"]);
   });
 
   it("returns no sections when settings search has no matches", () => {
@@ -73,6 +75,8 @@ describe("settings model", () => {
     expect(clampSettingNumber(5250, settingsNumberConstraints.editorAutoSaveDelayMs)).toBe(5000);
     expect(clampSettingNumber(-1, settingsNumberConstraints.editorRendererPreviewCacheEntries)).toBe(0);
     expect(clampSettingNumber(500, settingsNumberConstraints.editorRendererPreviewCacheEntries)).toBe(200);
+    expect(clampSettingNumber(5, settingsNumberConstraints.workspaceQuickOpenMaxResults)).toBe(20);
+    expect(clampSettingNumber(500, settingsNumberConstraints.workspaceQuickOpenMaxResults)).toBe(300);
   });
 
   it("converts search file size between bytes and megabytes", () => {

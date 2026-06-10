@@ -82,6 +82,10 @@ describe("configuration", () => {
       configurationNumberConstraints.workspaceSearchMaxFileSizeBytes
     );
     expectConfigurationNumberAligned(
+      defaultConfiguration.workspace.quickOpenMaxResults,
+      configurationNumberConstraints.workspaceQuickOpenMaxResults
+    );
+    expectConfigurationNumberAligned(
       defaultConfiguration.workspace.searchMaxResults,
       configurationNumberConstraints.workspaceSearchMaxResults
     );
@@ -112,6 +116,9 @@ describe("configuration", () => {
         autoSaveDelayMs: 1250,
         rendererPreviewCacheEntries: 0
       },
+      workspace: {
+        quickOpenMaxResults: 140
+      },
       extensionHost: {
         requestTimeoutMs: 20_000,
         wireMessageMaxLength: 2 * 1024 * 1024
@@ -139,6 +146,7 @@ describe("configuration", () => {
     expect(restored.getValue().editor.autoSave).toBe(true);
     expect(restored.getValue().editor.autoSaveDelayMs).toBe(1250);
     expect(restored.getValue().editor.rendererPreviewCacheEntries).toBe(0);
+    expect(restored.getValue().workspace.quickOpenMaxResults).toBe(140);
     expect(restored.getValue().extensionHost.requestTimeoutMs).toBe(20_000);
     expect(restored.getValue().extensionHost.wireMessageMaxLength).toBe(2 * 1024 * 1024);
     expect(restored.getValue().markdown.statusBadges).toEqual([
@@ -249,6 +257,7 @@ describe("configuration", () => {
         typewriterMode: true
       },
       workspace: {
+        quickOpenMaxResults: 0,
         searchMaxResults: 0
       },
       extensionHost: {
@@ -279,6 +288,7 @@ describe("configuration", () => {
       defaultConfiguration.editor.rendererPreviewCacheEntries
     );
     expect(service.getValue().editor.typewriterMode).toBe(true);
+    expect(service.getValue().workspace.quickOpenMaxResults).toBe(defaultConfiguration.workspace.quickOpenMaxResults);
     expect(service.getValue().workspace.searchMaxResults).toBe(120);
     expect(service.getValue().extensionHost.requestTimeoutMs).toBe(defaultConfiguration.extensionHost.requestTimeoutMs);
     expect(service.getValue().extensionHost.wireMessageMaxLength).toBe(
@@ -298,6 +308,7 @@ describe("configuration", () => {
         rendererPreviewCacheEntries: 9999
       },
       workspace: {
+        quickOpenMaxResults: 9999,
         searchMaxFileSizeBytes: 999 * 1024 * 1024,
         searchMaxResults: 9999
       },
@@ -321,6 +332,9 @@ describe("configuration", () => {
     );
     expect(service.getValue().workspace.searchMaxFileSizeBytes).toBe(
       configurationNumberConstraints.workspaceSearchMaxFileSizeBytes.max
+    );
+    expect(service.getValue().workspace.quickOpenMaxResults).toBe(
+      configurationNumberConstraints.workspaceQuickOpenMaxResults.max
     );
     expect(service.getValue().workspace.searchMaxResults).toBe(configurationNumberConstraints.workspaceSearchMaxResults.max);
     expect(service.getValue().extensionHost.requestTimeoutMs).toBe(

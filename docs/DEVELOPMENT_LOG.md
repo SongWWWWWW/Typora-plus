@@ -4059,3 +4059,32 @@ Review:
 Known limitations:
 
 - The task commands are command-palette discoverable but do not yet show shortcut labels because their default shortcuts remain editor-local.
+
+## 2026-06-11 - P2 Quick Open Result Model
+
+Completed:
+
+- Added a focused Workbench Quick Open model for file filtering, ranking, stable tie sorting, and result limiting.
+- Replaced the previous `Application.tsx` inline Quick Open scoring and hard-coded result window with the shared model.
+- Added `workspace.quickOpenMaxResults` to platform configuration with bounds, defaults, persistence, validation, and a Settings control.
+- Added focused coverage for Quick Open ranking, result limits, Settings search/constraints, and configuration validation.
+
+Quality gate:
+
+- `npx vitest run packages/workbench/src/workbenchQuickOpenModel.test.ts packages/workbench/src/settingsModel.test.ts packages/platform/src/platform.test.ts`: passed, 107 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 424 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Dev server smoke check: passed at `http://127.0.0.1:5173`; status 200 and root element present
+
+Review:
+
+- Quick Open matching remains Workbench-local and consumes platform `FileTreeEntry` data without touching filesystem, Electron, or index internals.
+- Result limits now come from platform configuration and Settings constraints instead of a React-local literal.
+- The shell component keeps only local overlay state and delegates filtering to a testable model.
+- No new dependency, storage path, visual token, extra documentation file, or hard-coded platform assumption was introduced.
+
+Known limitations:
+
+- Quick Open still uses a lightweight scorer rather than a workspace symbol/search index; that remains appropriate until larger workspace ranking requirements appear.

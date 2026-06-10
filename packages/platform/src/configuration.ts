@@ -36,6 +36,7 @@ export interface TyporaPlusConfiguration {
   };
   readonly workspace: {
     readonly defaultAssetFolder: string;
+    readonly quickOpenMaxResults: number;
     readonly searchMaxFileSizeBytes: number;
     readonly searchMaxResults: number;
   };
@@ -109,6 +110,7 @@ export const configurationNumberConstraints = {
     max: 20 * configurationBytesPerMegabyte,
     step: configurationBytesPerMegabyte
   },
+  workspaceQuickOpenMaxResults: { min: 20, max: 300, step: 10 },
   workspaceSearchMaxResults: { min: 20, max: 500, step: 10 },
   extensionHostRequestTimeoutMs: { min: 0, max: 60_000, step: 500 },
   extensionHostWireMessageMaxLength: {
@@ -168,6 +170,7 @@ export const defaultConfiguration: TyporaPlusConfiguration = {
   },
   workspace: {
     defaultAssetFolder: "assets",
+    quickOpenMaxResults: 80,
     searchMaxFileSizeBytes: 2 * configurationBytesPerMegabyte,
     searchMaxResults: 120
   },
@@ -345,6 +348,11 @@ function sanitizeWorkspaceConfiguration(value: Record<string, unknown>): Partial
       "searchMaxFileSizeBytes",
       value.searchMaxFileSizeBytes,
       configurationNumberConstraints.workspaceSearchMaxFileSizeBytes
+    ),
+    ...sanitizeNumberProperty(
+      "quickOpenMaxResults",
+      value.quickOpenMaxResults,
+      configurationNumberConstraints.workspaceQuickOpenMaxResults
     ),
     ...sanitizeNumberProperty("searchMaxResults", value.searchMaxResults, configurationNumberConstraints.workspaceSearchMaxResults)
   };
