@@ -15,7 +15,6 @@ import type {
   WorkspaceIndexStatus,
   WorkspaceState
 } from "@typora-plus/platform";
-import { isFileSaveConflictError } from "@typora-plus/platform";
 import { applyTheme, applyThemeTokens, resolveThemeName } from "@typora-plus/theme";
 import {
   AlertTriangle,
@@ -54,6 +53,10 @@ import {
 import { updateSavedFileIndexAndWorkspace } from "./savedFileIndexing";
 import { SettingsDialog } from "./SettingsDialog";
 import type { WorkbenchServices } from "./services";
+import {
+  executeWorkbenchCommand,
+  runWorkbenchAction
+} from "./workbenchActionRunner";
 import { editorTaskCommandMetadata } from "./workbenchContributions";
 import { openWorkbenchFile } from "./workbenchFileOpening";
 import {
@@ -1568,38 +1571,5 @@ function sidebarTitle(view: SideView): string {
       return "Backlinks";
     case "tags":
       return "Tags";
-  }
-}
-
-function executeWorkbenchCommand(
-  services: WorkbenchServices,
-  command: string,
-  setOperationError: (value: string | undefined) => void,
-  setSaveConflict?: (value: FileSaveConflict | undefined) => void
-): void {
-  void runWorkbenchAction(
-    () => services.commandService.executeCommand(command),
-    setOperationError,
-    setSaveConflict
-  );
-}
-
-async function runWorkbenchAction<T>(
-  action: () => Promise<T> | T,
-  setOperationError: (value: string | undefined) => void,
-  setSaveConflict?: (value: FileSaveConflict | undefined) => void
-): Promise<T | undefined> {
-  try {
-    setOperationError(undefined);
-    return await action();
-  } catch (error) {
-    if (isFileSaveConflictError(error)) {
-      setSaveConflict?.(error.conflict);
-      setOperationError("File changed on disk");
-      return undefined;
-    }
-
-    setOperationError(error instanceof Error ? error.message : "Operation failed");
-    return undefined;
   }
 }

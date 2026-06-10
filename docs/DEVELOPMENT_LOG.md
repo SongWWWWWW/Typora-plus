@@ -4203,3 +4203,32 @@ Review:
 Known limitations:
 
 - Save-conflict reload still records recent files directly in `Application.tsx` because it is tied to the conflict dialog lifecycle.
+
+## 2026-06-11 - P2 Workbench Action Runner
+
+Completed:
+
+- Moved Workbench async action execution and command dispatch error handling out of `Application.tsx`.
+- Added a focused action runner that clears stale operation errors, maps save conflicts into save-conflict state, preserves regular error messages, and falls back to a generic operation error for non-Error failures.
+- Kept existing command execution call sites stable while making the error boundary directly testable.
+- Added focused tests for successful actions, regular errors, non-Error failures, save conflicts, and command dispatch failures.
+
+Quality gate:
+
+- `npx vitest run packages/workbench/src/workbenchActionRunner.test.ts`: passed, 5 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 444 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Dev server smoke check: passed at `http://127.0.0.1:5173`; status 200 and root element present
+
+Review:
+
+- The action runner remains Workbench-local and consumes platform command/save-conflict contracts without owning command registration or UI rendering.
+- `Application.tsx` keeps action call sites and state setters, while the repeated async error semantics live in one helper.
+- Save-conflict dialog content and lifecycle remain in the shell; the helper only classifies the failure and sets state.
+- No new dependency, configuration key, storage path, visual token, extra documentation file, or hard-coded platform assumption was introduced.
+
+Known limitations:
+
+- Individual command handlers still live in `Application.tsx`; future stages can move larger command groups behind focused coordinators when their behavior grows.
