@@ -95,6 +95,10 @@ import {
   workbenchSideViewTitle,
   type WorkbenchSideView
 } from "./workbenchSideViewModel";
+import {
+  createWorkbenchTagRows,
+  nextWorkbenchSelectedTag
+} from "./workbenchTagsModel";
 
 export interface WorkbenchApplicationProps {
   readonly services: WorkbenchServices;
@@ -205,13 +209,10 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
   ]);
 
   useEffect(() => {
-    if (tags.length === 0) {
-      setSelectedTag(undefined);
-      return;
-    }
+    const nextSelectedTag = nextWorkbenchSelectedTag(tags, selectedTag);
 
-    if (!selectedTag || !tags.some((tag) => tag.tag.toLowerCase() === selectedTag.toLowerCase())) {
-      setSelectedTag(tags[0]?.tag);
+    if (nextSelectedTag !== selectedTag) {
+      setSelectedTag(nextSelectedTag);
     }
   }, [selectedTag, tags]);
 
@@ -1188,6 +1189,8 @@ function TagsPanel({
   readonly onSelectTag: (tag: string) => void;
   readonly onOpenTaggedResource: (tag: WorkspaceIndexedTag) => void;
 }) {
+  const tagRows = createWorkbenchTagRows(tags, selectedTag);
+
   return (
     <div className="tp-sidebar-content">
       {indexStatus.state === "indexing" ? (
@@ -1196,18 +1199,16 @@ function TagsPanel({
       {tags.length > 0 ? (
         <>
           <section className="tp-tag-list" aria-label="Tags">
-            {tags.map((tag) => {
-              const active = selectedTag?.toLowerCase() === tag.tag.toLowerCase();
-
+            {tagRows.map((row) => {
               return (
                 <button
-                  className={active ? "tp-tag-row tp-tag-row-active" : "tp-tag-row"}
-                  key={tag.tag}
+                  className={row.active ? "tp-tag-row tp-tag-row-active" : "tp-tag-row"}
+                  key={row.key}
                   type="button"
-                  onClick={() => onSelectTag(tag.tag)}
+                  onClick={() => onSelectTag(row.tag.tag)}
                 >
-                  <span>#{tag.tag}</span>
-                  <small>{tag.count}</small>
+                  <span>#{row.tag.tag}</span>
+                  <small>{row.tag.count}</small>
                 </button>
               );
             })}

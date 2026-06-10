@@ -4348,3 +4348,32 @@ Review:
 Known limitations:
 
 - Directory expand/collapse state is still not modeled; the current file tree remains fully expanded until a later navigation stage adds persisted or session-scoped tree state.
+
+## 2026-06-11 - P2 Workbench Tags Model
+
+Completed:
+
+- Added a focused Workbench tags model for tag name normalization, selected-tag fallback, row keys, and active row state.
+- Replaced `Application.tsx` tag-selection effect logic with a tested `nextWorkbenchSelectedTag()` helper.
+- Replaced inline Tags panel active-state checks with model-generated tag rows.
+- Added focused tests for empty tag lists, blank selections, case-insensitive selection preservation, invalid-selection fallback, row metadata, and normalization.
+
+Quality gate:
+
+- `npx vitest run packages/workbench/src/workbenchTagsModel.test.ts packages/workbench/src/workbenchSearchResultsModel.test.ts packages/workbench/src/workbenchFileTreeModel.test.ts`: passed, 16 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 466 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Dev server smoke check: passed at `http://127.0.0.1:5173`; status 200 and root element present
+
+Review:
+
+- Tag selection behavior remains Workbench-local and consumes platform `WorkspaceIndexedTagSummary` without adding index, storage, or Electron dependencies.
+- Case-insensitive matching now lives in one tested model, aligned with the platform index provider's normalized tag lookup instead of being copied into JSX.
+- The model preserves the original tag string for React row keys and user-facing labels while using normalized names only for matching policy.
+- No new dependency, configuration key, storage path, visual token, extra documentation file, or hard-coded platform assumption was introduced.
+
+Known limitations:
+
+- Tagged resource row keys still live with the shared search result helpers because resource rows use indexed source metadata; they can move into a dedicated tag resource model if the Tags panel gains richer grouping or sorting.
