@@ -4290,3 +4290,32 @@ Review:
 Known limitations:
 
 - Icon id to React icon mapping remains in `Application.tsx`; if extension-contributed icons expand beyond current ids, that should become its own constrained rendering adapter.
+
+## 2026-06-11 - P2 Workbench Recent Resources Model
+
+Completed:
+
+- Added a focused Workbench recent resources model for recent file/workspace grouping, per-section limits, row keys, active-state checks, file type narrowing, and recent-file-to-file-tree-entry mapping.
+- Removed recent resource filtering, row key construction, active checks, file entry mapping, and the inline section limit from `Application.tsx`.
+- Kept sidebar rendering and click dispatch in the shell because those still depend on React icons and Workbench callbacks.
+- Added focused tests for grouping order, limit normalization, row metadata, active-state checks, type narrowing, and file-entry mapping.
+
+Quality gate:
+
+- `npx vitest run packages/workbench/src/workbenchRecentResourcesModel.test.ts packages/workbench/src/workbenchMenuModel.test.ts packages/workbench/src/workbenchSideViewModel.test.ts`: passed, 12 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 456 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Dev server smoke check: passed at `http://127.0.0.1:5173`; status 200 and root element present
+
+Review:
+
+- Recent resource behavior remains Workbench-local and consumes platform `RecentResource` and `FileTreeEntry` contracts without introducing storage, Electron, or service dependencies.
+- Files sidebar history now uses one tested model for section shaping and row identity instead of embedding display policy directly in JSX.
+- The per-section display limit is named and normalized in the model boundary, so future Settings or service-backed limits can be wired without changing the renderer.
+- No new dependency, configuration key, storage path, visual token, extra documentation file, or hard-coded platform assumption was introduced.
+
+Known limitations:
+
+- The recent section display limit is still a Workbench default rather than a user setting; if users need control over sidebar density, it should move behind platform configuration like Quick Open result limits.

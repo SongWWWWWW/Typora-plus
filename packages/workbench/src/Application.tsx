@@ -73,6 +73,10 @@ import {
 } from "./workbenchWorkspaceOpening";
 import { filterQuickOpenFiles } from "./workbenchQuickOpenModel";
 import {
+  createWorkbenchRecentResourceRows,
+  createWorkbenchRecentResourceSections
+} from "./workbenchRecentResourcesModel";
+import {
   backlinkKey,
   formatBacklinkPreview,
   isWorkspaceSearchResult,
@@ -910,8 +914,7 @@ function FilesPanel({
   readonly onOpenFile: (entry: FileTreeEntry) => void;
 }) {
   const workspaceFiles = workspace.files;
-  const recentFiles = recents.filter((recent) => recent.kind === "file");
-  const recentWorkspaces = recents.filter((recent) => recent.kind === "workspace");
+  const recentSections = createWorkbenchRecentResourceSections(recents);
 
   return (
     <div className="tp-sidebar-content">
@@ -950,18 +953,18 @@ function FilesPanel({
           {model.dirty ? <span className="tp-row-dot" /> : null}
         </button>
       )}
-      {recentFiles.length > 0 ? (
+      {recentSections.files.length > 0 ? (
         <RecentSection
           title="Recent files"
-          recents={recentFiles}
+          recents={recentSections.files}
           activeUri={model.uri.toString()}
           onOpenFile={onOpenFile}
         />
       ) : null}
-      {recentWorkspaces.length > 0 ? (
+      {recentSections.workspaces.length > 0 ? (
         <RecentSection
           title="Recent workspaces"
-          recents={recentWorkspaces}
+          recents={recentSections.workspaces}
           activeUri={workspace.rootUri?.toString()}
           {...(fileServiceAvailable ? { onOpenWorkspace: onOpenRecentWorkspace } : {})}
         />
@@ -983,37 +986,31 @@ function RecentSection({
   readonly onOpenFile?: (entry: FileTreeEntry) => void;
   readonly onOpenWorkspace?: (recent: RecentResource) => void;
 }) {
+  const rows = createWorkbenchRecentResourceRows(recents, activeUri);
+
   return (
     <section className="tp-recent-section">
       <div className="tp-section-label">{title}</div>
-      {recents.slice(0, 8).map((recent) => {
-        const isFile = recent.kind === "file";
-        const isActive = recent.uri.toString() === activeUri;
-
+      {rows.map((row) => {
         return (
           <button
-            className={isActive ? "tp-file-row tp-file-row-active" : "tp-file-row"}
-            key={`${recent.kind}-${recent.uri.toString()}`}
+            className={row.active ? "tp-file-row tp-file-row-active" : "tp-file-row"}
+            key={row.key}
             type="button"
-            disabled={(isFile && !onOpenFile) || (!isFile && !onOpenWorkspace)}
+            disabled={(row.kind === "file" && !onOpenFile) || (row.kind === "workspace" && !onOpenWorkspace)}
             onClick={() => {
-              if (isFile && onOpenFile) {
-                onOpenFile({
-                  uri: recent.uri,
-                  name: recent.name,
-                  relativePath: recent.name,
-                  kind: "file"
-                });
+              if (row.fileEntry && onOpenFile) {
+                onOpenFile(row.fileEntry);
                 return;
               }
 
-              if (!isFile && onOpenWorkspace) {
-                onOpenWorkspace(recent);
+              if (row.kind === "workspace" && onOpenWorkspace) {
+                onOpenWorkspace(row.resource);
               }
             }}
           >
-            {isFile ? <FileText size={16} /> : <Folder size={16} />}
-            <span>{recent.name}</span>
+            {row.kind === "file" ? <FileText size={16} /> : <Folder size={16} />}
+            <span>{row.resource.name}</span>
           </button>
         );
       })}
