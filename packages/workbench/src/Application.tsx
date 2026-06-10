@@ -55,6 +55,7 @@ import { updateSavedFileIndex } from "./savedFileIndexing";
 import { SettingsDialog } from "./SettingsDialog";
 import type { WorkbenchServices } from "./services";
 import { editorTaskCommandMetadata } from "./workbenchContributions";
+import { openWorkbenchFile } from "./workbenchFileOpening";
 import { filterQuickOpenFiles } from "./workbenchQuickOpenModel";
 import {
   backlinkKey,
@@ -276,9 +277,9 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
         setSideView("files");
 
         if (workspaceFiles.files[0]) {
-          setSaveConflict(undefined);
-          const opened = await services.textFileService.openFile(workspaceFiles.files[0].uri);
-          services.recentService.addRecentFile(opened.uri, opened.name);
+          await openWorkbenchFile(services, workspaceFiles.files[0].uri, {
+            clearSaveConflict: () => setSaveConflict(undefined)
+          });
         }
       }, setOperationError, setSaveConflict)
     }));
@@ -523,26 +524,26 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
               }
 
               void runWorkbenchAction(async () => {
-                setSaveConflict(undefined);
-                const opened = await services.textFileService.openFile(result.uri);
-                services.recentService.addRecentFile(opened.uri, opened.name);
+                await openWorkbenchFile(services, result.uri, {
+                  clearSaveConflict: () => setSaveConflict(undefined)
+                });
                 window.setTimeout(() => editorRef.current?.scrollToLine(result.line), 0);
               }, setOperationError, setSaveConflict);
             }}
             onOpenBacklink={(link) => {
               void runWorkbenchAction(async () => {
-                setSaveConflict(undefined);
-                const opened = await services.textFileService.openFile(link.uri);
-                services.recentService.addRecentFile(opened.uri, opened.name);
+                await openWorkbenchFile(services, link.uri, {
+                  clearSaveConflict: () => setSaveConflict(undefined)
+                });
                 window.setTimeout(() => editorRef.current?.scrollToLine(link.line), 0);
               }, setOperationError, setSaveConflict);
             }}
             onSelectTag={setSelectedTag}
             onOpenTaggedResource={(tag) => {
               void runWorkbenchAction(async () => {
-                setSaveConflict(undefined);
-                const opened = await services.textFileService.openFile(tag.uri);
-                services.recentService.addRecentFile(opened.uri, opened.name);
+                await openWorkbenchFile(services, tag.uri, {
+                  clearSaveConflict: () => setSaveConflict(undefined)
+                });
                 window.setTimeout(() => editorRef.current?.scrollToLine(tag.line), 0);
               }, setOperationError, setSaveConflict);
             }}
@@ -561,17 +562,16 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
                 setSaveConflict(undefined);
 
                 if (workspaceFiles.files[0]) {
-                  const opened = await services.textFileService.openFile(workspaceFiles.files[0].uri);
-                  services.recentService.addRecentFile(opened.uri, opened.name);
+                  await openWorkbenchFile(services, workspaceFiles.files[0].uri);
                 }
               }, setOperationError, setSaveConflict);
             }}
             onRefreshWorkspace={() => executeCommand("file.refreshWorkspace")}
             onOpenFile={(entry) => {
               void runWorkbenchAction(async () => {
-                setSaveConflict(undefined);
-                const opened = await services.textFileService.openFile(entry.uri);
-                services.recentService.addRecentFile(opened.uri, opened.name);
+                await openWorkbenchFile(services, entry.uri, {
+                  clearSaveConflict: () => setSaveConflict(undefined)
+                });
               }, setOperationError, setSaveConflict);
             }}
           />
@@ -640,9 +640,9 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
         onClose={() => setQuickOpen(false)}
         onOpen={(entry) => {
           void runWorkbenchAction(async () => {
-            setSaveConflict(undefined);
-            const opened = await services.textFileService.openFile(entry.uri);
-            services.recentService.addRecentFile(opened.uri, opened.name);
+            await openWorkbenchFile(services, entry.uri, {
+              clearSaveConflict: () => setSaveConflict(undefined)
+            });
             setQuickOpen(false);
           }, setOperationError, setSaveConflict);
         }}

@@ -4117,3 +4117,32 @@ Review:
 Known limitations:
 
 - Local document search is still simple line matching; deeper parser-backed search can be introduced later behind the same model boundary if needed.
+
+## 2026-06-11 - P2 Workbench File Opening Coordinator
+
+Completed:
+
+- Added a focused Workbench file-opening helper for ordinary open flows.
+- Centralized the repeated save-conflict clearing, `ITextFileService.openFile()`, and recent-file tracking sequence.
+- Reused the helper from workspace first-file open, recent workspace first-file open, file tree open, Quick Open, workspace search results, backlinks, and tagged resource opens.
+- Added focused tests for side-effect order, returned models, and operation without a conflict callback.
+
+Quality gate:
+
+- `npx vitest run packages/workbench/src/workbenchFileOpening.test.ts`: passed, 2 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 432 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Dev server smoke check: passed at `http://127.0.0.1:5173`; status 200 and root element present
+
+Review:
+
+- The helper remains Workbench-local and consumes platform service contracts rather than reaching into Electron, storage, or filesystem code.
+- Save, save-as, overwrite, and save-conflict reload flows remain outside the helper because they have save-specific or conflict-dialog-specific semantics.
+- UI follow-up such as scrolling to indexed lines and closing Quick Open remains in `Application.tsx`.
+- No new dependency, configuration key, storage path, visual token, extra documentation file, or hard-coded platform assumption was introduced.
+
+Known limitations:
+
+- Workspace opening orchestration still lives in `Application.tsx`; a later stage can move workspace state/recent workspace coordination into its own focused helper.
