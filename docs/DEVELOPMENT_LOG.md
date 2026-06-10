@@ -4232,3 +4232,32 @@ Review:
 Known limitations:
 
 - Individual command handlers still live in `Application.tsx`; future stages can move larger command groups behind focused coordinators when their behavior grows.
+
+## 2026-06-11 - P2 Workbench Side View Model
+
+Completed:
+
+- Added a focused Workbench side-view model for side-view ids, the default view, toggle behavior, and sidebar titles.
+- Replaced `Application.tsx` inline `SideView`, `toggleSideView()`, and `sidebarTitle()` logic with the shared model.
+- Updated sidebar command handlers to use functional state updates so rapid command dispatch uses the latest active side view.
+- Added focused tests for the default side view, close-on-repeat toggle behavior, view switching, and stable titles.
+
+Quality gate:
+
+- `npx vitest run packages/workbench/src/workbenchSideViewModel.test.ts packages/workbench/src/workbenchContributions.test.ts`: passed, 13 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 448 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Dev server smoke check: passed at `http://127.0.0.1:5173`; status 200 and root element present
+
+Review:
+
+- Side-view behavior remains Workbench-local and does not introduce platform, storage, or Electron dependencies.
+- Activity bar toggled menu state, command handlers, and sidebar labels now consume a shared typed model instead of separate component-local rules.
+- The change removes the last sidebar-title switch from `Application.tsx` while preserving UI rendering ownership in the shell.
+- No new dependency, configuration key, storage path, visual token, extra documentation file, or hard-coded platform assumption was introduced.
+
+Known limitations:
+
+- Menu icon rendering still lives in `Application.tsx`; it remains tied to React icons and can be revisited if contributed icon handling grows.

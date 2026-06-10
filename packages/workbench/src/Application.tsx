@@ -75,8 +75,12 @@ import {
   tagResourceKey,
   type WorkbenchSearchResult
 } from "./workbenchSearchResultsModel";
-
-type SideView = "files" | "search" | "outline" | "backlinks" | "tags";
+import {
+  defaultWorkbenchSideView,
+  toggleWorkbenchSideView,
+  workbenchSideViewTitle,
+  type WorkbenchSideView
+} from "./workbenchSideViewModel";
 
 export interface WorkbenchApplicationProps {
   readonly services: WorkbenchServices;
@@ -94,7 +98,7 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
   const [workspace, setWorkspace] = useState<WorkspaceState>(() => services.workspaceService.getWorkspace());
   const [recents, setRecents] = useState<readonly RecentResource[]>(() => services.recentService.getRecents());
   const [themes, setThemes] = useState(() => services.themeService.getThemes());
-  const [sideView, setSideView] = useState<SideView | null>("outline");
+  const [sideView, setSideView] = useState<WorkbenchSideView | null>(defaultWorkbenchSideView);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [quickOpen, setQuickOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -313,31 +317,31 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
       id: "workbench.sidebar.files",
       title: "Show Files",
       category: "Workbench",
-      run: () => toggleSideView("files", sideView, setSideView)
+      run: () => setSideView((activeView) => toggleWorkbenchSideView("files", activeView))
     }));
     disposables.add(services.commandService.registerCommand({
       id: "workbench.sidebar.search",
       title: "Show Search",
       category: "Workbench",
-      run: () => toggleSideView("search", sideView, setSideView)
+      run: () => setSideView((activeView) => toggleWorkbenchSideView("search", activeView))
     }));
     disposables.add(services.commandService.registerCommand({
       id: "workbench.sidebar.outline",
       title: "Show Outline",
       category: "Workbench",
-      run: () => toggleSideView("outline", sideView, setSideView)
+      run: () => setSideView((activeView) => toggleWorkbenchSideView("outline", activeView))
     }));
     disposables.add(services.commandService.registerCommand({
       id: "workbench.sidebar.backlinks",
       title: "Show Backlinks",
       category: "Workbench",
-      run: () => toggleSideView("backlinks", sideView, setSideView)
+      run: () => setSideView((activeView) => toggleWorkbenchSideView("backlinks", activeView))
     }));
     disposables.add(services.commandService.registerCommand({
       id: "workbench.sidebar.tags",
       title: "Show Tags",
       category: "Workbench",
-      run: () => toggleSideView("tags", sideView, setSideView)
+      run: () => setSideView((activeView) => toggleWorkbenchSideView("tags", activeView))
     }));
     disposables.add(services.commandService.registerCommand({
       id: "file.save",
@@ -670,7 +674,7 @@ function menuItemTitle(item: MenuItem, getCommandTitle: (id: string) => string):
 
 function menuContext(
   configuration: TyporaPlusConfiguration,
-  sideView: SideView | null
+  sideView: WorkbenchSideView | null
 ): Readonly<Record<string, boolean | string | null>> {
   return {
     sideView,
@@ -768,7 +772,7 @@ function ActivityBar({
   getCommandTitle,
   onCommand
 }: {
-  readonly activeView: SideView | null;
+  readonly activeView: WorkbenchSideView | null;
   readonly configuration: TyporaPlusConfiguration;
   readonly primaryMenuItems: readonly MenuItem[];
   readonly secondaryMenuItems: readonly MenuItem[];
@@ -830,7 +834,7 @@ function Sidebar({
   onRefreshWorkspace,
   onOpenFile
 }: {
-  readonly view: SideView;
+  readonly view: WorkbenchSideView;
   readonly model: TextFileModel;
   readonly workspace: WorkspaceState;
   readonly recents: readonly RecentResource[];
@@ -858,7 +862,7 @@ function Sidebar({
   return (
     <aside className="tp-sidebar">
       <div className="tp-sidebar-header">
-        <span>{sidebarTitle(view)}</span>
+        <span>{workbenchSideViewTitle(view)}</span>
         <IconButton title="Close Sidebar" onClick={onClose}>
           <PanelLeft size={17} />
         </IconButton>
@@ -1549,27 +1553,4 @@ function IconButton({
       {children}
     </button>
   );
-}
-
-function toggleSideView(
-  view: SideView,
-  activeView: SideView | null,
-  setActiveView: (view: SideView | null) => void
-): void {
-  setActiveView(activeView === view ? null : view);
-}
-
-function sidebarTitle(view: SideView): string {
-  switch (view) {
-    case "files":
-      return "Files";
-    case "search":
-      return "Search";
-    case "outline":
-      return "Outline";
-    case "backlinks":
-      return "Backlinks";
-    case "tags":
-      return "Tags";
-  }
 }
