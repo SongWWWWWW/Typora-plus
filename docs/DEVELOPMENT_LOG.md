@@ -4146,3 +4146,32 @@ Review:
 Known limitations:
 
 - Workspace opening orchestration still lives in `Application.tsx`; a later stage can move workspace state/recent workspace coordination into its own focused helper.
+
+## 2026-06-11 - P2 Workbench Workspace Opening Coordinator
+
+Completed:
+
+- Added a focused Workbench workspace-opening helper for selected workspace open, trusted recent workspace reopen, workspace refresh, and file-tree-to-workspace-state mapping.
+- Centralized workspace state updates, recent workspace recording, and first-file opening through the existing file-opening helper.
+- Kept UI-specific follow-up such as opening the Files side view in `Application.tsx` via callbacks.
+- Added focused tests for workspace state mapping, selected workspace open ordering, canceled workspace selection, trusted recent workspace reopen, and refresh behavior.
+
+Quality gate:
+
+- `npx vitest run packages/workbench/src/workbenchWorkspaceOpening.test.ts packages/workbench/src/workbenchFileOpening.test.ts`: passed, 7 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 437 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Dev server smoke check: passed at `http://127.0.0.1:5173`; status 200 and root element present
+
+Review:
+
+- Workspace opening remains Workbench-local and consumes platform `IFileService`, `IWorkspaceService`, `IRecentService`, and `ITextFileService` contracts without reaching into Electron or storage.
+- Refresh only updates workspace state; it does not record recent workspaces or open files.
+- Selected and trusted recent workspace opens record recent workspaces and reuse the same ordinary file-open helper for the first file, reducing drift between entry points.
+- No new dependency, configuration key, storage path, visual token, extra documentation file, or hard-coded platform assumption was introduced.
+
+Known limitations:
+
+- Save-related workspace index refresh still uses a small adapter in `Application.tsx`; a later stage can fold that into the saved-file indexing helper if it continues to grow.

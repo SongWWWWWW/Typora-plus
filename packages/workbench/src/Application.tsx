@@ -56,6 +56,12 @@ import { SettingsDialog } from "./SettingsDialog";
 import type { WorkbenchServices } from "./services";
 import { editorTaskCommandMetadata } from "./workbenchContributions";
 import { openWorkbenchFile } from "./workbenchFileOpening";
+import {
+  openRecentWorkbenchWorkspace,
+  openWorkbenchWorkspace,
+  refreshWorkbenchWorkspace,
+  workspaceStateFromFiles
+} from "./workbenchWorkspaceOpening";
 import { filterQuickOpenFiles } from "./workbenchQuickOpenModel";
 import {
   backlinkKey,
@@ -266,36 +272,21 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
       title: "Open Workspace",
       category: "File",
       run: () => runWorkbenchAction(async () => {
-        const workspaceFiles = await services.fileService.openWorkspace();
-
-        if (!workspaceFiles) {
-          return;
-        }
-
-        services.workspaceService.setWorkspace(workspaceStateFromFiles(workspaceFiles));
-        services.recentService.addRecentWorkspace(workspaceFiles.root.uri, workspaceFiles.root.name);
-        setSideView("files");
-
-        if (workspaceFiles.files[0]) {
-          await openWorkbenchFile(services, workspaceFiles.files[0].uri, {
-            clearSaveConflict: () => setSaveConflict(undefined)
-          });
-        }
+        await openWorkbenchWorkspace(services, {
+          didOpenWorkspace: () => setSideView("files"),
+          clearSaveConflict: () => setSaveConflict(undefined)
+        });
       }, setOperationError, setSaveConflict)
     }));
     disposables.add(services.commandService.registerCommand({
       id: "file.refreshWorkspace",
       title: "Refresh Workspace",
       category: "File",
-      run: () => runWorkbenchAction(async () => {
-        const workspaceFiles = await services.fileService.refreshWorkspace();
-
-        if (!workspaceFiles) {
-          return;
-        }
-
-        services.workspaceService.setWorkspace(workspaceStateFromFiles(workspaceFiles));
-      }, setOperationError, setSaveConflict)
+      run: () => runWorkbenchAction(
+        () => refreshWorkbenchWorkspace(services),
+        setOperationError,
+        setSaveConflict
+      )
     }));
     disposables.add(services.commandService.registerCommand({
       id: "workbench.quickOpen",
@@ -550,20 +541,12 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
             onOpenWorkspace={() => executeCommand("file.openWorkspace")}
             onOpenRecentWorkspace={(recent) => {
               void runWorkbenchAction(async () => {
-                const workspaceFiles = await services.fileService.openRecentWorkspace(recent.uri);
-
-                if (!workspaceFiles) {
-                  return;
-                }
-
-                services.workspaceService.setWorkspace(workspaceStateFromFiles(workspaceFiles));
-                services.recentService.addRecentWorkspace(workspaceFiles.root.uri, workspaceFiles.root.name);
-                setSideView("files");
-                setSaveConflict(undefined);
-
-                if (workspaceFiles.files[0]) {
-                  await openWorkbenchFile(services, workspaceFiles.files[0].uri);
-                }
+                await openRecentWorkbenchWorkspace(services, recent.uri, {
+                  didOpenWorkspace: () => {
+                    setSideView("files");
+                    setSaveConflict(undefined);
+                  }
+                });
               }, setOperationError, setSaveConflict);
             }}
             onRefreshWorkspace={() => executeCommand("file.refreshWorkspace")}
@@ -1586,14 +1569,6 @@ function sidebarTitle(view: SideView): string {
     case "tags":
       return "Tags";
   }
-}
-
-function workspaceStateFromFiles(workspaceFiles: NonNullable<WorkspaceState["files"]>): WorkspaceState {
-  return {
-    name: workspaceFiles.root.name,
-    rootUri: workspaceFiles.root.uri,
-    files: workspaceFiles
-  };
 }
 
 async function updateSavedFileIndexAndWorkspace(
