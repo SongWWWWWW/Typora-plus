@@ -4088,3 +4088,32 @@ Review:
 Known limitations:
 
 - Quick Open still uses a lightweight scorer rather than a workspace symbol/search index; that remains appropriate until larger workspace ranking requirements appear.
+
+## 2026-06-11 - P2 Workbench Search Results Model
+
+Completed:
+
+- Added a focused Workbench search results model for local document search, workspace-result detection, search result keys, backlink previews, and tag/backlink keys.
+- Removed search result formatting and local document search helpers from `Application.tsx`.
+- Reused `workspace.searchMaxResults` for local document search, so the Settings search result limit now affects both current-note and workspace search paths.
+- Added focused tests for case-insensitive local search, configured result limits, workspace result detection, backlink fallback previews, and stable keys.
+
+Quality gate:
+
+- `npx vitest run packages/workbench/src/workbenchSearchResultsModel.test.ts`: passed, 6 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 430 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Dev server smoke check: passed at `http://127.0.0.1:5173`; status 200 and root element present
+
+Review:
+
+- Search matching and formatting remain Workbench-local and consume platform result contracts without reading files, parsing backlinks in UI components, or depending on Electron.
+- The previous local search hard-coded result limit was removed; the model consumes the platform configuration value already used by workspace search.
+- `Application.tsx` keeps shell coordination and rendering while the pure result model owns testable matching and key behavior.
+- No new dependency, configuration key, storage path, visual token, extra documentation file, or hard-coded platform assumption was introduced.
+
+Known limitations:
+
+- Local document search is still simple line matching; deeper parser-backed search can be introduced later behind the same model boundary if needed.

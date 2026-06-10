@@ -13,7 +13,6 @@ import type {
   WorkspaceIndexedTag,
   WorkspaceIndexedTagSummary,
   WorkspaceIndexStatus,
-  WorkspaceSearchResult,
   WorkspaceState
 } from "@typora-plus/platform";
 import { isFileSaveConflictError } from "@typora-plus/platform";
@@ -57,19 +56,21 @@ import { SettingsDialog } from "./SettingsDialog";
 import type { WorkbenchServices } from "./services";
 import { editorTaskCommandMetadata } from "./workbenchContributions";
 import { filterQuickOpenFiles } from "./workbenchQuickOpenModel";
+import {
+  backlinkKey,
+  formatBacklinkPreview,
+  isWorkspaceSearchResult,
+  searchDocument,
+  searchResultKey,
+  tagResourceKey,
+  type WorkbenchSearchResult
+} from "./workbenchSearchResultsModel";
 
 type SideView = "files" | "search" | "outline" | "backlinks" | "tags";
 
 export interface WorkbenchApplicationProps {
   readonly services: WorkbenchServices;
 }
-
-interface SearchResult {
-  readonly line: number;
-  readonly preview: string;
-}
-
-type WorkbenchSearchResult = SearchResult | WorkspaceSearchResult;
 
 type TreeStyle = CSSProperties & {
   readonly "--tp-tree-depth": number;
@@ -106,7 +107,7 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
   const searchResults = useMemo(
     () => workspace.files
       ? services.indexService.query(searchQuery)
-      : searchDocument(model.value, searchQuery),
+      : searchDocument(model.value, searchQuery, { maxResults: configuration.workspace.searchMaxResults }),
     [configuration.workspace.searchMaxResults, indexStatus.updatedAt, model.value, searchQuery, services, workspace.files]
   );
   const backlinks = useMemo(
@@ -1562,44 +1563,6 @@ function IconButton({
       {children}
     </button>
   );
-}
-
-function searchDocument(markdown: string, query: string): SearchResult[] {
-  const normalizedQuery = query.trim().toLowerCase();
-  if (!normalizedQuery) {
-    return [];
-  }
-
-  return markdown
-    .split(/\r?\n/)
-    .map((line, index) => ({
-      line: index + 1,
-      preview: line.trim()
-    }))
-    .filter((result) => result.preview.toLowerCase().includes(normalizedQuery))
-    .slice(0, 50);
-}
-
-function isWorkspaceSearchResult(result: WorkbenchSearchResult): result is WorkspaceSearchResult {
-  return "uri" in result;
-}
-
-function searchResultKey(result: WorkbenchSearchResult): string {
-  return isWorkspaceSearchResult(result)
-    ? `${result.uri.toString()}-${result.line}-${result.preview}`
-    : `${result.line}-${result.preview}`;
-}
-
-function backlinkKey(link: WorkspaceIndexedLink, index: number): string {
-  return `${link.uri.toString()}-${link.line}-${link.kind}-${link.target}-${link.label}-${index}`;
-}
-
-function formatBacklinkPreview(link: WorkspaceIndexedLink): string {
-  return link.label.trim() || link.target;
-}
-
-function tagResourceKey(tag: WorkspaceIndexedTag, index: number): string {
-  return `${tag.uri.toString()}-${tag.line}-${tag.tag}-${index}`;
 }
 
 function toggleSideView(
