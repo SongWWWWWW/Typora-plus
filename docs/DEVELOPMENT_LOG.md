@@ -4319,3 +4319,32 @@ Review:
 Known limitations:
 
 - The recent section display limit is still a Workbench default rather than a user setting; if users need control over sidebar density, it should move behind platform configuration like Quick Open result limits.
+
+## 2026-06-11 - P2 Workbench File Tree Model
+
+Completed:
+
+- Added a focused Workbench file tree model for flattening nested file trees into renderable rows.
+- Moved file tree depth calculation, row keys, active-state checks, dirty indicators, and file-entry narrowing out of `Application.tsx`.
+- Replaced recursive file tree rendering state logic with a simple row renderer that still owns React icons and click callbacks.
+- Added focused tests for nested preorder rows, depth normalization, active/dirty state, row keys, and file type guards.
+
+Quality gate:
+
+- `npx vitest run packages/workbench/src/workbenchFileTreeModel.test.ts packages/workbench/src/workbenchRecentResourcesModel.test.ts packages/workbench/src/workbenchQuickOpenModel.test.ts`: passed, 12 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 460 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Dev server smoke check: passed at `http://127.0.0.1:5173`; status 200 and root element present
+
+Review:
+
+- File tree behavior remains Workbench-local and consumes platform `FileTreeEntry` without introducing storage, Electron, or index dependencies.
+- The Files sidebar now consumes one tested row model for tree shape and active/dirty display state instead of deriving those rules while rendering.
+- The row model preserves UI ownership in React while making traversal and row identity reusable for future file-tree features such as collapse state or keyboard navigation.
+- No new dependency, configuration key, storage path, visual token, extra documentation file, or hard-coded platform assumption was introduced.
+
+Known limitations:
+
+- Directory expand/collapse state is still not modeled; the current file tree remains fully expanded until a later navigation stage adds persisted or session-scoped tree state.

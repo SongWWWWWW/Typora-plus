@@ -58,6 +58,10 @@ import {
   runWorkbenchAction
 } from "./workbenchActionRunner";
 import { editorTaskCommandMetadata } from "./workbenchContributions";
+import {
+  createWorkbenchFileTreeRows,
+  type WorkbenchFileTreeRow
+} from "./workbenchFileTreeModel";
 import { openWorkbenchFile } from "./workbenchFileOpening";
 import {
   createWorkbenchMenuContext,
@@ -915,6 +919,12 @@ function FilesPanel({
 }) {
   const workspaceFiles = workspace.files;
   const recentSections = createWorkbenchRecentResourceSections(recents);
+  const fileTreeRows = workspaceFiles
+    ? createWorkbenchFileTreeRows(workspaceFiles.root.children ?? [], {
+        activeUri: model.uri.toString(),
+        dirty: model.dirty
+      })
+    : [];
 
   return (
     <div className="tp-sidebar-content">
@@ -939,10 +949,7 @@ function FilesPanel({
       {workspaceFiles ? (
         <div className="tp-file-tree">
           <FileTreeRows
-            entries={workspaceFiles.root.children ?? []}
-            activeUri={model.uri.toString()}
-            dirty={model.dirty}
-            depth={0}
+            rows={fileTreeRows}
             onOpenFile={onOpenFile}
           />
         </div>
@@ -1019,48 +1026,37 @@ function RecentSection({
 }
 
 function FileTreeRows({
-  entries,
-  activeUri,
-  dirty,
-  depth,
+  rows,
   onOpenFile
 }: {
-  readonly entries: readonly FileTreeEntry[];
-  readonly activeUri: string;
-  readonly dirty: boolean;
-  readonly depth: number;
+  readonly rows: readonly WorkbenchFileTreeRow[];
   readonly onOpenFile: (entry: FileTreeEntry) => void;
 }) {
   return (
     <>
-      {entries.map((entry) => (
-        <div key={entry.uri.toString()}>
-          {entry.kind === "directory" ? (
-            <div className="tp-folder-row" style={{ "--tp-tree-depth": depth } as TreeStyle}>
+      {rows.map((row) => (
+        <div key={row.key}>
+          {row.kind === "directory" ? (
+            <div className="tp-folder-row" style={{ "--tp-tree-depth": row.depth } as TreeStyle}>
               <Folder size={16} />
-              <span>{entry.name}</span>
+              <span>{row.entry.name}</span>
             </div>
           ) : (
             <button
-              className={entry.uri.toString() === activeUri ? "tp-file-row tp-file-row-active" : "tp-file-row"}
-              style={{ "--tp-tree-depth": depth } as TreeStyle}
+              className={row.active ? "tp-file-row tp-file-row-active" : "tp-file-row"}
+              style={{ "--tp-tree-depth": row.depth } as TreeStyle}
               type="button"
-              onClick={() => onOpenFile(entry)}
+              onClick={() => {
+                if (row.fileEntry) {
+                  onOpenFile(row.fileEntry);
+                }
+              }}
             >
               <FileText size={16} />
-              <span>{entry.name}</span>
-              {entry.uri.toString() === activeUri && dirty ? <span className="tp-row-dot" /> : null}
+              <span>{row.entry.name}</span>
+              {row.dirty ? <span className="tp-row-dot" /> : null}
             </button>
           )}
-          {entry.kind === "directory" && entry.children ? (
-            <FileTreeRows
-              entries={entry.children}
-              activeUri={activeUri}
-              dirty={dirty}
-              depth={depth + 1}
-              onOpenFile={onOpenFile}
-            />
-          ) : null}
         </div>
       ))}
     </>
