@@ -14,6 +14,7 @@ import {
   workbenchStatusRendererId,
   workbenchStatusRendererLanguage
 } from "./statusMarkdownRenderer";
+import { workbenchContextKeys } from "./workbenchContextModel";
 
 export const editorTaskCommandMetadata = {
   removeTaskMarkers: {
@@ -50,7 +51,7 @@ export const defaultWorkbenchExtensionManifest = {
         icon: "folder-open",
         group: "10_file",
         order: 20,
-        when: "fileSystem.available"
+        when: workbenchContextKeys.fileSystemAvailable
       },
       {
         id: "titlebar.file.save",
@@ -60,7 +61,7 @@ export const defaultWorkbenchExtensionManifest = {
         icon: "save",
         group: "10_file",
         order: 30,
-        when: "fileSystem.available"
+        when: workbenchContextKeys.fileSystemAvailable
       },
       {
         id: "titlebar.file.saveAs",
@@ -71,7 +72,7 @@ export const defaultWorkbenchExtensionManifest = {
         group: "10_file",
         order: 40,
         compactHidden: true,
-        when: "fileSystem.available"
+        when: workbenchContextKeys.fileSystemAvailable
       },
       {
         id: "titlebar.file.exportHtml",
@@ -92,7 +93,7 @@ export const defaultWorkbenchExtensionManifest = {
         group: "20_editor",
         order: 10,
         compactHidden: true,
-        toggled: { context: "editor.focusMode", value: true }
+        toggled: { context: workbenchContextKeys.editorFocusMode, value: true }
       },
       {
         id: "titlebar.editor.typewriterMode",
@@ -103,7 +104,7 @@ export const defaultWorkbenchExtensionManifest = {
         group: "20_editor",
         order: 20,
         compactHidden: true,
-        toggled: { context: "editor.typewriterMode", value: true }
+        toggled: { context: workbenchContextKeys.editorTypewriterMode, value: true }
       },
       {
         id: "titlebar.workbench.theme",
@@ -131,8 +132,8 @@ export const defaultWorkbenchExtensionManifest = {
         title: "Files",
         icon: "file-text",
         order: 10,
-        toggled: { context: "sideView", value: "files" },
-        when: "fileSystem.available"
+        toggled: { context: workbenchContextKeys.sideView, value: "files" },
+        when: workbenchContextKeys.fileSystemAvailable
       },
       {
         id: "activitybar.primary.search",
@@ -141,7 +142,7 @@ export const defaultWorkbenchExtensionManifest = {
         title: "Search",
         icon: "search",
         order: 20,
-        toggled: { context: "sideView", value: "search" }
+        toggled: { context: workbenchContextKeys.sideView, value: "search" }
       },
       {
         id: "activitybar.primary.outline",
@@ -150,7 +151,7 @@ export const defaultWorkbenchExtensionManifest = {
         title: "Outline",
         icon: "list-tree",
         order: 30,
-        toggled: { context: "sideView", value: "outline" }
+        toggled: { context: workbenchContextKeys.sideView, value: "outline" }
       },
       {
         id: "activitybar.primary.backlinks",
@@ -159,8 +160,8 @@ export const defaultWorkbenchExtensionManifest = {
         title: "Backlinks",
         icon: "link",
         order: 40,
-        toggled: { context: "sideView", value: "backlinks" },
-        when: "workspace.open"
+        toggled: { context: workbenchContextKeys.sideView, value: "backlinks" },
+        when: workbenchContextKeys.workspaceOpen
       },
       {
         id: "activitybar.primary.tags",
@@ -169,8 +170,8 @@ export const defaultWorkbenchExtensionManifest = {
         title: "Tags",
         icon: "hash",
         order: 50,
-        toggled: { context: "sideView", value: "tags" },
-        when: "workspace.open"
+        toggled: { context: workbenchContextKeys.sideView, value: "tags" },
+        when: workbenchContextKeys.workspaceOpen
       },
       {
         id: "activitybar.secondary.settings",

@@ -3,6 +3,7 @@ import type {
   MenuItem,
   TyporaPlusConfiguration
 } from "@typora-plus/platform";
+import { workbenchContextKeys } from "./workbenchContextModel";
 import type { WorkbenchSideView } from "./workbenchSideViewModel";
 
 export type WorkbenchMenuContext = Readonly<Record<string, boolean | string | null>>;
@@ -30,9 +31,9 @@ export function createWorkbenchMenuContext(
   sideView: WorkbenchSideView | null
 ): WorkbenchMenuContext {
   return {
-    sideView,
-    "editor.focusMode": configuration.editor.focusMode,
-    "editor.typewriterMode": configuration.editor.typewriterMode
+    [workbenchContextKeys.sideView]: sideView,
+    [workbenchContextKeys.editorFocusMode]: configuration.editor.focusMode,
+    [workbenchContextKeys.editorTypewriterMode]: configuration.editor.typewriterMode
   };
 }
 

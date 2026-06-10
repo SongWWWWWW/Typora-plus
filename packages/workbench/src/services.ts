@@ -57,6 +57,10 @@ import {
 } from "@typora-plus/platform";
 import { createWorkbenchExtensionHost } from "./workbenchExtensionActivation";
 import { defaultWorkbenchExtensionManifest } from "./workbenchContributions";
+import {
+  applyWorkbenchContextValues,
+  createWorkbenchCapabilityContextValues
+} from "./workbenchContextModel";
 
 export interface WorkbenchServices {
   readonly serviceCollection: ServiceCollection;
@@ -134,6 +138,11 @@ export function createWorkbenchServices(): WorkbenchServices {
   serviceCollection.set(IThemeService, themeService);
   serviceCollection.set(IWorkspaceService, workspaceService);
   serviceCollection.set(ITextFileService, textFileService);
+  applyWorkbenchContextValues(contextKeyService, createWorkbenchCapabilityContextValues({
+    fileSystemAvailable: fileService.isAvailable(),
+    attachmentAvailable: attachmentService.isAvailable(),
+    resourceAvailable: resourceService.isAvailable()
+  }));
 
   const commandService = new CommandService(serviceCollection, {
     activationHandler: async (command) => {
@@ -153,9 +162,6 @@ export function createWorkbenchServices(): WorkbenchServices {
   });
   serviceCollection.set(IExtensionService, extensionService);
   exportService.registerProvider(markdownHtmlExportProvider);
-  contextKeyService.setValue("fileSystem.available", fileService.isAvailable());
-  contextKeyService.setValue("attachment.available", attachmentService.isAvailable());
-  contextKeyService.setValue("resource.available", resourceService.isAvailable());
   extensionService.registerExtension(defaultWorkbenchExtensionManifest);
   keybindingService.setUserKeybindings(configurationService.getValue().keybindings.overrides);
 

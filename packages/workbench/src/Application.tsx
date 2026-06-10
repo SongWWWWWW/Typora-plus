@@ -59,6 +59,10 @@ import {
 } from "./workbenchActionRunner";
 import { editorTaskCommandMetadata } from "./workbenchContributions";
 import {
+  applyWorkbenchContextValues,
+  createWorkbenchStateContextValues
+} from "./workbenchContextModel";
+import {
   createWorkbenchFileTreeRows,
   type WorkbenchFileTreeRow
 } from "./workbenchFileTreeModel";
@@ -194,11 +198,10 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
   }).dispose, [services]);
 
   useEffect(() => {
-    services.contextKeyService.setValue("activeResource.scheme", model.uri.scheme);
-    services.contextKeyService.setValue("editor.focusMode", configuration.editor.focusMode);
-    services.contextKeyService.setValue("editor.typewriterMode", configuration.editor.typewriterMode);
-    services.contextKeyService.setValue("sideView", sideView);
-    services.contextKeyService.setValue("workspace.open", workspace.files ? true : false);
+    applyWorkbenchContextValues(
+      services.contextKeyService,
+      createWorkbenchStateContextValues(configuration, model, sideView, workspace)
+    );
   }, [
     configuration.editor.focusMode,
     configuration.editor.typewriterMode,

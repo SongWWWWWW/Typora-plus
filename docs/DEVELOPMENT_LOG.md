@@ -4377,3 +4377,33 @@ Review:
 Known limitations:
 
 - Tagged resource row keys still live with the shared search result helpers because resource rows use indexed source metadata; they can move into a dedicated tag resource model if the Tags panel gains richer grouping or sorting.
+
+## 2026-06-11 - P2 Workbench Context Model
+
+Completed:
+
+- Added a focused Workbench context model for context key names, native capability context values, dynamic Workbench state context values, and the `IContextKeyService` apply boundary.
+- Replaced direct context key writes in `Application.tsx` with model-generated state snapshots.
+- Replaced direct native capability context key writes in Workbench service creation with model-generated capability snapshots.
+- Reused the same context key constants from Workbench menu toggle context and built-in menu `when` contributions.
+- Added focused tests for capability values, active resource scheme, editor modes, side view state, workspace-open state, and context service application order.
+
+Quality gate:
+
+- `npx vitest run packages/workbench/src/workbenchContextModel.test.ts packages/workbench/src/workbenchMenuModel.test.ts packages/workbench/src/workbenchContributions.test.ts`: passed, 17 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 470 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Dev server smoke check: passed at `http://127.0.0.1:5173`; status 200 and root element present
+
+Review:
+
+- Context key naming and snapshot construction remain Workbench-local while still applying values through platform `IContextKeyService`.
+- Built-in menu `when` clauses, toggle contexts, and shell state synchronization now share one context key source, reducing drift between contribution metadata and runtime state.
+- Native capability keys remain initialized during service creation; dynamic document/workspace/editor/sidebar keys remain synchronized by the shell as state changes.
+- No new dependency, configuration key, storage path, visual token, extra documentation file, or hard-coded platform assumption was introduced.
+
+Known limitations:
+
+- Extension-owned context keys remain separate in the platform extension context API; this model only owns built-in Workbench keys.
