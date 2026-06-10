@@ -51,7 +51,7 @@ import {
   createMarkdownCodeFenceRenderer,
   createMarkdownInlineRenderer
 } from "./markdownRendererPreview";
-import { updateSavedFileIndex } from "./savedFileIndexing";
+import { updateSavedFileIndexAndWorkspace } from "./savedFileIndexing";
 import { SettingsDialog } from "./SettingsDialog";
 import type { WorkbenchServices } from "./services";
 import { editorTaskCommandMetadata } from "./workbenchContributions";
@@ -1569,20 +1569,6 @@ function sidebarTitle(view: SideView): string {
     case "tags":
       return "Tags";
   }
-}
-
-async function updateSavedFileIndexAndWorkspace(
-  services: WorkbenchServices,
-  workspaceFiles: WorkspaceState["files"],
-  model: TextFileModel
-): Promise<void> {
-  const refreshedWorkspace = await updateSavedFileIndex(services, workspaceFiles, model);
-
-  if (!refreshedWorkspace) {
-    return;
-  }
-
-  services.workspaceService.setWorkspace(workspaceStateFromFiles(refreshedWorkspace));
 }
 
 function executeWorkbenchCommand(

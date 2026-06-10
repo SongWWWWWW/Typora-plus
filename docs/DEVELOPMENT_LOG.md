@@ -4175,3 +4175,31 @@ Review:
 Known limitations:
 
 - Save-related workspace index refresh still uses a small adapter in `Application.tsx`; a later stage can fold that into the saved-file indexing helper if it continues to grow.
+
+## 2026-06-11 - P2 Saved File Workspace Update Coordinator
+
+Completed:
+
+- Moved the save/save-as index refresh plus refreshed workspace state update adapter out of `Application.tsx` and into `savedFileIndexing.ts`.
+- Kept existing saved-file indexing behavior: index listed saved files directly, refresh once for newly saved files, and update workspace state only when a refreshed tree is returned.
+- Added focused tests for existing-file saves that do not update workspace state and save-as flows that refresh and synchronize workspace state.
+
+Quality gate:
+
+- `npx vitest run packages/workbench/src/savedFileIndexing.test.ts packages/workbench/src/workbenchWorkspaceOpening.test.ts`: passed, 9 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 439 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Dev server smoke check: passed at `http://127.0.0.1:5173`; status 200 and root element present
+
+Review:
+
+- Saved-file indexing remains Workbench-local and consumes platform `IFileService`, `IIndexService`, and `IWorkspaceService` contracts.
+- `Application.tsx` now coordinates save commands and conflict dialogs, while the helper owns the index/workspace synchronization detail.
+- The helper reuses the same `workspaceStateFromFiles()` mapping as workspace opening, avoiding duplicate workspace-state construction.
+- No new dependency, configuration key, storage path, visual token, extra documentation file, or hard-coded platform assumption was introduced.
+
+Known limitations:
+
+- Save-conflict reload still records recent files directly in `Application.tsx` because it is tied to the conflict dialog lifecycle.

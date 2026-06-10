@@ -2,14 +2,20 @@ import type {
   FileTreeEntry,
   IFileService,
   IIndexService,
+  IWorkspaceService,
   TextFileModel,
   WorkspaceFileTree,
   WorkspaceState
 } from "@typora-plus/platform";
+import { workspaceStateFromFiles } from "./workbenchWorkspaceOpening";
 
 export interface SavedFileIndexingServices {
   readonly fileService: Pick<IFileService, "refreshWorkspace">;
   readonly indexService: Pick<IIndexService, "indexFile">;
+}
+
+export interface SavedFileWorkspaceIndexingServices extends SavedFileIndexingServices {
+  readonly workspaceService: Pick<IWorkspaceService, "setWorkspace">;
 }
 
 export async function updateSavedFileIndex(
@@ -41,6 +47,20 @@ export async function updateSavedFileIndex(
   }
 
   return refreshedWorkspace;
+}
+
+export async function updateSavedFileIndexAndWorkspace(
+  services: SavedFileWorkspaceIndexingServices,
+  workspaceFiles: WorkspaceState["files"],
+  model: TextFileModel
+): Promise<void> {
+  const refreshedWorkspace = await updateSavedFileIndex(services, workspaceFiles, model);
+
+  if (!refreshedWorkspace) {
+    return;
+  }
+
+  services.workspaceService.setWorkspace(workspaceStateFromFiles(refreshedWorkspace));
 }
 
 function findWorkspaceFile(workspaceFiles: WorkspaceFileTree, model: TextFileModel): FileTreeEntry | undefined {
