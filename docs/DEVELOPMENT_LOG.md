@@ -4261,3 +4261,32 @@ Review:
 Known limitations:
 
 - Menu icon rendering still lives in `Application.tsx`; it remains tied to React icons and can be revisited if contributed icon handling grows.
+
+## 2026-06-11 - P2 Workbench Menu Model
+
+Completed:
+
+- Added a focused Workbench menu model for command title fallback, menu item title resolution, menu context construction, and toggled active-state checks.
+- Removed menu title/context/active helpers from `Application.tsx`.
+- Kept React icon rendering in the shell because it depends on lucide components and theme state.
+- Added focused tests for title fallback, contributed menu titles, context values, and toggled active-state behavior.
+
+Quality gate:
+
+- `npx vitest run packages/workbench/src/workbenchMenuModel.test.ts packages/workbench/src/workbenchContributions.test.ts`: passed, 13 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 452 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Dev server smoke check: passed at `http://127.0.0.1:5173`; status 200 and root element present
+
+Review:
+
+- Menu behavior remains Workbench-local and consumes platform `CommandMetadata`, `MenuItem`, and configuration contracts without introducing platform or storage dependencies.
+- Titlebar and activitybar now share one tested menu context/active-state model instead of duplicating assumptions in JSX.
+- The shell still owns rendering and icon mapping; the model owns only pure contribution interpretation.
+- No new dependency, configuration key, storage path, visual token, extra documentation file, or hard-coded platform assumption was introduced.
+
+Known limitations:
+
+- Icon id to React icon mapping remains in `Application.tsx`; if extension-contributed icons expand beyond current ids, that should become its own constrained rendering adapter.

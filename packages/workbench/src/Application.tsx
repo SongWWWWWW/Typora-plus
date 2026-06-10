@@ -60,6 +60,12 @@ import {
 import { editorTaskCommandMetadata } from "./workbenchContributions";
 import { openWorkbenchFile } from "./workbenchFileOpening";
 import {
+  createWorkbenchMenuContext,
+  isWorkbenchMenuItemActive,
+  workbenchCommandTitle,
+  workbenchMenuItemTitle
+} from "./workbenchMenuModel";
+import {
   openRecentWorkbenchWorkspace,
   openWorkbenchWorkspace,
   refreshWorkbenchWorkspace,
@@ -485,7 +491,7 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
         workspaceName={workspace.name}
         configuration={configuration}
         menuItems={titlebarMenuItems}
-        getCommandTitle={(id) => commandTitle(services.commandService.getCommands(), id)}
+        getCommandTitle={(id) => workbenchCommandTitle(services.commandService.getCommands(), id)}
         onCommand={executeCommand}
       />
       <div className="tp-body">
@@ -494,7 +500,7 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
           configuration={configuration}
           primaryMenuItems={activitybarPrimaryMenuItems}
           secondaryMenuItems={activitybarSecondaryMenuItems}
-          getCommandTitle={(id) => commandTitle(services.commandService.getCommands(), id)}
+          getCommandTitle={(id) => workbenchCommandTitle(services.commandService.getCommands(), id)}
           onCommand={executeCommand}
         />
         {sideView ? (
@@ -664,32 +670,6 @@ function useMenuItems(services: WorkbenchServices, menu: MenuId): readonly MenuI
   return items;
 }
 
-function commandTitle(commands: readonly { readonly id: string; readonly title: string }[], id: string): string {
-  return commands.find((command) => command.id === id)?.title ?? id;
-}
-
-function menuItemTitle(item: MenuItem, getCommandTitle: (id: string) => string): string {
-  return item.title ?? getCommandTitle(item.command);
-}
-
-function menuContext(
-  configuration: TyporaPlusConfiguration,
-  sideView: WorkbenchSideView | null
-): Readonly<Record<string, boolean | string | null>> {
-  return {
-    sideView,
-    "editor.focusMode": configuration.editor.focusMode,
-    "editor.typewriterMode": configuration.editor.typewriterMode
-  };
-}
-
-function isMenuItemActive(
-  item: MenuItem,
-  context: Readonly<Record<string, boolean | string | null>>
-): boolean {
-  return item.toggled ? context[item.toggled.context] === item.toggled.value : false;
-}
-
 function renderMenuIcon(item: MenuItem, configuration: TyporaPlusConfiguration, size: number): ReactNode {
   switch (item.icon) {
     case "command":
@@ -750,8 +730,8 @@ function Titlebar({
       <div className="tp-titlebar-actions">
         {menuItems.map((item) => (
           <IconButton
-            title={menuItemTitle(item, getCommandTitle)}
-            active={isMenuItemActive(item, menuContext(configuration, null))}
+            title={workbenchMenuItemTitle(item, getCommandTitle)}
+            active={isWorkbenchMenuItemActive(item, createWorkbenchMenuContext(configuration, null))}
             compactHidden={item.compactHidden ?? false}
             key={item.id}
             onClick={() => onCommand(item.command)}
@@ -779,14 +759,14 @@ function ActivityBar({
   readonly getCommandTitle: (id: string) => string;
   readonly onCommand: (id: string) => void;
 }) {
-  const context = menuContext(configuration, activeView);
+  const context = createWorkbenchMenuContext(configuration, activeView);
 
   return (
     <nav className="tp-activitybar" aria-label="Primary">
       {primaryMenuItems.map((item) => (
         <IconButton
-          title={menuItemTitle(item, getCommandTitle)}
-          active={isMenuItemActive(item, context)}
+          title={workbenchMenuItemTitle(item, getCommandTitle)}
+          active={isWorkbenchMenuItemActive(item, context)}
           key={item.id}
           onClick={() => onCommand(item.command)}
         >
@@ -796,8 +776,8 @@ function ActivityBar({
       <div className="tp-activitybar-spacer" />
       {secondaryMenuItems.map((item) => (
         <IconButton
-          title={menuItemTitle(item, getCommandTitle)}
-          active={isMenuItemActive(item, context)}
+          title={workbenchMenuItemTitle(item, getCommandTitle)}
+          active={isWorkbenchMenuItemActive(item, context)}
           key={item.id}
           onClick={() => onCommand(item.command)}
         >
