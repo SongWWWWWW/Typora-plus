@@ -71,6 +71,10 @@ import {
 } from "./workbenchFileSaving";
 import { openWorkbenchFile } from "./workbenchFileOpening";
 import {
+  overwriteWorkbenchSaveConflict,
+  reloadWorkbenchFileAfterSaveConflict
+} from "./workbenchSaveConflictResolution";
+import {
   createWorkbenchMenuContext,
   isWorkbenchMenuItemActive,
   workbenchCommandTitle,
@@ -601,17 +605,16 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
           onReload={() => {
             const conflict = saveConflict;
             void runWorkbenchAction(async () => {
-              const opened = await services.textFileService.openFile(conflict.uri);
-              services.recentService.addRecentFile(opened.uri, opened.name);
-              setSaveConflict(undefined);
-              return opened;
+              return reloadWorkbenchFileAfterSaveConflict(services, conflict, {
+                clearSaveConflict: () => setSaveConflict(undefined)
+              });
             }, setOperationError, setSaveConflict);
           }}
           onOverwrite={() => {
             void runWorkbenchAction(async () => {
-              const saved = await saveWorkbenchFile(services, workspace.files, { overwrite: true });
-              setSaveConflict(undefined);
-              return saved;
+              return overwriteWorkbenchSaveConflict(services, workspace.files, {
+                clearSaveConflict: () => setSaveConflict(undefined)
+              });
             }, setOperationError, setSaveConflict);
           }}
         />

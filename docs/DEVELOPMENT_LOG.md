@@ -4436,3 +4436,33 @@ Review:
 Known limitations:
 
 - Save-conflict reload still uses the existing file-opening flow directly from the conflict dialog; a later conflict-specific coordinator can own both reload and overwrite UI callbacks if that dialog grows.
+
+## 2026-06-11 - P2 Workbench Save Conflict Resolution
+
+Completed:
+
+- Added a focused Workbench save-conflict resolution helper for reload and overwrite actions.
+- Replaced direct conflict-dialog service orchestration in `Application.tsx` with helper calls.
+- Reused the existing file-opening helper for reload and the file-saving helper for overwrite.
+- Preserved shell ownership of dialog visibility by clearing save conflict state only after successful reload or overwrite.
+- Added focused tests for reload success, reload failure, overwrite success, overwrite failure, recent tracking, indexing, and clear-callback ordering.
+
+Quality gate:
+
+- `npx vitest run packages/workbench/src/workbenchSaveConflictResolution.test.ts packages/workbench/src/workbenchFileSaving.test.ts packages/workbench/src/workbenchFileOpening.test.ts`: passed, 13 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 481 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Dev server smoke check: passed at `http://127.0.0.1:5173`; status 200 and root element present
+
+Review:
+
+- Save-conflict action behavior remains Workbench-local and consumes platform file, recent, index, and workspace contracts through existing helpers.
+- The dialog now delegates reload/overwrite orchestration instead of duplicating service calls inline.
+- Failure paths keep the conflict dialog state intact so users can retry or choose another resolution.
+- No new dependency, configuration key, storage path, visual token, extra documentation file, or hard-coded platform assumption was introduced.
+
+Known limitations:
+
+- Conflict detection and conflict error classification still belong to the platform text-file/file-service layer and the shared Workbench action runner; this helper only owns user-selected resolution actions.
