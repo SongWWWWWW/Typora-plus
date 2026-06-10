@@ -50,7 +50,6 @@ import {
   createMarkdownCodeFenceRenderer,
   createMarkdownInlineRenderer
 } from "./markdownRendererPreview";
-import { updateSavedFileIndexAndWorkspace } from "./savedFileIndexing";
 import { SettingsDialog } from "./SettingsDialog";
 import type { WorkbenchServices } from "./services";
 import {
@@ -66,6 +65,10 @@ import {
   createWorkbenchFileTreeRows,
   type WorkbenchFileTreeRow
 } from "./workbenchFileTreeModel";
+import {
+  saveWorkbenchFile,
+  saveWorkbenchFileAs
+} from "./workbenchFileSaving";
 import { openWorkbenchFile } from "./workbenchFileOpening";
 import {
   createWorkbenchMenuContext,
@@ -240,9 +243,7 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
 
     const handle = window.setTimeout(() => {
       void runWorkbenchAction(async () => {
-        const saved = await services.textFileService.save();
-        await updateSavedFileIndexAndWorkspace(services, workspace.files, saved);
-        return saved;
+        return saveWorkbenchFile(services, workspace.files, { recordRecent: false });
       }, setOperationError, setSaveConflict);
     }, configuration.editor.autoSaveDelayMs);
     return () => window.clearTimeout(handle);
@@ -365,31 +366,21 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
       id: "file.save",
       title: "Save",
       category: "File",
-      run: () => runWorkbenchAction(async () => {
-        const saved = await services.textFileService.save();
-
-        if (saved.uri.scheme === "file") {
-          services.recentService.addRecentFile(saved.uri, saved.name);
-        }
-
-        await updateSavedFileIndexAndWorkspace(services, workspace.files, saved);
-        return saved;
-      }, setOperationError, setSaveConflict)
+      run: () => runWorkbenchAction(
+        () => saveWorkbenchFile(services, workspace.files),
+        setOperationError,
+        setSaveConflict
+      )
     }));
     disposables.add(services.commandService.registerCommand({
       id: "file.saveAs",
       title: "Save As",
       category: "File",
-      run: () => runWorkbenchAction(async () => {
-        const saved = await services.textFileService.saveAs();
-
-        if (saved) {
-          services.recentService.addRecentFile(saved.uri, saved.name);
-          await updateSavedFileIndexAndWorkspace(services, workspace.files, saved);
-        }
-
-        return saved;
-      }, setOperationError, setSaveConflict)
+      run: () => runWorkbenchAction(
+        () => saveWorkbenchFileAs(services, workspace.files),
+        setOperationError,
+        setSaveConflict
+      )
     }));
     disposables.add(services.commandService.registerCommand({
       id: "file.exportHtml",
@@ -618,13 +609,7 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
           }}
           onOverwrite={() => {
             void runWorkbenchAction(async () => {
-              const saved = await services.textFileService.save({ overwrite: true });
-
-              if (saved.uri.scheme === "file") {
-                services.recentService.addRecentFile(saved.uri, saved.name);
-              }
-
-              await updateSavedFileIndexAndWorkspace(services, workspace.files, saved);
+              const saved = await saveWorkbenchFile(services, workspace.files, { overwrite: true });
               setSaveConflict(undefined);
               return saved;
             }, setOperationError, setSaveConflict);

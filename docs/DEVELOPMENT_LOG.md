@@ -4407,3 +4407,32 @@ Review:
 Known limitations:
 
 - Extension-owned context keys remain separate in the platform extension context API; this model only owns built-in Workbench keys.
+
+## 2026-06-11 - P2 Workbench File Saving Coordinator
+
+Completed:
+
+- Added a focused Workbench file-saving helper for save, save-as, recent-file recording, and saved-file index/workspace synchronization.
+- Replaced duplicated save, save-as, auto-save, and save-conflict overwrite coordination in `Application.tsx`.
+- Kept UI-specific save-conflict clearing in the shell while moving service orchestration behind a reusable helper.
+- Added focused tests for regular saves, auto-save without recent tracking, overwrite options, save-as success, save-as cancellation, untitled recent suppression, and save-as workspace refresh.
+
+Quality gate:
+
+- `npx vitest run packages/workbench/src/workbenchFileSaving.test.ts packages/workbench/src/savedFileIndexing.test.ts packages/workbench/src/workbenchFileOpening.test.ts`: passed, 13 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 477 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Dev server smoke check: passed at `http://127.0.0.1:5173`; status 200 and root element present
+
+Review:
+
+- Save coordination remains Workbench-local and consumes platform `ITextFileService`, `IRecentService`, saved-file indexing, and workspace update contracts without introducing new storage or Electron access.
+- Auto-save, command save, save-as, and conflict overwrite now share one tested post-save path, reducing drift in recent tracking and index refresh behavior.
+- The helper keeps recent tracking configurable so auto-save does not pollute recent files while explicit saves still do.
+- No new dependency, configuration key, storage path, visual token, extra documentation file, or hard-coded platform assumption was introduced.
+
+Known limitations:
+
+- Save-conflict reload still uses the existing file-opening flow directly from the conflict dialog; a later conflict-specific coordinator can own both reload and overwrite UI callbacks if that dialog grows.
