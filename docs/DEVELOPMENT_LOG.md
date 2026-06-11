@@ -6668,3 +6668,33 @@ Known limitations:
 
 - Append is end-of-document only.
 - Streaming responses, replace workflows, and workspace-grounded retrieval remain future work.
+
+## 2026-06-11 - P2 Configured Responses AI Provider Foundation
+
+Completed:
+
+- Added zero-default AI provider configuration for Responses-compatible providers, including provider id, title, endpoint URL, model, secret reference, and optional store preference.
+- Added configuration sanitization that rejects invalid provider ids, unsupported provider kinds, invalid endpoint URLs, duplicate provider ids, and malformed secret references without breaking unrelated settings.
+- Added a Responses provider factory that creates `IAiService` providers from configuration while resolving secrets and sending network requests only through injected callbacks.
+- Added request shaping for instructions, active-note input, context items, metadata, and optional store preference, plus response parsing for top-level output text, message content output text, model metadata, and token usage.
+- Kept all provider identity, endpoint, model, and credential values user/configuration supplied; no built-in provider is registered by default.
+
+Quality gate:
+
+- `npx vitest run packages/platform/src/configurationAi.test.ts packages/platform/src/responsesAiProvider.test.ts packages/platform/src/ai.test.ts`: passed, 3 files / 14 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 70 files / 661 tests, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+
+Review:
+
+- The provider factory is deliberately platform-only and transport-injected so Electron can own future secret storage and network policy before any real credentials cross a boundary.
+- Provider configuration is data, not behavior: Workbench still discovers providers only through `IAiService`, matching the existing VS Code-like split between configuration, services, commands, and UI surfaces.
+- The adapter preserves AI output whitespace while trimming configuration fields, avoiding Markdown formatting damage in returned provider text.
+
+Known limitations:
+
+- No UI exists yet for editing AI provider configuration or secrets.
+- No native secret storage or network bridge is wired yet.
+- Streaming, tool calls, and workspace-grounded retrieval remain future work.

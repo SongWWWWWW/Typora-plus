@@ -3,6 +3,7 @@ import { createServiceIdentifier } from "./instantiation";
 import type { UserKeybindingRule } from "./keybindings";
 
 export type ColorSchemePreference = "light" | "dark" | "system";
+export type AiProviderConfigurationKind = "responses";
 export type MarkdownStatusBadgeTone = "danger" | "info" | "neutral" | "success" | "warning";
 
 export interface ConfigurationNumberConstraint {
@@ -18,11 +19,24 @@ export interface MarkdownStatusBadgeConfiguration {
   readonly aliases: readonly string[];
 }
 
+export interface AiProviderConfiguration {
+  readonly id: string;
+  readonly title: string;
+  readonly kind: AiProviderConfigurationKind;
+  readonly endpointUrl: string;
+  readonly model: string;
+  readonly secretRef: string;
+  readonly store?: boolean;
+}
+
 export interface TyporaPlusConfiguration {
   readonly appearance: {
     readonly colorScheme: ColorSchemePreference;
     readonly density: "comfortable" | "compact";
     readonly themeId?: string;
+  };
+  readonly ai: {
+    readonly providers: readonly AiProviderConfiguration[];
   };
   readonly editor: {
     readonly fontSize: number;
@@ -81,6 +95,7 @@ export interface IConfigurationService {
 
 export type PartialConfiguration = {
   readonly appearance?: PartialAppearanceConfiguration;
+  readonly ai?: Partial<TyporaPlusConfiguration["ai"]>;
   readonly editor?: Partial<TyporaPlusConfiguration["editor"]>;
   readonly workspace?: Partial<TyporaPlusConfiguration["workspace"]>;
   readonly extensionHost?: Partial<TyporaPlusConfiguration["extensionHost"]>;
@@ -95,6 +110,12 @@ export const defaultConfigurationServiceOptions: ConfigurationServiceOptions = {
 };
 
 export const configurationBytesPerMegabyte = 1024 * 1024;
+export const configurationMaxAiProviders = 20;
+export const configurationMaxAiProviderIdLength = 256;
+export const configurationMaxAiProviderTitleLength = 160;
+export const configurationMaxAiProviderEndpointUrlLength = 2000;
+export const configurationMaxAiProviderModelLength = 120;
+export const configurationMaxAiProviderSecretRefLength = 256;
 export const configurationMaxMarkdownStatusBadges = 50;
 export const configurationMaxMarkdownStatusBadgeAliases = 30;
 export const configurationMaxMarkdownStatusBadgeTextLength = 64;
@@ -157,6 +178,9 @@ export const defaultConfiguration: TyporaPlusConfiguration = {
   appearance: {
     colorScheme: "system",
     density: "comfortable"
+  },
+  ai: {
+    providers: []
   },
   editor: {
     fontSize: 17,
@@ -234,6 +258,10 @@ export function mergeConfiguration(
 ): TyporaPlusConfiguration {
   return {
     appearance: mergeAppearanceConfiguration(base.appearance, value.appearance),
+    ai: {
+      ...base.ai,
+      ...value.ai
+    },
     editor: {
       ...base.editor,
       ...value.editor
@@ -299,6 +327,7 @@ function sanitizePartialConfiguration(value: unknown): PartialConfiguration {
 
   return {
     ...(isRecord(value.appearance) ? { appearance: sanitizeAppearanceConfiguration(value.appearance) } : {}),
+    ...(isRecord(value.ai) ? { ai: sanitizeAiConfiguration(value.ai) } : {}),
     ...(isRecord(value.editor) ? { editor: sanitizeEditorConfiguration(value.editor) } : {}),
     ...(isRecord(value.workspace) ? { workspace: sanitizeWorkspaceConfiguration(value.workspace) } : {}),
     ...(isRecord(value.extensionHost) ? { extensionHost: sanitizeExtensionHostConfiguration(value.extensionHost) } : {}),
@@ -324,6 +353,14 @@ function sanitizeAppearanceConfiguration(value: Record<string, unknown>): Partia
   return appearance;
 }
 
+function sanitizeAiConfiguration(value: Record<string, unknown>): Partial<TyporaPlusConfiguration["ai"]> {
+  const providers = sanitizeAiProviderConfigurations(value.providers);
+
+  return {
+    ...(providers !== undefined ? { providers } : {})
+  };
+}
+
 function sanitizeEditorConfiguration(value: Record<string, unknown>): Partial<TyporaPlusConfiguration["editor"]> {
   return {
     ...sanitizeNumberProperty("fontSize", value.fontSize, configurationNumberConstraints.editorFontSize),
@@ -339,6 +376,53 @@ function sanitizeEditorConfiguration(value: Record<string, unknown>): Partial<Ty
       configurationNumberConstraints.editorRendererPreviewCacheEntries
     )
   };
+}
+
+function sanitizeAiProviderConfigurations(value: unknown): readonly AiProviderConfiguration[] | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+
+  const providers: AiProviderConfiguration[] = [];
+  const seenIds = new Set<string>();
+
+  for (const candidate of value.slice(0, configurationMaxAiProviders)) {
+    if (!isRecord(candidate)) {
+      continue;
+    }
+
+    const id = normalizeAiProviderConfigurationId(candidate.id);
+    const title = normalizeConfigurationText(candidate.title, configurationMaxAiProviderTitleLength);
+    const kind = normalizeAiProviderConfigurationKind(candidate.kind);
+    const endpointUrl = normalizeAiProviderEndpointUrl(candidate.endpointUrl);
+    const model = normalizeConfigurationText(candidate.model, configurationMaxAiProviderModelLength);
+    const secretRef = normalizeAiProviderSecretRef(candidate.secretRef);
+
+    if (!id || !title || !kind || !endpointUrl || !model || !secretRef || seenIds.has(id)) {
+      continue;
+    }
+
+    seenIds.add(id);
+    providers.push({
+      id,
+      title,
+      kind,
+      endpointUrl,
+      model,
+      secretRef,
+      ...(typeof candidate.store === "boolean" ? { store: candidate.store } : {})
+    });
+  }
+
+  if (providers.length === 0 && value.length > 0) {
+    return undefined;
+  }
+
+  return providers;
 }
 
 function sanitizeWorkspaceConfiguration(value: Record<string, unknown>): Partial<TyporaPlusConfiguration["workspace"]> {
@@ -509,6 +593,61 @@ function stepPrecision(step: number): number {
 
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;
+}
+
+function normalizeAiProviderConfigurationId(value: unknown): string | undefined {
+  const normalized = normalizeConfigurationText(value, configurationMaxAiProviderIdLength);
+
+  if (!normalized || !/^[A-Za-z0-9][A-Za-z0-9_.:-]*$/.test(normalized)) {
+    return undefined;
+  }
+
+  return normalized;
+}
+
+function normalizeAiProviderConfigurationKind(value: unknown): AiProviderConfigurationKind | undefined {
+  return value === "responses" ? value : undefined;
+}
+
+function normalizeAiProviderEndpointUrl(value: unknown): string | undefined {
+  const normalized = normalizeConfigurationText(value, configurationMaxAiProviderEndpointUrlLength);
+
+  if (!normalized) {
+    return undefined;
+  }
+
+  try {
+    const url = new URL(normalized);
+    return url.protocol === "https:" || url.protocol === "http:"
+      ? url.toString()
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function normalizeAiProviderSecretRef(value: unknown): string | undefined {
+  const normalized = normalizeConfigurationText(value, configurationMaxAiProviderSecretRefLength);
+
+  if (!normalized || !/^[A-Za-z0-9][A-Za-z0-9_.:-]*$/.test(normalized)) {
+    return undefined;
+  }
+
+  return normalized;
+}
+
+function normalizeConfigurationText(value: unknown, maxLength: number): string | undefined {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+
+  const normalized = value.trim();
+
+  if (!normalized || normalized.length > maxLength) {
+    return undefined;
+  }
+
+  return normalized;
 }
 
 function normalizeMarkdownStatusBadgeKey(value: unknown): string | undefined {
