@@ -6128,3 +6128,32 @@ Known limitations:
 
 - Remote providers still need durable remote state discovery/cache and execution adapters before the diff planner can drive real sync.
 - The planner uses `contentHash` when available, otherwise `size + mtime`; richer conflict detection remains a provider or future index/hash concern.
+
+## 2026-06-11 - P2 Remote Sync Operation Target Model
+
+Completed:
+
+- Added explicit `local`, `remote`, `both`, and `none` target classification to every remote sync operation.
+- Updated the shared diff planner so push, pull, bidirectional, delete, skip, and conflict operations declare the side they are expected to mutate.
+- Required provider-supplied plans and results to include normalized operation targets instead of making future UI or execution adapters infer target side from `localUri` or `remoteId`.
+- Covered target normalization, missing-target rejection, and target semantics with focused remote sync tests.
+
+Quality gate:
+
+- `npx vitest run packages/platform/src/remoteSync.test.ts`: passed, 12 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 61 files / 613 tests, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Dev server smoke check: passed at `http://127.0.0.1:5173`; status 200 and root element present
+
+Review:
+
+- Operation target classification is a platform contract, not a Feishu-specific assumption.
+- The planner still defaults skipped operations to `none` and unresolved bidirectional changes to `both`, keeping execution adapters conservative.
+- No new dependency, configuration key, storage path, visual token, extra documentation file, provider URL, endpoint, token, or hard-coded credential behavior was introduced.
+
+Known limitations:
+
+- No built-in Feishu provider, OAuth flow, Electron network bridge, remote state cache, or sync UI is wired yet.
+- Operation targets classify intended mutation side; actual local file writes, remote uploads, and conflict dialogs still belong to future execution adapters.

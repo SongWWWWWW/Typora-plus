@@ -30,6 +30,7 @@ describe("remote sync service", () => {
         return {
           operations: [{
             kind: "create",
+            target: "remote",
             relativePath: " daily\\today.md ",
             localUri: fileUri,
             remoteId: " remote-1 ",
@@ -81,6 +82,7 @@ describe("remote sync service", () => {
     expect(plan).toEqual({
       operations: [{
         kind: "create",
+        target: "remote",
         relativePath: "daily/today.md",
         localUri: fileUri,
         remoteId: "remote-1",
@@ -172,6 +174,7 @@ describe("remote sync service", () => {
         return {
           operations: [{
             kind: "create",
+            target: "remote",
             relativePath: "/absolute.md"
           }],
           summary: {
@@ -196,6 +199,28 @@ describe("remote sync service", () => {
         };
       }
     });
+    service.registerProvider({
+      id: "missing.target",
+      title: "Missing Target",
+      createPlan() {
+        return {
+          operations: [{
+            kind: "skip",
+            relativePath: "a.md"
+          }],
+          summary: {
+            creates: 0,
+            updates: 0,
+            deletes: 0,
+            skips: 1,
+            conflicts: 0
+          }
+        } as never;
+      },
+      executePlan() {
+        return result();
+      }
+    });
 
     await expect(service.createPlan("bad.result", request({
       direction: "sideways" as never
@@ -209,6 +234,8 @@ describe("remote sync service", () => {
     }))).rejects.toThrow("Remote sync resource 0 relative path must not contain parent traversal");
     await expect(service.createPlan("bad.result", request())).rejects
       .toThrow("Remote sync operation 0 relative path must be workspace-relative");
+    await expect(service.createPlan("missing.target", request())).rejects
+      .toThrow("Remote sync operation target must be local, remote, both, or none");
     await expect(service.executePlan("bad.result", plan(), request())).rejects
       .toThrow("Remote sync summary creates must be a non-negative integer");
   });
@@ -300,23 +327,27 @@ describe("remote sync service", () => {
       operations: [
         {
           kind: "update",
+          target: "remote",
           relativePath: "changed.md",
           localUri: URI.file("C:/Notes/changed.md"),
           remoteId: "changed"
         },
         {
           kind: "create",
+          target: "remote",
           relativePath: "local-only.md",
           localUri: URI.file("C:/Notes/local-only.md")
         },
         {
           kind: "skip",
+          target: "none",
           relativePath: "remote-only.md",
           remoteId: "remote-only",
           message: "Local resource is missing"
         },
         {
           kind: "skip",
+          target: "none",
           relativePath: "same.md",
           localUri: URI.file("C:/Notes/same.md"),
           remoteId: "same"
@@ -343,6 +374,7 @@ describe("remote sync service", () => {
     })).toEqual({
       operations: [{
         kind: "delete",
+        target: "remote",
         relativePath: "remote-only.md",
         remoteId: "remote-only",
         message: "Local resource is missing"
@@ -375,18 +407,21 @@ describe("remote sync service", () => {
       operations: [
         {
           kind: "update",
+          target: "local",
           relativePath: "changed.md",
           localUri: URI.file("C:/Notes/changed.md"),
           remoteId: "changed"
         },
         {
           kind: "delete",
+          target: "local",
           relativePath: "local-only.md",
           localUri: URI.file("C:/Notes/local-only.md"),
           message: "Remote resource is missing"
         },
         {
           kind: "create",
+          target: "local",
           relativePath: "remote-only.md",
           remoteId: "remote-only"
         }
@@ -424,6 +459,7 @@ describe("remote sync service", () => {
       operations: [
         {
           kind: "conflict",
+          target: "both",
           relativePath: "changed.md",
           localUri: URI.file("C:/Notes/changed.md"),
           remoteId: "changed",
@@ -431,6 +467,7 @@ describe("remote sync service", () => {
         },
         {
           kind: "conflict",
+          target: "both",
           relativePath: "kind.md",
           localUri: URI.file("C:/Notes/kind.md"),
           remoteId: "kind",
@@ -438,22 +475,26 @@ describe("remote sync service", () => {
         },
         {
           kind: "create",
+          target: "remote",
           relativePath: "local-only.md",
           localUri: URI.file("C:/Notes/local-only.md")
         },
         {
           kind: "create",
+          target: "local",
           relativePath: "remote-only.md",
           remoteId: "remote-only"
         },
         {
           kind: "skip",
+          target: "none",
           relativePath: "same.md",
           localUri: URI.file("C:/Notes/same.md"),
           remoteId: "same"
         },
         {
           kind: "conflict",
+          target: "both",
           relativePath: "unknown.md",
           localUri: URI.file("C:/Notes/unknown.md"),
           remoteId: "unknown",
@@ -593,6 +634,7 @@ function plan(): RemoteSyncPlan {
   return {
     operations: [{
       kind: "skip",
+      target: "none",
       relativePath: "a.md"
     }],
     summary: {

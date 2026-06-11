@@ -5,6 +5,7 @@ import type { FileKind, FileTreeEntry, WorkspaceFileTree } from "./files";
 export type RemoteSyncProviderId = string;
 export type RemoteSyncDirection = "push" | "pull" | "bidirectional";
 export type RemoteSyncOperationKind = "create" | "update" | "delete" | "skip" | "conflict";
+export type RemoteSyncOperationTarget = "local" | "remote" | "both" | "none";
 
 export interface RemoteSyncResource {
   readonly uri: URIType;
@@ -28,6 +29,7 @@ export interface RemoteSyncPlanRequest {
 
 export interface RemoteSyncOperation {
   readonly kind: RemoteSyncOperationKind;
+  readonly target: RemoteSyncOperationTarget;
   readonly relativePath: string;
   readonly localUri?: URIType;
   readonly remoteId?: string;
@@ -195,41 +197,41 @@ function createRemoteSyncDiffOperation(
   if (local && !remote) {
     if (direction === "pull") {
       return deleteMissing
-        ? createRemoteSyncOperation("delete", relativePath, {
+        ? createRemoteSyncOperation("delete", "local", relativePath, {
           localUri: local.uri,
           message: "Remote resource is missing"
         })
-        : createRemoteSyncOperation("skip", relativePath, {
+        : createRemoteSyncOperation("skip", "none", relativePath, {
           localUri: local.uri,
           message: "Remote resource is missing"
         });
     }
 
-    return createRemoteSyncOperation("create", relativePath, { localUri: local.uri });
+    return createRemoteSyncOperation("create", "remote", relativePath, { localUri: local.uri });
   }
 
   if (!local && remote) {
     if (direction === "push") {
       return deleteMissing
-        ? createRemoteSyncOperation("delete", relativePath, {
+        ? createRemoteSyncOperation("delete", "remote", relativePath, {
           remoteId: remote.remoteId,
           message: "Local resource is missing"
         })
-        : createRemoteSyncOperation("skip", relativePath, {
+        : createRemoteSyncOperation("skip", "none", relativePath, {
           remoteId: remote.remoteId,
           message: "Local resource is missing"
         });
     }
 
-    return createRemoteSyncOperation("create", relativePath, { remoteId: remote.remoteId });
+    return createRemoteSyncOperation("create", "local", relativePath, { remoteId: remote.remoteId });
   }
 
   if (!local || !remote) {
-    return createRemoteSyncOperation("skip", relativePath);
+    return createRemoteSyncOperation("skip", "none", relativePath);
   }
 
   if (local.kind !== remote.kind) {
-    return createRemoteSyncOperation("conflict", relativePath, {
+    return createRemoteSyncOperation("conflict", "both", relativePath, {
       localUri: local.uri,
       remoteId: remote.remoteId,
       message: "Resource kind differs"
@@ -239,21 +241,21 @@ function createRemoteSyncDiffOperation(
   const comparison = compareRemoteSyncResources(local, remote);
 
   if (comparison === "same") {
-    return createRemoteSyncOperation("skip", relativePath, {
+    return createRemoteSyncOperation("skip", "none", relativePath, {
       localUri: local.uri,
       remoteId: remote.remoteId
     });
   }
 
   if (direction === "bidirectional") {
-    return createRemoteSyncOperation("conflict", relativePath, {
+    return createRemoteSyncOperation("conflict", "both", relativePath, {
       localUri: local.uri,
       remoteId: remote.remoteId,
       message: comparison === "unknown" ? "Resource state cannot be compared" : "Resource differs on both sides"
     });
   }
 
-  return createRemoteSyncOperation("update", relativePath, {
+  return createRemoteSyncOperation("update", direction === "push" ? "remote" : "local", relativePath, {
     localUri: local.uri,
     remoteId: remote.remoteId
   });
@@ -261,6 +263,7 @@ function createRemoteSyncDiffOperation(
 
 function createRemoteSyncOperation(
   kind: RemoteSyncOperationKind,
+  target: RemoteSyncOperationTarget,
   relativePath: string,
   details: {
     readonly localUri?: URIType | undefined;
@@ -270,6 +273,7 @@ function createRemoteSyncOperation(
 ): RemoteSyncOperation {
   return {
     kind,
+    target,
     relativePath,
     ...(details.localUri ? { localUri: details.localUri } : {}),
     ...(details.remoteId ? { remoteId: details.remoteId } : {}),
@@ -467,6 +471,7 @@ function normalizeRemoteSyncOperations(value: unknown): readonly RemoteSyncOpera
 
     return {
       kind: normalizeRemoteSyncOperationKind(record.kind),
+      target: normalizeRemoteSyncOperationTarget(record.target),
       relativePath: normalizeRelativePath(record.relativePath, `Remote sync operation ${index} relative path`),
       ...(record.localUri !== undefined
         ? { localUri: readRequiredUri(record.localUri, `Remote sync operation ${index} local URI`) }
@@ -521,6 +526,14 @@ function normalizeRemoteSyncDirection(value: unknown): RemoteSyncDirection {
 function normalizeRemoteSyncOperationKind(value: unknown): RemoteSyncOperationKind {
   if (value !== "create" && value !== "update" && value !== "delete" && value !== "skip" && value !== "conflict") {
     throw new Error("Remote sync operation kind must be create, update, delete, skip, or conflict");
+  }
+
+  return value;
+}
+
+function normalizeRemoteSyncOperationTarget(value: unknown): RemoteSyncOperationTarget {
+  if (value !== "local" && value !== "remote" && value !== "both" && value !== "none") {
+    throw new Error("Remote sync operation target must be local, remote, both, or none");
   }
 
   return value;
