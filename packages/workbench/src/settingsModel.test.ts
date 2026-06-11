@@ -18,6 +18,7 @@ import {
   normalizeAssetFolderInput,
   resolveNearestSettingsSection,
   resolveSelectedSettingsThemeId,
+  resolveSettingsAssetFolderCommit,
   resolveVisibleSettingsSection,
   settingSectionAnchorId,
   settingsColorSchemeOptions,
@@ -256,5 +257,16 @@ describe("settings model", () => {
   it("normalizes asset folder input without accepting empty values", () => {
     expect(normalizeAssetFolderInput(" assets\\images ")).toBe("assets/images");
     expect(normalizeAssetFolderInput("   ")).toBeUndefined();
+  });
+
+  it("resolves asset folder commits from draft input", () => {
+    expect(resolveSettingsAssetFolderCommit(" media\\images ", "assets")).toEqual({
+      kind: "update",
+      defaultAssetFolder: "media/images"
+    });
+    expect(resolveSettingsAssetFolderCommit("   ", "assets")).toEqual({
+      kind: "reset",
+      draft: "assets"
+    });
   });
 });

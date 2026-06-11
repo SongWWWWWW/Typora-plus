@@ -27,9 +27,9 @@ import {
   isSettingsEntryVisible,
   isSettingsSectionVisible,
   megabytesToBytes,
-  normalizeAssetFolderInput,
   resolveNearestSettingsSection,
   resolveSelectedSettingsThemeId,
+  resolveSettingsAssetFolderCommit,
   resolveVisibleSettingsSection,
   settingSectionAnchorId,
   settingsColorSchemeOptions,
@@ -177,16 +177,19 @@ export function SettingsDialog({
   }
 
   const commitAssetFolder = () => {
-    const assetFolder = normalizeAssetFolderInput(assetFolderDraft);
+    const commit = resolveSettingsAssetFolderCommit(
+      assetFolderDraft,
+      configuration.workspace.defaultAssetFolder
+    );
 
-    if (!assetFolder) {
-      setAssetFolderDraft(configuration.workspace.defaultAssetFolder);
+    if (commit.kind === "reset") {
+      setAssetFolderDraft(commit.draft);
       return;
     }
 
     onUpdate({
       workspace: {
-        defaultAssetFolder: assetFolder
+        defaultAssetFolder: commit.defaultAssetFolder
       }
     });
   };

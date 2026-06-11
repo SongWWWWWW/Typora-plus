@@ -5956,3 +5956,31 @@ Review:
 Known limitations:
 
 - Settings field composition remains explicit JSX; visibility is centralized without introducing a broad schema renderer.
+
+## 2026-06-11 - P2 Settings Asset Folder Commit Model
+
+Completed:
+
+- Added a Settings model result type for committing Asset Folder drafts.
+- Routed Settings dialog Asset Folder blur/Enter handling through the shared commit resolver instead of duplicating normalization and reset behavior inline.
+- Preserved empty-input draft reset and non-empty normalized workspace preference updates.
+- Covered normalized update and empty-input reset behavior with focused Settings model tests.
+
+Quality gate:
+
+- `npx vitest run packages/workbench/src/settingsModel.test.ts packages/workbench/src/workbenchConfigurationUpdates.test.ts packages/workbench/src/keybindingSettings.test.ts`: passed, 31 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 59 files / 595 tests, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Dev server smoke check: passed at `http://127.0.0.1:5173`; status 200 and root element present
+
+Review:
+
+- Asset Folder input normalization and commit decision now live with the rest of the Settings model policy.
+- `SettingsDialog` still owns input state and update dispatch, but it no longer decides whether a draft should reset or update configuration.
+- No new dependency, configuration key, storage path, visual token, extra documentation file, or hard-coded platform assumption was introduced.
+
+Known limitations:
+
+- Asset Folder updates are still dispatched by `SettingsDialog`; broader Settings field action extraction remains deferred until multiple field types need shared commit orchestration.

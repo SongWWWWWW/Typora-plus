@@ -89,6 +89,10 @@ export interface SettingsSectionDistance {
   readonly distance: number;
 }
 
+export type SettingsAssetFolderCommit =
+  | { readonly kind: "update"; readonly defaultAssetFolder: string }
+  | { readonly kind: "reset"; readonly draft: string };
+
 export const settingsSections = [
   { id: settingsSectionIds.appearance, title: "Appearance" },
   { id: settingsSectionIds.editor, title: "Editor" },
@@ -174,6 +178,17 @@ export function bytesToMegabytes(value: number): number {
 export function normalizeAssetFolderInput(value: string): string | undefined {
   const normalized = value.trim().replace(/\\/g, "/");
   return normalized.length > 0 ? normalized : undefined;
+}
+
+export function resolveSettingsAssetFolderCommit(
+  draft: string,
+  currentDefaultAssetFolder: string
+): SettingsAssetFolderCommit {
+  const defaultAssetFolder = normalizeAssetFolderInput(draft);
+
+  return defaultAssetFolder
+    ? { kind: "update", defaultAssetFolder }
+    : { kind: "reset", draft: currentDefaultAssetFolder };
 }
 
 export function settingSectionAnchorId(sectionId: SettingsSectionId): string {
