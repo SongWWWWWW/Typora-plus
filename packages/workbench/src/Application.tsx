@@ -113,9 +113,9 @@ import {
   type WorkbenchSearchResult
 } from "./workbenchSearchResultsModel";
 import {
+  createWorkbenchQuickOpenFileOpenHandler,
   createWorkbenchResourceOpeningCallbacks,
   openWorkbenchFileResourceAction,
-  openWorkbenchQuickOpenFileAction,
   openWorkbenchRecentWorkspaceResourceAction
 } from "./workbenchResourceOpening";
 import { scheduleWorkbenchOverlayFocus } from "./workbenchOverlayFocus";
@@ -324,6 +324,10 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
     setSaveConflict,
     setSideView
   });
+  const quickOpenFileOpenHandler = createWorkbenchQuickOpenFileOpenHandler(
+    services,
+    resourceOpeningCallbacks
+  );
   const lineNavigationCallbacks = createWorkbenchLineNavigationCallbacks(
     createWorkbenchLineNavigationEnvironment(window),
     { getEditorHandle: () => editorRef.current },
@@ -446,9 +450,7 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
         files={workspace.files?.files ?? []}
         maxResults={configuration.workspace.quickOpenMaxResults}
         onClose={() => setQuickOpen(false)}
-        onOpen={(entry) => {
-          void openWorkbenchQuickOpenFileAction(services, entry, resourceOpeningCallbacks);
-        }}
+        onOpen={quickOpenFileOpenHandler}
       />
       <SettingsDialog
         open={settingsOpen}

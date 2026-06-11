@@ -51,6 +51,15 @@ export function createWorkbenchResourceOpeningCallbacks(
   };
 }
 
+export function createWorkbenchQuickOpenFileOpenHandler(
+  services: WorkbenchFileOpeningServices,
+  callbacks: WorkbenchResourceOpeningActionCallbacks
+): (entry: FileTreeEntry) => void {
+  return (entry) => {
+    void openWorkbenchQuickOpenFileAction(services, entry, callbacks);
+  };
+}
+
 export async function openWorkbenchFileResource(
   services: WorkbenchFileOpeningServices,
   entry: FileTreeEntry,

@@ -7,6 +7,7 @@ import type {
 import { FileSaveConflictError } from "@typora-plus/platform";
 import { describe, expect, it, vi } from "vitest";
 import {
+  createWorkbenchQuickOpenFileOpenHandler,
   createWorkbenchResourceOpeningCallbacks,
   openWorkbenchFileResourceAction,
   openWorkbenchFileResource,
@@ -189,6 +190,28 @@ describe("workbench resource opening", () => {
     ]);
   });
 
+  it("creates a Quick Open file handler with the shared action boundary", async () => {
+    const entry = createFileEntry("notes/a.md");
+    const operationErrors: Array<string | undefined> = [];
+    const callbacks = createActionCallbacks({
+      setOperationError: (value) => operationErrors.push(value)
+    });
+    const services = createServices({
+      openFile: async () => {
+        throw new Error("Open failed");
+      }
+    });
+    const openQuickOpenFile = createWorkbenchQuickOpenFileOpenHandler(services, callbacks);
+
+    openQuickOpenFile(entry);
+    await waitForQuickOpenHandler();
+
+    expect(callbacks.clearSaveConflict).toHaveBeenCalledOnce();
+    expect(callbacks.closeQuickOpen).not.toHaveBeenCalled();
+    expect(services.textFileService.openFile).toHaveBeenCalledWith(entry.uri);
+    expect(operationErrors).toEqual([undefined, "Open failed"]);
+  });
+
   it("forwards save conflicts from recent workspace resource actions", async () => {
     const conflict = {
       uri: URI.file("/workspace/notes/a.md"),
@@ -266,6 +289,12 @@ function createActionCallbacks(
     setOperationError: vi.fn(),
     ...overrides
   };
+}
+
+function waitForQuickOpenHandler(): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, 0);
+  });
 }
 
 function createWorkspaceFileTree(files: readonly FileTreeEntry[]): WorkspaceFileTree {

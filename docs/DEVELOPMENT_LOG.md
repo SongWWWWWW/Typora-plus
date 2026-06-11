@@ -5425,3 +5425,31 @@ Review:
 Known limitations:
 
 - Settings close behavior is still a direct shell state update because it has no service or action boundary.
+
+## 2026-06-11 - P2 Quick Open File Open Handler
+
+Completed:
+
+- Added a focused Quick Open file open handler factory that adapts selected file rows into the shared resource-opening action boundary.
+- Routed `Application.tsx` Quick Open `onOpen` wiring through the handler instead of dispatching the resource-opening action inline.
+- Preserved ordinary file opening, recent-file recording, stale save-conflict clearing, Quick Open close ordering, and operation-error mapping.
+- Covered handler delegation and failure handling alongside the existing resource-opening tests.
+
+Quality gate:
+
+- `npx vitest run packages/workbench/src/workbenchResourceOpening.test.ts`: passed, 9 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 55 files / 561 tests, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Dev server smoke check: passed at `http://127.0.0.1:5173`; status 200 and root element present
+
+Review:
+
+- Quick Open file selection now reaches `ITextFileService` through a Workbench-local handler and the shared resource-opening action runner instead of a shell-local inline callback.
+- `Application.tsx` still renders Quick Open and supplies shell state callbacks, while `workbenchResourceOpening` owns selected-file dispatch, close follow-up, and error/save-conflict mapping.
+- No new dependency, configuration key, storage path, visual token, extra documentation file, or hard-coded platform assumption was introduced.
+
+Known limitations:
+
+- Quick Open close behavior remains a direct shell state update because it is local overlay state with no service or action boundary.
