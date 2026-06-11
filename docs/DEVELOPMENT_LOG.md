@@ -4893,3 +4893,31 @@ Review:
 Known limitations:
 
 - Command Palette still closes itself inline after command execution because that focus/visibility behavior is local to the palette surface.
+
+## 2026-06-11 - P2 Workbench Command Palette Execution
+
+Completed:
+
+- Added a focused Command Palette execution helper that dispatches commands through the Workbench action runner before closing the palette surface.
+- Replaced inline `Application.tsx` command-palette execution and close orchestration with the helper call.
+- Preserved immediate close-after-dispatch behavior while keeping command failures and save conflicts on the shared Workbench action error path.
+- Covered successful command dispatch, close behavior, command failure mapping, and save-conflict forwarding.
+
+Quality gate:
+
+- `npx vitest run packages/workbench/src/commandPaletteModel.test.ts packages/workbench/src/workbenchActionRunner.test.ts`: passed, 11 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 531 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Dev server smoke check: passed at `http://127.0.0.1:5173`; status 200 and root element present
+
+Review:
+
+- Command Palette execution now shares the same error and save-conflict action boundary as shortcuts, menu actions, resource opening, and dialog actions.
+- `Application.tsx` still owns palette visibility state, while command-palette execution owns the execute-and-close interaction policy.
+- No new dependency, configuration key, storage path, visual token, extra documentation file, or hard-coded platform assumption was introduced.
+
+Known limitations:
+
+- Command Palette still keeps its query and active-row state locally because that state is specific to the overlay surface.

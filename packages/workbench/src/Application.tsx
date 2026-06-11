@@ -38,7 +38,10 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
-import { filterCommandPaletteCommands } from "./commandPaletteModel";
+import {
+  executeCommandPaletteCommand,
+  filterCommandPaletteCommands
+} from "./commandPaletteModel";
 import {
   isListNavigationKey,
   moveListSelection,
@@ -410,8 +413,11 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
         getKeybindingLabel={(id) => services.keybindingService.getKeybindingLabel(id)}
         onClose={() => setPaletteOpen(false)}
         onExecute={(id) => {
-          executeCommand(id);
-          setPaletteOpen(false);
+          executeCommandPaletteCommand(services, id, {
+            closePalette: () => setPaletteOpen(false),
+            setOperationError,
+            setSaveConflict
+          });
         }}
       />
       <QuickOpen
