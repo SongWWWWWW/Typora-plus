@@ -62,8 +62,8 @@ import {
   type WorkbenchFileTreeRow
 } from "./workbenchFileTreeModel";
 import {
-  overwriteWorkbenchSaveConflict,
-  reloadWorkbenchFileAfterSaveConflict
+  overwriteWorkbenchSaveConflictAction,
+  reloadWorkbenchSaveConflictAction
 } from "./workbenchSaveConflictResolution";
 import {
   openWorkbenchLineResource,
@@ -412,19 +412,18 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
           conflict={saveConflict}
           onClose={() => setSaveConflict(undefined)}
           onReload={() => {
-            const conflict = saveConflict;
-            void runWorkbenchAction(async () => {
-              return reloadWorkbenchFileAfterSaveConflict(services, conflict, {
-                clearSaveConflict: () => setSaveConflict(undefined)
-              });
-            }, setOperationError, setSaveConflict);
+            void reloadWorkbenchSaveConflictAction(services, saveConflict, {
+              clearSaveConflict: () => setSaveConflict(undefined),
+              setOperationError,
+              setSaveConflict
+            });
           }}
           onOverwrite={() => {
-            void runWorkbenchAction(async () => {
-              return overwriteWorkbenchSaveConflict(services, workspace.files, {
-                clearSaveConflict: () => setSaveConflict(undefined)
-              });
-            }, setOperationError, setSaveConflict);
+            void overwriteWorkbenchSaveConflictAction(services, workspace.files, {
+              clearSaveConflict: () => setSaveConflict(undefined),
+              setOperationError,
+              setSaveConflict
+            });
           }}
         />
       ) : null}

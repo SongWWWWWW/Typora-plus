@@ -8,7 +8,9 @@ import type {
 } from "@typora-plus/platform";
 import { describe, expect, it, vi } from "vitest";
 import {
+  overwriteWorkbenchSaveConflictAction,
   overwriteWorkbenchSaveConflict,
+  reloadWorkbenchSaveConflictAction,
   reloadWorkbenchFileAfterSaveConflict,
   type WorkbenchSaveConflictResolutionServices
 } from "./workbenchSaveConflictResolution";
@@ -55,6 +57,27 @@ describe("workbench save conflict resolution", () => {
     expect(services.recentService.addRecentFile).not.toHaveBeenCalled();
   });
 
+  it("runs reload actions through Workbench action handling", async () => {
+    const conflict = saveConflict("C:/Notes/a.md");
+    const opened = model("C:/Notes/a.md", "# Disk");
+    const clearSaveConflict = vi.fn();
+    const setOperationError = vi.fn();
+    const setSaveConflict = vi.fn();
+    const services = createServices({
+      openFile: vi.fn(async () => opened)
+    });
+
+    await expect(reloadWorkbenchSaveConflictAction(services, conflict, {
+      clearSaveConflict,
+      setOperationError,
+      setSaveConflict
+    })).resolves.toBe(opened);
+
+    expect(setOperationError).toHaveBeenCalledWith(undefined);
+    expect(clearSaveConflict).toHaveBeenCalledOnce();
+    expect(setSaveConflict).not.toHaveBeenCalled();
+  });
+
   it("overwrites the conflicted save, records and indexes the file, clears the conflict, and returns the model", async () => {
     const saved = model("C:/Notes/a.md", "# Local");
     const workspaceFiles = workspace([file("C:/Notes/a.md", "a.md")]);
@@ -96,6 +119,28 @@ describe("workbench save conflict resolution", () => {
     expect(clearSaveConflict).not.toHaveBeenCalled();
     expect(services.recentService.addRecentFile).not.toHaveBeenCalled();
     expect(services.indexService.indexFile).not.toHaveBeenCalled();
+  });
+
+  it("runs overwrite failures through Workbench action handling", async () => {
+    const clearSaveConflict = vi.fn();
+    const setOperationError = vi.fn();
+    const setSaveConflict = vi.fn();
+    const services = createServices({
+      save: vi.fn(async () => {
+        throw new Error("save failed");
+      })
+    });
+
+    await expect(overwriteWorkbenchSaveConflictAction(services, undefined, {
+      clearSaveConflict,
+      setOperationError,
+      setSaveConflict
+    })).resolves.toBeUndefined();
+
+    expect(setOperationError).toHaveBeenCalledWith(undefined);
+    expect(setOperationError).toHaveBeenCalledWith("save failed");
+    expect(clearSaveConflict).not.toHaveBeenCalled();
+    expect(setSaveConflict).not.toHaveBeenCalled();
   });
 });
 

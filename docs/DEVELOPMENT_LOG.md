@@ -4779,4 +4779,32 @@ Review:
 
 Known limitations:
 
-- Save-conflict dialog reload/overwrite callbacks still stay inline because they are dialog-specific and already share the existing file-opening and file-saving coordinators.
+- Native attachment availability still depends on the platform bridge; browser fallback leaves paste-image saving disabled.
+
+## 2026-06-11 - P2 Workbench Save Conflict Dialog Actions
+
+Completed:
+
+- Added save-conflict dialog action helpers that run reload and overwrite flows through the Workbench action runner.
+- Replaced inline `Application.tsx` reload/overwrite dialog orchestration with action helper calls.
+- Preserved the existing core reload and overwrite helpers for file opening, saving, recent-file recording, and saved-file indexing.
+- Covered successful reload action handling and overwrite failure handling through the action runner.
+
+Quality gate:
+
+- `npx vitest run packages/workbench/src/workbenchSaveConflictResolution.test.ts packages/workbench/src/workbenchActionRunner.test.ts packages/workbench/src/workbenchFileSaving.test.ts`: passed, 18 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 518 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Dev server smoke check: passed at `http://127.0.0.1:5173`; status 200 and root element present
+
+Review:
+
+- Save-conflict dialog actions now reuse the same Workbench action-runner error/conflict mapping as commands, shortcuts, and resource-opening flows.
+- `Application.tsx` still owns dialog visibility state, while save-conflict resolution owns service orchestration and action error handling.
+- No new dependency, configuration key, storage path, visual token, extra documentation file, or hard-coded platform assumption was introduced.
+
+Known limitations:
+
+- Command Palette still closes itself inline after command execution because that focus/visibility behavior is local to the palette surface.

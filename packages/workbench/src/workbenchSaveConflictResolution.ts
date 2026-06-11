@@ -8,6 +8,11 @@ import type {
 import type { SavedFileWorkspaceIndexingServices } from "./savedFileIndexing";
 import { saveWorkbenchFile } from "./workbenchFileSaving";
 import { openWorkbenchFile } from "./workbenchFileOpening";
+import {
+  runWorkbenchAction,
+  type WorkbenchOperationErrorSetter,
+  type WorkbenchSaveConflictSetter
+} from "./workbenchActionRunner";
 
 export interface WorkbenchSaveConflictResolutionServices extends SavedFileWorkspaceIndexingServices {
   readonly recentService: Pick<IRecentService, "addRecentFile">;
@@ -16,6 +21,35 @@ export interface WorkbenchSaveConflictResolutionServices extends SavedFileWorksp
 
 export interface WorkbenchSaveConflictResolutionCallbacks {
   readonly clearSaveConflict?: () => void;
+}
+
+export interface WorkbenchSaveConflictActionCallbacks extends WorkbenchSaveConflictResolutionCallbacks {
+  readonly setOperationError: WorkbenchOperationErrorSetter;
+  readonly setSaveConflict: WorkbenchSaveConflictSetter;
+}
+
+export function reloadWorkbenchSaveConflictAction(
+  services: WorkbenchSaveConflictResolutionServices,
+  conflict: FileSaveConflict,
+  callbacks: WorkbenchSaveConflictActionCallbacks
+): Promise<TextFileModel | undefined> {
+  return runWorkbenchAction(
+    () => reloadWorkbenchFileAfterSaveConflict(services, conflict, callbacks),
+    callbacks.setOperationError,
+    callbacks.setSaveConflict
+  );
+}
+
+export function overwriteWorkbenchSaveConflictAction(
+  services: WorkbenchSaveConflictResolutionServices,
+  workspaceFiles: WorkspaceState["files"],
+  callbacks: WorkbenchSaveConflictActionCallbacks
+): Promise<TextFileModel | undefined> {
+  return runWorkbenchAction(
+    () => overwriteWorkbenchSaveConflict(services, workspaceFiles, callbacks),
+    callbacks.setOperationError,
+    callbacks.setSaveConflict
+  );
 }
 
 export async function reloadWorkbenchFileAfterSaveConflict(
