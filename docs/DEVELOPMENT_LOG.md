@@ -4639,3 +4639,31 @@ Review:
 Known limitations:
 
 - Quick Open still closes itself inline after file opening; that behavior is surface-specific and can stay in the shell unless more open-and-close flows appear.
+
+## 2026-06-11 - P2 Workbench Command Registration Coordinator
+
+Completed:
+
+- Added a focused Workbench command registration helper for built-in executable command handlers.
+- Replaced the large inline `Application.tsx` command registration effect with one registration call that receives current configuration, workspace files, editor handles, and shell callbacks.
+- Preserved the command metadata/handler split: contribution metadata still lives in Workbench contributions, while executable handlers are registered through `ICommandService`.
+- Covered command handler registration/disposal, simple UI commands, export command payloads, configuration toggles, and editor task command delegation.
+
+Quality gate:
+
+- `npx vitest run packages/workbench/src/workbenchCommandRegistration.test.ts packages/workbench/src/workbenchContributions.test.ts`: passed, 13 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 505 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Dev server smoke check: passed at `http://127.0.0.1:5173`; status 200 and root element present
+
+Review:
+
+- Command handler behavior remains Workbench-local and consumes existing action-runner, file-saving, workspace-opening, configuration, and editor-handle boundaries.
+- `Application.tsx` now owns shell state and lifecycle, not the command-handler catalog.
+- No new dependency, configuration key, storage path, visual token, extra documentation file, or hard-coded platform assumption was introduced.
+
+Known limitations:
+
+- Quick Open and recent-workspace item actions still stay inline because they are tied to surface-specific close/focus follow-up rather than reusable command handlers.
