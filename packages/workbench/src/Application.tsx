@@ -111,7 +111,7 @@ import {
   nextWorkbenchSelectedTag
 } from "./workbenchTagsModel";
 import { registerWorkbenchStateSubscriptions } from "./workbenchStateSubscriptions";
-import { applyWorkbenchTheme } from "./workbenchThemeApplication";
+import { registerWorkbenchThemeSynchronization } from "./workbenchThemeSynchronization";
 
 export interface WorkbenchApplicationProps {
   readonly services: WorkbenchServices;
@@ -238,14 +238,12 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
       return;
     }
 
-    const media = window.matchMedia("(prefers-color-scheme: dark)");
-    const syncTheme = () => {
-      applyWorkbenchTheme(document.documentElement, configuration, services, media.matches);
-    };
+    const disposable = registerWorkbenchThemeSynchronization({
+      matchMedia: (query) => window.matchMedia(query),
+      target: document.documentElement
+    }, configuration, services);
 
-    syncTheme();
-    media.addEventListener("change", syncTheme);
-    return () => media.removeEventListener("change", syncTheme);
+    return () => disposable.dispose();
   }, [configuration.appearance.colorScheme, configuration.appearance.themeId, services, themes]);
 
   useEffect(() => {

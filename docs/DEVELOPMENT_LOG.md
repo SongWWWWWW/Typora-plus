@@ -4837,3 +4837,31 @@ Review:
 Known limitations:
 
 - Command Palette still closes itself inline after command execution because that focus/visibility behavior is local to the palette surface.
+
+## 2026-06-11 - P2 Workbench Theme Synchronization
+
+Completed:
+
+- Added a focused Workbench theme synchronization helper for browser media-query lifecycle and document-root theme application.
+- Replaced inline `Application.tsx` `matchMedia` listener setup and direct `document.documentElement` theme application with one registration call.
+- Kept selected-theme lookup, system color-scheme fallback, and token-overlay writes behind the existing theme application helper.
+- Covered initial media application, system theme changes, disposal, and selected theme token overlays.
+
+Quality gate:
+
+- `npx vitest run packages/workbench/src/workbenchThemeSynchronization.test.ts packages/workbench/src/workbenchThemeApplication.test.ts packages/workbench/src/workbenchContributions.test.ts`: passed, 15 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 525 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Dev server smoke check: passed at `http://127.0.0.1:5173`; status 200 and root element present
+
+Review:
+
+- Theme synchronization remains Workbench-local and uses injected `matchMedia` and target boundaries for browser-facing lifecycle behavior.
+- `Application.tsx` now supplies the browser environment, while the helper owns listener registration, immediate application, and cleanup.
+- No new dependency, configuration key, storage path, visual token, extra documentation file, or hard-coded platform assumption was introduced.
+
+Known limitations:
+
+- Command Palette still closes itself inline after command execution because that focus/visibility behavior is local to the palette surface.
