@@ -2,6 +2,7 @@ import { URI } from "@typora-plus/base";
 import { describe, expect, it } from "vitest";
 import type { FileTreeEntry, WorkspaceFileTree } from "./files";
 import {
+  createRemoteSyncManifestResourcesFromExecution,
   createRemoteSyncManifestStorageKey,
   createRemoteSyncPlanFromDiff,
   createRemoteSyncPlanFromManifest,
@@ -892,6 +893,167 @@ describe("remote sync service", () => {
         manifestResource("../escape.md")
       ]
     })).toThrow("Remote sync manifest resource 0 relative path must not contain parent traversal");
+  });
+
+  it("updates manifests from executed create and update operations with verified snapshots", () => {
+    const resources = createRemoteSyncManifestResourcesFromExecution({
+      manifestResources: [
+        manifestResource("conflict.md", { remoteId: "conflict", contentHash: "old-conflict" }),
+        manifestResource("skipped.md", { remoteId: "skipped", contentHash: "old-skipped" }),
+        manifestResource("untouched.md", { remoteId: "untouched", contentHash: "untouched" }),
+        manifestResource("updated-local.md", { remoteId: "updated-local", contentHash: "old-local" }),
+        manifestResource("updated-remote.md", { remoteId: "updated-remote", contentHash: "old-remote" })
+      ],
+      localResources: [
+        localResource("created-remote.md", { contentHash: "created", size: 10, mtime: 1 }),
+        localResource("updated-local.md", { contentHash: "remote-v2", size: 20, mtime: 2 }),
+        localResource("updated-remote.md", { contentHash: "local-v2", size: 30, mtime: 3 })
+      ],
+      remoteResources: [
+        remoteResource("created-remote.md", { remoteId: "created-from-snapshot", contentHash: "created", size: 10, mtime: 1 }),
+        remoteResource("updated-local.md", { remoteId: "updated-local", contentHash: "remote-v2", size: 20, mtime: 2 }),
+        remoteResource("updated-remote.md", { remoteId: "updated-remote", contentHash: "local-v2", size: 30, mtime: 3 })
+      ],
+      operations: [
+        { kind: "create", target: "remote", relativePath: "created-remote.md", remoteId: "created-from-result" },
+        { kind: "update", target: "local", relativePath: "updated-local.md" },
+        { kind: "update", target: "remote", relativePath: "updated-remote.md" },
+        { kind: "skip", target: "none", relativePath: "skipped.md" },
+        { kind: "conflict", target: "both", relativePath: "conflict.md" }
+      ]
+    });
+
+    expect(resources).toEqual([
+      manifestResource("conflict.md", { remoteId: "conflict", contentHash: "old-conflict" }),
+      manifestResource("created-remote.md", {
+        remoteId: "created-from-result",
+        contentHash: "created",
+        size: 10,
+        mtime: 1
+      }),
+      manifestResource("skipped.md", { remoteId: "skipped", contentHash: "old-skipped" }),
+      manifestResource("untouched.md", { remoteId: "untouched", contentHash: "untouched" }),
+      manifestResource("updated-local.md", {
+        remoteId: "updated-local",
+        contentHash: "remote-v2",
+        size: 20,
+        mtime: 2
+      }),
+      manifestResource("updated-remote.md", {
+        remoteId: "updated-remote",
+        contentHash: "local-v2",
+        size: 30,
+        mtime: 3
+      })
+    ]);
+  });
+
+  it("removes manifest baselines for executed delete operations", () => {
+    expect(createRemoteSyncManifestResourcesFromExecution({
+      manifestResources: [
+        manifestResource("delete-both.md", { remoteId: "delete-both", contentHash: "base" }),
+        manifestResource("delete-local.md", { remoteId: "delete-local", contentHash: "base" }),
+        manifestResource("delete-none.md", { remoteId: "delete-none", contentHash: "base" }),
+        manifestResource("delete-remote.md", { remoteId: "delete-remote", contentHash: "base" }),
+        manifestResource("keep.md", { remoteId: "keep", contentHash: "base" })
+      ],
+      localResources: [],
+      remoteResources: [],
+      operations: [
+        { kind: "delete", target: "both", relativePath: "delete-both.md" },
+        { kind: "delete", target: "local", relativePath: "delete-local.md" },
+        { kind: "delete", target: "none", relativePath: "delete-none.md" },
+        { kind: "delete", target: "remote", relativePath: "delete-remote.md" }
+      ]
+    })).toEqual([
+      manifestResource("delete-none.md", { remoteId: "delete-none", contentHash: "base" }),
+      manifestResource("keep.md", { remoteId: "keep", contentHash: "base" })
+    ]);
+  });
+
+  it("rejects manifest execution updates that are ambiguous or not proven synchronized", () => {
+    expect(() => createRemoteSyncManifestResourcesFromExecution({
+      manifestResources: [
+        manifestResource("same.md"),
+        manifestResource("same.md")
+      ],
+      localResources: [],
+      remoteResources: [],
+      operations: []
+    })).toThrow("Duplicate manifest remote sync resource: same.md");
+
+    expect(() => createRemoteSyncManifestResourcesFromExecution({
+      manifestResources: [],
+      localResources: [
+        localResource("same.md"),
+        localResource("same.md")
+      ],
+      remoteResources: [],
+      operations: []
+    })).toThrow("Duplicate local remote sync resource: same.md");
+
+    expect(() => createRemoteSyncManifestResourcesFromExecution({
+      manifestResources: [],
+      localResources: [
+        localResource("target-both.md", { contentHash: "same" })
+      ],
+      remoteResources: [
+        remoteResource("target-both.md", { contentHash: "same" })
+      ],
+      operations: [
+        { kind: "update", target: "both", relativePath: "target-both.md" }
+      ]
+    })).toThrow("Remote sync manifest update target-both.md must target local or remote");
+
+    expect(() => createRemoteSyncManifestResourcesFromExecution({
+      manifestResources: [],
+      localResources: [
+        localResource("missing-remote.md", { contentHash: "same" })
+      ],
+      remoteResources: [],
+      operations: [
+        { kind: "update", target: "remote", relativePath: "missing-remote.md" }
+      ]
+    })).toThrow("Remote sync manifest update missing-remote.md requires local and remote resources");
+
+    expect(() => createRemoteSyncManifestResourcesFromExecution({
+      manifestResources: [],
+      localResources: [
+        localResource("kind.md", { kind: "file", contentHash: "same" })
+      ],
+      remoteResources: [
+        remoteResource("kind.md", { kind: "directory", contentHash: "same" })
+      ],
+      operations: [
+        { kind: "update", target: "remote", relativePath: "kind.md" }
+      ]
+    })).toThrow("Remote sync manifest update kind.md resource kind differs");
+
+    expect(() => createRemoteSyncManifestResourcesFromExecution({
+      manifestResources: [],
+      localResources: [
+        localResource("changed.md", { contentHash: "local" })
+      ],
+      remoteResources: [
+        remoteResource("changed.md", { contentHash: "remote" })
+      ],
+      operations: [
+        { kind: "update", target: "remote", relativePath: "changed.md" }
+      ]
+    })).toThrow("Remote sync manifest update changed.md resources are not synchronized");
+
+    expect(() => createRemoteSyncManifestResourcesFromExecution({
+      manifestResources: [],
+      localResources: [
+        localResource("unknown.md")
+      ],
+      remoteResources: [
+        remoteResource("unknown.md")
+      ],
+      operations: [
+        { kind: "update", target: "remote", relativePath: "unknown.md" }
+      ]
+    })).toThrow("Remote sync manifest update unknown.md resource state cannot be compared");
   });
 
   it("persists and restores normalized manifest resources", () => {

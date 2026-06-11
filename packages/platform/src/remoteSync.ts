@@ -104,6 +104,13 @@ export interface RemoteSyncManifestPlanInput extends RemoteSyncDiffPlanInput {
   readonly manifestResources: readonly RemoteSyncManifestResource[];
 }
 
+export interface RemoteSyncManifestExecutionUpdateInput {
+  readonly manifestResources: readonly RemoteSyncManifestResource[];
+  readonly localResources: readonly RemoteSyncResource[];
+  readonly remoteResources: readonly RemoteSyncRemoteResource[];
+  readonly operations: readonly RemoteSyncOperation[];
+}
+
 export const remoteSyncManifestSnapshotVersion = 1;
 
 export interface RemoteSyncManifestSnapshot {
@@ -319,6 +326,43 @@ export function createRemoteSyncPlanFromManifest(input: RemoteSyncManifestPlanIn
     operations,
     summary: summarizeRemoteSyncOperations(operations)
   });
+}
+
+export function createRemoteSyncManifestResourcesFromExecution(
+  input: RemoteSyncManifestExecutionUpdateInput
+): readonly RemoteSyncManifestResource[] {
+  const record = expectRecord(input, "Remote sync manifest execution update input");
+  const manifestResources = normalizeUniqueRemoteSyncManifestResources(record.manifestResources, "manifest");
+  const localByPath = mapRemoteSyncResources(normalizeRemoteSyncResources(record.localResources), "local");
+  const remoteByPath = mapRemoteSyncResources(normalizeRemoteSyncRemoteResources(record.remoteResources), "remote");
+  const operations = normalizeRemoteSyncOperations(record.operations);
+  const manifestByPath = new Map<string, RemoteSyncManifestResource>(
+    manifestResources.map((resource) => [resource.relativePath, resource])
+  );
+
+  for (const operation of operations) {
+    switch (operation.kind) {
+      case "create":
+      case "update":
+        manifestByPath.set(operation.relativePath, createRemoteSyncManifestResourceFromExecutedOperation(
+          operation,
+          localByPath.get(operation.relativePath),
+          remoteByPath.get(operation.relativePath)
+        ));
+        break;
+      case "delete":
+        if (operation.target === "local" || operation.target === "remote" || operation.target === "both") {
+          manifestByPath.delete(operation.relativePath);
+        }
+        break;
+      case "conflict":
+      case "skip":
+        break;
+    }
+  }
+
+  return [...manifestByPath.values()]
+    .sort((first, second) => first.relativePath.localeCompare(second.relativePath));
 }
 
 export class RemoteSyncService implements IRemoteSyncService {
@@ -617,6 +661,59 @@ function createRemoteSyncManifestRemoteOnlyOperation(
       remoteId: remote.remoteId,
       message: "Local resource is missing"
     });
+}
+
+function createRemoteSyncManifestResourceFromExecutedOperation(
+  operation: RemoteSyncOperation,
+  local: RemoteSyncResource | undefined,
+  remote: RemoteSyncRemoteResource | undefined
+): RemoteSyncManifestResource {
+  if (operation.target !== "local" && operation.target !== "remote") {
+    throw new Error(`Remote sync manifest update ${operation.relativePath} must target local or remote`);
+  }
+
+  if (!local || !remote) {
+    throw new Error(`Remote sync manifest update ${operation.relativePath} requires local and remote resources`);
+  }
+
+  if (local.kind !== remote.kind) {
+    throw new Error(`Remote sync manifest update ${operation.relativePath} resource kind differs`);
+  }
+
+  const comparison = compareRemoteSyncResources(local, remote);
+
+  if (comparison !== "same") {
+    throw new Error(
+      comparison === "unknown"
+        ? `Remote sync manifest update ${operation.relativePath} resource state cannot be compared`
+        : `Remote sync manifest update ${operation.relativePath} resources are not synchronized`
+    );
+  }
+
+  return createRemoteSyncManifestResourceFromSyncedResources(
+    local,
+    remote,
+    operation.remoteId ?? remote.remoteId
+  );
+}
+
+function createRemoteSyncManifestResourceFromSyncedResources(
+  local: RemoteSyncResource,
+  remote: RemoteSyncRemoteResource,
+  remoteId: string | undefined
+): RemoteSyncManifestResource {
+  const contentHash = local.contentHash && remote.contentHash
+    ? local.contentHash
+    : local.contentHash ?? remote.contentHash;
+
+  return {
+    relativePath: local.relativePath,
+    kind: local.kind,
+    ...(remoteId ? { remoteId } : {}),
+    ...(local.size !== undefined && local.size === remote.size ? { size: local.size } : {}),
+    ...(local.mtime !== undefined && local.mtime === remote.mtime ? { mtime: local.mtime } : {}),
+    ...(contentHash ? { contentHash } : {})
+  };
 }
 
 function createRemoteSyncOperation(

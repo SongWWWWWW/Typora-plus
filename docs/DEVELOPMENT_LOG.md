@@ -7307,3 +7307,35 @@ Known limitations:
 - No Feishu Drive provider, OAuth flow, token storage, or upload/download execution adapter is registered yet.
 - Manifest storage currently has a browser storage fallback; a future Electron/native bridge can implement the same injected storage contract when Feishu credentials and local app-data policy are introduced.
 - The manifest still depends on provider-supplied remote ids plus content hashes or size/mtime metadata for comparison quality.
+
+## 2026-06-12 - P2 Remote Sync Manifest Execution Updates
+
+Completed:
+
+- Added a provider-neutral helper that refreshes last-sync manifest resources from executed remote sync operations.
+- Required post-execution local and remote snapshots to both exist, share the same kind, and compare as synchronized before create/update operations can refresh the manifest baseline.
+- Removed manifest baselines for executed delete operations while preserving existing baselines for skip and conflict operations.
+- Kept execution-result manifest refresh in the platform remote sync model so future Feishu Drive providers do not need to encode baseline update policy in Workbench UI.
+- Kept Feishu endpoints, OAuth scopes, app ids, folder tokens, access tokens, storage paths, credentials, and model defaults out of the implementation.
+- Updated maintained docs without adding new documentation surfaces.
+
+Quality gate:
+
+- `npx vitest run packages/platform/src/remoteSync.test.ts`: passed, 1 file / 26 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 76 files / 725 tests, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Remote sync implementation hardcode scan for endpoint/secret/token/model literal patterns: passed
+
+Review:
+
+- Manifest refresh is intentionally conservative: if a provider cannot prove both sides are synchronized after execution, the helper rejects the update instead of writing a misleading baseline.
+- The helper does not execute sync, fetch remote metadata, resolve conflicts, or mutate storage; providers still own remote I/O and can persist the returned manifest through the existing store.
+- Delete handling is explicit and path-based, so removed resources do not linger in future bidirectional planning baselines.
+
+Known limitations:
+
+- No Feishu Drive provider, OAuth flow, token storage, or upload/download execution adapter is registered yet.
+- Providers need post-execution snapshots with comparable metadata, preferably content hashes; size/mtime-only providers must ensure both sides normalize timestamps consistently.
+- The manifest update helper is not yet wired into a built-in provider because no built-in remote sync provider exists.
