@@ -19,10 +19,13 @@ import {
   bytesToMegabytes,
   clampSettingNumber,
   createSettingsSearchResult,
+  defaultSettingsSectionId,
   megabytesToBytes,
   normalizeAssetFolderInput,
   settingSectionAnchorId,
+  settingsEntryIds,
   settingsNumberConstraints,
+  settingsSectionIds,
   settingsSections,
   type SettingsEntryId,
   type SettingsSectionId,
@@ -56,7 +59,7 @@ export function SettingsDialog({
   const [keybindingQuery, setKeybindingQuery] = useState("");
   const [modifiedKeybindingsOnly, setModifiedKeybindingsOnly] = useState(false);
   const [pendingKeybinding, setPendingKeybinding] = useState<PendingKeybindingOverride | undefined>();
-  const [activeSettingsSection, setActiveSettingsSection] = useState<SettingsSectionId>("appearance");
+  const [activeSettingsSection, setActiveSettingsSection] = useState<SettingsSectionId>(defaultSettingsSectionId);
   const settingsContentRef = useRef<HTMLDivElement | null>(null);
   const hasKeybindingOverrides = configuration.keybindings.overrides.length > 0;
   const selectedThemeId = configuration.appearance.themeId && themes.some((theme) => theme.id === configuration.appearance.themeId)
@@ -93,7 +96,7 @@ export function SettingsDialog({
       setKeybindingQuery("");
       setModifiedKeybindingsOnly(false);
       setPendingKeybinding(undefined);
-      setActiveSettingsSection("appearance");
+      setActiveSettingsSection(defaultSettingsSectionId);
     }
   }, [configuration.workspace.defaultAssetFolder, open]);
 
@@ -289,9 +292,9 @@ export function SettingsDialog({
             {!settingsSearchHasResults ? (
               <div className="tp-settings-empty-row">No matching settings</div>
             ) : null}
-            {isSettingsSectionVisible("appearance") ? (
-              <SettingsSection sectionId="appearance">
-                {isSettingsEntryVisible("appearance.theme") ? (
+            {isSettingsSectionVisible(settingsSectionIds.appearance) ? (
+              <SettingsSection sectionId={settingsSectionIds.appearance}>
+                {isSettingsEntryVisible(settingsEntryIds.appearance.theme) ? (
                   <SettingsField label="Theme">
                     <SegmentedControl
                       ariaLabel="Theme"
@@ -305,7 +308,7 @@ export function SettingsDialog({
                     />
                   </SettingsField>
                 ) : null}
-                {isSettingsEntryVisible("appearance.customTheme") ? (
+                {isSettingsEntryVisible(settingsEntryIds.appearance.customTheme) ? (
                   <SettingsField label="Custom Theme">
                     <select
                       className="tp-settings-select"
@@ -326,7 +329,7 @@ export function SettingsDialog({
                     </select>
                   </SettingsField>
                 ) : null}
-                {isSettingsEntryVisible("appearance.density") ? (
+                {isSettingsEntryVisible(settingsEntryIds.appearance.density) ? (
                   <SettingsField label="Density">
                     <SegmentedControl
                       ariaLabel="Density"
@@ -342,9 +345,9 @@ export function SettingsDialog({
               </SettingsSection>
             ) : null}
 
-            {isSettingsSectionVisible("editor") ? (
-              <SettingsSection sectionId="editor">
-                {isSettingsEntryVisible("editor.autoSave") ? (
+            {isSettingsSectionVisible(settingsSectionIds.editor) ? (
+              <SettingsSection sectionId={settingsSectionIds.editor}>
+                {isSettingsEntryVisible(settingsEntryIds.editor.autoSave) ? (
                   <SettingsField label="Auto Save">
                     <ToggleControl
                       checked={configuration.editor.autoSave}
@@ -353,7 +356,7 @@ export function SettingsDialog({
                     />
                   </SettingsField>
                 ) : null}
-                {isSettingsEntryVisible("editor.autoSaveDelay") ? (
+                {isSettingsEntryVisible(settingsEntryIds.editor.autoSaveDelay) ? (
                   <NumberSetting
                     label="Auto Save Delay"
                     value={configuration.editor.autoSaveDelayMs}
@@ -362,7 +365,7 @@ export function SettingsDialog({
                     onChange={(autoSaveDelayMs) => onUpdate({ editor: { autoSaveDelayMs } })}
                   />
                 ) : null}
-                {isSettingsEntryVisible("editor.focusMode") ? (
+                {isSettingsEntryVisible(settingsEntryIds.editor.focusMode) ? (
                   <SettingsField label="Focus Mode">
                     <ToggleControl
                       checked={configuration.editor.focusMode}
@@ -371,7 +374,7 @@ export function SettingsDialog({
                     />
                   </SettingsField>
                 ) : null}
-                {isSettingsEntryVisible("editor.typewriterMode") ? (
+                {isSettingsEntryVisible(settingsEntryIds.editor.typewriterMode) ? (
                   <SettingsField label="Typewriter Mode">
                     <ToggleControl
                       checked={configuration.editor.typewriterMode}
@@ -380,7 +383,7 @@ export function SettingsDialog({
                     />
                   </SettingsField>
                 ) : null}
-                {isSettingsEntryVisible("editor.fontSize") ? (
+                {isSettingsEntryVisible(settingsEntryIds.editor.fontSize) ? (
                   <NumberSetting
                     label="Font Size"
                     value={configuration.editor.fontSize}
@@ -389,7 +392,7 @@ export function SettingsDialog({
                     onChange={(fontSize) => onUpdate({ editor: { fontSize } })}
                   />
                 ) : null}
-                {isSettingsEntryVisible("editor.lineHeight") ? (
+                {isSettingsEntryVisible(settingsEntryIds.editor.lineHeight) ? (
                   <NumberSetting
                     label="Line Height"
                     value={configuration.editor.lineHeight}
@@ -397,7 +400,7 @@ export function SettingsDialog({
                     onChange={(lineHeight) => onUpdate({ editor: { lineHeight } })}
                   />
                 ) : null}
-                {isSettingsEntryVisible("editor.maxWidth") ? (
+                {isSettingsEntryVisible(settingsEntryIds.editor.maxWidth) ? (
                   <NumberSetting
                     label="Editor Width"
                     value={configuration.editor.maxWidth}
@@ -406,7 +409,7 @@ export function SettingsDialog({
                     onChange={(maxWidth) => onUpdate({ editor: { maxWidth } })}
                   />
                 ) : null}
-                {isSettingsEntryVisible("editor.rendererPreviewCacheEntries") ? (
+                {isSettingsEntryVisible(settingsEntryIds.editor.rendererPreviewCacheEntries) ? (
                   <NumberSetting
                     label="Renderer Cache"
                     value={configuration.editor.rendererPreviewCacheEntries}
@@ -418,9 +421,9 @@ export function SettingsDialog({
               </SettingsSection>
             ) : null}
 
-            {isSettingsSectionVisible("workspace") ? (
-              <SettingsSection sectionId="workspace">
-                {isSettingsEntryVisible("workspace.defaultAssetFolder") ? (
+            {isSettingsSectionVisible(settingsSectionIds.workspace) ? (
+              <SettingsSection sectionId={settingsSectionIds.workspace}>
+                {isSettingsEntryVisible(settingsEntryIds.workspace.defaultAssetFolder) ? (
                   <SettingsField label="Asset Folder">
                     <input
                       className="tp-settings-text-input"
@@ -437,7 +440,7 @@ export function SettingsDialog({
                     />
                   </SettingsField>
                 ) : null}
-                {isSettingsEntryVisible("workspace.searchMaxFileSize") ? (
+                {isSettingsEntryVisible(settingsEntryIds.workspace.searchMaxFileSize) ? (
                   <NumberSetting
                     label="Search File Limit"
                     value={searchMaxFileSizeMegabytes}
@@ -450,7 +453,7 @@ export function SettingsDialog({
                     })}
                   />
                 ) : null}
-                {isSettingsEntryVisible("workspace.quickOpenMaxResults") ? (
+                {isSettingsEntryVisible(settingsEntryIds.workspace.quickOpenMaxResults) ? (
                   <NumberSetting
                     label="Quick Open Results"
                     value={configuration.workspace.quickOpenMaxResults}
@@ -458,7 +461,7 @@ export function SettingsDialog({
                     onChange={(quickOpenMaxResults) => onUpdate({ workspace: { quickOpenMaxResults } })}
                   />
                 ) : null}
-                {isSettingsEntryVisible("workspace.searchMaxResults") ? (
+                {isSettingsEntryVisible(settingsEntryIds.workspace.searchMaxResults) ? (
                   <NumberSetting
                     label="Search Results"
                     value={configuration.workspace.searchMaxResults}
@@ -469,8 +472,8 @@ export function SettingsDialog({
               </SettingsSection>
             ) : null}
 
-            {isSettingsSectionVisible("keybindings") ? (
-              <SettingsSection sectionId="keybindings">
+            {isSettingsSectionVisible(settingsSectionIds.keybindings) ? (
+              <SettingsSection sectionId={settingsSectionIds.keybindings}>
                 <div className="tp-settings-keybinding-search">
                   <Search size={15} />
                   <input

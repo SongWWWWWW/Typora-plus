@@ -3,15 +3,57 @@ import {
   bytesToMegabytes,
   clampSettingNumber,
   createSettingsSearchResult,
+  defaultSettingsSectionId,
   megabytesToBytes,
   normalizeAssetFolderInput,
   settingSectionAnchorId,
   settingsEntries,
+  settingsEntryIds,
+  settingsSectionIds,
   settingsSections,
   settingsNumberConstraints
 } from "./settingsModel";
 
 describe("settings model", () => {
+  it("defines stable settings section ids", () => {
+    expect(settingsSectionIds).toEqual({
+      appearance: "appearance",
+      editor: "editor",
+      workspace: "workspace",
+      keybindings: "keybindings"
+    });
+    expect(defaultSettingsSectionId).toBe(settingsSectionIds.appearance);
+  });
+
+  it("defines stable settings entry ids", () => {
+    expect(settingsEntryIds).toEqual({
+      appearance: {
+        theme: "appearance.theme",
+        customTheme: "appearance.customTheme",
+        density: "appearance.density"
+      },
+      editor: {
+        autoSave: "editor.autoSave",
+        autoSaveDelay: "editor.autoSaveDelay",
+        focusMode: "editor.focusMode",
+        typewriterMode: "editor.typewriterMode",
+        fontSize: "editor.fontSize",
+        lineHeight: "editor.lineHeight",
+        maxWidth: "editor.maxWidth",
+        rendererPreviewCacheEntries: "editor.rendererPreviewCacheEntries"
+      },
+      workspace: {
+        defaultAssetFolder: "workspace.defaultAssetFolder",
+        quickOpenMaxResults: "workspace.quickOpenMaxResults",
+        searchMaxFileSize: "workspace.searchMaxFileSize",
+        searchMaxResults: "workspace.searchMaxResults"
+      },
+      keybindings: {
+        editor: "keybindings.editor"
+      }
+    });
+  });
+
   it("defines stable settings sections for navigation", () => {
     expect(settingsSections.map((section) => [section.id, section.title])).toEqual([
       ["appearance", "Appearance"],
@@ -19,6 +61,16 @@ describe("settings model", () => {
       ["workspace", "Workspace"],
       ["keybindings", "Keybindings"]
     ]);
+  });
+
+  it("keeps settings entries unique and assigned to known sections", () => {
+    const sectionIds = new Set(settingsSections.map((section) => section.id));
+    const entryIds = settingsEntries.map((entry) => entry.id);
+
+    expect(new Set(entryIds).size).toBe(entryIds.length);
+    expect(settingsEntries.flatMap((entry) =>
+      sectionIds.has(entry.sectionId) ? [] : [entry.sectionId]
+    )).toEqual([]);
   });
 
   it("generates unique settings section anchors", () => {

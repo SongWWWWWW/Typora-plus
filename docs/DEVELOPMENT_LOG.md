@@ -5789,3 +5789,30 @@ Review:
 Known limitations:
 
 - Menu item titles remain in the manifest because those are surface-specific labels and may intentionally differ from command palette titles.
+
+## 2026-06-11 - P2 Settings Id Model
+
+Completed:
+
+- Added stable Settings section ids, entry ids, and the default section id to the focused Settings model.
+- Derived Settings section and entry types from the shared id constants instead of maintaining parallel string unions.
+- Routed Settings dialog section reset, section visibility, and entry visibility through the shared Settings ids instead of raw id strings.
+- Covered stable ids, default section ownership, unique entry ids, and known section assignment with focused tests.
+
+Quality gate:
+
+- `npx vitest run packages/workbench/src/settingsModel.test.ts packages/workbench/src/workbenchConfigurationUpdates.test.ts packages/workbench/src/keybindingSettings.test.ts`: passed, 22 tests
+- `npm run verify`: passed, 59 files / 586 tests, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Dev server smoke check: passed at `http://127.0.0.1:5173`; status 200 and root element present
+
+Review:
+
+- Settings section and entry ids are now a stable model-level contract consumed by navigation, search, and dialog rendering.
+- `SettingsDialog` still owns the React control layout, but it no longer owns the section or entry id literals that decide which settings render.
+- No new dependency, configuration key, storage path, visual token, extra documentation file, or hard-coded platform assumption was introduced.
+
+Known limitations:
+
+- Settings field composition remains in `SettingsDialog` because it is still a compact Workbench UI surface; a contributed setting schema can be introduced later if the settings surface becomes extension-driven.
