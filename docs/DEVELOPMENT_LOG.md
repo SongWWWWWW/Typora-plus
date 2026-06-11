@@ -4667,3 +4667,31 @@ Review:
 Known limitations:
 
 - Quick Open and recent-workspace item actions still stay inline because they are tied to surface-specific close/focus follow-up rather than reusable command handlers.
+
+## 2026-06-11 - P2 Workbench State Subscription Coordinator
+
+Completed:
+
+- Added a focused Workbench state subscription helper for service-to-shell event wiring.
+- Replaced eight inline `Application.tsx` service subscription effects with one lifecycle registration that forwards configuration, active model, workspace, recent resources, themes, index status, and Markdown renderer changes.
+- Kept configuration runtime synchronization behind the existing configuration sync helper and workspace-file watcher mapping behind the existing workspace-opening model.
+- Covered service event forwarding, configuration sync side effects, workspace file-tree mapping, and disposal as one lifecycle unit.
+
+Quality gate:
+
+- `npx vitest run packages/workbench/src/workbenchStateSubscriptions.test.ts packages/workbench/src/workbenchConfigurationSync.test.ts packages/workbench/src/workbenchWorkspaceOpening.test.ts`: passed, 9 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 508 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Dev server smoke check: passed at `http://127.0.0.1:5173`; status 200 and root element present
+
+Review:
+
+- State subscription behavior remains Workbench-local and consumes public service events instead of coupling the shell to service internals.
+- `Application.tsx` now owns state values and rendering, while the helper owns listener registration and disposal.
+- No new dependency, configuration key, storage path, visual token, extra documentation file, or hard-coded platform assumption was introduced.
+
+Known limitations:
+
+- Browser `matchMedia` theme synchronization still stays in the shell because it is DOM-facing and depends on the document root.

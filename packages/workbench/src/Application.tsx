@@ -52,7 +52,6 @@ import {
 } from "./workbenchActionRunner";
 import { scheduleWorkbenchAutoSave } from "./workbenchAutoSave";
 import { registerWorkbenchCommands } from "./workbenchCommandRegistration";
-import { applyWorkbenchConfigurationToServices } from "./workbenchConfigurationSync";
 import {
   applyWorkbenchContextValues,
   createWorkbenchStateContextValues
@@ -77,10 +76,7 @@ import {
   workbenchCommandTitle,
   workbenchMenuItemTitle
 } from "./workbenchMenuModel";
-import {
-  openRecentWorkbenchWorkspace,
-  workspaceStateFromFiles
-} from "./workbenchWorkspaceOpening";
+import { openRecentWorkbenchWorkspace } from "./workbenchWorkspaceOpening";
 import {
   getWorkbenchBacklinks,
   getWorkbenchSearchResults,
@@ -109,6 +105,7 @@ import {
   createWorkbenchTagRows,
   nextWorkbenchSelectedTag
 } from "./workbenchTagsModel";
+import { registerWorkbenchStateSubscriptions } from "./workbenchStateSubscriptions";
 import { applyWorkbenchTheme } from "./workbenchThemeApplication";
 
 export interface WorkbenchApplicationProps {
@@ -166,34 +163,19 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
     [indexStatus.updatedAt, selectedTag, services, workspace.files]
   );
 
-  useEffect(() => services.configurationService.onDidChangeConfiguration((nextConfiguration) => {
-    applyWorkbenchConfigurationToServices(services, nextConfiguration);
-    setConfiguration(nextConfiguration);
-  }).dispose, [services]);
+  useEffect(() => {
+    const disposable = registerWorkbenchStateSubscriptions(services, {
+      bumpMarkdownRendererRevision: () => setMarkdownRendererRevision((revision) => revision + 1),
+      setConfiguration,
+      setIndexStatus,
+      setModel,
+      setRecents,
+      setThemes,
+      setWorkspace
+    });
 
-  useEffect(() => services.textFileService.onDidChangeModel(setModel).dispose, [services]);
-
-  useEffect(() => services.workspaceService.onDidChangeWorkspace(setWorkspace).dispose, [services]);
-
-  useEffect(() => services.fileService.onDidChangeWorkspaceFiles((workspaceFiles) => {
-    if (!workspaceFiles) {
-      return;
-    }
-
-    services.workspaceService.setWorkspace(workspaceStateFromFiles(workspaceFiles));
-  }).dispose, [services]);
-
-  useEffect(() => services.recentService.onDidChangeRecents(setRecents).dispose, [services]);
-
-  useEffect(() => services.themeService.onDidChangeThemes(() => {
-    setThemes(services.themeService.getThemes());
-  }).dispose, [services]);
-
-  useEffect(() => services.indexService.onDidChangeStatus(setIndexStatus).dispose, [services]);
-
-  useEffect(() => services.markdownRendererService.onDidChangeMarkdownRenderers(() => {
-    setMarkdownRendererRevision((revision) => revision + 1);
-  }).dispose, [services]);
+    return () => disposable.dispose();
+  }, [services]);
 
   useEffect(() => {
     applyWorkbenchContextValues(
