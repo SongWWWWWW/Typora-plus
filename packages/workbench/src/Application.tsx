@@ -66,7 +66,7 @@ import {
   reloadWorkbenchSaveConflictAction
 } from "./workbenchSaveConflictResolution";
 import {
-  openWorkbenchLineResource,
+  openWorkbenchLineTargetAction,
   scrollWorkbenchLine
 } from "./workbenchLineNavigation";
 import { registerWorkbenchKeybindingDispatch } from "./workbenchKeybindingDispatch";
@@ -297,7 +297,9 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
     defer: (callback: () => void) => {
       window.setTimeout(callback, 0);
     },
-    scrollToLine: (line: number) => editorRef.current?.scrollToLine(line)
+    scrollToLine: (line: number) => editorRef.current?.scrollToLine(line),
+    setOperationError,
+    setSaveConflict
   };
 
   return (
@@ -341,31 +343,14 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
             onClose={() => setSideView(null)}
             onSelectLine={(line) => scrollWorkbenchLine(lineNavigationCallbacks, { line })}
             onOpenSearchResult={(result) => {
-              if (!isWorkspaceSearchResult(result)) {
-                scrollWorkbenchLine(lineNavigationCallbacks, result);
-                return;
-              }
-
-              void runWorkbenchAction(
-                () => openWorkbenchLineResource(services, result, lineNavigationCallbacks),
-                setOperationError,
-                setSaveConflict
-              );
+              void openWorkbenchLineTargetAction(services, result, lineNavigationCallbacks);
             }}
             onOpenBacklink={(link) => {
-              void runWorkbenchAction(
-                () => openWorkbenchLineResource(services, link, lineNavigationCallbacks),
-                setOperationError,
-                setSaveConflict
-              );
+              void openWorkbenchLineTargetAction(services, link, lineNavigationCallbacks);
             }}
             onSelectTag={setSelectedTag}
             onOpenTaggedResource={(tag) => {
-              void runWorkbenchAction(
-                () => openWorkbenchLineResource(services, tag, lineNavigationCallbacks),
-                setOperationError,
-                setSaveConflict
-              );
+              void openWorkbenchLineTargetAction(services, tag, lineNavigationCallbacks);
             }}
             onOpenWorkspace={() => executeCommand("file.openWorkspace")}
             onOpenRecentWorkspace={(recent) => {

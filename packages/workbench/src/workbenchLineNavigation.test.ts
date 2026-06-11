@@ -3,6 +3,7 @@ import type { TextFileModel } from "@typora-plus/platform";
 import { describe, expect, it, vi } from "vitest";
 import {
   openWorkbenchLineResource,
+  openWorkbenchLineTargetAction,
   scrollWorkbenchLine,
   type WorkbenchLineNavigationCallbacks
 } from "./workbenchLineNavigation";
@@ -60,11 +61,93 @@ describe("workbench line navigation", () => {
     expect(callbacks.scrollToLine).toHaveBeenCalledWith(12);
     expect(calls.at(-1)).toBe("scroll:12");
   });
+
+  it("opens local line targets without clearing operation errors", async () => {
+    const callbacks = {
+      clearSaveConflict: vi.fn(),
+      defer: vi.fn(),
+      scrollToLine: vi.fn(),
+      setOperationError: vi.fn(),
+      setSaveConflict: vi.fn()
+    };
+    const services = createServices();
+
+    await expect(openWorkbenchLineTargetAction(services, { line: 5 }, callbacks)).resolves.toBeUndefined();
+
+    expect(callbacks.scrollToLine).toHaveBeenCalledWith(5);
+    expect(callbacks.setOperationError).not.toHaveBeenCalled();
+    expect(callbacks.clearSaveConflict).not.toHaveBeenCalled();
+    expect(services.textFileService.openFile).not.toHaveBeenCalled();
+  });
+
+  it("opens resource line targets through Workbench action handling", async () => {
+    const sourceUri = URI.file("C:/Notes/source.md");
+    const openedModel = model("C:/Notes/source.md");
+    const callbacks = {
+      clearSaveConflict: vi.fn(),
+      defer: vi.fn(),
+      scrollToLine: vi.fn(),
+      setOperationError: vi.fn(),
+      setSaveConflict: vi.fn()
+    };
+    const services = createServices({
+      openFile: async () => openedModel
+    });
+
+    await expect(openWorkbenchLineTargetAction(services, { uri: sourceUri, line: 9 }, callbacks))
+      .resolves.toBeUndefined();
+
+    expect(callbacks.setOperationError).toHaveBeenCalledWith(undefined);
+    expect(callbacks.clearSaveConflict).toHaveBeenCalledOnce();
+    expect(services.textFileService.openFile).toHaveBeenCalledWith(sourceUri);
+    expect(callbacks.defer).toHaveBeenCalledOnce();
+    expect(callbacks.scrollToLine).not.toHaveBeenCalled();
+  });
+
+  it("maps resource line opening failures into operation errors", async () => {
+    const callbacks = {
+      clearSaveConflict: vi.fn(),
+      defer: vi.fn(),
+      scrollToLine: vi.fn(),
+      setOperationError: vi.fn()
+    };
+    const services = createServices({
+      openFile: async () => {
+        throw new Error("open failed");
+      }
+    });
+
+    await expect(openWorkbenchLineTargetAction(
+      services,
+      { uri: URI.file("C:/Notes/missing.md"), line: 3 },
+      callbacks
+    )).resolves.toBeUndefined();
+
+    expect(callbacks.setOperationError).toHaveBeenCalledWith(undefined);
+    expect(callbacks.setOperationError).toHaveBeenCalledWith("open failed");
+    expect(callbacks.defer).not.toHaveBeenCalled();
+    expect(callbacks.scrollToLine).not.toHaveBeenCalled();
+  });
 });
 
-function model(path: string): TextFileModel {
+function createServices(overrides: {
+  readonly openFile?: (uri: URI) => Promise<TextFileModel>;
+} = {}) {
   return {
-    uri: URI.file(path),
+    textFileService: {
+      openFile: vi.fn(overrides.openFile ?? (async (uri) => model(uri.toString())))
+    },
+    recentService: {
+      addRecentFile: vi.fn()
+    }
+  };
+}
+
+function model(path: string): TextFileModel {
+  const uri = path.includes("://") ? URI.parse(path) : URI.file(path);
+
+  return {
+    uri,
     name: path.split("/").at(-1) ?? path,
     languageId: "markdown",
     value: "",
