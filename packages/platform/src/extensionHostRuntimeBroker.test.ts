@@ -1,6 +1,7 @@
 import { toDisposable, URI, type IDisposable } from "@typora-plus/base";
 import { describe, expect, it } from "vitest";
 import type {
+  AiProvider,
   CommandMetadata,
   ExtensionCommandHandler,
   ExtensionContext,
@@ -11,6 +12,10 @@ import type {
 import {
   createExtensionHostApiErrorMessage,
   createExtensionHostApiResultMessage,
+  createExtensionHostAiProviderRegisterRequestMessage,
+  createExtensionHostAiProviderUnregisterRequestMessage,
+  createExtensionHostAiTextRequestMessage,
+  createExtensionHostAiTextResultMessage,
   createExtensionHostCommandExecuteRequestMessage,
   createExtensionHostCommandListRequestMessage,
   createExtensionHostCommandRegisterRequestMessage,
@@ -116,6 +121,96 @@ describe("extension host runtime broker", () => {
       undefined
     ));
     expect(controls.contextValues.has("notes.remote.ready")).toBe(false);
+  });
+
+  it("registers AI provider proxies that call the remote host", async () => {
+    const { context, controls } = createBrokerTestContext();
+    const requests: ExtensionHostProtocolMessage[] = [];
+    const broker = new ExtensionHostRuntimeBroker(context, {
+      createRequestId: createSequentialRequestId(),
+      request: (message) => {
+        const request = readExtensionHostProtocolMessage(message);
+        requests.push(request);
+
+        if (request.type === extensionHostProtocolMessageTypes.aiTextRequest) {
+          expect("signal" in request.request).toBe(false);
+          return createExtensionHostAiTextResultMessage(request.requestId, request.extensionId, request.providerId, {
+            value: `Remote: ${request.request.input}`,
+            model: "remote-test-model",
+            usage: {
+              inputTokens: 2,
+              outputTokens: 3,
+              totalTokens: 5
+            }
+          });
+        }
+
+        throw new Error(`Unexpected request: ${request.type}`);
+      }
+    });
+
+    await expect(broker.handleMessage(createExtensionHostAiProviderRegisterRequestMessage(
+      "request-ai-1",
+      "notes.remote",
+      {
+        id: "notes.remote.ai",
+        title: "Remote AI"
+      }
+    ))).resolves.toEqual(createExtensionHostApiResultMessage("request-ai-1", "notes.remote"));
+    expect(controls.aiProviders.map((provider) => ({ id: provider.id, title: provider.title }))).toEqual([
+      { id: "notes.remote.ai", title: "Remote AI" }
+    ]);
+
+    await expect(controls.aiProviders[0]?.requestText({
+      instruction: "Summarize",
+      input: "# A",
+      context: [
+        {
+          kind: "note",
+          title: "A",
+          uri: URI.file("C:/Notes/A.md"),
+          value: "Context"
+        }
+      ],
+      metadata: {
+        surface: "command"
+      }
+    })).resolves.toEqual({
+      value: "Remote: # A",
+      model: "remote-test-model",
+      usage: {
+        inputTokens: 2,
+        outputTokens: 3,
+        totalTokens: 5
+      }
+    });
+    expect(requests[0]).toEqual(createExtensionHostAiTextRequestMessage(
+      "aiTextRequest-1",
+      "notes.remote",
+      "notes.remote.ai",
+      {
+        instruction: "Summarize",
+        input: "# A",
+        context: [
+          {
+            kind: "note",
+            title: "A",
+            uri: "file://C:/Notes/A.md",
+            value: "Context"
+          }
+        ],
+        metadata: {
+          surface: "command"
+        }
+      }
+    ));
+
+    await expect(broker.handleMessage(createExtensionHostAiProviderUnregisterRequestMessage(
+      "request-ai-2",
+      "notes.remote",
+      "notes.remote.ai"
+    ))).resolves.toEqual(createExtensionHostApiResultMessage("request-ai-2", "notes.remote"));
+    expect(controls.aiProviders).toEqual([]);
   });
 
   it("registers export and Markdown renderer proxies that call the remote host", async () => {
@@ -353,6 +448,7 @@ describe("extension host runtime broker", () => {
 });
 
 interface BrokerTestControls {
+  readonly aiProviders: AiProvider[];
   readonly commandRegistrations: {
     readonly command: string;
     readonly handler: ExtensionCommandHandler;
@@ -373,6 +469,7 @@ interface BrokerTestControls {
 
 function createBrokerTestContext(): { readonly context: ExtensionContext; readonly controls: BrokerTestControls } {
   const controls: BrokerTestControls = {
+    aiProviders: [],
     commandRegistrations: [],
     commandMetadata: [],
     executeCommand: async (command, args) => ({ args, command }),
@@ -400,6 +497,13 @@ function createBrokerTestContext(): { readonly context: ExtensionContext; readon
         }
 
         controls.contextValues.set(key, value);
+      }
+    },
+    ai: {
+      getProviders: () => controls.aiProviders.map((provider) => ({ id: provider.id, title: provider.title })),
+      registerProvider(provider) {
+        controls.aiProviders.push(provider);
+        return removeFromArrayDisposable(controls.aiProviders, provider);
       }
     },
     exports: {

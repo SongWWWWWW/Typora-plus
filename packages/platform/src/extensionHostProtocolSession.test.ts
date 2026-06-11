@@ -1,5 +1,6 @@
 import { Emitter, toDisposable, URI, type Event, type IDisposable } from "@typora-plus/base";
 import { describe, expect, it } from "vitest";
+import type { AiProvider } from "./ai";
 import type { CommandMetadata } from "./commands";
 import type { ExtensionCommandHandler, ExtensionContext } from "./extensions";
 import type { ExportProvider } from "./exports";
@@ -7,6 +8,9 @@ import type { MarkdownRendererProvider, MarkdownRendererRuntimeMetadata } from "
 import {
   createExtensionHostActivationErrorMessage,
   createExtensionHostActivationResultMessage,
+  createExtensionHostAiProviderRegisterRequestMessage,
+  createExtensionHostAiTextRequestMessage,
+  createExtensionHostAiTextResultMessage,
   createExtensionHostApiResultMessage,
   createExtensionHostCommandExecuteRequestMessage,
   createExtensionHostCommandRegisterRequestMessage,
@@ -95,6 +99,7 @@ describe("extension host protocol session", () => {
       protocolVersion: 1,
       capabilities: [
         "activation",
+        "aiProviders",
         "commands",
         "contextKeys",
         "exports",
@@ -273,6 +278,37 @@ describe("extension host protocol session", () => {
     }));
 
     await expect(commandExecution).resolves.toEqual({ ok: true });
+
+    transport.receive(createExtensionHostAiProviderRegisterRequestMessage("remote-ai-1", "notes.remote", {
+      id: "notes.remote.ai",
+      title: "Remote AI"
+    }));
+    await flushPromises();
+
+    expect(controls.aiProviders).toHaveLength(1);
+    expect(transport.sent[2]).toEqual(createExtensionHostApiResultMessage("remote-ai-1", "notes.remote"));
+
+    const aiExecution = controls.aiProviders[0]?.requestText({
+      instruction: "Summarize",
+      input: "# A"
+    });
+    await flushPromises();
+
+    expect(transport.sent[3]).toEqual(createExtensionHostAiTextRequestMessage(
+      "aiTextRequest-2",
+      "notes.remote",
+      "notes.remote.ai",
+      {
+        instruction: "Summarize",
+        input: "# A"
+      }
+    ));
+
+    transport.receive(createExtensionHostAiTextResultMessage("aiTextRequest-2", "notes.remote", "notes.remote.ai", {
+      value: "Summary"
+    }));
+
+    await expect(aiExecution).resolves.toEqual({ value: "Summary" });
   });
 
   it("rejects proxy callback requests that miss the configured timeout", async () => {
@@ -465,6 +501,7 @@ interface MemoryTransport extends ExtensionHostProtocolTransport {
 }
 
 interface SessionTestControls {
+  readonly aiProviders: AiProvider[];
   readonly commandRegistrations: {
     readonly command: string;
     readonly handler: ExtensionCommandHandler;
@@ -496,6 +533,7 @@ function createMemoryTransport(): MemoryTransport {
 
 function createSessionTestContext(): { readonly context: ExtensionContext; readonly controls: SessionTestControls } {
   const controls: SessionTestControls = {
+    aiProviders: [],
     commandRegistrations: [],
     commandMetadata: [],
     executeCommand: async (command, args) => ({ args, command }),
@@ -516,6 +554,13 @@ function createSessionTestContext(): { readonly context: ExtensionContext; reado
     contextKeys: {
       getValue: () => undefined,
       setValue: () => undefined
+    },
+    ai: {
+      getProviders: () => controls.aiProviders.map((provider) => ({ id: provider.id, title: provider.title })),
+      registerProvider(provider) {
+        controls.aiProviders.push(provider);
+        return removeFromArrayDisposable(controls.aiProviders, provider);
+      }
     },
     exports: {
       getProviders: () => controls.exportProviders,

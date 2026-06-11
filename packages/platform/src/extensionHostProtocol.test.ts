@@ -5,6 +5,10 @@ import {
   createExtensionHostActivationErrorMessage,
   createExtensionHostActivationRequestMessage,
   createExtensionHostActivationResultMessage,
+  createExtensionHostAiProviderRegisterRequestMessage,
+  createExtensionHostAiProviderUnregisterRequestMessage,
+  createExtensionHostAiTextRequestMessage,
+  createExtensionHostAiTextResultMessage,
   createExtensionHostApiErrorMessage,
   createExtensionHostApiResultMessage,
   createExtensionHostCommandExecuteRequestMessage,
@@ -249,6 +253,116 @@ describe("extension host protocol", () => {
       "other.ready",
       true
     )).toThrow("must start with");
+  });
+
+  it("serializes AI provider broker messages", () => {
+    const register = createExtensionHostAiProviderRegisterRequestMessage("request-ai-1", "notes.main", {
+      id: " notes.main.ai ",
+      title: " Notes AI "
+    });
+    const request = createExtensionHostAiTextRequestMessage("request-ai-2", "notes.main", " notes.main.ai ", {
+      instruction: " Summarize ",
+      input: "# A",
+      context: [
+        {
+          kind: " note ",
+          title: " A ",
+          uri: " file://C:/Notes/A.md ",
+          value: "Context"
+        }
+      ],
+      metadata: {
+        surface: "command"
+      }
+    });
+    const result = createExtensionHostAiTextResultMessage("request-ai-3", "notes.main", "notes.main.ai", {
+      value: "Summary",
+      model: " test-model ",
+      usage: {
+        inputTokens: 2,
+        outputTokens: 3,
+        totalTokens: 5
+      }
+    });
+    const unregister = createExtensionHostAiProviderUnregisterRequestMessage(
+      "request-ai-4",
+      "notes.main",
+      "notes.main.ai"
+    );
+
+    expect(register).toEqual({
+      type: extensionHostProtocolMessageTypes.aiProviderRegister,
+      requestId: "request-ai-1",
+      extensionId: "notes.main",
+      provider: {
+        id: "notes.main.ai",
+        title: "Notes AI"
+      }
+    });
+    expect(request).toEqual({
+      type: extensionHostProtocolMessageTypes.aiTextRequest,
+      requestId: "request-ai-2",
+      extensionId: "notes.main",
+      providerId: "notes.main.ai",
+      request: {
+        instruction: "Summarize",
+        input: "# A",
+        context: [
+          {
+            kind: "note",
+            title: "A",
+            uri: "file://C:/Notes/A.md",
+            value: "Context"
+          }
+        ],
+        metadata: {
+          surface: "command"
+        }
+      }
+    });
+    expect(result).toEqual({
+      type: extensionHostProtocolMessageTypes.aiTextResult,
+      requestId: "request-ai-3",
+      extensionId: "notes.main",
+      providerId: "notes.main.ai",
+      result: {
+        value: "Summary",
+        model: "test-model",
+        usage: {
+          inputTokens: 2,
+          outputTokens: 3,
+          totalTokens: 5
+        }
+      }
+    });
+    expect(unregister).toEqual({
+      type: extensionHostProtocolMessageTypes.aiProviderUnregister,
+      requestId: "request-ai-4",
+      extensionId: "notes.main",
+      providerId: "notes.main.ai"
+    });
+    expect(deserializeExtensionHostProtocolMessage(serializeExtensionHostProtocolMessage(register))).toEqual(register);
+    expect(deserializeExtensionHostProtocolMessage(serializeExtensionHostProtocolMessage(request))).toEqual(request);
+    expect(deserializeExtensionHostProtocolMessage(serializeExtensionHostProtocolMessage(result))).toEqual(result);
+    expect(deserializeExtensionHostProtocolMessage(serializeExtensionHostProtocolMessage(unregister))).toEqual(unregister);
+    expect(() => createExtensionHostAiProviderRegisterRequestMessage("request-ai-5", "notes.main", {
+      id: "bad provider",
+      title: "Bad Provider"
+    })).toThrow("AI provider id is invalid");
+    expect(() => createExtensionHostAiTextRequestMessage("request-ai-6", "notes.main", "notes.main.ai", {
+      instruction: "Summarize",
+      input: "# A",
+      context: new Array(extensionHostProtocolLimits.aiContextItemCount + 1).fill({
+        kind: "note",
+        value: "Context"
+      })
+    })).toThrow("must contain at most");
+    expect(() => createExtensionHostAiTextResultMessage("request-ai-7", "notes.main", "notes.main.ai", {
+      value: "Summary",
+      usage: {
+        totalTokens: -1
+      }
+    })).toThrow("between");
   });
 
   it("serializes runtime API result and error broker messages", () => {
@@ -552,6 +666,10 @@ function createExtensionContext(extension: RegisteredExtension): ExtensionContex
     contextKeys: {
       getValue: () => undefined,
       setValue: () => undefined
+    },
+    ai: {
+      getProviders: () => [],
+      registerProvider: () => toDisposable(() => undefined)
     },
     exports: {
       getProviders: () => [],

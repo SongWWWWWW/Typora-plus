@@ -252,6 +252,10 @@ function createExtensionContext(extension: RegisteredExtension): TestExtensionCo
       getValue: () => undefined,
       setValue: () => undefined
     },
+    ai: {
+      getProviders: () => [],
+      registerProvider: () => toDisposable(() => undefined)
+    },
     disposeSubscriptions() {
       for (const disposable of [...disposables]) {
         disposable.dispose();

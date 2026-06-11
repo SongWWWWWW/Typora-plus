@@ -1,4 +1,5 @@
 import { Disposable, DisposableStore, toDisposable, URI, type IDisposable } from "@typora-plus/base";
+import type { AiProvider, AiTextRequest } from "./ai";
 import type { CommandMetadata } from "./commands";
 import type { ContextKeyValue } from "./contextKeys";
 import type {
@@ -18,6 +19,9 @@ import type {
 import {
   createExtensionHostActivationErrorMessage,
   createExtensionHostActivationResultMessage,
+  createExtensionHostAiProviderRegisterRequestMessage,
+  createExtensionHostAiProviderUnregisterRequestMessage,
+  createExtensionHostAiTextResultMessage,
   createExtensionHostApiErrorMessage,
   createExtensionHostApiResultMessage,
   createExtensionHostCommandExecuteRequestMessage,
@@ -36,6 +40,7 @@ import {
   extensionHostProtocolMessageTypes,
   readExtensionHostProtocolMessage,
   type ExtensionHostActivationRequestMessage,
+  type ExtensionHostAiTextRequestMessage,
   type ExtensionHostApiErrorMessage,
   type ExtensionHostApiResultMessage,
   type ExtensionHostExportDocumentResultMessage,
@@ -52,6 +57,8 @@ import {
 } from "./extensionHostProtocolRequestTimer";
 
 export type ExtensionHostProtocolRuntimeRequestKind =
+  | "aiProviderRegister"
+  | "aiProviderUnregister"
   | "commandExecute"
   | "commandRegister"
   | "commandUnregister"
@@ -80,6 +87,7 @@ interface RuntimeExtensionRecord {
   readonly extension: RegisteredExtension;
   readonly context: ExtensionContext;
   readonly disposables: DisposableStore;
+  readonly aiProviders: Map<string, AiProvider>;
   readonly commandHandlers: Map<string, RuntimeCommandRegistration>;
   readonly contextValues: Map<string, ContextKeyValue>;
   readonly exportProviders: Map<string, ExportProvider>;
@@ -167,6 +175,9 @@ export class ExtensionHostProtocolRuntime extends Disposable {
         case extensionHostProtocolMessageTypes.activate:
           await this.activateExtension(message);
           return;
+        case extensionHostProtocolMessageTypes.aiTextRequest:
+          await this.requestRegisteredAiText(message);
+          return;
         case extensionHostProtocolMessageTypes.commandExecute:
           await this.executeRegisteredCommand(message.requestId, message.extensionId, message.command, message.args);
           return;
@@ -219,6 +230,26 @@ export class ExtensionHostProtocolRuntime extends Disposable {
     } catch (error) {
       this.disposeExtensionRecord(message.extension.id, record);
       await this.transport.send(createExtensionHostActivationErrorMessage(message.requestId, message.extension.id, error));
+    }
+  }
+
+  private async requestRegisteredAiText(message: ExtensionHostAiTextRequestMessage): Promise<void> {
+    try {
+      const record = this.requireExtensionRecord(message.extensionId);
+      const provider = record.aiProviders.get(message.providerId);
+
+      if (!provider) {
+        throw new Error(`No extension host runtime AI provider registered: ${message.providerId}`);
+      }
+
+      await this.transport.send(createExtensionHostAiTextResultMessage(
+        message.requestId,
+        message.extensionId,
+        message.providerId,
+        await provider.requestText(toRuntimeAiTextRequest(message.request))
+      ));
+    } catch (error) {
+      await this.sendRuntimeApiError(message.requestId, message.extensionId, error);
     }
   }
 
@@ -313,6 +344,12 @@ export class ExtensionHostProtocolRuntime extends Disposable {
         },
         getValue: (key) => record.contextValues.get(key)
       },
+      ai: {
+        registerProvider: (provider) => this.registerAiProvider(record, provider),
+        getProviders: () => [...record.aiProviders.values()]
+          .map((provider) => ({ id: provider.id, title: provider.title }))
+          .sort((first, second) => first.title.localeCompare(second.title) || first.id.localeCompare(second.id))
+      },
       exports: {
         registerProvider: (provider) => this.registerExportProvider(record, provider),
         getProviders: () => [...record.exportProviders.values()]
@@ -364,6 +401,42 @@ export class ExtensionHostProtocolRuntime extends Disposable {
         this.nextRequestId("commandUnregister"),
         record.extension.id,
         commandId
+      ));
+    }));
+  }
+
+  private registerAiProvider(
+    record: Omit<RuntimeExtensionRecord, "context">,
+    provider: AiProvider
+  ): IDisposable {
+    const request = createExtensionHostAiProviderRegisterRequestMessage(
+      this.nextRequestId("aiProviderRegister"),
+      record.extension.id,
+      provider
+    );
+    const providerId = request.provider.id;
+
+    if (record.aiProviders.has(providerId)) {
+      throw new Error(`Extension host runtime AI provider already registered: ${providerId}`);
+    }
+
+    const normalizedProvider = {
+      ...provider,
+      id: providerId,
+      title: request.provider.title
+    };
+    record.aiProviders.set(providerId, normalizedProvider);
+    this.sendAndReport(request);
+
+    return record.disposables.add(toDisposable(() => {
+      if (!record.aiProviders.delete(providerId)) {
+        return;
+      }
+
+      this.sendAndReport(createExtensionHostAiProviderUnregisterRequestMessage(
+        this.nextRequestId("aiProviderUnregister"),
+        record.extension.id,
+        providerId
       ));
     }));
   }
@@ -491,6 +564,7 @@ export class ExtensionHostProtocolRuntime extends Disposable {
     const partialRecord: Omit<RuntimeExtensionRecord, "context"> = {
       extension,
       disposables: new DisposableStore(),
+      aiProviders: new Map(),
       commandHandlers: new Map(),
       contextValues: new Map(),
       exportProviders: new Map(),
@@ -667,6 +741,24 @@ function getRegisteredMarkdownRenderers(
       first.label.localeCompare(second.label) ||
       first.id.localeCompare(second.id)
     );
+}
+
+function toRuntimeAiTextRequest(request: Omit<AiTextRequest, "signal" | "context"> & {
+  readonly context?: readonly { readonly kind: string; readonly value: string; readonly title?: string; readonly uri?: string }[];
+}): AiTextRequest {
+  return {
+    instruction: request.instruction,
+    input: request.input,
+    ...(request.context ? {
+      context: request.context.map((item) => ({
+        kind: item.kind,
+        value: item.value,
+        ...(item.title ? { title: item.title } : {}),
+        ...(item.uri ? { uri: URI.parse(item.uri) } : {})
+      }))
+    } : {}),
+    ...(request.metadata ? { metadata: request.metadata } : {})
+  };
 }
 
 function getMessageExtensionId(message: ExtensionHostProtocolMessage): string {

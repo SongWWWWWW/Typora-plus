@@ -6,6 +6,7 @@ import {
   ContextKeyExpr,
   ContextKeyService,
   ExtensionService,
+  AiService,
   FileSaveConflictError,
   ExportService,
   NativeFileService,
@@ -1525,6 +1526,109 @@ describe("extensions", () => {
     await expect(services.extensionService.activateByEvent("onStartupFinished"))
       .rejects.toThrow("Extension context key must start with");
     expect(services.contextKeyService.getValue("workspace.open")).toBeUndefined();
+  });
+
+  it("registers AI providers through the extension context", async () => {
+    const services = createExtensionServices((request) => {
+      expect(request.context.ai.getProviders()).toEqual([]);
+      request.context.ai.registerProvider({
+        id: "notes.summary",
+        title: "Notes Summary",
+        requestText(aiRequest) {
+          return {
+            value: `${aiRequest.instruction}: ${aiRequest.input}`,
+            model: "extension-test-model",
+            usage: {
+              inputTokens: 3,
+              outputTokens: 4,
+              totalTokens: 7
+            }
+          };
+        }
+      });
+    });
+
+    const disposable = services.extensionService.registerExtension({
+      id: "notes.ai",
+      activationEvents: ["onStartupFinished"]
+    });
+
+    await services.extensionService.activateByEvent("onStartupFinished");
+
+    expect(services.aiService.getProviders()).toEqual([
+      { id: "notes.summary", title: "Notes Summary" }
+    ]);
+    await expect(services.aiService.requestText("notes.summary", {
+      instruction: "Summarize",
+      input: "# A"
+    })).resolves.toEqual({
+      providerId: "notes.summary",
+      value: "Summarize: # A",
+      model: "extension-test-model",
+      usage: {
+        inputTokens: 3,
+        outputTokens: 4,
+        totalTokens: 7
+      }
+    });
+
+    disposable.dispose();
+
+    expect(services.aiService.getProviders()).toEqual([]);
+    await expect(services.aiService.requestText("notes.summary", {
+      instruction: "Summarize",
+      input: "# A"
+    })).rejects.toThrow("No AI provider registered");
+  });
+
+  it("cleans up extension AI providers when activation fails", async () => {
+    const services = createExtensionServices((request) => {
+      request.context.ai.registerProvider({
+        id: "notes.failedAi",
+        title: "Failed AI",
+        requestText() {
+          return { value: "leaked" };
+        }
+      });
+      throw new Error("Activation failed");
+    });
+
+    services.extensionService.registerExtension({
+      id: "notes.failedAi",
+      activationEvents: ["onStartupFinished"]
+    });
+
+    await expect(services.extensionService.activateByEvent("onStartupFinished")).rejects.toThrow("Activation failed");
+    expect(services.aiService.getProviders()).toEqual([]);
+  });
+
+  it("requires an AI service for extension AI providers", async () => {
+    const serviceCollection = new ServiceCollection();
+    const commandService = new CommandService(serviceCollection);
+    const extensionService = new ExtensionService(
+      commandService,
+      new MenuService(),
+      new KeybindingService(),
+      {
+        activationHandler: (request) => {
+          request.context.ai.registerProvider({
+            id: "notes.noAiService",
+            title: "No AI Service",
+            requestText() {
+              return { value: "unreachable" };
+            }
+          });
+        }
+      }
+    );
+
+    extensionService.registerExtension({
+      id: "notes.noAiService",
+      activationEvents: ["onStartupFinished"]
+    });
+
+    await expect(extensionService.activateByEvent("onStartupFinished"))
+      .rejects.toThrow("No extension AI service registered");
   });
 
   it("registers export providers through the extension context", async () => {
@@ -3113,6 +3217,7 @@ function createExtensionServices(activationHandler?: ExtensionActivationHandler)
     }
   });
   const contextKeyService = new ContextKeyService();
+  const aiService = new AiService();
   const menuService = new MenuService(contextKeyService);
   const keybindingService = new KeybindingService();
   const exportService = new ExportService({
@@ -3129,6 +3234,7 @@ function createExtensionServices(activationHandler?: ExtensionActivationHandler)
     menuService,
     keybindingService,
     {
+      aiService,
       contextKeyService,
       exportService,
       markdownRendererService,
@@ -3138,6 +3244,7 @@ function createExtensionServices(activationHandler?: ExtensionActivationHandler)
   );
 
   return {
+    aiService,
     commandService,
     contextKeyService,
     extensionService,

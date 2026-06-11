@@ -1,3 +1,10 @@
+import type {
+  AiTextContextItem,
+  AiTextProviderResult,
+  AiTextRequest,
+  AiTokenUsage,
+  RegisteredAiProvider
+} from "./ai";
 import type { CommandMetadata } from "./commands";
 import type { ContextKeyValue } from "./contextKeys";
 import type { ExtensionActivationRequest, ExtensionActivationState, RegisteredExtension } from "./extensions";
@@ -13,6 +20,10 @@ export const extensionHostProtocolMessageTypes = {
   activate: "extensionHost/activate",
   activationError: "extensionHost/activationError",
   activationResult: "extensionHost/activationResult",
+  aiProviderRegister: "extensionHost/ai/providerRegister",
+  aiProviderUnregister: "extensionHost/ai/providerUnregister",
+  aiTextRequest: "extensionHost/ai/textRequest",
+  aiTextResult: "extensionHost/ai/textResult",
   apiError: "extensionHost/api/error",
   apiResult: "extensionHost/api/result",
   commandExecute: "extensionHost/command/execute",
@@ -37,6 +48,7 @@ export const extensionHostProtocolVersion = 1;
 
 export const extensionHostProtocolCapabilities = [
   "activation",
+  "aiProviders",
   "commands",
   "contextKeys",
   "exports",
@@ -52,6 +64,20 @@ export const requiredExtensionHostProtocolCapabilities = [
 export const extensionHostProtocolLimits = {
   activationEventLength: 256,
   activationEvents: 200,
+  aiContextItemCount: 100,
+  aiContextKindLength: 80,
+  aiContextTitleLength: 240,
+  aiContextValueLength: 1000000,
+  aiMetadataEntries: 100,
+  aiMetadataKeyLength: 120,
+  aiMetadataValueLength: 4000,
+  aiModelLength: 120,
+  aiProviderIdLength: 256,
+  aiProviderTitleLength: 160,
+  aiTextInputLength: 5000000,
+  aiTextInstructionLength: 20000,
+  aiTextOutputLength: 5000000,
+  aiTokenUsageMax: 1000000000,
   capabilityCount: 40,
   capabilityLength: 80,
   commandArgumentCount: 20,
@@ -93,6 +119,10 @@ export type ExtensionHostProtocolMessage =
   | ExtensionHostActivationErrorMessage
   | ExtensionHostActivationRequestMessage
   | ExtensionHostActivationResultMessage
+  | ExtensionHostAiProviderRegisterRequestMessage
+  | ExtensionHostAiProviderUnregisterRequestMessage
+  | ExtensionHostAiTextRequestMessage
+  | ExtensionHostAiTextResultMessage
   | ExtensionHostApiErrorMessage
   | ExtensionHostApiResultMessage
   | ExtensionHostCommandExecuteRequestMessage
@@ -138,6 +168,36 @@ export interface ExtensionHostActivationErrorMessage {
   readonly requestId: string;
   readonly extensionId: string;
   readonly error: ExtensionHostProtocolError;
+}
+
+export interface ExtensionHostAiProviderRegisterRequestMessage {
+  readonly type: typeof extensionHostProtocolMessageTypes.aiProviderRegister;
+  readonly requestId: string;
+  readonly extensionId: string;
+  readonly provider: ExtensionHostProtocolAiProviderRegistration;
+}
+
+export interface ExtensionHostAiProviderUnregisterRequestMessage {
+  readonly type: typeof extensionHostProtocolMessageTypes.aiProviderUnregister;
+  readonly requestId: string;
+  readonly extensionId: string;
+  readonly providerId: string;
+}
+
+export interface ExtensionHostAiTextRequestMessage {
+  readonly type: typeof extensionHostProtocolMessageTypes.aiTextRequest;
+  readonly requestId: string;
+  readonly extensionId: string;
+  readonly providerId: string;
+  readonly request: ExtensionHostProtocolAiTextRequest;
+}
+
+export interface ExtensionHostAiTextResultMessage {
+  readonly type: typeof extensionHostProtocolMessageTypes.aiTextResult;
+  readonly requestId: string;
+  readonly extensionId: string;
+  readonly providerId: string;
+  readonly result: ExtensionHostProtocolAiTextProviderResult;
 }
 
 export interface ExtensionHostApiResultMessage {
@@ -277,6 +337,18 @@ export interface ExtensionHostProtocolCommandRegistration extends Pick<CommandMe
   readonly title?: string;
   readonly category?: string;
 }
+
+export interface ExtensionHostProtocolAiProviderRegistration extends Pick<RegisteredAiProvider, "id" | "title"> {}
+
+export interface ExtensionHostProtocolAiTextRequest extends Omit<AiTextRequest, "signal" | "context"> {
+  readonly context?: readonly ExtensionHostProtocolAiTextContextItem[];
+}
+
+export interface ExtensionHostProtocolAiTextContextItem extends Omit<AiTextContextItem, "uri"> {
+  readonly uri?: string;
+}
+
+export interface ExtensionHostProtocolAiTextProviderResult extends AiTextProviderResult {}
 
 export interface ExtensionHostProtocolExportProviderRegistration extends Pick<ExportProvider, "format" | "title"> {}
 
@@ -527,6 +599,62 @@ export function createExtensionHostContextKeyGetRequestMessage(
   };
 }
 
+export function createExtensionHostAiProviderRegisterRequestMessage(
+  requestId: string,
+  extensionId: string,
+  provider: ExtensionHostProtocolAiProviderRegistration
+): ExtensionHostAiProviderRegisterRequestMessage {
+  return {
+    type: extensionHostProtocolMessageTypes.aiProviderRegister,
+    requestId: normalizeRequestId(requestId, "Extension host AI provider registration request id"),
+    extensionId: normalizeExtensionId(extensionId, "Extension host AI provider registration extension id"),
+    provider: normalizeProtocolAiProviderRegistration(provider)
+  };
+}
+
+export function createExtensionHostAiProviderUnregisterRequestMessage(
+  requestId: string,
+  extensionId: string,
+  providerId: string
+): ExtensionHostAiProviderUnregisterRequestMessage {
+  return {
+    type: extensionHostProtocolMessageTypes.aiProviderUnregister,
+    requestId: normalizeRequestId(requestId, "Extension host AI provider unregister request id"),
+    extensionId: normalizeExtensionId(extensionId, "Extension host AI provider unregister extension id"),
+    providerId: normalizeAiProviderId(providerId, "Extension host AI provider unregister id")
+  };
+}
+
+export function createExtensionHostAiTextRequestMessage(
+  requestId: string,
+  extensionId: string,
+  providerId: string,
+  request: ExtensionHostProtocolAiTextRequest
+): ExtensionHostAiTextRequestMessage {
+  return {
+    type: extensionHostProtocolMessageTypes.aiTextRequest,
+    requestId: normalizeRequestId(requestId, "Extension host AI text request id"),
+    extensionId: normalizeExtensionId(extensionId, "Extension host AI text request extension id"),
+    providerId: normalizeAiProviderId(providerId, "Extension host AI text request provider id"),
+    request: normalizeProtocolAiTextRequest(request)
+  };
+}
+
+export function createExtensionHostAiTextResultMessage(
+  requestId: string,
+  extensionId: string,
+  providerId: string,
+  result: ExtensionHostProtocolAiTextProviderResult
+): ExtensionHostAiTextResultMessage {
+  return {
+    type: extensionHostProtocolMessageTypes.aiTextResult,
+    requestId: normalizeRequestId(requestId, "Extension host AI text result request id"),
+    extensionId: normalizeExtensionId(extensionId, "Extension host AI text result extension id"),
+    providerId: normalizeAiProviderId(providerId, "Extension host AI text result provider id"),
+    result: normalizeProtocolAiTextProviderResult(result)
+  };
+}
+
 export function createExtensionHostExportProviderRegisterRequestMessage(
   requestId: string,
   extensionId: string,
@@ -676,6 +804,14 @@ export function readExtensionHostProtocolMessage(value: unknown): ExtensionHostP
       return readContextKeySetRequestMessage(record);
     case extensionHostProtocolMessageTypes.contextKeyGet:
       return readContextKeyGetRequestMessage(record);
+    case extensionHostProtocolMessageTypes.aiProviderRegister:
+      return readAiProviderRegisterRequestMessage(record);
+    case extensionHostProtocolMessageTypes.aiProviderUnregister:
+      return readAiProviderUnregisterRequestMessage(record);
+    case extensionHostProtocolMessageTypes.aiTextRequest:
+      return readAiTextRequestMessage(record);
+    case extensionHostProtocolMessageTypes.aiTextResult:
+      return readAiTextResultMessage(record);
     case extensionHostProtocolMessageTypes.exportProviderRegister:
       return readExportProviderRegisterRequestMessage(record);
     case extensionHostProtocolMessageTypes.exportProviderUnregister:
@@ -860,6 +996,44 @@ function readContextKeyGetRequestMessage(record: UnknownRecord): ExtensionHostCo
     requestId: normalizeRequestId(record.requestId, "Extension host context key get request id"),
     extensionId,
     key: normalizeExtensionOwnedContextKey(extensionId, record.key)
+  };
+}
+
+function readAiProviderRegisterRequestMessage(record: UnknownRecord): ExtensionHostAiProviderRegisterRequestMessage {
+  return {
+    type: extensionHostProtocolMessageTypes.aiProviderRegister,
+    requestId: normalizeRequestId(record.requestId, "Extension host AI provider registration request id"),
+    extensionId: normalizeExtensionId(record.extensionId, "Extension host AI provider registration extension id"),
+    provider: normalizeProtocolAiProviderRegistration(record.provider)
+  };
+}
+
+function readAiProviderUnregisterRequestMessage(record: UnknownRecord): ExtensionHostAiProviderUnregisterRequestMessage {
+  return {
+    type: extensionHostProtocolMessageTypes.aiProviderUnregister,
+    requestId: normalizeRequestId(record.requestId, "Extension host AI provider unregister request id"),
+    extensionId: normalizeExtensionId(record.extensionId, "Extension host AI provider unregister extension id"),
+    providerId: normalizeAiProviderId(record.providerId, "Extension host AI provider unregister id")
+  };
+}
+
+function readAiTextRequestMessage(record: UnknownRecord): ExtensionHostAiTextRequestMessage {
+  return {
+    type: extensionHostProtocolMessageTypes.aiTextRequest,
+    requestId: normalizeRequestId(record.requestId, "Extension host AI text request id"),
+    extensionId: normalizeExtensionId(record.extensionId, "Extension host AI text request extension id"),
+    providerId: normalizeAiProviderId(record.providerId, "Extension host AI text request provider id"),
+    request: normalizeProtocolAiTextRequest(record.request)
+  };
+}
+
+function readAiTextResultMessage(record: UnknownRecord): ExtensionHostAiTextResultMessage {
+  return {
+    type: extensionHostProtocolMessageTypes.aiTextResult,
+    requestId: normalizeRequestId(record.requestId, "Extension host AI text result request id"),
+    extensionId: normalizeExtensionId(record.extensionId, "Extension host AI text result extension id"),
+    providerId: normalizeAiProviderId(record.providerId, "Extension host AI text result provider id"),
+    result: normalizeProtocolAiTextProviderResult(record.result)
   };
 }
 
@@ -1060,6 +1234,176 @@ function normalizeProtocolCommandRegistration(value: unknown): ExtensionHostProt
     ...(title ? { title } : {}),
     ...(category ? { category } : {})
   };
+}
+
+function normalizeProtocolAiProviderRegistration(value: unknown): ExtensionHostProtocolAiProviderRegistration {
+  const record = expectRecord(value, "Extension host AI provider registration");
+
+  return {
+    id: normalizeAiProviderId(record.id, "Extension host AI provider id"),
+    title: normalizeRequiredProtocolString(
+      record.title,
+      "Extension host AI provider title",
+      extensionHostProtocolLimits.aiProviderTitleLength
+    )
+  };
+}
+
+function normalizeProtocolAiTextRequest(value: unknown): ExtensionHostProtocolAiTextRequest {
+  const record = expectRecord(value, "Extension host AI text request");
+  const context = normalizeOptionalProtocolAiTextContext(record.context);
+  const metadata = normalizeOptionalProtocolAiTextMetadata(record.metadata);
+
+  return {
+    instruction: normalizeRequiredProtocolString(
+      record.instruction,
+      "Extension host AI text request instruction",
+      extensionHostProtocolLimits.aiTextInstructionLength
+    ),
+    input: normalizeProtocolText(
+      record.input,
+      "Extension host AI text request input",
+      extensionHostProtocolLimits.aiTextInputLength
+    ),
+    ...(context.length > 0 ? { context } : {}),
+    ...(metadata ? { metadata } : {})
+  };
+}
+
+function normalizeOptionalProtocolAiTextContext(value: unknown): readonly ExtensionHostProtocolAiTextContextItem[] {
+  if (value === undefined) {
+    return [];
+  }
+
+  if (!Array.isArray(value)) {
+    throw new Error("Extension host AI text request context must be an array");
+  }
+
+  if (value.length > extensionHostProtocolLimits.aiContextItemCount) {
+    throw new Error(
+      `Extension host AI text request context must contain at most ${extensionHostProtocolLimits.aiContextItemCount} items`
+    );
+  }
+
+  return value.map((item, index) => normalizeProtocolAiTextContextItem(item, index));
+}
+
+function normalizeProtocolAiTextContextItem(
+  value: unknown,
+  index: number
+): ExtensionHostProtocolAiTextContextItem {
+  const record = expectRecord(value, `Extension host AI text request context item ${index + 1}`);
+  const title = normalizeOptionalProtocolString(
+    record.title,
+    `Extension host AI text request context item ${index + 1} title`,
+    extensionHostProtocolLimits.aiContextTitleLength
+  );
+  const uri = normalizeOptionalProtocolUri(
+    record.uri,
+    `Extension host AI text request context item ${index + 1} URI`
+  );
+
+  return {
+    kind: normalizeRequiredProtocolString(
+      record.kind,
+      `Extension host AI text request context item ${index + 1} kind`,
+      extensionHostProtocolLimits.aiContextKindLength
+    ),
+    value: normalizeProtocolText(
+      record.value,
+      `Extension host AI text request context item ${index + 1} value`,
+      extensionHostProtocolLimits.aiContextValueLength
+    ),
+    ...(title ? { title } : {}),
+    ...(uri ? { uri } : {})
+  };
+}
+
+function normalizeOptionalProtocolAiTextMetadata(
+  value: unknown
+): Readonly<Record<string, string>> | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  const record = expectRecord(value, "Extension host AI text request metadata");
+  const entries = Object.entries(record);
+
+  if (entries.length > extensionHostProtocolLimits.aiMetadataEntries) {
+    throw new Error(
+      `Extension host AI text request metadata must contain at most ${extensionHostProtocolLimits.aiMetadataEntries} entries`
+    );
+  }
+
+  const result: Record<string, string> = {};
+
+  for (const [key, metadataValue] of entries) {
+    const normalizedKey = normalizeRequiredProtocolString(
+      key,
+      "Extension host AI text request metadata key",
+      extensionHostProtocolLimits.aiMetadataKeyLength
+    );
+
+    result[normalizedKey] = normalizeProtocolText(
+      metadataValue,
+      `Extension host AI text request metadata ${normalizedKey}`,
+      extensionHostProtocolLimits.aiMetadataValueLength
+    );
+  }
+
+  return result;
+}
+
+function normalizeProtocolAiTextProviderResult(value: unknown): ExtensionHostProtocolAiTextProviderResult {
+  const record = expectRecord(value, "Extension host AI text provider result");
+  const model = normalizeOptionalProtocolString(
+    record.model,
+    "Extension host AI text provider result model",
+    extensionHostProtocolLimits.aiModelLength
+  );
+  const usage = normalizeOptionalProtocolAiTokenUsage(record.usage);
+
+  return {
+    value: normalizeProtocolText(
+      record.value,
+      "Extension host AI text provider result value",
+      extensionHostProtocolLimits.aiTextOutputLength
+    ),
+    ...(model ? { model } : {}),
+    ...(usage ? { usage } : {})
+  };
+}
+
+function normalizeOptionalProtocolAiTokenUsage(value: unknown): AiTokenUsage | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  const record = expectRecord(value, "Extension host AI token usage");
+
+  return {
+    ...normalizeOptionalProtocolAiTokenUsageValue("inputTokens", record.inputTokens),
+    ...normalizeOptionalProtocolAiTokenUsageValue("outputTokens", record.outputTokens),
+    ...normalizeOptionalProtocolAiTokenUsageValue("totalTokens", record.totalTokens)
+  };
+}
+
+function normalizeOptionalProtocolAiTokenUsageValue<Key extends keyof AiTokenUsage>(
+  key: Key,
+  value: unknown
+): Partial<Record<Key, number>> {
+  if (value === undefined) {
+    return {};
+  }
+
+  return {
+    [key]: normalizeOptionalProtocolNumber(
+      value,
+      `Extension host AI token usage ${key}`,
+      0,
+      extensionHostProtocolLimits.aiTokenUsageMax
+    )
+  } as Partial<Record<Key, number>>;
 }
 
 function normalizeProtocolExportProviderRegistration(
@@ -1399,6 +1743,16 @@ function normalizeProtocolText(value: unknown, label: string, maxLength: number)
 
 function normalizeCommandId(value: unknown, label: string): string {
   return normalizeRequiredProtocolString(value, label, extensionHostProtocolLimits.commandIdLength);
+}
+
+function normalizeAiProviderId(value: unknown, label: string): string {
+  const id = normalizeRequiredProtocolString(value, label, extensionHostProtocolLimits.aiProviderIdLength);
+
+  if (!/^[A-Za-z0-9][A-Za-z0-9_.:-]*$/.test(id)) {
+    throw new Error(`${label} is invalid: ${id}`);
+  }
+
+  return id;
 }
 
 function normalizeExtensionId(value: unknown, label: string): string {

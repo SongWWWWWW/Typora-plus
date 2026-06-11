@@ -289,6 +289,8 @@ export class ExtensionHostProtocolSession extends Disposable {
 
 function isRuntimeBrokerRequest(message: ExtensionHostProtocolMessage): boolean {
   switch (message.type) {
+    case extensionHostProtocolMessageTypes.aiProviderRegister:
+    case extensionHostProtocolMessageTypes.aiProviderUnregister:
     case extensionHostProtocolMessageTypes.commandRegister:
     case extensionHostProtocolMessageTypes.commandExecute:
     case extensionHostProtocolMessageTypes.commandList:

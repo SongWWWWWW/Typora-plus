@@ -3,10 +3,13 @@ import { describe, expect, it } from "vitest";
 import type { ExtensionActivationRequest, ExtensionContext } from "./extensions";
 import {
   createExtensionHostActivationRequestMessage,
+  createExtensionHostAiTextRequestMessage,
+  createExtensionHostAiTextResultMessage,
   createExtensionHostApiErrorMessage,
   createExtensionHostApiResultMessage,
   createExtensionHostCommandExecuteRequestMessage,
   createExtensionHostExportDocumentRequestMessage,
+  createExtensionHostAiProviderRegisterRequestMessage,
   createExtensionHostHandshakeRequestMessage,
   createExtensionHostMarkdownRendererRenderRequestMessage,
   extensionHostProtocolMessageTypes,
@@ -39,6 +42,7 @@ describe("extension host protocol runtime", () => {
       protocolVersion: 1,
       capabilities: [
         "activation",
+        "aiProviders",
         "commands",
         "contextKeys",
         "exports",
@@ -87,6 +91,11 @@ describe("extension host protocol runtime", () => {
           { title: "Run Remote", category: "Remote" }
         );
         request.context.contextKeys.setValue("notes.remote.ready", true);
+        request.context.ai.registerProvider({
+          id: "notes.remote.ai",
+          title: "Remote AI",
+          requestText: () => ({ value: "AI" })
+        });
         request.context.exports.registerProvider({
           format: "html",
           title: "HTML",
@@ -118,6 +127,10 @@ describe("extension host protocol runtime", () => {
       title: "Run Remote",
       category: "Remote"
     }]);
+    expect(activatedContext?.ai.getProviders()).toEqual([{
+      id: "notes.remote.ai",
+      title: "Remote AI"
+    }]);
     expect(activatedContext?.exports.getProviders().map((provider) => provider.format)).toEqual(["html"]);
     expect(activatedContext?.markdown.getRenderers()).toEqual([{
       id: "notes.remote.diagram",
@@ -147,8 +160,17 @@ describe("extension host protocol runtime", () => {
         value: true
       },
       {
+        type: extensionHostProtocolMessageTypes.aiProviderRegister,
+        requestId: "aiProviderRegister-3",
+        extensionId: "notes.remote",
+        provider: {
+          id: "notes.remote.ai",
+          title: "Remote AI"
+        }
+      },
+      {
         type: extensionHostProtocolMessageTypes.exportProviderRegister,
-        requestId: "exportProviderRegister-3",
+        requestId: "exportProviderRegister-4",
         extensionId: "notes.remote",
         provider: {
           format: "html",
@@ -157,7 +179,7 @@ describe("extension host protocol runtime", () => {
       },
       {
         type: extensionHostProtocolMessageTypes.markdownRendererRegister,
-        requestId: "markdownRendererRegister-4",
+        requestId: "markdownRendererRegister-5",
         extensionId: "notes.remote",
         renderer: {
           id: "notes.remote.diagram",
@@ -184,6 +206,19 @@ describe("extension host protocol runtime", () => {
         request.context.commands.registerCommand("notes.remote.run", (value) => ({
           value
         }), { title: "Run" });
+        request.context.ai.registerProvider({
+          id: "notes.remote.ai",
+          title: "Remote AI",
+          requestText: (input) => ({
+            value: `${input.instruction}: ${input.context?.[0]?.uri?.path ?? ""}: ${input.input}`,
+            model: "remote-test-model",
+            usage: {
+              inputTokens: 1,
+              outputTokens: 2,
+              totalTokens: 3
+            }
+          })
+        });
         request.context.exports.registerProvider({
           format: "html",
           title: "HTML",
@@ -216,6 +251,22 @@ describe("extension host protocol runtime", () => {
       "notes.remote.run",
       ["alpha"]
     ));
+    transport.receive(createExtensionHostAiTextRequestMessage(
+      "main-ai-1",
+      "notes.remote",
+      "notes.remote.ai",
+      {
+        instruction: "Summarize",
+        input: "# A",
+        context: [
+          {
+            kind: "note",
+            uri: "file://C:/Notes/A.md",
+            value: "Context"
+          }
+        ]
+      }
+    ));
     transport.receive(createExtensionHostExportDocumentRequestMessage(
       "main-2",
       "notes.remote",
@@ -241,6 +292,15 @@ describe("extension host protocol runtime", () => {
     expect(transport.sent).toEqual([
       createExtensionHostApiResultMessage("main-1", "notes.remote", {
         value: "alpha"
+      }),
+      createExtensionHostAiTextResultMessage("main-ai-1", "notes.remote", "notes.remote.ai", {
+        value: "Summarize: C:/Notes/A.md: # A",
+        model: "remote-test-model",
+        usage: {
+          inputTokens: 1,
+          outputTokens: 2,
+          totalTokens: 3
+        }
       }),
       {
         type: extensionHostProtocolMessageTypes.exportDocumentResult,

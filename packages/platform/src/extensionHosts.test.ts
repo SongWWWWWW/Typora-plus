@@ -112,6 +112,10 @@ function createExtensionContext(extension: RegisteredExtension): ExtensionContex
       getValue: () => undefined,
       setValue: () => undefined
     },
+    ai: {
+      getProviders: () => [],
+      registerProvider: () => toDisposable(() => undefined)
+    },
     exports: {
       getProviders: () => [],
       registerProvider: () => toDisposable(() => undefined)

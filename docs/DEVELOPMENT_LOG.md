@@ -6457,3 +6457,34 @@ Known limitations:
 
 - No built-in AI provider, credential bridge, streaming response UI, insertion workflow, or workspace-grounded retrieval provider exists yet.
 - No built-in Feishu provider exists yet; the current work keeps sync planning and execution contracts ready for a future provider.
+
+## 2026-06-11 - P2 Extension AI Provider Runtime API
+
+Completed:
+
+- Added `ExtensionContext.ai` so activated extensions can register provider-backed text providers through `IAiService`.
+- Wired Workbench's `IAiService` into `ExtensionService`, keeping future OpenAI, local-model, Codex-adjacent, or workspace-grounded providers behind extension/runtime provider registration.
+- Extended the extension-host protocol with wire-safe AI provider registration, unregistration, text request, and text result messages.
+- Added broker/runtime/session support so remote extension hosts can proxy AI providers and service text requests through bounded protocol messages.
+- Preserved provider neutrality: no model id, endpoint, token, OAuth scope, storage path, OpenAI, Codex, Feishu, or provider id was hard-coded.
+- Updated maintained architecture notes to include extension/runtime AI provider registration and remote provider callback flow.
+
+Quality gate:
+
+- `npx vitest run packages/platform/src/platform.test.ts packages/platform/src/extensionHostProtocol.test.ts packages/platform/src/extensionHostRuntimeBroker.test.ts packages/platform/src/extensionHostProtocolRuntime.test.ts packages/platform/src/extensionHostProtocolSession.test.ts packages/platform/src/extensionHostProtocolTransport.test.ts packages/platform/src/extensionHostProtocolWireTransport.test.ts packages/workbench/src/services.test.ts packages/workbench/src/workbenchExtensionActivation.test.ts`: passed, 9 files / 157 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 65 files / 631 tests, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Dev server smoke check: passed at `http://127.0.0.1:5173`; status 200 and root element present
+
+Review:
+
+- AI provider implementation can now live in an extension or future external host instead of being built into Workbench UI code.
+- The protocol mirrors the existing export and Markdown renderer provider pattern: registration sends metadata, provider callbacks cross the request/response channel, and unregister/dispose clears runtime contributions.
+- AI request cancellation remains local to the service boundary; protocol-level cancellation is still a future extension-host message if streaming or long-running requests are added.
+
+Known limitations:
+
+- No built-in AI provider, credential bridge, streaming response UI, insertion workflow, workspace-grounded retrieval provider, or external extension loader exists yet.
+- Remote sync provider registration is still not exposed through extension/runtime APIs.

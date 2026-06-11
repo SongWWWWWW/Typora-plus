@@ -168,6 +168,7 @@ export function createWorkbenchServices(): WorkbenchServices {
   }));
   extensionService = new ExtensionService(commandService, menuService, keybindingService, {
     activationHandler: (request) => extensionHostService.activate(request),
+    aiService,
     contextKeyService,
     exportService,
     markdownRendererService,

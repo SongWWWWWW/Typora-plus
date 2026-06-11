@@ -1,6 +1,8 @@
 import { Disposable, type IDisposable } from "@typora-plus/base";
+import type { AiTextRequest } from "./ai";
 import type { ExtensionContext } from "./extensions";
 import {
+  createExtensionHostAiTextRequestMessage,
   createExtensionHostApiErrorMessage,
   createExtensionHostApiResultMessage,
   createExtensionHostCommandExecuteRequestMessage,
@@ -10,6 +12,7 @@ import {
   readExtensionHostProtocolMessage,
   type ExtensionHostApiErrorMessage,
   type ExtensionHostApiResultMessage,
+  type ExtensionHostAiTextResultMessage,
   type ExtensionHostExportDocumentResultMessage,
   type ExtensionHostMarkdownRendererRenderResultMessage,
   type ExtensionHostProtocolError,
@@ -17,6 +20,7 @@ import {
 } from "./extensionHostProtocol";
 
 export type ExtensionHostRuntimeBrokerRequestKind =
+  | "aiTextRequest"
   | "commandExecute"
   | "exportDocument"
   | "markdownRendererRender";
@@ -34,6 +38,7 @@ export interface ExtensionHostRuntimeBrokerOptions {
 }
 
 export class ExtensionHostRuntimeBroker extends Disposable {
+  private readonly aiProviderDisposables = new Map<string, IDisposable>();
   private readonly commandDisposables = new Map<string, IDisposable>();
   private readonly exportProviderDisposables = new Map<string, IDisposable>();
   private readonly markdownRendererDisposables = new Map<string, IDisposable>();
@@ -58,6 +63,12 @@ export class ExtensionHostRuntimeBroker extends Disposable {
       this.assertExtensionId(request.extensionId);
 
       switch (message.type) {
+        case extensionHostProtocolMessageTypes.aiProviderRegister:
+          this.registerAiProviderProxy(message.provider.id, message.provider.title);
+          return createExtensionHostApiResultMessage(message.requestId, message.extensionId);
+        case extensionHostProtocolMessageTypes.aiProviderUnregister:
+          this.unregisterProxy(this.aiProviderDisposables, message.providerId, "AI provider");
+          return createExtensionHostApiResultMessage(message.requestId, message.extensionId);
         case extensionHostProtocolMessageTypes.commandRegister:
           this.registerCommandProxy(message.command.id, message.command.title, message.command.category);
           return createExtensionHostApiResultMessage(message.requestId, message.extensionId);
@@ -103,6 +114,38 @@ export class ExtensionHostRuntimeBroker extends Disposable {
     } catch (error) {
       return createExtensionHostApiErrorMessage(request?.requestId ?? this.nextRequestId("commandExecute"), this.context.extension.id, error);
     }
+  }
+
+  private registerAiProviderProxy(providerId: string, title: string): void {
+    if (this.aiProviderDisposables.has(providerId)) {
+      throw new Error(`Extension host AI provider proxy already registered: ${providerId}`);
+    }
+
+    const disposable = this.context.ai.registerProvider({
+      id: providerId,
+      title,
+      requestText: async (request) => {
+        const requestId = this.nextRequestId("aiTextRequest");
+        const response = readExtensionHostProtocolMessage(await this.options.request(
+          createExtensionHostAiTextRequestMessage(
+            requestId,
+            this.context.extension.id,
+            providerId,
+            toProtocolAiTextRequest(request)
+          )
+        ));
+
+        assertResponseIdentity(response, requestId, this.context.extension.id);
+
+        if (response.type !== extensionHostProtocolMessageTypes.aiTextResult) {
+          throw new Error(`Expected extension host AI text result but received: ${response.type}`);
+        }
+
+        return (response as ExtensionHostAiTextResultMessage).result;
+      }
+    });
+    this.aiProviderDisposables.set(providerId, disposable);
+    this.addRuntimeDisposable(disposable);
   }
 
   private registerCommandProxy(command: string, title: string | undefined, category: string | undefined): void {
@@ -222,6 +265,7 @@ export class ExtensionHostRuntimeBroker extends Disposable {
   }
 
   override dispose(): void {
+    this.aiProviderDisposables.clear();
     this.commandDisposables.clear();
     this.exportProviderDisposables.clear();
     this.markdownRendererDisposables.clear();
@@ -233,6 +277,8 @@ function getRuntimeRequestInfo(
   message: ExtensionHostProtocolMessage
 ): { readonly requestId: string; readonly extensionId: string } | undefined {
   switch (message.type) {
+    case extensionHostProtocolMessageTypes.aiProviderRegister:
+    case extensionHostProtocolMessageTypes.aiProviderUnregister:
     case extensionHostProtocolMessageTypes.commandRegister:
     case extensionHostProtocolMessageTypes.commandExecute:
     case extensionHostProtocolMessageTypes.commandList:
@@ -250,6 +296,22 @@ function getRuntimeRequestInfo(
     default:
       return undefined;
   }
+}
+
+function toProtocolAiTextRequest(request: AiTextRequest) {
+  return {
+    instruction: request.instruction,
+    input: request.input,
+    ...(request.context ? {
+      context: request.context.map((item) => ({
+        kind: item.kind,
+        value: item.value,
+        ...(item.title ? { title: item.title } : {}),
+        ...(item.uri ? { uri: item.uri.toString() } : {})
+      }))
+    } : {}),
+    ...(request.metadata ? { metadata: request.metadata } : {})
+  };
 }
 
 function readApiResponseValue(

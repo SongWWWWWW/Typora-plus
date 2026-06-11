@@ -1,5 +1,6 @@
 import { Emitter, toDisposable, URI, type Event, type IDisposable } from "@typora-plus/base";
 import { describe, expect, it } from "vitest";
+import type { AiProvider } from "./ai";
 import type { CommandMetadata } from "./commands";
 import type { ExtensionCommandHandler, ExtensionContext, RegisteredExtension } from "./extensions";
 import type { ExportProvider } from "./exports";
@@ -221,6 +222,7 @@ interface WireChannelPair {
 }
 
 interface MainContextControls {
+  readonly aiProviders: AiProvider[];
   readonly commandRegistrations: {
     readonly command: string;
     readonly handler: ExtensionCommandHandler;
@@ -269,6 +271,7 @@ function createMainContext(extensionId: string): {
   readonly controls: MainContextControls;
 } {
   const controls: MainContextControls = {
+    aiProviders: [],
     commandRegistrations: [],
     exportProviders: [],
     markdownProviders: []
@@ -306,6 +309,13 @@ function createMainContext(extensionId: string): {
       contextKeys: {
         getValue: () => undefined,
         setValue: () => undefined
+      },
+      ai: {
+        getProviders: () => controls.aiProviders.map((provider) => ({ id: provider.id, title: provider.title })),
+        registerProvider(provider) {
+          controls.aiProviders.push(provider);
+          return removeFromArrayDisposable(controls.aiProviders, provider);
+        }
       },
       exports: {
         getProviders: () => controls.exportProviders,

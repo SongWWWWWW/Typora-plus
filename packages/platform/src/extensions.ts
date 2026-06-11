@@ -1,4 +1,5 @@
 import { Disposable, DisposableStore, toDisposable, type IDisposable } from "@typora-plus/base";
+import type { AiProvider, IAiService, RegisteredAiProvider } from "./ai";
 import type { CommandMetadata, ICommandService } from "./commands";
 import {
   parseContextKeyExpression,
@@ -93,6 +94,7 @@ export interface ExtensionActivationRequest {
 export type ExtensionActivationHandler = (request: ExtensionActivationRequest) => void | Promise<void>;
 
 export interface ExtensionServiceOptions {
+  readonly aiService?: IAiService;
   readonly activationHandler?: ExtensionActivationHandler;
   readonly contextKeyService?: IContextKeyService;
   readonly exportService?: IExportService;
@@ -111,6 +113,7 @@ export interface ExtensionContext {
   readonly subscriptions: ExtensionSubscriptionStore;
   readonly commands: ExtensionCommandApi;
   readonly contextKeys: ExtensionContextKeyApi;
+  readonly ai: ExtensionAiApi;
   readonly exports: ExtensionExportApi;
   readonly markdown: ExtensionMarkdownApi;
 }
@@ -128,6 +131,11 @@ export interface ExtensionCommandApi {
 export interface ExtensionContextKeyApi {
   setValue(key: string, value: ContextKeyValue | undefined): void;
   getValue(key: string): ContextKeyValue | undefined;
+}
+
+export interface ExtensionAiApi {
+  registerProvider(provider: AiProvider): IDisposable;
+  getProviders(): readonly RegisteredAiProvider[];
 }
 
 export interface ExtensionExportApi {
@@ -280,6 +288,7 @@ export class ExtensionService extends Disposable implements IExtensionService {
             record,
             registeredExtension,
             this.commandService,
+            this.options.aiService,
             this.options.contextKeyService,
             this.options.exportService,
             this.options.markdownRendererService
@@ -722,6 +731,7 @@ function createExtensionContext(
   record: RegisteredExtensionRecord,
   extension: RegisteredExtension,
   commandService: ICommandService,
+  aiService: IAiService | undefined,
   contextKeyService: IContextKeyService | undefined,
   exportService: IExportService | undefined,
   markdownRendererService: IMarkdownRendererService | undefined
@@ -769,6 +779,17 @@ function createExtensionContext(
 
         return contextKeyService.getValue(normalizeExtensionContextKey(record.manifest.id, key));
       }
+    },
+    ai: {
+      registerProvider(provider) {
+        if (!aiService) {
+          throw new Error(`No extension AI service registered: ${record.manifest.id}`);
+        }
+
+        const disposable = aiService.registerProvider(provider);
+        return record.runtimeDisposables.add(disposable);
+      },
+      getProviders: () => aiService?.getProviders() ?? []
     },
     exports: {
       registerProvider(provider) {
