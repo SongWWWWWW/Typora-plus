@@ -73,6 +73,10 @@ import {
   reloadWorkbenchFileAfterSaveConflict
 } from "./workbenchSaveConflictResolution";
 import {
+  openWorkbenchLineResource,
+  scrollWorkbenchLine
+} from "./workbenchLineNavigation";
+import {
   createWorkbenchMenuContext,
   isWorkbenchMenuItemActive,
   workbenchCommandTitle,
@@ -460,6 +464,13 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
       services
     ]
   );
+  const lineNavigationCallbacks = {
+    clearSaveConflict: () => setSaveConflict(undefined),
+    defer: (callback: () => void) => {
+      window.setTimeout(callback, 0);
+    },
+    scrollToLine: (line: number) => editorRef.current?.scrollToLine(line)
+  };
 
   return (
     <main className={[
@@ -500,36 +511,33 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
             indexStatus={indexStatus}
             onSearchQueryChange={setSearchQuery}
             onClose={() => setSideView(null)}
-            onSelectLine={(line) => editorRef.current?.scrollToLine(line)}
+            onSelectLine={(line) => scrollWorkbenchLine(lineNavigationCallbacks, { line })}
             onOpenSearchResult={(result) => {
               if (!isWorkspaceSearchResult(result)) {
-                editorRef.current?.scrollToLine(result.line);
+                scrollWorkbenchLine(lineNavigationCallbacks, result);
                 return;
               }
 
-              void runWorkbenchAction(async () => {
-                await openWorkbenchFile(services, result.uri, {
-                  clearSaveConflict: () => setSaveConflict(undefined)
-                });
-                window.setTimeout(() => editorRef.current?.scrollToLine(result.line), 0);
-              }, setOperationError, setSaveConflict);
+              void runWorkbenchAction(
+                () => openWorkbenchLineResource(services, result, lineNavigationCallbacks),
+                setOperationError,
+                setSaveConflict
+              );
             }}
             onOpenBacklink={(link) => {
-              void runWorkbenchAction(async () => {
-                await openWorkbenchFile(services, link.uri, {
-                  clearSaveConflict: () => setSaveConflict(undefined)
-                });
-                window.setTimeout(() => editorRef.current?.scrollToLine(link.line), 0);
-              }, setOperationError, setSaveConflict);
+              void runWorkbenchAction(
+                () => openWorkbenchLineResource(services, link, lineNavigationCallbacks),
+                setOperationError,
+                setSaveConflict
+              );
             }}
             onSelectTag={setSelectedTag}
             onOpenTaggedResource={(tag) => {
-              void runWorkbenchAction(async () => {
-                await openWorkbenchFile(services, tag.uri, {
-                  clearSaveConflict: () => setSaveConflict(undefined)
-                });
-                window.setTimeout(() => editorRef.current?.scrollToLine(tag.line), 0);
-              }, setOperationError, setSaveConflict);
+              void runWorkbenchAction(
+                () => openWorkbenchLineResource(services, tag, lineNavigationCallbacks),
+                setOperationError,
+                setSaveConflict
+              );
             }}
             onOpenWorkspace={() => executeCommand("file.openWorkspace")}
             onOpenRecentWorkspace={(recent) => {

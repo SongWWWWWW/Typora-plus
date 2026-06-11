@@ -4610,3 +4610,32 @@ Review:
 Known limitations:
 
 - Auto-save still relies on the shell effect dependency list for rescheduling; a future DOM-facing hook could own that if more timer-based editor workflows appear.
+
+## 2026-06-11 - P2 Workbench Line Navigation Coordinator
+
+Completed:
+
+- Added a focused Workbench line-navigation helper for immediate local line scrolling and file-resource line navigation.
+- Replaced duplicated search/backlink/tag resource open-and-scroll code in `Application.tsx`.
+- Reused the existing file-opening helper so line navigation still clears stale save conflicts and records recent files through the ordinary open path.
+- Kept deferred scrolling injectable so tests can verify that scrolling happens only after file opening has completed.
+- Added focused tests for local scrolling and deferred resource scrolling order.
+
+Quality gate:
+
+- `npx vitest run packages/workbench/src/workbenchLineNavigation.test.ts packages/workbench/src/workbenchFileOpening.test.ts`: passed, 4 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 501 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Dev server smoke check: passed at `http://127.0.0.1:5173`; status 200 and root element present
+
+Review:
+
+- Line navigation remains Workbench-local and consumes public URI, text-file, and recent-service contracts.
+- Search, backlink, and tag panels now share one resource-open-and-scroll path instead of repeating timer and save-conflict cleanup logic in JSX.
+- No new dependency, configuration key, storage path, visual token, extra documentation file, or hard-coded platform assumption was introduced.
+
+Known limitations:
+
+- Quick Open still closes itself inline after file opening; that behavior is surface-specific and can stay in the shell unless more open-and-close flows appear.
