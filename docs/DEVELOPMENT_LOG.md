@@ -4724,3 +4724,31 @@ Review:
 Known limitations:
 
 - Save-conflict dialog reload/overwrite callbacks still stay inline because they are dialog-specific and already share the existing file-opening and file-saving coordinators.
+
+## 2026-06-11 - P2 Workbench Keybinding Dispatch Coordinator
+
+Completed:
+
+- Added a focused Workbench keybinding dispatch helper for keydown listener lifecycle, keybinding resolution, default prevention, and command execution.
+- Replaced the inline `Application.tsx` window keydown effect with one registration call that receives the target, services, and shell error/conflict callbacks.
+- Kept command execution behind the existing Workbench action runner so shortcut-triggered commands still clear stale operation errors and surface save conflicts consistently.
+- Covered unmatched keybindings, matched command dispatch, default prevention, and listener disposal.
+
+Quality gate:
+
+- `npx vitest run packages/workbench/src/workbenchKeybindingDispatch.test.ts packages/workbench/src/workbenchActionRunner.test.ts packages/workbench/src/workbenchContributions.test.ts`: passed, 17 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 515 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Dev server smoke check: passed at `http://127.0.0.1:5173`; status 200 and root element present
+
+Review:
+
+- Keyboard input handling remains Workbench-local and consumes public keybinding and command service contracts without hard-coded shortcut checks in React.
+- `Application.tsx` now owns the browser target and state setters, while the helper owns dispatch policy and listener cleanup.
+- No new dependency, configuration key, storage path, visual token, extra documentation file, or hard-coded platform assumption was introduced.
+
+Known limitations:
+
+- Command Palette still closes itself inline after command execution because that focus/visibility behavior is local to the palette surface.

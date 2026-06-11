@@ -69,6 +69,7 @@ import {
   openWorkbenchLineResource,
   scrollWorkbenchLine
 } from "./workbenchLineNavigation";
+import { registerWorkbenchKeybindingDispatch } from "./workbenchKeybindingDispatch";
 import {
   createWorkbenchMenuContext,
   isWorkbenchMenuItemActive,
@@ -271,19 +272,12 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
   }, [configuration, services, workspace.files]);
 
   useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      const command = services.keybindingService.resolve(event);
+    const disposable = registerWorkbenchKeybindingDispatch(window, services, {
+      setOperationError,
+      setSaveConflict
+    });
 
-      if (!command) {
-        return;
-      }
-
-      event.preventDefault();
-      executeWorkbenchCommand(services, command, setOperationError, setSaveConflict);
-    };
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
+    return () => disposable.dispose();
   }, [services]);
 
   const editorAdapter = useMemo(
