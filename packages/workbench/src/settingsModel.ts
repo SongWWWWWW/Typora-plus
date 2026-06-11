@@ -77,6 +77,13 @@ export interface SettingsSearchResult {
   readonly visibleSections: readonly SettingsSectionId[];
 }
 
+export interface SettingsVisibilityState {
+  readonly hasResults: boolean;
+  readonly visibleEntryIds: readonly SettingsEntryId[];
+  readonly visibleSectionIds: readonly SettingsSectionId[];
+  readonly visibleSections: readonly SettingsSectionDefinition[];
+}
+
 export interface SettingsSectionDistance {
   readonly sectionId: SettingsSectionId;
   readonly distance: number;
@@ -278,6 +285,29 @@ export function createSettingsSearchResult(query: string): SettingsSearchResult 
       .map((section) => section.id)
       .filter((sectionId) => visibleSectionSet.has(sectionId))
   };
+}
+
+export function createSettingsVisibilityState(searchResult: SettingsSearchResult): SettingsVisibilityState {
+  return {
+    hasResults: searchResult.visibleSections.length > 0,
+    visibleEntryIds: searchResult.visibleEntries,
+    visibleSectionIds: searchResult.visibleSections,
+    visibleSections: settingsSections.filter((section) => searchResult.visibleSections.includes(section.id))
+  };
+}
+
+export function isSettingsSectionVisible(
+  visibility: SettingsVisibilityState,
+  sectionId: SettingsSectionId
+): boolean {
+  return visibility.visibleSectionIds.includes(sectionId);
+}
+
+export function isSettingsEntryVisible(
+  visibility: SettingsVisibilityState,
+  entryId: SettingsEntryId
+): boolean {
+  return visibility.visibleEntryIds.includes(entryId);
 }
 
 function normalizeSettingsSearchTerms(query: string): readonly string[] {

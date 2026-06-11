@@ -20,9 +20,12 @@ import {
   clampSettingNumber,
   createSettingsSearchResult,
   createSettingsThemeOptions,
+  createSettingsVisibilityState,
   defaultSettingsSectionId,
   getSettingsEntryLabel,
   getSettingsSectionTitle,
+  isSettingsEntryVisible,
+  isSettingsSectionVisible,
   megabytesToBytes,
   normalizeAssetFolderInput,
   resolveNearestSettingsSection,
@@ -34,8 +37,6 @@ import {
   settingsEntryIds,
   settingsNumberConstraints,
   settingsSectionIds,
-  settingsSections,
-  type SettingsEntryId,
   type SettingsSectionId,
   type NumberSettingConstraint
 } from "./settingsModel";
@@ -74,17 +75,9 @@ export function SettingsDialog({
   const themeOptions = useMemo(() => createSettingsThemeOptions(themes), [themes]);
   const searchMaxFileSizeMegabytes = bytesToMegabytes(configuration.workspace.searchMaxFileSizeBytes);
   const settingsSearchResult = useMemo(() => createSettingsSearchResult(settingsQuery), [settingsQuery]);
-  const visibleSettingsSectionIds = useMemo(
-    () => new Set(settingsSearchResult.visibleSections),
-    [settingsSearchResult.visibleSections]
-  );
-  const visibleSettingsEntryIds = useMemo(
-    () => new Set(settingsSearchResult.visibleEntries),
-    [settingsSearchResult.visibleEntries]
-  );
-  const visibleSettingsSections = useMemo(
-    () => settingsSections.filter((section) => visibleSettingsSectionIds.has(section.id)),
-    [visibleSettingsSectionIds]
+  const settingsVisibility = useMemo(
+    () => createSettingsVisibilityState(settingsSearchResult),
+    [settingsSearchResult]
   );
   const filteredKeybindingCommands = useMemo(
     () => filterKeybindingCommands(commands, keybindingQuery, {
@@ -172,12 +165,12 @@ export function SettingsDialog({
       return;
     }
 
-    const nextSection = resolveVisibleSettingsSection(activeSettingsSection, settingsSearchResult.visibleSections);
+    const nextSection = resolveVisibleSettingsSection(activeSettingsSection, settingsVisibility.visibleSectionIds);
 
     if (nextSection !== activeSettingsSection) {
       setActiveSettingsSection(nextSection);
     }
-  }, [activeSettingsSection, open, settingsSearchResult.visibleSections]);
+  }, [activeSettingsSection, open, settingsVisibility]);
 
   if (!open) {
     return null;
@@ -198,10 +191,6 @@ export function SettingsDialog({
     });
   };
 
-  const settingsSearchHasResults = settingsSearchResult.visibleSections.length > 0;
-  const isSettingsSectionVisible = (sectionId: SettingsSectionId) => visibleSettingsSectionIds.has(sectionId);
-  const isSettingsEntryVisible = (entryId: SettingsEntryId) => visibleSettingsEntryIds.has(entryId);
-
   const scrollToSettingsSection = (sectionId: SettingsSectionId) => {
     setActiveSettingsSection(sectionId);
     settingsContentRef.current
@@ -217,7 +206,7 @@ export function SettingsDialog({
     }
 
     const containerTop = container.getBoundingClientRect().top;
-    const distances = visibleSettingsSections.flatMap((section) => {
+    const distances = settingsVisibility.visibleSections.flatMap((section) => {
       const element = container.querySelector<HTMLElement>(`#${settingSectionAnchorId(section.id)}`);
 
       if (!element) {
@@ -275,7 +264,7 @@ export function SettingsDialog({
               ) : <span aria-hidden="true" />}
             </div>
             <nav className="tp-settings-nav" aria-label="Settings Sections">
-              {visibleSettingsSections.map((section) => (
+              {settingsVisibility.visibleSections.map((section) => (
                 <button
                   className={activeSettingsSection === section.id ? "tp-settings-nav-button tp-settings-nav-button-active" : "tp-settings-nav-button"}
                   key={section.id}
@@ -290,12 +279,12 @@ export function SettingsDialog({
             </nav>
           </aside>
           <div className="tp-settings-content" ref={settingsContentRef} onScroll={syncActiveSettingsSection}>
-            {!settingsSearchHasResults ? (
+            {!settingsVisibility.hasResults ? (
               <div className="tp-settings-empty-row">No matching settings</div>
             ) : null}
-            {isSettingsSectionVisible(settingsSectionIds.appearance) ? (
+            {isSettingsSectionVisible(settingsVisibility, settingsSectionIds.appearance) ? (
               <SettingsSection sectionId={settingsSectionIds.appearance}>
-                {isSettingsEntryVisible(settingsEntryIds.appearance.theme) ? (
+                {isSettingsEntryVisible(settingsVisibility, settingsEntryIds.appearance.theme) ? (
                   <SettingsField label={getSettingsEntryLabel(settingsEntryIds.appearance.theme)}>
                     <SegmentedControl
                       ariaLabel={getSettingsEntryLabel(settingsEntryIds.appearance.theme)}
@@ -305,7 +294,7 @@ export function SettingsDialog({
                     />
                   </SettingsField>
                 ) : null}
-                {isSettingsEntryVisible(settingsEntryIds.appearance.customTheme) ? (
+                {isSettingsEntryVisible(settingsVisibility, settingsEntryIds.appearance.customTheme) ? (
                   <SettingsField label={getSettingsEntryLabel(settingsEntryIds.appearance.customTheme)}>
                     <select
                       className="tp-settings-select"
@@ -325,7 +314,7 @@ export function SettingsDialog({
                     </select>
                   </SettingsField>
                 ) : null}
-                {isSettingsEntryVisible(settingsEntryIds.appearance.density) ? (
+                {isSettingsEntryVisible(settingsVisibility, settingsEntryIds.appearance.density) ? (
                   <SettingsField label={getSettingsEntryLabel(settingsEntryIds.appearance.density)}>
                     <SegmentedControl
                       ariaLabel={getSettingsEntryLabel(settingsEntryIds.appearance.density)}
@@ -338,9 +327,9 @@ export function SettingsDialog({
               </SettingsSection>
             ) : null}
 
-            {isSettingsSectionVisible(settingsSectionIds.editor) ? (
+            {isSettingsSectionVisible(settingsVisibility, settingsSectionIds.editor) ? (
               <SettingsSection sectionId={settingsSectionIds.editor}>
-                {isSettingsEntryVisible(settingsEntryIds.editor.autoSave) ? (
+                {isSettingsEntryVisible(settingsVisibility, settingsEntryIds.editor.autoSave) ? (
                   <SettingsField label={getSettingsEntryLabel(settingsEntryIds.editor.autoSave)}>
                     <ToggleControl
                       checked={configuration.editor.autoSave}
@@ -349,7 +338,7 @@ export function SettingsDialog({
                     />
                   </SettingsField>
                 ) : null}
-                {isSettingsEntryVisible(settingsEntryIds.editor.autoSaveDelay) ? (
+                {isSettingsEntryVisible(settingsVisibility, settingsEntryIds.editor.autoSaveDelay) ? (
                   <NumberSetting
                     label={getSettingsEntryLabel(settingsEntryIds.editor.autoSaveDelay)}
                     value={configuration.editor.autoSaveDelayMs}
@@ -358,7 +347,7 @@ export function SettingsDialog({
                     onChange={(autoSaveDelayMs) => onUpdate({ editor: { autoSaveDelayMs } })}
                   />
                 ) : null}
-                {isSettingsEntryVisible(settingsEntryIds.editor.focusMode) ? (
+                {isSettingsEntryVisible(settingsVisibility, settingsEntryIds.editor.focusMode) ? (
                   <SettingsField label={getSettingsEntryLabel(settingsEntryIds.editor.focusMode)}>
                     <ToggleControl
                       checked={configuration.editor.focusMode}
@@ -367,7 +356,7 @@ export function SettingsDialog({
                     />
                   </SettingsField>
                 ) : null}
-                {isSettingsEntryVisible(settingsEntryIds.editor.typewriterMode) ? (
+                {isSettingsEntryVisible(settingsVisibility, settingsEntryIds.editor.typewriterMode) ? (
                   <SettingsField label={getSettingsEntryLabel(settingsEntryIds.editor.typewriterMode)}>
                     <ToggleControl
                       checked={configuration.editor.typewriterMode}
@@ -376,7 +365,7 @@ export function SettingsDialog({
                     />
                   </SettingsField>
                 ) : null}
-                {isSettingsEntryVisible(settingsEntryIds.editor.fontSize) ? (
+                {isSettingsEntryVisible(settingsVisibility, settingsEntryIds.editor.fontSize) ? (
                   <NumberSetting
                     label={getSettingsEntryLabel(settingsEntryIds.editor.fontSize)}
                     value={configuration.editor.fontSize}
@@ -385,7 +374,7 @@ export function SettingsDialog({
                     onChange={(fontSize) => onUpdate({ editor: { fontSize } })}
                   />
                 ) : null}
-                {isSettingsEntryVisible(settingsEntryIds.editor.lineHeight) ? (
+                {isSettingsEntryVisible(settingsVisibility, settingsEntryIds.editor.lineHeight) ? (
                   <NumberSetting
                     label={getSettingsEntryLabel(settingsEntryIds.editor.lineHeight)}
                     value={configuration.editor.lineHeight}
@@ -393,7 +382,7 @@ export function SettingsDialog({
                     onChange={(lineHeight) => onUpdate({ editor: { lineHeight } })}
                   />
                 ) : null}
-                {isSettingsEntryVisible(settingsEntryIds.editor.maxWidth) ? (
+                {isSettingsEntryVisible(settingsVisibility, settingsEntryIds.editor.maxWidth) ? (
                   <NumberSetting
                     label={getSettingsEntryLabel(settingsEntryIds.editor.maxWidth)}
                     value={configuration.editor.maxWidth}
@@ -402,7 +391,7 @@ export function SettingsDialog({
                     onChange={(maxWidth) => onUpdate({ editor: { maxWidth } })}
                   />
                 ) : null}
-                {isSettingsEntryVisible(settingsEntryIds.editor.rendererPreviewCacheEntries) ? (
+                {isSettingsEntryVisible(settingsVisibility, settingsEntryIds.editor.rendererPreviewCacheEntries) ? (
                   <NumberSetting
                     label={getSettingsEntryLabel(settingsEntryIds.editor.rendererPreviewCacheEntries)}
                     value={configuration.editor.rendererPreviewCacheEntries}
@@ -414,9 +403,9 @@ export function SettingsDialog({
               </SettingsSection>
             ) : null}
 
-            {isSettingsSectionVisible(settingsSectionIds.workspace) ? (
+            {isSettingsSectionVisible(settingsVisibility, settingsSectionIds.workspace) ? (
               <SettingsSection sectionId={settingsSectionIds.workspace}>
-                {isSettingsEntryVisible(settingsEntryIds.workspace.defaultAssetFolder) ? (
+                {isSettingsEntryVisible(settingsVisibility, settingsEntryIds.workspace.defaultAssetFolder) ? (
                   <SettingsField label={getSettingsEntryLabel(settingsEntryIds.workspace.defaultAssetFolder)}>
                     <input
                       className="tp-settings-text-input"
@@ -433,7 +422,7 @@ export function SettingsDialog({
                     />
                   </SettingsField>
                 ) : null}
-                {isSettingsEntryVisible(settingsEntryIds.workspace.searchMaxFileSize) ? (
+                {isSettingsEntryVisible(settingsVisibility, settingsEntryIds.workspace.searchMaxFileSize) ? (
                   <NumberSetting
                     label={getSettingsEntryLabel(settingsEntryIds.workspace.searchMaxFileSize)}
                     value={searchMaxFileSizeMegabytes}
@@ -446,7 +435,7 @@ export function SettingsDialog({
                     })}
                   />
                 ) : null}
-                {isSettingsEntryVisible(settingsEntryIds.workspace.quickOpenMaxResults) ? (
+                {isSettingsEntryVisible(settingsVisibility, settingsEntryIds.workspace.quickOpenMaxResults) ? (
                   <NumberSetting
                     label={getSettingsEntryLabel(settingsEntryIds.workspace.quickOpenMaxResults)}
                     value={configuration.workspace.quickOpenMaxResults}
@@ -454,7 +443,7 @@ export function SettingsDialog({
                     onChange={(quickOpenMaxResults) => onUpdate({ workspace: { quickOpenMaxResults } })}
                   />
                 ) : null}
-                {isSettingsEntryVisible(settingsEntryIds.workspace.searchMaxResults) ? (
+                {isSettingsEntryVisible(settingsVisibility, settingsEntryIds.workspace.searchMaxResults) ? (
                   <NumberSetting
                     label={getSettingsEntryLabel(settingsEntryIds.workspace.searchMaxResults)}
                     value={configuration.workspace.searchMaxResults}
@@ -465,7 +454,7 @@ export function SettingsDialog({
               </SettingsSection>
             ) : null}
 
-            {isSettingsSectionVisible(settingsSectionIds.keybindings) ? (
+            {isSettingsSectionVisible(settingsVisibility, settingsSectionIds.keybindings) ? (
               <SettingsSection sectionId={settingsSectionIds.keybindings}>
                 <div className="tp-settings-keybinding-search">
                   <Search size={15} />

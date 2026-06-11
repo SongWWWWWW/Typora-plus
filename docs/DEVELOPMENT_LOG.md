@@ -5928,3 +5928,31 @@ Review:
 Known limitations:
 
 - Settings section content is still composed directly in React; extracting a schema-driven renderer remains a larger future step.
+
+## 2026-06-11 - P2 Settings Search Visibility Model
+
+Completed:
+
+- Added a Settings visibility state derived from search results, including visible section definitions, visible section ids, visible entry ids, and empty-result state.
+- Added focused helpers for Settings section and entry visibility checks.
+- Routed Settings dialog navigation rows, empty state, and section/entry render checks through the shared visibility state instead of local sets and filters.
+- Covered full-search, partial-search, and no-result visibility behavior with focused Settings model tests.
+
+Quality gate:
+
+- `npx vitest run packages/workbench/src/settingsModel.test.ts packages/workbench/src/workbenchConfigurationUpdates.test.ts packages/workbench/src/keybindingSettings.test.ts`: passed, 30 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 59 files / 594 tests, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Dev server smoke check: passed at `http://127.0.0.1:5173`; status 200 and root element present
+
+Review:
+
+- Settings search now produces one model-level visibility state consumed by navigation, empty-state, and field rendering.
+- `SettingsDialog` still owns the explicit field layout, but it no longer builds local visibility sets or filters section definitions itself.
+- No new dependency, configuration key, storage path, visual token, extra documentation file, or hard-coded platform assumption was introduced.
+
+Known limitations:
+
+- Settings field composition remains explicit JSX; visibility is centralized without introducing a broad schema renderer.

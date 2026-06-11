@@ -4,6 +4,7 @@ import {
   clampSettingNumber,
   createSettingsThemeOptions,
   createSettingsSearchResult,
+  createSettingsVisibilityState,
   defaultSettingsSectionId,
   defaultSettingsThemeOption,
   formatSettingsThemeOptionLabel,
@@ -11,6 +12,8 @@ import {
   getSettingsEntryLabel,
   getSettingsSectionDefinition,
   getSettingsSectionTitle,
+  isSettingsEntryVisible,
+  isSettingsSectionVisible,
   megabytesToBytes,
   normalizeAssetFolderInput,
   resolveNearestSettingsSection,
@@ -158,6 +161,25 @@ describe("settings model", () => {
     expect(result.visibleEntries).toEqual(settingsEntries.map((entry) => entry.id));
   });
 
+  it("creates settings visibility state from search results", () => {
+    const allSettings = createSettingsVisibilityState(createSettingsSearchResult(""));
+
+    expect(allSettings.hasResults).toBe(true);
+    expect(allSettings.visibleSections).toEqual(settingsSections);
+    expect(allSettings.visibleSectionIds).toEqual(settingsSections.map((section) => section.id));
+    expect(allSettings.visibleEntryIds).toEqual(settingsEntries.map((entry) => entry.id));
+    expect(isSettingsSectionVisible(allSettings, settingsSectionIds.editor)).toBe(true);
+    expect(isSettingsEntryVisible(allSettings, settingsEntryIds.editor.fontSize)).toBe(true);
+
+    const workspaceSettings = createSettingsVisibilityState(createSettingsSearchResult("workspace"));
+    expect(workspaceSettings.hasResults).toBe(true);
+    expect(workspaceSettings.visibleSections.map((section) => section.id)).toEqual([settingsSectionIds.workspace]);
+    expect(isSettingsSectionVisible(workspaceSettings, settingsSectionIds.workspace)).toBe(true);
+    expect(isSettingsSectionVisible(workspaceSettings, settingsSectionIds.editor)).toBe(false);
+    expect(isSettingsEntryVisible(workspaceSettings, settingsEntryIds.workspace.searchMaxResults)).toBe(true);
+    expect(isSettingsEntryVisible(workspaceSettings, settingsEntryIds.editor.fontSize)).toBe(false);
+  });
+
   it("matches complete sections and individual settings entries", () => {
     expect(createSettingsSearchResult("workspace").visibleEntries).toEqual([
       "workspace.defaultAssetFolder",
@@ -179,9 +201,14 @@ describe("settings model", () => {
 
   it("returns no sections when settings search has no matches", () => {
     const result = createSettingsSearchResult("does-not-exist");
+    const visibility = createSettingsVisibilityState(result);
 
     expect(result.visibleEntries).toEqual([]);
     expect(result.visibleSections).toEqual([]);
+    expect(visibility.hasResults).toBe(false);
+    expect(visibility.visibleSections).toEqual([]);
+    expect(isSettingsSectionVisible(visibility, settingsSectionIds.editor)).toBe(false);
+    expect(isSettingsEntryVisible(visibility, settingsEntryIds.editor.fontSize)).toBe(false);
   });
 
   it("resolves active settings sections against visible search results", () => {
