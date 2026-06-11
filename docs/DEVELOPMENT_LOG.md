@@ -6978,6 +6978,37 @@ Known limitations:
 - Execution result feedback is summary-level; per-operation execution status remains provider-returned operation data only.
 - Workspace context is keyword search/snippet based, not semantic or vector retrieval.
 
+## 2026-06-11 - P2 Remote Sync Summary Consistency
+
+Completed:
+
+- Added platform validation that provider-returned remote sync plan summaries match normalized operation counts.
+- Added platform validation that provider-returned remote sync execution result summaries match normalized operation counts.
+- Added provider-contract tests for mismatched plan and execution result summaries.
+- Updated maintained docs to record the provider-neutral summary consistency requirement.
+
+Quality gate:
+
+- `npx vitest run packages/platform/src/remoteSync.test.ts packages/platform/src/platform.test.ts packages/platform/src/extensionHostProtocolRuntime.test.ts packages/platform/src/extensionHostRuntimeBroker.test.ts`: passed, 4 files / 138 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 75 files / 700 tests, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Dev server smoke check at `http://127.0.0.1:5173/`: status 200 and root element present
+
+Review:
+
+- The contract remains provider-neutral and does not introduce Feishu provider ids, endpoints, OAuth scopes, tokens, storage paths, credentials, or model ids.
+- Workbench and extension brokers only consume provider results after platform normalization verifies summary counts against operation data.
+- The validation uses the existing operation summarizer, so future operation kinds continue to share one counting path.
+
+Known limitations:
+
+- Feishu OAuth and a built-in Feishu provider remain future work.
+- Remote sync progress streaming and richer conflict-resolution UI are still not implemented.
+- Execution result operations are provider-returned final state, not live progress events.
+- Workspace AI context is keyword/snippet based, not semantic or vector retrieval.
+
 ## 2026-06-11 - P2 Remote Sync Execution Operation Feedback
 
 Completed:

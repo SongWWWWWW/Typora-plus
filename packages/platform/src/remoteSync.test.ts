@@ -243,6 +243,42 @@ describe("remote sync service", () => {
         return result();
       }
     });
+    service.registerProvider({
+      id: "bad.summary",
+      title: "Bad Summary",
+      createPlan() {
+        return {
+          operations: [{
+            kind: "skip",
+            target: "none",
+            relativePath: "a.md"
+          }],
+          summary: {
+            creates: 1,
+            updates: 0,
+            deletes: 0,
+            skips: 0,
+            conflicts: 0
+          }
+        };
+      },
+      executePlan() {
+        return {
+          operations: [{
+            kind: "update",
+            target: "remote",
+            relativePath: "a.md"
+          }],
+          summary: {
+            creates: 0,
+            updates: 0,
+            deletes: 0,
+            skips: 1,
+            conflicts: 0
+          }
+        };
+      }
+    });
 
     await expect(service.createPlan("bad.result", request({
       direction: "sideways" as never
@@ -260,6 +296,10 @@ describe("remote sync service", () => {
       .toThrow("Remote sync operation target must be local, remote, both, or none");
     await expect(service.executePlan("bad.result", plan(), request())).rejects
       .toThrow("Remote sync summary creates must be a non-negative integer");
+    await expect(service.createPlan("bad.summary", request())).rejects
+      .toThrow("Remote sync plan summary creates must match operation count");
+    await expect(service.executePlan("bad.summary", plan(), request())).rejects
+      .toThrow("Remote sync result summary updates must match operation count");
   });
 
   it("creates normalized sync resources from workspace files", () => {

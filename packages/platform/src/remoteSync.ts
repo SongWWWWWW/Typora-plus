@@ -448,22 +448,44 @@ function normalizeRemoteSyncRemoteResources(value: unknown): readonly RemoteSync
 
 function normalizeRemoteSyncPlan(plan: RemoteSyncPlan): RemoteSyncPlan {
   const record = expectRecord(plan, "Remote sync plan");
+  const operations = normalizeRemoteSyncOperations(record.operations);
+  const summary = normalizeRemoteSyncSummary(record.summary);
+
+  assertRemoteSyncSummaryMatchesOperations(summary, operations, "Remote sync plan summary");
 
   return {
-    operations: normalizeRemoteSyncOperations(record.operations),
-    summary: normalizeRemoteSyncSummary(record.summary)
+    operations,
+    summary
   };
 }
 
 function normalizeRemoteSyncResult(result: RemoteSyncResult): RemoteSyncResult {
   const record = expectRecord(result, "Remote sync result");
   const completedAt = readOptionalFiniteNumber(record.completedAt, "Remote sync completed timestamp");
+  const operations = normalizeRemoteSyncOperations(record.operations);
+  const summary = normalizeRemoteSyncSummary(record.summary);
+
+  assertRemoteSyncSummaryMatchesOperations(summary, operations, "Remote sync result summary");
 
   return {
-    operations: normalizeRemoteSyncOperations(record.operations),
-    summary: normalizeRemoteSyncSummary(record.summary),
+    operations,
+    summary,
     ...(completedAt !== undefined ? { completedAt } : {})
   };
+}
+
+function assertRemoteSyncSummaryMatchesOperations(
+  summary: RemoteSyncSummary,
+  operations: readonly RemoteSyncOperation[],
+  label: string
+): void {
+  const expected = summarizeRemoteSyncOperations(operations);
+
+  for (const key of Object.keys(expected) as (keyof RemoteSyncSummary)[]) {
+    if (summary[key] !== expected[key]) {
+      throw new Error(`${label} ${key} must match operation count`);
+    }
+  }
 }
 
 function normalizeRemoteSyncOperations(value: unknown): readonly RemoteSyncOperation[] {
