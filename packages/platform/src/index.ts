@@ -21,6 +21,7 @@ export * from "./instantiation";
 export * from "./keybindings";
 export * from "./markdownRenderers";
 export * from "./menus";
+export * from "./remoteSync";
 export * from "./recents";
 export * from "./resources";
 export * from "./textFile";

@@ -1,0 +1,403 @@
+import { toDisposable, type IDisposable, type URI as URIType } from "@typora-plus/base";
+import { createServiceIdentifier } from "./instantiation";
+import type { FileKind } from "./files";
+
+export type RemoteSyncProviderId = string;
+export type RemoteSyncDirection = "push" | "pull" | "bidirectional";
+export type RemoteSyncOperationKind = "create" | "update" | "delete" | "skip" | "conflict";
+
+export interface RemoteSyncResource {
+  readonly uri: URIType;
+  readonly relativePath: string;
+  readonly kind: FileKind;
+  readonly name?: string;
+  readonly size?: number;
+  readonly mtime?: number;
+  readonly contentHash?: string;
+}
+
+export interface RemoteSyncPlanRequest {
+  readonly workspaceUri: URIType;
+  readonly resources: readonly RemoteSyncResource[];
+  readonly direction: RemoteSyncDirection;
+  readonly remoteScopeId?: string;
+  readonly dryRun?: boolean;
+  readonly metadata?: Readonly<Record<string, string>>;
+  readonly signal?: AbortSignal;
+}
+
+export interface RemoteSyncOperation {
+  readonly kind: RemoteSyncOperationKind;
+  readonly relativePath: string;
+  readonly localUri?: URIType;
+  readonly remoteId?: string;
+  readonly message?: string;
+}
+
+export interface RemoteSyncSummary {
+  readonly creates: number;
+  readonly updates: number;
+  readonly deletes: number;
+  readonly skips: number;
+  readonly conflicts: number;
+}
+
+export interface RemoteSyncPlan {
+  readonly operations: readonly RemoteSyncOperation[];
+  readonly summary: RemoteSyncSummary;
+}
+
+export interface RemoteSyncResult {
+  readonly operations: readonly RemoteSyncOperation[];
+  readonly summary: RemoteSyncSummary;
+  readonly completedAt?: number;
+}
+
+export interface RemoteSyncProvider {
+  readonly id: RemoteSyncProviderId;
+  readonly title: string;
+  createPlan(request: RemoteSyncPlanRequest): RemoteSyncPlan | Promise<RemoteSyncPlan>;
+  executePlan(plan: RemoteSyncPlan, request: RemoteSyncPlanRequest): RemoteSyncResult | Promise<RemoteSyncResult>;
+}
+
+export interface RegisteredRemoteSyncProvider {
+  readonly id: RemoteSyncProviderId;
+  readonly title: string;
+}
+
+export interface IRemoteSyncService {
+  registerProvider(provider: RemoteSyncProvider): IDisposable;
+  getProviders(): readonly RegisteredRemoteSyncProvider[];
+  createPlan(providerId: RemoteSyncProviderId, request: RemoteSyncPlanRequest): Promise<RemoteSyncPlan>;
+  executePlan(
+    providerId: RemoteSyncProviderId,
+    plan: RemoteSyncPlan,
+    request: RemoteSyncPlanRequest
+  ): Promise<RemoteSyncResult>;
+}
+
+export const IRemoteSyncService = createServiceIdentifier<IRemoteSyncService>("remoteSync");
+
+export class RemoteSyncService implements IRemoteSyncService {
+  private readonly providers = new Map<RemoteSyncProviderId, RemoteSyncProvider>();
+
+  registerProvider(provider: RemoteSyncProvider): IDisposable {
+    const normalizedProvider = normalizeRemoteSyncProvider(provider);
+
+    if (this.providers.has(normalizedProvider.id)) {
+      throw new Error(`Remote sync provider already registered: ${normalizedProvider.id}`);
+    }
+
+    this.providers.set(normalizedProvider.id, normalizedProvider);
+    return toDisposable(() => {
+      if (this.providers.get(normalizedProvider.id) === normalizedProvider) {
+        this.providers.delete(normalizedProvider.id);
+      }
+    });
+  }
+
+  getProviders(): readonly RegisteredRemoteSyncProvider[] {
+    return [...this.providers.values()]
+      .map((provider) => ({ id: provider.id, title: provider.title }))
+      .sort((first, second) => first.title.localeCompare(second.title) || first.id.localeCompare(second.id));
+  }
+
+  async createPlan(providerId: RemoteSyncProviderId, request: RemoteSyncPlanRequest): Promise<RemoteSyncPlan> {
+    const provider = this.getProvider(providerId);
+    return normalizeRemoteSyncPlan(await provider.createPlan(normalizeRemoteSyncPlanRequest(request)));
+  }
+
+  async executePlan(
+    providerId: RemoteSyncProviderId,
+    plan: RemoteSyncPlan,
+    request: RemoteSyncPlanRequest
+  ): Promise<RemoteSyncResult> {
+    const provider = this.getProvider(providerId);
+    const normalizedPlan = normalizeRemoteSyncPlan(plan);
+    const normalizedRequest = normalizeRemoteSyncPlanRequest(request);
+
+    return normalizeRemoteSyncResult(await provider.executePlan(normalizedPlan, normalizedRequest));
+  }
+
+  private getProvider(providerId: RemoteSyncProviderId): RemoteSyncProvider {
+    const normalizedProviderId = readRequiredString(providerId, "Remote sync provider id");
+    const provider = this.providers.get(normalizedProviderId);
+
+    if (!provider) {
+      throw new Error(`No remote sync provider registered: ${normalizedProviderId}`);
+    }
+
+    return provider;
+  }
+}
+
+function normalizeRemoteSyncProvider(provider: RemoteSyncProvider): RemoteSyncProvider {
+  const record = expectRecord(provider, "Remote sync provider");
+  const id = readRequiredString(record.id, "Remote sync provider id");
+  const title = readRequiredString(record.title, `Remote sync provider title for ${id}`);
+
+  if (typeof provider.createPlan !== "function") {
+    throw new Error(`Remote sync provider for ${id} must provide createPlan`);
+  }
+
+  if (typeof provider.executePlan !== "function") {
+    throw new Error(`Remote sync provider for ${id} must provide executePlan`);
+  }
+
+  return {
+    id,
+    title,
+    createPlan: (request) => provider.createPlan(request),
+    executePlan: (plan, request) => provider.executePlan(plan, request)
+  };
+}
+
+function normalizeRemoteSyncPlanRequest(request: RemoteSyncPlanRequest): RemoteSyncPlanRequest {
+  const record = expectRecord(request, "Remote sync plan request");
+  const resources = normalizeRemoteSyncResources(record.resources);
+  const direction = normalizeRemoteSyncDirection(record.direction);
+  const remoteScopeId = readOptionalString(record.remoteScopeId, "Remote sync scope id");
+  const metadata = normalizeRemoteSyncMetadata(record.metadata);
+
+  return {
+    workspaceUri: readRequiredUri(record.workspaceUri, "Remote sync workspace URI"),
+    resources,
+    direction,
+    ...(remoteScopeId ? { remoteScopeId } : {}),
+    ...(typeof record.dryRun === "boolean" ? { dryRun: record.dryRun } : {}),
+    ...(metadata !== undefined ? { metadata } : {}),
+    ...(record.signal !== undefined ? { signal: record.signal as AbortSignal } : {})
+  };
+}
+
+function normalizeRemoteSyncResources(value: unknown): readonly RemoteSyncResource[] {
+  if (!Array.isArray(value)) {
+    throw new Error("Remote sync resources must be an array");
+  }
+
+  return value.map((resource, index) => {
+    const record = expectRecord(resource, `Remote sync resource ${index}`);
+    const relativePath = normalizeRelativePath(record.relativePath, `Remote sync resource ${index} relative path`);
+    const name = readOptionalString(record.name, `Remote sync resource ${index} name`);
+    const contentHash = readOptionalString(record.contentHash, `Remote sync resource ${index} content hash`);
+
+    return {
+      uri: readRequiredUri(record.uri, `Remote sync resource ${index} URI`),
+      relativePath,
+      kind: normalizeFileKind(record.kind, `Remote sync resource ${index} kind`),
+      ...(name ? { name } : {}),
+      ...readOptionalNonNegativeNumber("size", record.size, `Remote sync resource ${index} size`),
+      ...readOptionalNonNegativeNumber("mtime", record.mtime, `Remote sync resource ${index} mtime`),
+      ...(contentHash ? { contentHash } : {})
+    };
+  });
+}
+
+function normalizeRemoteSyncPlan(plan: RemoteSyncPlan): RemoteSyncPlan {
+  const record = expectRecord(plan, "Remote sync plan");
+
+  return {
+    operations: normalizeRemoteSyncOperations(record.operations),
+    summary: normalizeRemoteSyncSummary(record.summary)
+  };
+}
+
+function normalizeRemoteSyncResult(result: RemoteSyncResult): RemoteSyncResult {
+  const record = expectRecord(result, "Remote sync result");
+  const completedAt = readOptionalFiniteNumber(record.completedAt, "Remote sync completed timestamp");
+
+  return {
+    operations: normalizeRemoteSyncOperations(record.operations),
+    summary: normalizeRemoteSyncSummary(record.summary),
+    ...(completedAt !== undefined ? { completedAt } : {})
+  };
+}
+
+function normalizeRemoteSyncOperations(value: unknown): readonly RemoteSyncOperation[] {
+  if (!Array.isArray(value)) {
+    throw new Error("Remote sync operations must be an array");
+  }
+
+  return value.map((operation, index) => {
+    const record = expectRecord(operation, `Remote sync operation ${index}`);
+    const remoteId = readOptionalString(record.remoteId, `Remote sync operation ${index} remote id`);
+    const message = readOptionalString(record.message, `Remote sync operation ${index} message`);
+
+    return {
+      kind: normalizeRemoteSyncOperationKind(record.kind),
+      relativePath: normalizeRelativePath(record.relativePath, `Remote sync operation ${index} relative path`),
+      ...(record.localUri !== undefined
+        ? { localUri: readRequiredUri(record.localUri, `Remote sync operation ${index} local URI`) }
+        : {}),
+      ...(remoteId ? { remoteId } : {}),
+      ...(message ? { message } : {})
+    };
+  });
+}
+
+function normalizeRemoteSyncSummary(value: unknown): RemoteSyncSummary {
+  const record = expectRecord(value, "Remote sync summary");
+
+  return {
+    creates: readSummaryCount(record.creates, "creates"),
+    updates: readSummaryCount(record.updates, "updates"),
+    deletes: readSummaryCount(record.deletes, "deletes"),
+    skips: readSummaryCount(record.skips, "skips"),
+    conflicts: readSummaryCount(record.conflicts, "conflicts")
+  };
+}
+
+function normalizeRemoteSyncMetadata(value: unknown): Readonly<Record<string, string>> | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  const record = expectRecord(value, "Remote sync metadata");
+  const metadata: Record<string, string> = {};
+
+  for (const [key, metadataValue] of Object.entries(record)) {
+    const normalizedKey = key.trim();
+
+    if (!normalizedKey) {
+      throw new Error("Remote sync metadata keys must not be empty");
+    }
+
+    metadata[normalizedKey] = readString(metadataValue, `Remote sync metadata ${normalizedKey}`);
+  }
+
+  return metadata;
+}
+
+function normalizeRemoteSyncDirection(value: unknown): RemoteSyncDirection {
+  if (value !== "push" && value !== "pull" && value !== "bidirectional") {
+    throw new Error("Remote sync direction must be push, pull, or bidirectional");
+  }
+
+  return value;
+}
+
+function normalizeRemoteSyncOperationKind(value: unknown): RemoteSyncOperationKind {
+  if (value !== "create" && value !== "update" && value !== "delete" && value !== "skip" && value !== "conflict") {
+    throw new Error("Remote sync operation kind must be create, update, delete, skip, or conflict");
+  }
+
+  return value;
+}
+
+function normalizeFileKind(value: unknown, label: string): FileKind {
+  if (value !== "file" && value !== "directory") {
+    throw new Error(`${label} must be file or directory`);
+  }
+
+  return value;
+}
+
+function normalizeRelativePath(value: unknown, label: string): string {
+  const normalized = readRequiredString(value, label).replaceAll("\\", "/");
+
+  if (normalized.startsWith("/") || /^[a-z][a-z0-9+.-]*:/i.test(normalized)) {
+    throw new Error(`${label} must be workspace-relative`);
+  }
+
+  const segments: string[] = [];
+
+  for (const segment of normalized.split("/")) {
+    if (!segment || segment === ".") {
+      continue;
+    }
+
+    if (segment === "..") {
+      throw new Error(`${label} must not contain parent traversal`);
+    }
+
+    segments.push(segment);
+  }
+
+  const relativePath = segments.join("/");
+
+  if (!relativePath) {
+    throw new Error(`${label} must not be empty`);
+  }
+
+  return relativePath;
+}
+
+function readRequiredUri(value: unknown, label: string): URIType {
+  if (typeof value !== "object" || value === null || typeof (value as { toString?: unknown }).toString !== "function") {
+    throw new Error(`${label} must be a URI`);
+  }
+
+  return value as URIType;
+}
+
+function readOptionalNonNegativeNumber<Key extends string>(
+  key: Key,
+  value: unknown,
+  label: string
+): Partial<Record<Key, number>> {
+  if (value === undefined) {
+    return {};
+  }
+
+  const normalizedValue = readOptionalFiniteNumber(value, label);
+
+  if (normalizedValue === undefined || normalizedValue < 0) {
+    throw new Error(`${label} must be a non-negative finite number`);
+  }
+
+  return { [key]: normalizedValue } as Partial<Record<Key, number>>;
+}
+
+function readOptionalFiniteNumber(value: unknown, label: string): number | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    throw new Error(`${label} must be a finite number`);
+  }
+
+  return value;
+}
+
+function readSummaryCount(value: unknown, key: keyof RemoteSyncSummary): number {
+  if (typeof value !== "number" || !Number.isInteger(value) || value < 0) {
+    throw new Error(`Remote sync summary ${key} must be a non-negative integer`);
+  }
+
+  return value;
+}
+
+function expectRecord(value: unknown, label: string): Record<string, unknown> {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw new Error(`${label} must be an object`);
+  }
+
+  return value as Record<string, unknown>;
+}
+
+function readRequiredString(value: unknown, label: string): string {
+  const normalized = readString(value, label).trim();
+
+  if (!normalized) {
+    throw new Error(`${label} must not be empty`);
+  }
+
+  return normalized;
+}
+
+function readString(value: unknown, label: string): string {
+  if (typeof value !== "string") {
+    throw new Error(`${label} must be a string`);
+  }
+
+  return value;
+}
+
+function readOptionalString(value: unknown, label: string): string | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  return readString(value, label).trim() || undefined;
+}

@@ -6040,3 +6040,32 @@ Known limitations:
 
 - No built-in AI provider, UI command, secret storage, or OpenAI/Codex runtime bridge is wired yet.
 - Workspace-grounded prompts still need an adapter that selects context through `IIndexService` before calling `IAiService`.
+
+## 2026-06-11 - P2 Remote Sync Provider Service Boundary
+
+Completed:
+
+- Added a platform `IRemoteSyncService` with provider registration, provider metadata listing, plan creation, plan execution delegation, and disposable unregister behavior.
+- Added normalized remote sync request, resource, operation, summary, plan, and result contracts for workspace-relative cloud mirroring flows.
+- Kept Feishu, OAuth, upload endpoints, network behavior, and credential storage out of UI code and out of platform defaults.
+- Exported the remote sync service from the platform package and covered delegation, sorting, duplicate rejection, unregister behavior, path safety, direction validation, and result validation with focused tests.
+
+Quality gate:
+
+- `npx vitest run packages/platform/src/remoteSync.test.ts`: passed, 4 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 61 files / 605 tests, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Dev server smoke check: passed at `http://127.0.0.1:5173`; status 200 and root element present
+
+Review:
+
+- Remote sync now has the same provider-backed shape used by export, Markdown renderer, and AI services.
+- The service validates workspace-relative resource paths and normalized operation summaries before future providers expose plans to Workbench surfaces.
+- No new dependency, configuration key, storage path, visual token, extra documentation file, or hard-coded platform assumption was introduced.
+
+Known limitations:
+
+- No built-in Feishu provider, OAuth flow, Electron network bridge, remote state cache, or sync UI is wired yet.
+- Conflict resolution is represented in plans/results but not yet connected to Workbench dialogs or local file writes.
