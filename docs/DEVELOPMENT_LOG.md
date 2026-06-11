@@ -7717,4 +7717,35 @@ Review:
 Known limitations:
 
 - No concrete Feishu/raw-mirror adapter is implemented yet.
-- Native remote sync still lacks a trusted workspace binary read/write/delete boundary for full Markdown assets mirroring.
+- No concrete adapter consumes multipart yet, so upload semantics remain injected by future provider work.
+
+## 2026-06-12 - P2 Remote Sync Trusted Workspace Resource Bridge
+
+Completed:
+
+- Added `IRemoteSyncWorkspaceResourceService` and a native bridge-backed implementation for provider-neutral workspace resource read/write/delete operations.
+- Serialized workspace URI plus normalized workspace-relative paths through the platform boundary before native IPC calls.
+- Added Electron preload and main-process IPC for reading base64 file content, writing bounded base64 file content, and deleting files inside the active trusted workspace.
+- Rejected ignored-directory paths, symlink/realpath escapes, invalid base64 payloads, oversized content, directory targets, and stale writes/deletes before disk mutation.
+- Kept remote sync resource access separate from ordinary Markdown editing so future adapters can mirror Markdown assets without relaxing `IFileService`'s Markdown-only text boundary.
+- Registered the new service in Workbench's service collection without adding a concrete Feishu provider or UI-owned filesystem behavior.
+
+Quality gate:
+
+- `npx vitest run packages/platform/src/remoteSyncWorkspaceResources.test.ts`: passed, 1 file / 6 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 83 files / 789 tests, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Trusted workspace resource bridge hardcode scan for Feishu endpoints, OAuth scopes, token/secret names, model ids, provider ids, and credential literals: passed
+
+Review:
+
+- The bridge is provider-neutral: callers supply workspace-relative paths and base64 content only; no provider ids, endpoint paths, OAuth scopes, token names, folder ids, or retry policy defaults were added.
+- Electron owns active-workspace verification, ignored-directory rejection, path traversal rejection, symlink/realpath containment, size limits, base64 validation, directory rejection, and stale-write/delete checks before touching disk.
+- The change removes the previous blocker for raw Markdown/assets mirroring prerequisites while preserving the existing Markdown-only `IFileService` editing contract.
+
+Known limitations:
+
+- No concrete Feishu/raw-mirror adapter consumes the bridge yet.
+- The bridge moves file content but does not compute content hashes or discover Markdown-linked assets; those remain future provider/resource-collection work.

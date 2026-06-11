@@ -40,6 +40,12 @@ interface Window {
       request(request: unknown): Promise<unknown>;
       cancel(requestId: string): void;
     };
+    readonly remoteSyncWorkspaceResources?: {
+      readonly isAvailable: boolean;
+      readResource(request: unknown): Promise<unknown>;
+      writeResource(request: unknown): Promise<unknown>;
+      deleteResource(request: unknown): Promise<boolean>;
+    };
     readonly documentExport?: {
       readonly isAvailable: boolean;
       saveDocument(document: unknown): Promise<boolean>;

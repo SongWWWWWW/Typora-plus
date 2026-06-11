@@ -23,6 +23,7 @@ import {
   IRecentService,
   IResourceService,
   IRemoteSyncService,
+  IRemoteSyncWorkspaceResourceService,
   ITextFileService,
   IThemeService,
   IWorkspaceService,
@@ -31,6 +32,7 @@ import {
   MenuService,
   NativeAttachmentService,
   NativeFileService,
+  NativeRemoteSyncWorkspaceResourceService,
   NativeResourceService,
   PersistedWorkspaceIndexProvider,
   RecentService,
@@ -58,6 +60,7 @@ import {
   type IRecentService as RecentServiceContract,
   type IResourceService as ResourceServiceContract,
   type IRemoteSyncService as RemoteSyncServiceContract,
+  type IRemoteSyncWorkspaceResourceService as RemoteSyncWorkspaceResourceServiceContract,
   type ITextFileService as TextFileServiceContract,
   type IThemeService as ThemeServiceContract,
   type IWorkspaceService as WorkspaceServiceContract
@@ -88,6 +91,7 @@ export interface WorkbenchServices {
   readonly menuService: MenuServiceContract;
   readonly recentService: RecentServiceContract;
   readonly remoteSyncService: RemoteSyncServiceContract;
+  readonly remoteSyncWorkspaceResourceService: RemoteSyncWorkspaceResourceServiceContract;
   readonly resourceService: ResourceServiceContract;
   readonly textFileService: TextFileServiceContract;
   readonly themeService: ThemeServiceContract;
@@ -110,6 +114,7 @@ export function createWorkbenchServices(): WorkbenchServices {
   const contextKeyService = new ContextKeyService();
   const themeService = new ThemeService();
   const remoteSyncService = new RemoteSyncService();
+  const remoteSyncWorkspaceResourceService = new NativeRemoteSyncWorkspaceResourceService();
   const extensionHostService = new ExtensionHostService();
   const markdownRendererService = new MarkdownRendererService({
     activationHandler: async (rendererId) => {
@@ -158,6 +163,7 @@ export function createWorkbenchServices(): WorkbenchServices {
   serviceCollection.set(IMenuService, menuService);
   serviceCollection.set(IRecentService, recentService);
   serviceCollection.set(IRemoteSyncService, remoteSyncService);
+  serviceCollection.set(IRemoteSyncWorkspaceResourceService, remoteSyncWorkspaceResourceService);
   serviceCollection.set(IResourceService, resourceService);
   serviceCollection.set(IThemeService, themeService);
   serviceCollection.set(IWorkspaceService, workspaceService);
@@ -215,6 +221,7 @@ export function createWorkbenchServices(): WorkbenchServices {
     menuService,
     recentService,
     remoteSyncService,
+    remoteSyncWorkspaceResourceService,
     resourceService,
     textFileService,
     themeService,

@@ -53,6 +53,15 @@ contextBridge.exposeInMainWorld("typoraPlus", {
     request: (request: unknown) => ipcRenderer.invoke(nativeRemoteSyncRequestIpcChannels.request, request),
     cancel: (requestId: string) => ipcRenderer.send(nativeRemoteSyncRequestIpcChannels.cancel, requestId)
   },
+  remoteSyncWorkspaceResources: {
+    isAvailable: true,
+    readResource: (request: unknown) =>
+      ipcRenderer.invoke(nativeFileIpcChannels.remoteSyncReadResource, request),
+    writeResource: (request: unknown) =>
+      ipcRenderer.invoke(nativeFileIpcChannels.remoteSyncWriteResource, request),
+    deleteResource: (request: unknown) =>
+      ipcRenderer.invoke(nativeFileIpcChannels.remoteSyncDeleteResource, request)
+  },
   documentExport: {
     isAvailable: true,
     saveDocument: (document: unknown) => ipcRenderer.invoke(nativeExportIpcChannels.saveDocument, document)

@@ -59,9 +59,12 @@ Current services:
 - `IMarkdownRendererService`: registered Markdown renderer metadata, provider lifecycle, rendering delegation, and change events
 - `IAiService`: registered AI providers and normalized text request delegation for future writing-assistant, workspace-grounded, OpenAI, Codex, or local-model integrations
 - `IRemoteSyncService`: registered remote sync providers, workspace sync planning, execution-side classification, execution delegation, extension/runtime provider registration, and normalized conflict/reporting metadata for future Feishu Drive or other cloud integrations
+- `IRemoteSyncWorkspaceResourceService`: provider-neutral read/write/delete access to bounded file content in the active trusted workspace for future remote sync adapters
 - `IThemeService`: registered theme contributions, theme change events, and theme token validation
 
 Remote sync native requests support UTF-8/base64 bodies and structured multipart text/file parts. The renderer passes multipart parts as data, not prebuilt `FormData`; Electron validates part counts, field names, file names, content types, decoded request size, secret bindings, and caller headers before constructing `FormData` in the main process. Multipart requests cannot also provide raw bodies, JSON secret fields, `bodyEncoding`, or caller-owned `Content-Type`, so future upload adapters do not own multipart boundary generation or secret injection policy.
+
+Remote sync workspace resource access is a separate native bridge from ordinary Markdown file editing. Providers pass a workspace URI plus a workspace-relative path and base64 content through `IRemoteSyncWorkspaceResourceService`; Electron verifies the workspace is the active trusted root, rejects absolute paths, URI schemes, parent traversal, ignored-directory segments, symlink/realpath escapes, oversized resources, directories, invalid base64, and stale writes/deletes before reading, writing, or unlinking a file. This keeps future upload/download adapters from using unrestricted filesystem APIs while still allowing Markdown assets and raw mirrored files to move through a bounded service.
 
 Native workspace trust is owned by the Electron main process. The renderer may request a recent workspace by URI, but the main process only opens paths previously selected through the native directory picker and recorded in the main-process trust store.
 

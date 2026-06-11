@@ -55,6 +55,7 @@ export const desktopShellConfig = {
     maxDepth: 8,
     maxFiles: 5000,
     maxImagePreviewBytes: 5 * 1024 * 1024,
+    maxRemoteSyncResourceBytes: 25 * 1024 * 1024,
     maxTrustedWorkspaces: 40,
     defaultAssetFolder: "assets",
     imagePreviewExtensions: [".png", ".jpg", ".jpeg", ".webp", ".gif", ".svg"],

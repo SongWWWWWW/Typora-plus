@@ -1,4 +1,4 @@
-import { watch, type FSWatcher } from "node:fs";
+import { watch, type FSWatcher, type Stats } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { app, BrowserWindow, dialog, ipcMain, type OpenDialogOptions, type SaveDialogOptions } from "electron";
@@ -12,13 +12,17 @@ export const nativeFileIpcChannels = {
   resolveImageResource: "typora-plus:resource:image",
   writeFile: "typora-plus:file:write",
   saveFileAs: "typora-plus:file:saveAs",
-  saveAttachment: "typora-plus:attachment:save"
+  saveAttachment: "typora-plus:attachment:save",
+  remoteSyncReadResource: "typora-plus:remote-sync-resource:read",
+  remoteSyncWriteResource: "typora-plus:remote-sync-resource:write",
+  remoteSyncDeleteResource: "typora-plus:remote-sync-resource:delete"
 } as const;
 
 export interface NativeWorkspaceConfig {
   readonly maxDepth: number;
   readonly maxFiles: number;
   readonly maxImagePreviewBytes: number;
+  readonly maxRemoteSyncResourceBytes: number;
   readonly maxTrustedWorkspaces: number;
   readonly defaultAssetFolder: string;
   readonly imagePreviewExtensions: readonly string[];
@@ -74,6 +78,43 @@ interface SerializedResolvedImageResource {
   readonly dataUrl: string;
   readonly mimeType: string;
   readonly source: string;
+}
+
+interface SerializedRemoteSyncWorkspaceResourceReadRequest {
+  readonly workspaceUri: string;
+  readonly relativePath: string;
+}
+
+interface SerializedRemoteSyncWorkspaceResourceWriteRequest {
+  readonly workspaceUri: string;
+  readonly relativePath: string;
+  readonly value: string;
+  readonly encoding: "base64";
+  readonly expectedMtime?: number;
+  readonly overwrite?: boolean;
+}
+
+interface SerializedRemoteSyncWorkspaceResourceDeleteRequest {
+  readonly workspaceUri: string;
+  readonly relativePath: string;
+  readonly expectedMtime?: number;
+  readonly overwrite?: boolean;
+}
+
+interface SerializedRemoteSyncWorkspaceResourceReadResult {
+  readonly workspaceUri: string;
+  readonly relativePath: string;
+  readonly value: string;
+  readonly encoding: "base64";
+  readonly size: number;
+  readonly mtime?: number;
+}
+
+interface SerializedRemoteSyncWorkspaceResourceWriteResult {
+  readonly workspaceUri: string;
+  readonly relativePath: string;
+  readonly size: number;
+  readonly mtime?: number;
 }
 
 const workspaceWatchDebounceMs = 180;
@@ -319,6 +360,104 @@ export function registerNativeFileIpc(config: NativeWorkspaceConfig): void {
         relativePath,
         markdown: `![${markdownAltText(image.name)}](${encodeMarkdownPath(relativePath)})`
       } satisfies SerializedSavedAttachment;
+    }
+  );
+
+  ipcMain.handle(
+    nativeFileIpcChannels.remoteSyncReadResource,
+    async (_event, request: SerializedRemoteSyncWorkspaceResourceReadRequest) => {
+      const resource = resolveRemoteSyncWorkspaceResourcePath(request, workspaceRoot, config);
+      const stat = await statRemoteSyncWorkspaceFile(resource.filePath, resource.workspaceRoot);
+
+      if (stat.size > config.maxRemoteSyncResourceBytes) {
+        throw new Error("Remote sync workspace resource is too large");
+      }
+
+      const value = await fs.readFile(resource.filePath);
+
+      if (value.byteLength > config.maxRemoteSyncResourceBytes) {
+        throw new Error("Remote sync workspace resource is too large");
+      }
+
+      return {
+        workspaceUri: fileUri(resource.workspaceRoot),
+        relativePath: resource.relativePath,
+        value: value.toString("base64"),
+        encoding: "base64",
+        size: stat.size,
+        mtime: stat.mtimeMs
+      } satisfies SerializedRemoteSyncWorkspaceResourceReadResult;
+    }
+  );
+
+  ipcMain.handle(
+    nativeFileIpcChannels.remoteSyncWriteResource,
+    async (_event, request: SerializedRemoteSyncWorkspaceResourceWriteRequest) => {
+      const resource = resolveRemoteSyncWorkspaceResourcePath(request, workspaceRoot, config);
+      const value = decodeRemoteSyncWorkspaceResourceValue(request);
+
+      if (value.byteLength > config.maxRemoteSyncResourceBytes) {
+        throw new Error("Remote sync workspace resource is too large");
+      }
+
+      const beforeWrite = await lstatIfExists(resource.filePath);
+
+      if (beforeWrite?.isSymbolicLink()) {
+        throw new Error("Remote sync workspace resource must not be a symbolic link");
+      }
+
+      if (beforeWrite?.isDirectory()) {
+        throw new Error("Remote sync workspace resource must be a file");
+      }
+
+      if (beforeWrite && hasSaveConflict(beforeWrite.mtimeMs, request)) {
+        throw new Error("Remote sync workspace resource changed on disk");
+      }
+
+      await fs.mkdir(path.dirname(resource.filePath), { recursive: true });
+      await assertRemoteSyncWorkspaceRealPathInside(path.dirname(resource.filePath), resource.workspaceRoot);
+      await fs.writeFile(resource.filePath, value);
+      allowedFiles.add(resource.filePath);
+      scheduleWorkspaceChange();
+
+      const stat = await statRemoteSyncWorkspaceFile(resource.filePath, resource.workspaceRoot);
+      return {
+        workspaceUri: fileUri(resource.workspaceRoot),
+        relativePath: resource.relativePath,
+        size: stat.size,
+        mtime: stat.mtimeMs
+      } satisfies SerializedRemoteSyncWorkspaceResourceWriteResult;
+    }
+  );
+
+  ipcMain.handle(
+    nativeFileIpcChannels.remoteSyncDeleteResource,
+    async (_event, request: SerializedRemoteSyncWorkspaceResourceDeleteRequest) => {
+      const resource = resolveRemoteSyncWorkspaceResourcePath(request, workspaceRoot, config);
+      const stat = await lstatIfExists(resource.filePath);
+
+      if (!stat) {
+        return false;
+      }
+
+      if (stat.isSymbolicLink()) {
+        throw new Error("Remote sync workspace resource must not be a symbolic link");
+      }
+
+      if (!stat.isFile()) {
+        throw new Error("Remote sync workspace resource must be a file");
+      }
+
+      await assertRemoteSyncWorkspaceRealPathInside(resource.filePath, resource.workspaceRoot);
+
+      if (hasSaveConflict(stat.mtimeMs, request)) {
+        throw new Error("Remote sync workspace resource changed on disk");
+      }
+
+      await fs.unlink(resource.filePath);
+      allowedFiles.delete(resource.filePath);
+      scheduleWorkspaceChange();
+      return true;
     }
   );
 }
@@ -572,6 +711,165 @@ function hasSaveConflict(diskMtime: number, options: SerializedSaveFileOptions):
   return !options.overwrite
     && options.expectedMtime !== undefined
     && diskMtime > options.expectedMtime + fileMtimeConflictToleranceMs;
+}
+
+function resolveRemoteSyncWorkspaceResourcePath(
+  request: SerializedRemoteSyncWorkspaceResourceReadRequest,
+  workspaceRoot: string | undefined,
+  config: NativeWorkspaceConfig
+): {
+  readonly workspaceRoot: string;
+  readonly relativePath: string;
+  readonly filePath: string;
+} {
+  if (!workspaceRoot) {
+    throw new Error("No active workspace for remote sync resource access");
+  }
+
+  const requestedWorkspaceRoot = pathFromFileUri(readRequiredString(
+    request.workspaceUri,
+    "Remote sync workspace resource workspace URI"
+  ));
+
+  if (!samePath(requestedWorkspaceRoot, workspaceRoot)) {
+    throw new Error("Remote sync workspace resource workspace is not active");
+  }
+
+  const relativePath = normalizeRemoteSyncWorkspaceResourceRelativePath(request.relativePath, config);
+  const filePath = path.resolve(workspaceRoot, ...relativePath.split("/"));
+
+  if (!isPathInside(filePath, workspaceRoot)) {
+    throw new Error("Remote sync workspace resource path is outside the active workspace");
+  }
+
+  return {
+    workspaceRoot,
+    relativePath,
+    filePath
+  };
+}
+
+function normalizeRemoteSyncWorkspaceResourceRelativePath(
+  value: unknown,
+  config: NativeWorkspaceConfig
+): string {
+  const normalized = readRequiredString(value, "Remote sync workspace resource relative path")
+    .replaceAll("\\", "/");
+
+  if (normalized.startsWith("/") || hasUriScheme(normalized)) {
+    throw new Error("Remote sync workspace resource relative path must be workspace-relative");
+  }
+
+  const segments: string[] = [];
+
+  for (const segment of normalized.split("/")) {
+    if (!segment || segment === ".") {
+      continue;
+    }
+
+    if (segment === "..") {
+      throw new Error("Remote sync workspace resource relative path must not contain parent traversal");
+    }
+
+    if (config.ignoredDirectories.includes(segment)) {
+      throw new Error("Remote sync workspace resource path uses an ignored directory");
+    }
+
+    segments.push(segment);
+  }
+
+  const relativePath = segments.join("/");
+
+  if (!relativePath) {
+    throw new Error("Remote sync workspace resource relative path must not be empty");
+  }
+
+  return relativePath;
+}
+
+function decodeRemoteSyncWorkspaceResourceValue(
+  request: SerializedRemoteSyncWorkspaceResourceWriteRequest
+): Buffer {
+  if (request.encoding !== "base64") {
+    throw new Error("Remote sync workspace resource encoding must be base64");
+  }
+
+  const value = readString(request.value, "Remote sync workspace resource value");
+
+  if (!isBase64Value(value)) {
+    throw new Error("Remote sync workspace resource value must be base64");
+  }
+
+  return Buffer.from(value, "base64");
+}
+
+function isBase64Value(value: string): boolean {
+  if (value === "") {
+    return true;
+  }
+
+  return value === value.trim() &&
+    value.length % 4 === 0 &&
+    /^[A-Za-z0-9+/]*={0,2}$/.test(value);
+}
+
+async function lstatIfExists(filePath: string): Promise<Stats | undefined> {
+  try {
+    return await fs.lstat(filePath);
+  } catch (error) {
+    if (typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT") {
+      return undefined;
+    }
+
+    throw error;
+  }
+}
+
+async function statRemoteSyncWorkspaceFile(filePath: string, workspaceRoot: string): Promise<Stats> {
+  const linkStat = await fs.lstat(filePath);
+
+  if (linkStat.isSymbolicLink()) {
+    throw new Error("Remote sync workspace resource must not be a symbolic link");
+  }
+
+  const stat = await fs.stat(filePath);
+
+  if (!stat.isFile()) {
+    throw new Error("Remote sync workspace resource must be a file");
+  }
+
+  await assertRemoteSyncWorkspaceRealPathInside(filePath, workspaceRoot);
+
+  return stat;
+}
+
+async function assertRemoteSyncWorkspaceRealPathInside(filePath: string, workspaceRoot: string): Promise<void> {
+  const [realPath, realWorkspaceRoot] = await Promise.all([
+    fs.realpath(filePath),
+    fs.realpath(workspaceRoot)
+  ]);
+
+  if (!isPathInside(realPath, realWorkspaceRoot)) {
+    throw new Error("Remote sync workspace resource path is outside the active workspace");
+  }
+}
+
+function readRequiredString(value: unknown, label: string): string {
+  const normalized = readString(value, label).trim();
+
+  if (!normalized) {
+    throw new Error(`${label} must not be empty`);
+  }
+
+  return normalized;
+}
+
+function readString(value: unknown, label: string): string {
+  if (typeof value !== "string") {
+    throw new Error(`${label} must be a string`);
+  }
+
+  return value;
 }
 
 function samePath(first: string, second: string): boolean {
