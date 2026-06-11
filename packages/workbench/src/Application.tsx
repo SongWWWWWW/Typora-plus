@@ -112,6 +112,7 @@ import {
   openWorkbenchQuickOpenFileAction,
   openWorkbenchRecentWorkspaceResourceAction
 } from "./workbenchResourceOpening";
+import { scheduleWorkbenchOverlayFocus } from "./workbenchOverlayFocus";
 import { indexWorkbenchWorkspaceAction } from "./workbenchWorkspaceIndexing";
 import {
   defaultWorkbenchSideView,
@@ -1117,7 +1118,9 @@ function CommandPalette({
       return;
     }
 
-    window.setTimeout(() => inputRef.current?.focus(), 0);
+    return scheduleWorkbenchOverlayFocus(window, {
+      getFocusTarget: () => inputRef.current
+    });
   }, [open]);
 
   useEffect(() => {
@@ -1220,7 +1223,9 @@ function QuickOpen({
       return;
     }
 
-    window.setTimeout(() => inputRef.current?.focus(), 0);
+    return scheduleWorkbenchOverlayFocus(window, {
+      getFocusTarget: () => inputRef.current
+    });
   }, [open]);
 
   useEffect(() => {

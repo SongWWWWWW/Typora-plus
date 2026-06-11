@@ -5201,3 +5201,31 @@ Review:
 Known limitations:
 
 - Overlay focus timers in Command Palette and Quick Open are still provided directly by the React shell.
+
+## 2026-06-11 - P2 Workbench Overlay Focus Environment
+
+Completed:
+
+- Added a focused overlay-focus helper that schedules delayed input focus through an injected timer boundary.
+- Routed Command Palette and Quick Open input focus through the shared helper instead of inline `window.setTimeout` calls.
+- Added cleanup for pending focus work when an overlay closes or unmounts before the scheduled focus callback runs.
+- Covered shared delay scheduling, missing-target tolerance, and timer cleanup behavior.
+
+Quality gate:
+
+- `npx vitest run packages/workbench/src/workbenchOverlayFocus.test.ts`: passed, 3 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 552 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Dev server smoke check: passed at `http://127.0.0.1:5173`; status 200 and root element present
+
+Review:
+
+- Command Palette and Quick Open now share the same Workbench-local focus scheduling boundary, reducing duplicated overlay browser behavior in `Application.tsx`.
+- `Application.tsx` still supplies the concrete browser timer and input refs, while `workbenchOverlayFocus` owns scheduling, target lookup, and cancellation semantics.
+- No new dependency, configuration key, storage path, visual token, extra documentation file, or hard-coded platform assumption was introduced.
+
+Known limitations:
+
+- Theme synchronization still adapts `window.matchMedia` and `document.documentElement` from the React shell.
