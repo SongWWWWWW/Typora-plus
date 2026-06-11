@@ -1,6 +1,10 @@
-import fs from "node:fs";
-import path from "node:path";
-import { app, ipcMain, safeStorage } from "electron";
+import { ipcMain } from "electron";
+import {
+  deleteNativeSecret,
+  normalizeNativeSecretRef,
+  readNativeSecret,
+  setNativeSecret
+} from "./nativeSecretStore.js";
 
 export const nativeAiIpcChannels = {
   cancelResponses: "typora-plus:ai:responses:cancel",
@@ -24,12 +28,8 @@ interface SerializedNativeResponsesRequest {
   readonly body: string;
 }
 
-interface SerializedAiSecretStore {
-  readonly version?: number;
-  readonly values?: unknown;
-}
-
 const activeResponsesRequests = new Map<string, AbortController>();
+const nativeAiSecretLabel = "AI";
 
 export function registerNativeAiIpc(config: NativeAiConfig): void {
   ipcMain.handle(nativeAiIpcChannels.setSecret, async (_event, secretRef: string, value: string) => {
@@ -52,28 +52,11 @@ export function registerNativeAiIpc(config: NativeAiConfig): void {
 }
 
 function setNativeAiSecret(config: NativeAiConfig, secretRef: unknown, value: unknown): void {
-  const normalizedSecretRef = normalizeSecretRef(secretRef);
-  const normalizedValue = normalizeSecretValue(value, config);
-  const encryptedValue = encryptSecret(normalizedValue);
-  const store = {
-    ...readSecretStore(config),
-    [normalizedSecretRef]: encryptedValue
-  };
-
-  writeSecretStore(config, store);
+  setNativeSecret(config, nativeAiSecretLabel, secretRef, value);
 }
 
 function deleteNativeAiSecret(config: NativeAiConfig, secretRef: unknown): void {
-  const normalizedSecretRef = normalizeSecretRef(secretRef);
-  const store = readSecretStore(config);
-
-  if (!(normalizedSecretRef in store)) {
-    return;
-  }
-
-  const nextStore = { ...store };
-  delete nextStore[normalizedSecretRef];
-  writeSecretStore(config, nextStore);
+  deleteNativeSecret(config, nativeAiSecretLabel, secretRef);
 }
 
 async function requestNativeResponses(
@@ -147,35 +130,7 @@ function cancelNativeResponsesRequest(webContentsId: number, requestId: unknown)
 }
 
 function readNativeAiSecret(config: NativeAiConfig, secretRef: string): string | undefined {
-  const encryptedValue = readSecretStore(config)[secretRef];
-
-  if (!encryptedValue) {
-    return undefined;
-  }
-
-  return decryptSecret(encryptedValue);
-}
-
-function readSecretStore(config: NativeAiConfig): Record<string, string> {
-  try {
-    const parsed = JSON.parse(fs.readFileSync(secretStoragePath(config), "utf8")) as SerializedAiSecretStore;
-
-    if (!isRecord(parsed.values)) {
-      return {};
-    }
-
-    return Object.fromEntries(Object.entries(parsed.values).filter((entry): entry is [string, string] =>
-      isValidSecretRef(entry[0]) && typeof entry[1] === "string" && entry[1].length > 0
-    ));
-  } catch {
-    return {};
-  }
-}
-
-function writeSecretStore(config: NativeAiConfig, values: Readonly<Record<string, string>>): void {
-  const storagePath = secretStoragePath(config);
-  fs.mkdirSync(path.dirname(storagePath), { recursive: true });
-  fs.writeFileSync(storagePath, JSON.stringify({ version: 1, values }, null, 2), "utf8");
+  return readNativeSecret(config, nativeAiSecretLabel, secretRef);
 }
 
 function normalizeResponsesRequest(
@@ -233,23 +188,7 @@ function normalizeRequestBody(config: NativeAiConfig, value: unknown): string {
 }
 
 function normalizeSecretRef(value: unknown): string {
-  if (typeof value !== "string" || !isValidSecretRef(value)) {
-    throw new Error("AI secret reference is invalid");
-  }
-
-  return value;
-}
-
-function normalizeSecretValue(value: unknown, config: NativeAiConfig): string {
-  if (typeof value !== "string" || !value.trim()) {
-    throw new Error("AI secret value must not be empty");
-  }
-
-  if (Buffer.byteLength(value, "utf8") > config.maxSecretBytes) {
-    throw new Error("AI secret value is too large");
-  }
-
-  return value;
+  return normalizeNativeSecretRef(nativeAiSecretLabel, value);
 }
 
 function readRequiredRequestId(value: unknown): string {
@@ -270,22 +209,6 @@ function readOptionalRequestId(value: unknown): string | undefined {
   return /^[A-Za-z0-9_.:-]+$/.test(value) ? value : undefined;
 }
 
-function encryptSecret(value: string): string {
-  if (!safeStorage.isEncryptionAvailable()) {
-    throw new Error("AI secret storage is unavailable");
-  }
-
-  return safeStorage.encryptString(value).toString("base64");
-}
-
-function decryptSecret(value: string): string | undefined {
-  if (!safeStorage.isEncryptionAvailable()) {
-    throw new Error("AI secret storage is unavailable");
-  }
-
-  return safeStorage.decryptString(Buffer.from(value, "base64"));
-}
-
 function hasErrorPayload(value: unknown): boolean {
   return isRecord(value) && isRecord(value.error);
 }
@@ -295,14 +218,6 @@ function isLoopbackHttpUrl(url: URL): boolean {
     (url.hostname === "localhost" || url.hostname === "127.0.0.1" || url.hostname === "[::1]");
 }
 
-function isValidSecretRef(value: string): boolean {
-  return value.length <= 256 && /^[A-Za-z0-9][A-Za-z0-9_.:-]*$/.test(value);
-}
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function secretStoragePath(config: NativeAiConfig): string {
-  return path.join(app.getPath("userData"), config.secretsStorageFile);
 }

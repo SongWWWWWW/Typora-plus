@@ -138,6 +138,14 @@ export interface NativeRemoteSyncManifestBridge {
   write(key: string, value: string): void;
 }
 
+export interface NativeRemoteSyncSecretBridge {
+  readonly isAvailable: boolean;
+  setSecret(secretRef: string, value: string): Promise<boolean>;
+  deleteSecret(secretRef: string): Promise<boolean>;
+}
+
+export const remoteSyncMaxSecretRefLength = 256;
+
 export interface RemoteSyncManifestStoreOptions {
   readonly storage: RemoteSyncManifestStorage;
   readonly storageKey?: string;

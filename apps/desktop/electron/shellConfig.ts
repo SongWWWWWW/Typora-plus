@@ -27,6 +27,10 @@ export const desktopShellConfig = {
     storageDirectory: "remote-sync-manifests",
     maxValueBytes: 1 * 1024 * 1024
   },
+  remoteSyncSecrets: {
+    secretsStorageFile: "remote-sync-secrets.json",
+    maxSecretBytes: 64 * 1024
+  },
   exportDocuments: {
     maxValueBytes: 10 * 1024 * 1024,
     maxAssetBytes: 5 * 1024 * 1024,

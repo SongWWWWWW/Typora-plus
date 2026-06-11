@@ -7371,3 +7371,35 @@ Known limitations:
 - No Feishu Drive provider, OAuth flow, token storage, or upload/download execution adapter is registered yet.
 - The native storage bridge is synchronous like the existing index snapshot bridge; larger or more frequent manifest writes may eventually merit an async IPC variant.
 - Manifest values remain provider-neutral JSON snapshots; provider-specific remote metadata still needs to fit the normalized manifest resource contract.
+
+## 2026-06-12 - P2 Native Remote Sync Secret Boundary
+
+Completed:
+
+- Extracted the Electron AI secret persistence path into a shared `safeStorage`-backed native secret helper.
+- Added a separate Electron remote sync secret IPC bridge with provider-neutral set/delete operations and no renderer-side secret reads.
+- Exposed the remote sync secret bridge through preload and renderer typings for future OAuth/token setup surfaces.
+- Added Workbench remote sync secret action helpers that validate secret references, trim transient input values, and route failures through the shared operation-error boundary.
+- Kept Feishu endpoints, OAuth scopes, app ids, folder tokens, access tokens, provider ids, model defaults, and request execution policy out of the bridge.
+- Updated maintained docs without adding new documentation surfaces.
+
+Quality gate:
+
+- `npx vitest run packages/workbench/src/workbenchRemoteSyncSecrets.test.ts packages/workbench/src/workbenchAiSecrets.test.ts packages/platform/src/responsesAiProvider.test.ts packages/platform/src/remoteSync.test.ts`: passed, 4 files / 44 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 77 files / 730 tests, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Remote sync secret bridge hardcode scan for endpoint/OAuth/token/secret/model/provider literals: passed for implementation files; wider matches were existing test fixtures
+
+Review:
+
+- Secret material is still owned by Electron main-process storage; renderer code can only hand off a value to be encrypted or request deletion by `secretRef`.
+- The helper is shared by AI and remote sync, so future provider families do not grow separate encryption, validation, and app-data write policies.
+- The bridge intentionally does not call Feishu, refresh tokens, choose scopes, or expose decrypted secrets. A future remote sync transport should consume stored secrets inside Electron main.
+
+Known limitations:
+
+- No remote sync provider configuration UI is wired to this bridge yet.
+- No Feishu OAuth flow, token refresh flow, upload/download transport, or provider is registered yet.
+- Native secret storage depends on Electron `safeStorage` availability; unavailable encryption still surfaces as an operation failure.
