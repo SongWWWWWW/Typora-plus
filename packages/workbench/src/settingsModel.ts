@@ -4,6 +4,7 @@ import {
   configurationNumberConstraints,
   type ColorSchemePreference,
   type ConfigurationNumberConstraint,
+  type RegisteredTheme,
   type TyporaPlusConfiguration
 } from "@typora-plus/platform";
 
@@ -94,6 +95,11 @@ export const settingsDensityOptions = [
   { value: "compact", label: "Compact" }
 ] as const satisfies readonly SettingsOption<TyporaPlusConfiguration["appearance"]["density"]>[];
 
+export const defaultSettingsThemeOption = {
+  value: "",
+  label: "Default"
+} as const satisfies SettingsOption<"">;
+
 export const settingsEntries = [
   { id: settingsEntryIds.appearance.theme, sectionId: settingsSectionIds.appearance, label: "Theme", keywords: ["color scheme", "system", "light", "dark"] },
   { id: settingsEntryIds.appearance.customTheme, sectionId: settingsSectionIds.appearance, label: "Custom Theme", keywords: ["theme", "extension", "custom", "tokens"] },
@@ -168,6 +174,31 @@ export function getSettingsEntryDefinition(entryId: SettingsEntryId): SettingsEn
 
 export function getSettingsEntryLabel(entryId: SettingsEntryId): string {
   return getSettingsEntryDefinition(entryId).label;
+}
+
+export function createSettingsThemeOptions(
+  themes: readonly Pick<RegisteredTheme, "colorScheme" | "id" | "label">[]
+): readonly SettingsOption<string>[] {
+  return [
+    defaultSettingsThemeOption,
+    ...themes.map((theme) => ({
+      value: theme.id,
+      label: formatSettingsThemeOptionLabel(theme)
+    }))
+  ];
+}
+
+export function resolveSelectedSettingsThemeId(
+  themeId: string | undefined,
+  themes: readonly Pick<RegisteredTheme, "id">[]
+): string {
+  return themeId && themes.some((theme) => theme.id === themeId)
+    ? themeId
+    : defaultSettingsThemeOption.value;
+}
+
+export function formatSettingsThemeOptionLabel(theme: Pick<RegisteredTheme, "colorScheme" | "label">): string {
+  return theme.colorScheme ? `${theme.label} (${theme.colorScheme})` : theme.label;
 }
 
 export function createSettingsSearchResult(query: string): SettingsSearchResult {

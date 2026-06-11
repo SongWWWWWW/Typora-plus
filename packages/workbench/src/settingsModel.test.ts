@@ -2,12 +2,16 @@ import { describe, expect, it } from "vitest";
 import {
   bytesToMegabytes,
   clampSettingNumber,
+  createSettingsThemeOptions,
   createSettingsSearchResult,
   defaultSettingsSectionId,
+  defaultSettingsThemeOption,
+  formatSettingsThemeOptionLabel,
   getSettingsEntryDefinition,
   getSettingsEntryLabel,
   megabytesToBytes,
   normalizeAssetFolderInput,
+  resolveSelectedSettingsThemeId,
   settingSectionAnchorId,
   settingsColorSchemeOptions,
   settingsDensityOptions,
@@ -85,6 +89,7 @@ describe("settings model", () => {
   });
 
   it("defines stable settings option metadata", () => {
+    expect(defaultSettingsThemeOption).toEqual({ value: "", label: "Default" });
     expect(settingsColorSchemeOptions).toEqual([
       { value: "system", label: "System" },
       { value: "light", label: "Light" },
@@ -94,6 +99,32 @@ describe("settings model", () => {
       { value: "comfortable", label: "Comfortable" },
       { value: "compact", label: "Compact" }
     ]);
+  });
+
+  it("creates custom theme options from registered themes", () => {
+    const themes = [
+      { id: "ink", label: "Ink", colorScheme: "dark" },
+      { id: "paper", label: "Paper" }
+    ] as const;
+
+    expect(createSettingsThemeOptions(themes)).toEqual([
+      { value: "", label: "Default" },
+      { value: "ink", label: "Ink (dark)" },
+      { value: "paper", label: "Paper" }
+    ]);
+    expect(formatSettingsThemeOptionLabel(themes[0])).toBe("Ink (dark)");
+    expect(formatSettingsThemeOptionLabel(themes[1])).toBe("Paper");
+  });
+
+  it("resolves selected custom theme ids against registered themes", () => {
+    const themes = [
+      { id: "ink" },
+      { id: "paper" }
+    ] as const;
+
+    expect(resolveSelectedSettingsThemeId("ink", themes)).toBe("ink");
+    expect(resolveSelectedSettingsThemeId("missing", themes)).toBe("");
+    expect(resolveSelectedSettingsThemeId(undefined, themes)).toBe("");
   });
 
   it("generates unique settings section anchors", () => {

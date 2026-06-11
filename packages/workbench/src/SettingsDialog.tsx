@@ -19,10 +19,12 @@ import {
   bytesToMegabytes,
   clampSettingNumber,
   createSettingsSearchResult,
+  createSettingsThemeOptions,
   defaultSettingsSectionId,
   getSettingsEntryLabel,
   megabytesToBytes,
   normalizeAssetFolderInput,
+  resolveSelectedSettingsThemeId,
   settingSectionAnchorId,
   settingsColorSchemeOptions,
   settingsDensityOptions,
@@ -65,9 +67,8 @@ export function SettingsDialog({
   const [activeSettingsSection, setActiveSettingsSection] = useState<SettingsSectionId>(defaultSettingsSectionId);
   const settingsContentRef = useRef<HTMLDivElement | null>(null);
   const hasKeybindingOverrides = configuration.keybindings.overrides.length > 0;
-  const selectedThemeId = configuration.appearance.themeId && themes.some((theme) => theme.id === configuration.appearance.themeId)
-    ? configuration.appearance.themeId
-    : "";
+  const selectedThemeId = resolveSelectedSettingsThemeId(configuration.appearance.themeId, themes);
+  const themeOptions = useMemo(() => createSettingsThemeOptions(themes), [themes]);
   const searchMaxFileSizeMegabytes = bytesToMegabytes(configuration.workspace.searchMaxFileSizeBytes);
   const settingsSearchResult = useMemo(() => createSettingsSearchResult(settingsQuery), [settingsQuery]);
   const visibleSettingsSectionIds = useMemo(
@@ -319,10 +320,9 @@ export function SettingsDialog({
                         }
                       })}
                     >
-                      <option value="">Default</option>
-                      {themes.map((theme) => (
-                        <option key={theme.id} value={theme.id}>
-                          {formatThemeOptionLabel(theme)}
+                      {themeOptions.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
                         </option>
                       ))}
                     </select>
@@ -613,10 +613,6 @@ function applyKeybindingOverride(
 
 function commandTitle(commands: readonly CommandMetadata[], id: string): string {
   return commands.find((command) => command.id === id)?.title ?? id;
-}
-
-function formatThemeOptionLabel(theme: RegisteredTheme): string {
-  return theme.colorScheme ? `${theme.label} (${theme.colorScheme})` : theme.label;
 }
 
 function SettingsSection({

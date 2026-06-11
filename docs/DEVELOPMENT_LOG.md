@@ -5872,3 +5872,31 @@ Review:
 Known limitations:
 
 - Custom theme choices still come from registered theme metadata at render time, so they remain a runtime list rather than static Settings option metadata.
+
+## 2026-06-11 - P2 Settings Theme Option Model
+
+Completed:
+
+- Added Settings model helpers for custom theme option construction, theme option labels, and selected theme id fallback.
+- Routed the Settings custom theme select through the shared theme option helpers instead of inline default-option and label-formatting rules.
+- Narrowed the theme option helper contract to the registered theme fields it actually reads.
+- Covered default theme option metadata, custom theme option formatting, and selected-theme fallback with focused Settings model tests.
+
+Quality gate:
+
+- `npx vitest run packages/workbench/src/settingsModel.test.ts packages/workbench/src/workbenchConfigurationUpdates.test.ts packages/workbench/src/keybindingSettings.test.ts`: passed, 26 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 59 files / 590 tests, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Dev server smoke check: passed at `http://127.0.0.1:5173`; status 200 and root element present
+
+Review:
+
+- Static appearance options and runtime custom theme options now share the same Settings model boundary.
+- `SettingsDialog` still renders the select element and emits the selected `themeId`, but it no longer owns default theme copy, selected-id validation, or registered-theme label formatting.
+- No new dependency, configuration key, storage path, visual token, extra documentation file, or hard-coded platform assumption was introduced.
+
+Known limitations:
+
+- Settings still renders each field explicitly in React; a schema-driven form layer remains deferred until more setting types or extension-contributed settings make it worthwhile.
