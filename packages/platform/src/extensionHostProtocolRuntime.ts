@@ -16,6 +16,7 @@ import type {
   MarkdownRendererRuntimeMetadata,
   RegisteredMarkdownRenderer
 } from "./markdownRenderers";
+import type { RemoteSyncPlan, RemoteSyncPlanRequest, RemoteSyncProvider, RemoteSyncResult } from "./remoteSync";
 import {
   createExtensionHostActivationErrorMessage,
   createExtensionHostActivationResultMessage,
@@ -36,6 +37,10 @@ import {
   createExtensionHostMarkdownRendererRegisterRequestMessage,
   createExtensionHostMarkdownRendererRenderResultMessage,
   createExtensionHostMarkdownRendererUnregisterRequestMessage,
+  createExtensionHostRemoteSyncCreatePlanResultMessage,
+  createExtensionHostRemoteSyncExecutePlanResultMessage,
+  createExtensionHostRemoteSyncProviderRegisterRequestMessage,
+  createExtensionHostRemoteSyncProviderUnregisterRequestMessage,
   extensionHostProtocolVersion,
   extensionHostProtocolMessageTypes,
   readExtensionHostProtocolMessage,
@@ -46,6 +51,11 @@ import {
   type ExtensionHostExportDocumentResultMessage,
   type ExtensionHostHandshakeRequestMessage,
   type ExtensionHostMarkdownRendererRenderResultMessage,
+  type ExtensionHostProtocolRemoteSyncPlan,
+  type ExtensionHostProtocolRemoteSyncPlanRequest,
+  type ExtensionHostProtocolRemoteSyncResult,
+  type ExtensionHostRemoteSyncCreatePlanRequestMessage,
+  type ExtensionHostRemoteSyncExecutePlanRequestMessage,
   type ExtensionHostProtocolError,
   type ExtensionHostProtocolMessage
 } from "./extensionHostProtocol";
@@ -66,7 +76,9 @@ export type ExtensionHostProtocolRuntimeRequestKind =
   | "exportProviderRegister"
   | "exportProviderUnregister"
   | "markdownRendererRegister"
-  | "markdownRendererUnregister";
+  | "markdownRendererUnregister"
+  | "remoteSyncProviderRegister"
+  | "remoteSyncProviderUnregister";
 
 export interface ExtensionHostProtocolRuntimeOptions {
   readonly activate: ExtensionActivationHandler;
@@ -92,6 +104,7 @@ interface RuntimeExtensionRecord {
   readonly contextValues: Map<string, ContextKeyValue>;
   readonly exportProviders: Map<string, ExportProvider>;
   readonly markdownProviders: Map<string, RuntimeMarkdownRendererRegistration>;
+  readonly remoteSyncProviders: Map<string, RemoteSyncProvider>;
 }
 
 interface RuntimeCommandRegistration {
@@ -189,6 +202,12 @@ export class ExtensionHostProtocolRuntime extends Disposable {
           return;
         case extensionHostProtocolMessageTypes.markdownRendererRender:
           await this.renderRegisteredMarkdown(message);
+          return;
+        case extensionHostProtocolMessageTypes.remoteSyncCreatePlan:
+          await this.createRegisteredRemoteSyncPlan(message);
+          return;
+        case extensionHostProtocolMessageTypes.remoteSyncExecutePlan:
+          await this.executeRegisteredRemoteSyncPlan(message);
           return;
         default:
           this.reportError(
@@ -325,6 +344,51 @@ export class ExtensionHostProtocolRuntime extends Disposable {
     }
   }
 
+  private async createRegisteredRemoteSyncPlan(message: ExtensionHostRemoteSyncCreatePlanRequestMessage): Promise<void> {
+    try {
+      const record = this.requireExtensionRecord(message.extensionId);
+      const provider = record.remoteSyncProviders.get(message.providerId);
+
+      if (!provider) {
+        throw new Error(`No extension host runtime remote sync provider registered: ${message.providerId}`);
+      }
+
+      await this.transport.send(createExtensionHostRemoteSyncCreatePlanResultMessage(
+        message.requestId,
+        message.extensionId,
+        message.providerId,
+        toProtocolRemoteSyncPlan(await provider.createPlan(toRuntimeRemoteSyncPlanRequest(message.request)))
+      ));
+    } catch (error) {
+      await this.sendRuntimeApiError(message.requestId, message.extensionId, error);
+    }
+  }
+
+  private async executeRegisteredRemoteSyncPlan(
+    message: ExtensionHostRemoteSyncExecutePlanRequestMessage
+  ): Promise<void> {
+    try {
+      const record = this.requireExtensionRecord(message.extensionId);
+      const provider = record.remoteSyncProviders.get(message.providerId);
+
+      if (!provider) {
+        throw new Error(`No extension host runtime remote sync provider registered: ${message.providerId}`);
+      }
+
+      await this.transport.send(createExtensionHostRemoteSyncExecutePlanResultMessage(
+        message.requestId,
+        message.extensionId,
+        message.providerId,
+        toProtocolRemoteSyncResult(await provider.executePlan(
+          toRuntimeRemoteSyncPlan(message.plan),
+          toRuntimeRemoteSyncPlanRequest(message.request)
+        ))
+      ));
+    } catch (error) {
+      await this.sendRuntimeApiError(message.requestId, message.extensionId, error);
+    }
+  }
+
   private createContext(record: Omit<RuntimeExtensionRecord, "context">): ExtensionContext {
     return {
       extension: record.extension,
@@ -357,6 +421,12 @@ export class ExtensionHostProtocolRuntime extends Disposable {
       markdown: {
         registerRendererProvider: (provider, metadata) => this.registerMarkdownRendererProvider(record, provider, metadata),
         getRenderers: () => getRegisteredMarkdownRenderers(record.markdownProviders)
+      },
+      remoteSync: {
+        registerProvider: (provider) => this.registerRemoteSyncProvider(record, provider),
+        getProviders: () => [...record.remoteSyncProviders.values()]
+          .map((provider) => ({ id: provider.id, title: provider.title }))
+          .sort((first, second) => first.title.localeCompare(second.title) || first.id.localeCompare(second.id))
       }
     };
   }
@@ -554,6 +624,42 @@ export class ExtensionHostProtocolRuntime extends Disposable {
     }));
   }
 
+  private registerRemoteSyncProvider(
+    record: Omit<RuntimeExtensionRecord, "context">,
+    provider: RemoteSyncProvider
+  ): IDisposable {
+    const request = createExtensionHostRemoteSyncProviderRegisterRequestMessage(
+      this.nextRequestId("remoteSyncProviderRegister"),
+      record.extension.id,
+      provider
+    );
+    const providerId = request.provider.id;
+
+    if (record.remoteSyncProviders.has(providerId)) {
+      throw new Error(`Extension host runtime remote sync provider already registered: ${providerId}`);
+    }
+
+    const normalizedProvider = {
+      ...provider,
+      id: providerId,
+      title: request.provider.title
+    };
+    record.remoteSyncProviders.set(providerId, normalizedProvider);
+    this.sendAndReport(request);
+
+    return record.disposables.add(toDisposable(() => {
+      if (!record.remoteSyncProviders.delete(providerId)) {
+        return;
+      }
+
+      this.sendAndReport(createExtensionHostRemoteSyncProviderUnregisterRequestMessage(
+        this.nextRequestId("remoteSyncProviderUnregister"),
+        record.extension.id,
+        providerId
+      ));
+    }));
+  }
+
   private getOrCreateExtensionRecord(extension: RegisteredExtension): RuntimeExtensionRecord {
     const existing = this.extensions.get(extension.id);
 
@@ -568,7 +674,8 @@ export class ExtensionHostProtocolRuntime extends Disposable {
       commandHandlers: new Map(),
       contextValues: new Map(),
       exportProviders: new Map(),
-      markdownProviders: new Map()
+      markdownProviders: new Map(),
+      remoteSyncProviders: new Map()
     };
     const record: RuntimeExtensionRecord = {
       ...partialRecord,
@@ -758,6 +865,63 @@ function toRuntimeAiTextRequest(request: Omit<AiTextRequest, "signal" | "context
       }))
     } : {}),
     ...(request.metadata ? { metadata: request.metadata } : {})
+  };
+}
+
+function toRuntimeRemoteSyncPlanRequest(
+  request: ExtensionHostProtocolRemoteSyncPlanRequest
+): RemoteSyncPlanRequest {
+  return {
+    workspaceUri: URI.parse(request.workspaceUri),
+    resources: request.resources.map((resource) => ({
+      uri: URI.parse(resource.uri),
+      relativePath: resource.relativePath,
+      kind: resource.kind,
+      ...(resource.name ? { name: resource.name } : {}),
+      ...(resource.size !== undefined ? { size: resource.size } : {}),
+      ...(resource.mtime !== undefined ? { mtime: resource.mtime } : {}),
+      ...(resource.contentHash ? { contentHash: resource.contentHash } : {})
+    })),
+    direction: request.direction,
+    ...(request.remoteScopeId ? { remoteScopeId: request.remoteScopeId } : {}),
+    ...(request.dryRun !== undefined ? { dryRun: request.dryRun } : {}),
+    ...(request.metadata ? { metadata: request.metadata } : {})
+  };
+}
+
+function toRuntimeRemoteSyncPlan(plan: ExtensionHostProtocolRemoteSyncPlan): RemoteSyncPlan {
+  return {
+    operations: plan.operations.map((operation) => ({
+      kind: operation.kind,
+      target: operation.target,
+      relativePath: operation.relativePath,
+      ...(operation.localUri ? { localUri: URI.parse(operation.localUri) } : {}),
+      ...(operation.remoteId ? { remoteId: operation.remoteId } : {}),
+      ...(operation.message ? { message: operation.message } : {})
+    })),
+    summary: plan.summary
+  };
+}
+
+function toProtocolRemoteSyncPlan(plan: RemoteSyncPlan): ExtensionHostProtocolRemoteSyncPlan {
+  return {
+    operations: plan.operations.map((operation) => ({
+      kind: operation.kind,
+      target: operation.target,
+      relativePath: operation.relativePath,
+      ...(operation.localUri ? { localUri: operation.localUri.toString() } : {}),
+      ...(operation.remoteId ? { remoteId: operation.remoteId } : {}),
+      ...(operation.message ? { message: operation.message } : {})
+    })),
+    summary: plan.summary
+  };
+}
+
+function toProtocolRemoteSyncResult(result: RemoteSyncResult): ExtensionHostProtocolRemoteSyncResult {
+  return {
+    operations: toProtocolRemoteSyncPlan(result).operations,
+    summary: result.summary,
+    ...(result.completedAt !== undefined ? { completedAt: result.completedAt } : {})
   };
 }
 

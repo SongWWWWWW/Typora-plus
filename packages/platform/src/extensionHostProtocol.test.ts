@@ -27,6 +27,12 @@ import {
   createExtensionHostMarkdownRendererRenderRequestMessage,
   createExtensionHostMarkdownRendererRenderResultMessage,
   createExtensionHostMarkdownRendererUnregisterRequestMessage,
+  createExtensionHostRemoteSyncCreatePlanRequestMessage,
+  createExtensionHostRemoteSyncCreatePlanResultMessage,
+  createExtensionHostRemoteSyncExecutePlanRequestMessage,
+  createExtensionHostRemoteSyncExecutePlanResultMessage,
+  createExtensionHostRemoteSyncProviderRegisterRequestMessage,
+  createExtensionHostRemoteSyncProviderUnregisterRequestMessage,
   deserializeExtensionHostProtocolMessage,
   extensionHostProtocolLimits,
   extensionHostProtocolMessageTypes,
@@ -365,6 +371,193 @@ describe("extension host protocol", () => {
     })).toThrow("between");
   });
 
+  it("serializes remote sync provider broker messages", () => {
+    const register = createExtensionHostRemoteSyncProviderRegisterRequestMessage("request-sync-1", "notes.main", {
+      id: " notes.main.sync ",
+      title: " Notes Sync "
+    });
+    const request = createExtensionHostRemoteSyncCreatePlanRequestMessage(
+      "request-sync-2",
+      "notes.main",
+      " notes.main.sync ",
+      {
+        workspaceUri: " file://C:/Notes ",
+        resources: [
+          {
+            uri: " file://C:/Notes/A.md ",
+            relativePath: " ./A.md ",
+            kind: "file",
+            name: " A.md ",
+            size: 10,
+            mtime: 20,
+            contentHash: " hash-a "
+          }
+        ],
+        direction: "push",
+        dryRun: true,
+        remoteScopeId: " folder-token ",
+        metadata: {
+          surface: "command"
+        }
+      }
+    );
+    const plan = {
+      operations: [{
+        kind: "create" as const,
+        target: "remote" as const,
+        relativePath: "A.md",
+        localUri: "file://C:/Notes/A.md",
+        remoteId: "remote-a",
+        message: "Upload"
+      }],
+      summary: {
+        creates: 1,
+        updates: 0,
+        deletes: 0,
+        skips: 0,
+        conflicts: 0
+      }
+    };
+    const createResult = createExtensionHostRemoteSyncCreatePlanResultMessage(
+      "request-sync-3",
+      "notes.main",
+      "notes.main.sync",
+      plan
+    );
+    const execute = createExtensionHostRemoteSyncExecutePlanRequestMessage(
+      "request-sync-4",
+      "notes.main",
+      "notes.main.sync",
+      plan,
+      request.request
+    );
+    const executeResult = createExtensionHostRemoteSyncExecutePlanResultMessage(
+      "request-sync-5",
+      "notes.main",
+      "notes.main.sync",
+      {
+        ...plan,
+        completedAt: 123
+      }
+    );
+    const unregister = createExtensionHostRemoteSyncProviderUnregisterRequestMessage(
+      "request-sync-6",
+      "notes.main",
+      "notes.main.sync"
+    );
+
+    expect(register).toEqual({
+      type: extensionHostProtocolMessageTypes.remoteSyncProviderRegister,
+      requestId: "request-sync-1",
+      extensionId: "notes.main",
+      provider: {
+        id: "notes.main.sync",
+        title: "Notes Sync"
+      }
+    });
+    expect(request).toEqual({
+      type: extensionHostProtocolMessageTypes.remoteSyncCreatePlan,
+      requestId: "request-sync-2",
+      extensionId: "notes.main",
+      providerId: "notes.main.sync",
+      request: {
+        workspaceUri: "file://C:/Notes",
+        resources: [
+          {
+            uri: "file://C:/Notes/A.md",
+            relativePath: "A.md",
+            kind: "file",
+            name: "A.md",
+            size: 10,
+            mtime: 20,
+            contentHash: "hash-a"
+          }
+        ],
+        direction: "push",
+        remoteScopeId: "folder-token",
+        dryRun: true,
+        metadata: {
+          surface: "command"
+        }
+      }
+    });
+    expect(createResult).toEqual({
+      type: extensionHostProtocolMessageTypes.remoteSyncCreatePlanResult,
+      requestId: "request-sync-3",
+      extensionId: "notes.main",
+      providerId: "notes.main.sync",
+      plan
+    });
+    expect(execute).toEqual({
+      type: extensionHostProtocolMessageTypes.remoteSyncExecutePlan,
+      requestId: "request-sync-4",
+      extensionId: "notes.main",
+      providerId: "notes.main.sync",
+      plan,
+      request: request.request
+    });
+    expect(executeResult).toEqual({
+      type: extensionHostProtocolMessageTypes.remoteSyncExecutePlanResult,
+      requestId: "request-sync-5",
+      extensionId: "notes.main",
+      providerId: "notes.main.sync",
+      result: {
+        ...plan,
+        completedAt: 123
+      }
+    });
+    expect(unregister).toEqual({
+      type: extensionHostProtocolMessageTypes.remoteSyncProviderUnregister,
+      requestId: "request-sync-6",
+      extensionId: "notes.main",
+      providerId: "notes.main.sync"
+    });
+    expect("signal" in request.request).toBe(false);
+    expect(deserializeExtensionHostProtocolMessage(serializeExtensionHostProtocolMessage(register))).toEqual(register);
+    expect(deserializeExtensionHostProtocolMessage(serializeExtensionHostProtocolMessage(request))).toEqual(request);
+    expect(deserializeExtensionHostProtocolMessage(serializeExtensionHostProtocolMessage(createResult))).toEqual(createResult);
+    expect(deserializeExtensionHostProtocolMessage(serializeExtensionHostProtocolMessage(execute))).toEqual(execute);
+    expect(deserializeExtensionHostProtocolMessage(serializeExtensionHostProtocolMessage(executeResult))).toEqual(executeResult);
+    expect(deserializeExtensionHostProtocolMessage(serializeExtensionHostProtocolMessage(unregister))).toEqual(unregister);
+    expect(() => createExtensionHostRemoteSyncProviderRegisterRequestMessage("request-sync-7", "notes.main", {
+      id: "bad provider",
+      title: "Bad Provider"
+    })).toThrow("remote sync provider id is invalid");
+    expect(() => createExtensionHostRemoteSyncCreatePlanRequestMessage(
+      "request-sync-8",
+      "notes.main",
+      "notes.main.sync",
+      {
+        workspaceUri: "file://C:/Notes",
+        resources: new Array(extensionHostProtocolLimits.remoteSyncResourceCount + 1).fill({
+          uri: "file://C:/Notes/A.md",
+          relativePath: "A.md",
+          kind: "file"
+        }),
+        direction: "push"
+      }
+    )).toThrow("must contain at most");
+    expect(() => createExtensionHostRemoteSyncCreatePlanResultMessage(
+      "request-sync-9",
+      "notes.main",
+      "notes.main.sync",
+      {
+        operations: [{
+          kind: "create",
+          target: "remote",
+          relativePath: "../secret.md"
+        }],
+        summary: {
+          creates: 1,
+          updates: 0,
+          deletes: 0,
+          skips: 0,
+          conflicts: 0
+        }
+      }
+    )).toThrow("parent traversal");
+  });
+
   it("serializes runtime API result and error broker messages", () => {
     const result = createExtensionHostApiResultMessage("request-15", "notes.main", {
       commands: ["notes.open"]
@@ -679,6 +872,10 @@ function createExtensionContext(extension: RegisteredExtension): ExtensionContex
     markdown: {
       getRenderers: () => [],
       registerRendererProvider: () => toDisposable(() => undefined)
+    },
+    remoteSync: {
+      getProviders: () => [],
+      registerProvider: () => toDisposable(() => undefined)
     },
     subscriptions: {
       add(disposable) {

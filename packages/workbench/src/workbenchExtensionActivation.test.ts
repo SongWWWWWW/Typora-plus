@@ -140,6 +140,10 @@ function createActivationContext(options: {
         return options.registerRendererProvider?.(provider) ?? toDisposable(() => undefined);
       }
     },
+    remoteSync: {
+      getProviders: () => [],
+      registerProvider: () => toDisposable(() => undefined)
+    },
     subscriptions: {
       add(disposable) {
         options.addSubscription?.(disposable);

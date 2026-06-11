@@ -11,6 +11,7 @@ import {
   type LinkedExtensionHostProtocolTransport
 } from "./extensionHostProtocolTransport";
 import type { MarkdownRendererProvider, MarkdownRendererRuntimeMetadata } from "./markdownRenderers";
+import type { RemoteSyncProvider } from "./remoteSync";
 
 describe("extension host protocol linked transport", () => {
   it("connects protocol host and runtime through a wire-safe transport pair", async () => {
@@ -184,6 +185,7 @@ interface MainContextControls {
     readonly provider: MarkdownRendererProvider;
     readonly metadata?: MarkdownRendererRuntimeMetadata;
   }[];
+  readonly remoteSyncProviders: RemoteSyncProvider[];
 }
 
 function createMainContext(extensionId: string): {
@@ -194,7 +196,8 @@ function createMainContext(extensionId: string): {
     aiProviders: [],
     commandRegistrations: [],
     exportProviders: [],
-    markdownProviders: []
+    markdownProviders: [],
+    remoteSyncProviders: []
   };
   const extension: RegisteredExtension = {
     activationEvents: ["onStartup"],
@@ -251,6 +254,13 @@ function createMainContext(extensionId: string): {
           const registration = { provider, ...(metadata ? { metadata } : {}) };
           controls.markdownProviders.push(registration);
           return removeFromArrayDisposable(controls.markdownProviders, registration);
+        }
+      },
+      remoteSync: {
+        getProviders: () => controls.remoteSyncProviders.map((provider) => ({ id: provider.id, title: provider.title })),
+        registerProvider(provider) {
+          controls.remoteSyncProviders.push(provider);
+          return removeFromArrayDisposable(controls.remoteSyncProviders, provider);
         }
       },
       subscriptions: {

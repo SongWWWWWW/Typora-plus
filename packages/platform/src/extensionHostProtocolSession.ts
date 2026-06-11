@@ -301,6 +301,8 @@ function isRuntimeBrokerRequest(message: ExtensionHostProtocolMessage): boolean 
     case extensionHostProtocolMessageTypes.exportProviderUnregister:
     case extensionHostProtocolMessageTypes.markdownRendererRegister:
     case extensionHostProtocolMessageTypes.markdownRendererUnregister:
+    case extensionHostProtocolMessageTypes.remoteSyncProviderRegister:
+    case extensionHostProtocolMessageTypes.remoteSyncProviderUnregister:
       return true;
     default:
       return false;

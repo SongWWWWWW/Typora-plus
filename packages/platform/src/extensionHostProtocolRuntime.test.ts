@@ -1,4 +1,4 @@
-import { Emitter, toDisposable, type Event } from "@typora-plus/base";
+import { Emitter, toDisposable, URI, type Event } from "@typora-plus/base";
 import { describe, expect, it } from "vitest";
 import type { ExtensionActivationRequest, ExtensionContext } from "./extensions";
 import {
@@ -12,6 +12,10 @@ import {
   createExtensionHostAiProviderRegisterRequestMessage,
   createExtensionHostHandshakeRequestMessage,
   createExtensionHostMarkdownRendererRenderRequestMessage,
+  createExtensionHostRemoteSyncCreatePlanRequestMessage,
+  createExtensionHostRemoteSyncCreatePlanResultMessage,
+  createExtensionHostRemoteSyncExecutePlanRequestMessage,
+  createExtensionHostRemoteSyncExecutePlanResultMessage,
   extensionHostProtocolMessageTypes,
   readExtensionHostProtocolMessage,
   type ExtensionHostProtocolMessage
@@ -47,6 +51,7 @@ describe("extension host protocol runtime", () => {
         "contextKeys",
         "exports",
         "markdownRenderers",
+        "remoteSyncProviders",
         "remoteCallbacks",
         "unregister"
       ]
@@ -323,6 +328,126 @@ describe("extension host protocol runtime", () => {
         }
       }
     ]);
+  });
+
+  it("handles main-thread remote sync callbacks", async () => {
+    const transport = createMemoryTransport();
+    new ExtensionHostProtocolRuntime(transport, {
+      activate(request) {
+        request.context.remoteSync.registerProvider({
+          id: "notes.remote.sync",
+          title: "Remote Sync",
+          createPlan: (input) => {
+            expect(input.workspaceUri.toString()).toBe("file://C:/Notes");
+            expect("signal" in input).toBe(false);
+            const resource = input.resources[0];
+
+            if (!resource) {
+              throw new Error("Expected a sync resource");
+            }
+
+            return {
+              operations: [{
+                kind: "create",
+                target: "remote",
+                relativePath: resource.relativePath,
+                localUri: resource.uri
+              }],
+              summary: {
+                creates: 1,
+                updates: 0,
+                deletes: 0,
+                skips: 0,
+                conflicts: 0
+              }
+            };
+          },
+          executePlan: (plan, input) => {
+            expect(input.direction).toBe("push");
+
+            return {
+              operations: plan.operations,
+              summary: plan.summary,
+              completedAt: 789
+            };
+          }
+        });
+      }
+    });
+
+    transport.receive(createActivationMessage("activate-sync"));
+    await flushPromises();
+
+    expect(transport.sent[0]).toEqual({
+      type: extensionHostProtocolMessageTypes.remoteSyncProviderRegister,
+      requestId: "extension-runtime-remoteSyncProviderRegister-1",
+      extensionId: "notes.remote",
+      provider: {
+        id: "notes.remote.sync",
+        title: "Remote Sync"
+      }
+    });
+    transport.sent.length = 0;
+
+    const syncRequest = {
+      workspaceUri: "file://C:/Notes",
+      resources: [{
+        uri: "file://C:/Notes/A.md",
+        relativePath: "A.md",
+        kind: "file" as const
+      }],
+      direction: "push" as const
+    };
+    const plan = {
+      operations: [{
+        kind: "create" as const,
+        target: "remote" as const,
+        relativePath: "A.md",
+        localUri: "file://C:/Notes/A.md"
+      }],
+      summary: {
+        creates: 1,
+        updates: 0,
+        deletes: 0,
+        skips: 0,
+        conflicts: 0
+      }
+    };
+
+    transport.receive(createExtensionHostRemoteSyncCreatePlanRequestMessage(
+      "main-sync-1",
+      "notes.remote",
+      "notes.remote.sync",
+      syncRequest
+    ));
+    transport.receive(createExtensionHostRemoteSyncExecutePlanRequestMessage(
+      "main-sync-2",
+      "notes.remote",
+      "notes.remote.sync",
+      plan,
+      syncRequest
+    ));
+    await flushPromises();
+
+    expect(transport.sent).toEqual([
+      createExtensionHostRemoteSyncCreatePlanResultMessage(
+        "main-sync-1",
+        "notes.remote",
+        "notes.remote.sync",
+        plan
+      ),
+      createExtensionHostRemoteSyncExecutePlanResultMessage(
+        "main-sync-2",
+        "notes.remote",
+        "notes.remote.sync",
+        {
+          ...plan,
+          completedAt: 789
+        }
+      )
+    ]);
+
+    expect(URI.parse(plan.operations[0]!.localUri).toString()).toBe("file://C:/Notes/A.md");
   });
 
   it("executes main-thread commands from the proxy context", async () => {

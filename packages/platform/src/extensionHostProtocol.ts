@@ -15,6 +15,17 @@ import type {
   MarkdownRendererOutput,
   MarkdownRendererRuntimeMetadata
 } from "./markdownRenderers";
+import type {
+  RegisteredRemoteSyncProvider,
+  RemoteSyncDirection,
+  RemoteSyncOperationKind,
+  RemoteSyncOperationTarget,
+  RemoteSyncPlan,
+  RemoteSyncPlanRequest,
+  RemoteSyncResource,
+  RemoteSyncResult,
+  RemoteSyncSummary
+} from "./remoteSync";
 
 export const extensionHostProtocolMessageTypes = {
   activate: "extensionHost/activate",
@@ -41,7 +52,13 @@ export const extensionHostProtocolMessageTypes = {
   markdownRendererRegister: "extensionHost/markdownRenderer/register",
   markdownRendererRender: "extensionHost/markdownRenderer/render",
   markdownRendererRenderResult: "extensionHost/markdownRenderer/renderResult",
-  markdownRendererUnregister: "extensionHost/markdownRenderer/unregister"
+  markdownRendererUnregister: "extensionHost/markdownRenderer/unregister",
+  remoteSyncCreatePlan: "extensionHost/remoteSync/createPlan",
+  remoteSyncCreatePlanResult: "extensionHost/remoteSync/createPlanResult",
+  remoteSyncExecutePlan: "extensionHost/remoteSync/executePlan",
+  remoteSyncExecutePlanResult: "extensionHost/remoteSync/executePlanResult",
+  remoteSyncProviderRegister: "extensionHost/remoteSync/providerRegister",
+  remoteSyncProviderUnregister: "extensionHost/remoteSync/providerUnregister"
 } as const;
 
 export const extensionHostProtocolVersion = 1;
@@ -53,6 +70,7 @@ export const extensionHostProtocolCapabilities = [
   "contextKeys",
   "exports",
   "markdownRenderers",
+  "remoteSyncProviders",
   "remoteCallbacks",
   "unregister"
 ] as const;
@@ -112,6 +130,18 @@ export const extensionHostProtocolLimits = {
   markdownRendererPriorityMin: -100000,
   markdownRendererValueLength: 1000000,
   protocolVersionMax: 1000,
+  remoteSyncCompletedAtMax: 10000000000000,
+  remoteSyncMessageLength: 4000,
+  remoteSyncMetadataEntries: 100,
+  remoteSyncMetadataKeyLength: 120,
+  remoteSyncMetadataValueLength: 4000,
+  remoteSyncOperationCount: 10000,
+  remoteSyncProviderIdLength: 256,
+  remoteSyncProviderTitleLength: 160,
+  remoteSyncRelativePathLength: 1000,
+  remoteSyncRemoteIdLength: 512,
+  remoteSyncResourceCount: 10000,
+  remoteSyncUriLength: 2000,
   requestIdLength: 120
 } as const;
 
@@ -140,7 +170,13 @@ export type ExtensionHostProtocolMessage =
   | ExtensionHostMarkdownRendererRegisterRequestMessage
   | ExtensionHostMarkdownRendererRenderRequestMessage
   | ExtensionHostMarkdownRendererRenderResultMessage
-  | ExtensionHostMarkdownRendererUnregisterRequestMessage;
+  | ExtensionHostMarkdownRendererUnregisterRequestMessage
+  | ExtensionHostRemoteSyncCreatePlanRequestMessage
+  | ExtensionHostRemoteSyncCreatePlanResultMessage
+  | ExtensionHostRemoteSyncExecutePlanRequestMessage
+  | ExtensionHostRemoteSyncExecutePlanResultMessage
+  | ExtensionHostRemoteSyncProviderRegisterRequestMessage
+  | ExtensionHostRemoteSyncProviderUnregisterRequestMessage;
 
 export type ExtensionHostProtocolJsonValue =
   | null
@@ -333,6 +369,53 @@ export interface ExtensionHostMarkdownRendererUnregisterRequestMessage {
   readonly rendererId: string;
 }
 
+export interface ExtensionHostRemoteSyncProviderRegisterRequestMessage {
+  readonly type: typeof extensionHostProtocolMessageTypes.remoteSyncProviderRegister;
+  readonly requestId: string;
+  readonly extensionId: string;
+  readonly provider: ExtensionHostProtocolRemoteSyncProviderRegistration;
+}
+
+export interface ExtensionHostRemoteSyncProviderUnregisterRequestMessage {
+  readonly type: typeof extensionHostProtocolMessageTypes.remoteSyncProviderUnregister;
+  readonly requestId: string;
+  readonly extensionId: string;
+  readonly providerId: string;
+}
+
+export interface ExtensionHostRemoteSyncCreatePlanRequestMessage {
+  readonly type: typeof extensionHostProtocolMessageTypes.remoteSyncCreatePlan;
+  readonly requestId: string;
+  readonly extensionId: string;
+  readonly providerId: string;
+  readonly request: ExtensionHostProtocolRemoteSyncPlanRequest;
+}
+
+export interface ExtensionHostRemoteSyncCreatePlanResultMessage {
+  readonly type: typeof extensionHostProtocolMessageTypes.remoteSyncCreatePlanResult;
+  readonly requestId: string;
+  readonly extensionId: string;
+  readonly providerId: string;
+  readonly plan: ExtensionHostProtocolRemoteSyncPlan;
+}
+
+export interface ExtensionHostRemoteSyncExecutePlanRequestMessage {
+  readonly type: typeof extensionHostProtocolMessageTypes.remoteSyncExecutePlan;
+  readonly requestId: string;
+  readonly extensionId: string;
+  readonly providerId: string;
+  readonly plan: ExtensionHostProtocolRemoteSyncPlan;
+  readonly request: ExtensionHostProtocolRemoteSyncPlanRequest;
+}
+
+export interface ExtensionHostRemoteSyncExecutePlanResultMessage {
+  readonly type: typeof extensionHostProtocolMessageTypes.remoteSyncExecutePlanResult;
+  readonly requestId: string;
+  readonly extensionId: string;
+  readonly providerId: string;
+  readonly result: ExtensionHostProtocolRemoteSyncResult;
+}
+
 export interface ExtensionHostProtocolCommandRegistration extends Pick<CommandMetadata, "id"> {
   readonly title?: string;
   readonly category?: string;
@@ -377,6 +460,36 @@ export interface ExtensionHostProtocolMarkdownRendererInput extends Omit<Markdow
 }
 
 export interface ExtensionHostProtocolMarkdownRendererOutput extends MarkdownRendererOutput {}
+
+export interface ExtensionHostProtocolRemoteSyncProviderRegistration
+  extends Pick<RegisteredRemoteSyncProvider, "id" | "title"> {}
+
+export interface ExtensionHostProtocolRemoteSyncPlanRequest
+  extends Omit<RemoteSyncPlanRequest, "resources" | "signal" | "workspaceUri"> {
+  readonly workspaceUri: string;
+  readonly resources: readonly ExtensionHostProtocolRemoteSyncResource[];
+}
+
+export interface ExtensionHostProtocolRemoteSyncResource extends Omit<RemoteSyncResource, "uri"> {
+  readonly uri: string;
+}
+
+export interface ExtensionHostProtocolRemoteSyncOperation {
+  readonly kind: RemoteSyncOperationKind;
+  readonly target: RemoteSyncOperationTarget;
+  readonly relativePath: string;
+  readonly localUri?: string;
+  readonly remoteId?: string;
+  readonly message?: string;
+}
+
+export interface ExtensionHostProtocolRemoteSyncPlan extends Omit<RemoteSyncPlan, "operations"> {
+  readonly operations: readonly ExtensionHostProtocolRemoteSyncOperation[];
+}
+
+export interface ExtensionHostProtocolRemoteSyncResult extends Omit<RemoteSyncResult, "operations"> {
+  readonly operations: readonly ExtensionHostProtocolRemoteSyncOperation[];
+}
 
 export interface ExtensionHostProtocolExtension {
   readonly id: string;
@@ -765,6 +878,94 @@ export function createExtensionHostMarkdownRendererUnregisterRequestMessage(
   };
 }
 
+export function createExtensionHostRemoteSyncProviderRegisterRequestMessage(
+  requestId: string,
+  extensionId: string,
+  provider: ExtensionHostProtocolRemoteSyncProviderRegistration
+): ExtensionHostRemoteSyncProviderRegisterRequestMessage {
+  return {
+    type: extensionHostProtocolMessageTypes.remoteSyncProviderRegister,
+    requestId: normalizeRequestId(requestId, "Extension host remote sync provider registration request id"),
+    extensionId: normalizeExtensionId(extensionId, "Extension host remote sync provider registration extension id"),
+    provider: normalizeProtocolRemoteSyncProviderRegistration(provider)
+  };
+}
+
+export function createExtensionHostRemoteSyncProviderUnregisterRequestMessage(
+  requestId: string,
+  extensionId: string,
+  providerId: string
+): ExtensionHostRemoteSyncProviderUnregisterRequestMessage {
+  return {
+    type: extensionHostProtocolMessageTypes.remoteSyncProviderUnregister,
+    requestId: normalizeRequestId(requestId, "Extension host remote sync provider unregister request id"),
+    extensionId: normalizeExtensionId(extensionId, "Extension host remote sync provider unregister extension id"),
+    providerId: normalizeRemoteSyncProviderId(providerId, "Extension host remote sync provider unregister id")
+  };
+}
+
+export function createExtensionHostRemoteSyncCreatePlanRequestMessage(
+  requestId: string,
+  extensionId: string,
+  providerId: string,
+  request: ExtensionHostProtocolRemoteSyncPlanRequest
+): ExtensionHostRemoteSyncCreatePlanRequestMessage {
+  return {
+    type: extensionHostProtocolMessageTypes.remoteSyncCreatePlan,
+    requestId: normalizeRequestId(requestId, "Extension host remote sync create plan request id"),
+    extensionId: normalizeExtensionId(extensionId, "Extension host remote sync create plan extension id"),
+    providerId: normalizeRemoteSyncProviderId(providerId, "Extension host remote sync create plan provider id"),
+    request: normalizeProtocolRemoteSyncPlanRequest(request)
+  };
+}
+
+export function createExtensionHostRemoteSyncCreatePlanResultMessage(
+  requestId: string,
+  extensionId: string,
+  providerId: string,
+  plan: ExtensionHostProtocolRemoteSyncPlan
+): ExtensionHostRemoteSyncCreatePlanResultMessage {
+  return {
+    type: extensionHostProtocolMessageTypes.remoteSyncCreatePlanResult,
+    requestId: normalizeRequestId(requestId, "Extension host remote sync create plan result request id"),
+    extensionId: normalizeExtensionId(extensionId, "Extension host remote sync create plan result extension id"),
+    providerId: normalizeRemoteSyncProviderId(providerId, "Extension host remote sync create plan result provider id"),
+    plan: normalizeProtocolRemoteSyncPlan(plan)
+  };
+}
+
+export function createExtensionHostRemoteSyncExecutePlanRequestMessage(
+  requestId: string,
+  extensionId: string,
+  providerId: string,
+  plan: ExtensionHostProtocolRemoteSyncPlan,
+  request: ExtensionHostProtocolRemoteSyncPlanRequest
+): ExtensionHostRemoteSyncExecutePlanRequestMessage {
+  return {
+    type: extensionHostProtocolMessageTypes.remoteSyncExecutePlan,
+    requestId: normalizeRequestId(requestId, "Extension host remote sync execute plan request id"),
+    extensionId: normalizeExtensionId(extensionId, "Extension host remote sync execute plan extension id"),
+    providerId: normalizeRemoteSyncProviderId(providerId, "Extension host remote sync execute plan provider id"),
+    plan: normalizeProtocolRemoteSyncPlan(plan),
+    request: normalizeProtocolRemoteSyncPlanRequest(request)
+  };
+}
+
+export function createExtensionHostRemoteSyncExecutePlanResultMessage(
+  requestId: string,
+  extensionId: string,
+  providerId: string,
+  result: ExtensionHostProtocolRemoteSyncResult
+): ExtensionHostRemoteSyncExecutePlanResultMessage {
+  return {
+    type: extensionHostProtocolMessageTypes.remoteSyncExecutePlanResult,
+    requestId: normalizeRequestId(requestId, "Extension host remote sync execute plan result request id"),
+    extensionId: normalizeExtensionId(extensionId, "Extension host remote sync execute plan result extension id"),
+    providerId: normalizeRemoteSyncProviderId(providerId, "Extension host remote sync execute plan result provider id"),
+    result: normalizeProtocolRemoteSyncResult(result)
+  };
+}
+
 export function serializeExtensionHostProtocolMessage(message: ExtensionHostProtocolMessage): string {
   return JSON.stringify(readExtensionHostProtocolMessage(message));
 }
@@ -828,6 +1029,18 @@ export function readExtensionHostProtocolMessage(value: unknown): ExtensionHostP
       return readMarkdownRendererRenderResultMessage(record);
     case extensionHostProtocolMessageTypes.markdownRendererUnregister:
       return readMarkdownRendererUnregisterRequestMessage(record);
+    case extensionHostProtocolMessageTypes.remoteSyncProviderRegister:
+      return readRemoteSyncProviderRegisterRequestMessage(record);
+    case extensionHostProtocolMessageTypes.remoteSyncProviderUnregister:
+      return readRemoteSyncProviderUnregisterRequestMessage(record);
+    case extensionHostProtocolMessageTypes.remoteSyncCreatePlan:
+      return readRemoteSyncCreatePlanRequestMessage(record);
+    case extensionHostProtocolMessageTypes.remoteSyncCreatePlanResult:
+      return readRemoteSyncCreatePlanResultMessage(record);
+    case extensionHostProtocolMessageTypes.remoteSyncExecutePlan:
+      return readRemoteSyncExecutePlanRequestMessage(record);
+    case extensionHostProtocolMessageTypes.remoteSyncExecutePlanResult:
+      return readRemoteSyncExecutePlanResultMessage(record);
     default:
       throw new Error(`Unknown extension host protocol message type: ${type}`);
   }
@@ -1119,6 +1332,77 @@ function readMarkdownRendererUnregisterRequestMessage(
     requestId: normalizeRequestId(record.requestId, "Extension host Markdown renderer unregister request id"),
     extensionId: normalizeExtensionId(record.extensionId, "Extension host Markdown renderer unregister extension id"),
     rendererId: normalizeMarkdownRendererId(record.rendererId, "Extension host Markdown renderer unregister id")
+  };
+}
+
+function readRemoteSyncProviderRegisterRequestMessage(
+  record: UnknownRecord
+): ExtensionHostRemoteSyncProviderRegisterRequestMessage {
+  return {
+    type: extensionHostProtocolMessageTypes.remoteSyncProviderRegister,
+    requestId: normalizeRequestId(record.requestId, "Extension host remote sync provider registration request id"),
+    extensionId: normalizeExtensionId(record.extensionId, "Extension host remote sync provider registration extension id"),
+    provider: normalizeProtocolRemoteSyncProviderRegistration(record.provider)
+  };
+}
+
+function readRemoteSyncProviderUnregisterRequestMessage(
+  record: UnknownRecord
+): ExtensionHostRemoteSyncProviderUnregisterRequestMessage {
+  return {
+    type: extensionHostProtocolMessageTypes.remoteSyncProviderUnregister,
+    requestId: normalizeRequestId(record.requestId, "Extension host remote sync provider unregister request id"),
+    extensionId: normalizeExtensionId(record.extensionId, "Extension host remote sync provider unregister extension id"),
+    providerId: normalizeRemoteSyncProviderId(record.providerId, "Extension host remote sync provider unregister id")
+  };
+}
+
+function readRemoteSyncCreatePlanRequestMessage(
+  record: UnknownRecord
+): ExtensionHostRemoteSyncCreatePlanRequestMessage {
+  return {
+    type: extensionHostProtocolMessageTypes.remoteSyncCreatePlan,
+    requestId: normalizeRequestId(record.requestId, "Extension host remote sync create plan request id"),
+    extensionId: normalizeExtensionId(record.extensionId, "Extension host remote sync create plan extension id"),
+    providerId: normalizeRemoteSyncProviderId(record.providerId, "Extension host remote sync create plan provider id"),
+    request: normalizeProtocolRemoteSyncPlanRequest(record.request)
+  };
+}
+
+function readRemoteSyncCreatePlanResultMessage(
+  record: UnknownRecord
+): ExtensionHostRemoteSyncCreatePlanResultMessage {
+  return {
+    type: extensionHostProtocolMessageTypes.remoteSyncCreatePlanResult,
+    requestId: normalizeRequestId(record.requestId, "Extension host remote sync create plan result request id"),
+    extensionId: normalizeExtensionId(record.extensionId, "Extension host remote sync create plan result extension id"),
+    providerId: normalizeRemoteSyncProviderId(record.providerId, "Extension host remote sync create plan result provider id"),
+    plan: normalizeProtocolRemoteSyncPlan(record.plan)
+  };
+}
+
+function readRemoteSyncExecutePlanRequestMessage(
+  record: UnknownRecord
+): ExtensionHostRemoteSyncExecutePlanRequestMessage {
+  return {
+    type: extensionHostProtocolMessageTypes.remoteSyncExecutePlan,
+    requestId: normalizeRequestId(record.requestId, "Extension host remote sync execute plan request id"),
+    extensionId: normalizeExtensionId(record.extensionId, "Extension host remote sync execute plan extension id"),
+    providerId: normalizeRemoteSyncProviderId(record.providerId, "Extension host remote sync execute plan provider id"),
+    plan: normalizeProtocolRemoteSyncPlan(record.plan),
+    request: normalizeProtocolRemoteSyncPlanRequest(record.request)
+  };
+}
+
+function readRemoteSyncExecutePlanResultMessage(
+  record: UnknownRecord
+): ExtensionHostRemoteSyncExecutePlanResultMessage {
+  return {
+    type: extensionHostProtocolMessageTypes.remoteSyncExecutePlanResult,
+    requestId: normalizeRequestId(record.requestId, "Extension host remote sync execute plan result request id"),
+    extensionId: normalizeExtensionId(record.extensionId, "Extension host remote sync execute plan result extension id"),
+    providerId: normalizeRemoteSyncProviderId(record.providerId, "Extension host remote sync execute plan result provider id"),
+    result: normalizeProtocolRemoteSyncResult(record.result)
   };
 }
 
@@ -1557,6 +1841,203 @@ function normalizeProtocolMarkdownRendererOutput(value: unknown): ExtensionHostP
   };
 }
 
+function normalizeProtocolRemoteSyncProviderRegistration(
+  value: unknown
+): ExtensionHostProtocolRemoteSyncProviderRegistration {
+  const record = expectRecord(value, "Extension host remote sync provider registration");
+
+  return {
+    id: normalizeRemoteSyncProviderId(record.id, "Extension host remote sync provider id"),
+    title: normalizeRequiredProtocolString(
+      record.title,
+      "Extension host remote sync provider title",
+      extensionHostProtocolLimits.remoteSyncProviderTitleLength
+    )
+  };
+}
+
+function normalizeProtocolRemoteSyncPlanRequest(value: unknown): ExtensionHostProtocolRemoteSyncPlanRequest {
+  const record = expectRecord(value, "Extension host remote sync plan request");
+  const remoteScopeId = normalizeOptionalProtocolString(
+    record.remoteScopeId,
+    "Extension host remote sync scope id",
+    extensionHostProtocolLimits.remoteSyncRemoteIdLength
+  );
+  const metadata = normalizeOptionalProtocolRemoteSyncMetadata(record.metadata);
+
+  return {
+    workspaceUri: normalizeRemoteSyncUri(record.workspaceUri, "Extension host remote sync workspace URI"),
+    resources: normalizeProtocolRemoteSyncResources(record.resources),
+    direction: normalizeRemoteSyncDirection(record.direction),
+    ...(remoteScopeId ? { remoteScopeId } : {}),
+    ...(typeof record.dryRun === "boolean" ? { dryRun: record.dryRun } : {}),
+    ...(metadata ? { metadata } : {})
+  };
+}
+
+function normalizeProtocolRemoteSyncResources(value: unknown): readonly ExtensionHostProtocolRemoteSyncResource[] {
+  if (!Array.isArray(value)) {
+    throw new Error("Extension host remote sync resources must be an array");
+  }
+
+  if (value.length > extensionHostProtocolLimits.remoteSyncResourceCount) {
+    throw new Error(
+      `Extension host remote sync resources must contain at most ${extensionHostProtocolLimits.remoteSyncResourceCount} items`
+    );
+  }
+
+  return value.map((item, index) => normalizeProtocolRemoteSyncResource(item, index));
+}
+
+function normalizeProtocolRemoteSyncResource(
+  value: unknown,
+  index: number
+): ExtensionHostProtocolRemoteSyncResource {
+  const record = expectRecord(value, `Extension host remote sync resource ${index + 1}`);
+  const name = normalizeOptionalProtocolString(
+    record.name,
+    `Extension host remote sync resource ${index + 1} name`,
+    extensionHostProtocolLimits.remoteSyncRelativePathLength
+  );
+  const contentHash = normalizeOptionalProtocolString(
+    record.contentHash,
+    `Extension host remote sync resource ${index + 1} content hash`,
+    extensionHostProtocolLimits.remoteSyncRemoteIdLength
+  );
+
+  return {
+    uri: normalizeRemoteSyncUri(record.uri, `Extension host remote sync resource ${index + 1} URI`),
+    relativePath: normalizeRemoteSyncRelativePath(
+      record.relativePath,
+      `Extension host remote sync resource ${index + 1} relative path`
+    ),
+    kind: normalizeRemoteSyncFileKind(record.kind, `Extension host remote sync resource ${index + 1} kind`),
+    ...(name ? { name } : {}),
+    ...normalizeOptionalProtocolRemoteSyncNumber("size", record.size, `Extension host remote sync resource ${index + 1} size`),
+    ...normalizeOptionalProtocolRemoteSyncNumber("mtime", record.mtime, `Extension host remote sync resource ${index + 1} mtime`),
+    ...(contentHash ? { contentHash } : {})
+  };
+}
+
+function normalizeProtocolRemoteSyncPlan(value: unknown): ExtensionHostProtocolRemoteSyncPlan {
+  const record = expectRecord(value, "Extension host remote sync plan");
+
+  return {
+    operations: normalizeProtocolRemoteSyncOperations(record.operations),
+    summary: normalizeProtocolRemoteSyncSummary(record.summary)
+  };
+}
+
+function normalizeProtocolRemoteSyncResult(value: unknown): ExtensionHostProtocolRemoteSyncResult {
+  const record = expectRecord(value, "Extension host remote sync result");
+  const completedAt = normalizeOptionalProtocolNumber(
+    record.completedAt,
+    "Extension host remote sync completed timestamp",
+    0,
+    extensionHostProtocolLimits.remoteSyncCompletedAtMax
+  );
+
+  return {
+    operations: normalizeProtocolRemoteSyncOperations(record.operations),
+    summary: normalizeProtocolRemoteSyncSummary(record.summary),
+    ...(completedAt !== undefined ? { completedAt } : {})
+  };
+}
+
+function normalizeProtocolRemoteSyncOperations(
+  value: unknown
+): readonly ExtensionHostProtocolRemoteSyncOperation[] {
+  if (!Array.isArray(value)) {
+    throw new Error("Extension host remote sync operations must be an array");
+  }
+
+  if (value.length > extensionHostProtocolLimits.remoteSyncOperationCount) {
+    throw new Error(
+      `Extension host remote sync operations must contain at most ${extensionHostProtocolLimits.remoteSyncOperationCount} items`
+    );
+  }
+
+  return value.map((item, index) => normalizeProtocolRemoteSyncOperation(item, index));
+}
+
+function normalizeProtocolRemoteSyncOperation(
+  value: unknown,
+  index: number
+): ExtensionHostProtocolRemoteSyncOperation {
+  const record = expectRecord(value, `Extension host remote sync operation ${index + 1}`);
+  const remoteId = normalizeOptionalProtocolString(
+    record.remoteId,
+    `Extension host remote sync operation ${index + 1} remote id`,
+    extensionHostProtocolLimits.remoteSyncRemoteIdLength
+  );
+  const message = normalizeOptionalProtocolString(
+    record.message,
+    `Extension host remote sync operation ${index + 1} message`,
+    extensionHostProtocolLimits.remoteSyncMessageLength
+  );
+
+  return {
+    kind: normalizeRemoteSyncOperationKind(record.kind),
+    target: normalizeRemoteSyncOperationTarget(record.target),
+    relativePath: normalizeRemoteSyncRelativePath(
+      record.relativePath,
+      `Extension host remote sync operation ${index + 1} relative path`
+    ),
+    ...(record.localUri !== undefined
+      ? { localUri: normalizeRemoteSyncUri(record.localUri, `Extension host remote sync operation ${index + 1} local URI`) }
+      : {}),
+    ...(remoteId ? { remoteId } : {}),
+    ...(message ? { message } : {})
+  };
+}
+
+function normalizeProtocolRemoteSyncSummary(value: unknown): RemoteSyncSummary {
+  const record = expectRecord(value, "Extension host remote sync summary");
+
+  return {
+    creates: normalizeRemoteSyncSummaryCount(record.creates, "creates"),
+    updates: normalizeRemoteSyncSummaryCount(record.updates, "updates"),
+    deletes: normalizeRemoteSyncSummaryCount(record.deletes, "deletes"),
+    skips: normalizeRemoteSyncSummaryCount(record.skips, "skips"),
+    conflicts: normalizeRemoteSyncSummaryCount(record.conflicts, "conflicts")
+  };
+}
+
+function normalizeOptionalProtocolRemoteSyncMetadata(
+  value: unknown
+): Readonly<Record<string, string>> | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  const record = expectRecord(value, "Extension host remote sync metadata");
+  const entries = Object.entries(record);
+
+  if (entries.length > extensionHostProtocolLimits.remoteSyncMetadataEntries) {
+    throw new Error(
+      `Extension host remote sync metadata must contain at most ${extensionHostProtocolLimits.remoteSyncMetadataEntries} entries`
+    );
+  }
+
+  const result: Record<string, string> = {};
+
+  for (const [key, metadataValue] of entries) {
+    const normalizedKey = normalizeRequiredProtocolString(
+      key,
+      "Extension host remote sync metadata key",
+      extensionHostProtocolLimits.remoteSyncMetadataKeyLength
+    );
+
+    result[normalizedKey] = normalizeProtocolText(
+      metadataValue,
+      `Extension host remote sync metadata ${normalizedKey}`,
+      extensionHostProtocolLimits.remoteSyncMetadataValueLength
+    );
+  }
+
+  return result;
+}
+
 function normalizeExportFormat(value: unknown, label: string): string {
   const format = normalizeRequiredProtocolString(value, label, extensionHostProtocolLimits.exportFormatLength);
 
@@ -1753,6 +2234,123 @@ function normalizeAiProviderId(value: unknown, label: string): string {
   }
 
   return id;
+}
+
+function normalizeRemoteSyncProviderId(value: unknown, label: string): string {
+  const id = normalizeRequiredProtocolString(value, label, extensionHostProtocolLimits.remoteSyncProviderIdLength);
+
+  if (!/^[A-Za-z0-9][A-Za-z0-9_.:-]*$/.test(id)) {
+    throw new Error(`${label} is invalid: ${id}`);
+  }
+
+  return id;
+}
+
+function normalizeRemoteSyncDirection(value: unknown): RemoteSyncDirection {
+  if (value !== "push" && value !== "pull" && value !== "bidirectional") {
+    throw new Error("Extension host remote sync direction must be push, pull, or bidirectional");
+  }
+
+  return value;
+}
+
+function normalizeRemoteSyncOperationKind(value: unknown): RemoteSyncOperationKind {
+  if (value !== "create" && value !== "update" && value !== "delete" && value !== "skip" && value !== "conflict") {
+    throw new Error("Extension host remote sync operation kind must be create, update, delete, skip, or conflict");
+  }
+
+  return value;
+}
+
+function normalizeRemoteSyncOperationTarget(value: unknown): RemoteSyncOperationTarget {
+  if (value !== "local" && value !== "remote" && value !== "both" && value !== "none") {
+    throw new Error("Extension host remote sync operation target must be local, remote, both, or none");
+  }
+
+  return value;
+}
+
+function normalizeRemoteSyncFileKind(value: unknown, label: string): "file" | "directory" {
+  if (value !== "file" && value !== "directory") {
+    throw new Error(`${label} must be file or directory`);
+  }
+
+  return value;
+}
+
+function normalizeRemoteSyncRelativePath(value: unknown, label: string): string {
+  const normalized = normalizeRequiredProtocolString(
+    value,
+    label,
+    extensionHostProtocolLimits.remoteSyncRelativePathLength
+  ).replaceAll("\\", "/");
+
+  if (normalized.startsWith("/") || /^[A-Za-z][A-Za-z0-9+.-]*:/.test(normalized)) {
+    throw new Error(`${label} must be workspace-relative`);
+  }
+
+  const segments: string[] = [];
+
+  for (const segment of normalized.split("/")) {
+    if (!segment || segment === ".") {
+      continue;
+    }
+
+    if (segment === "..") {
+      throw new Error(`${label} must not contain parent traversal`);
+    }
+
+    segments.push(segment);
+  }
+
+  const relativePath = segments.join("/");
+
+  if (!relativePath) {
+    throw new Error(`${label} must not be empty`);
+  }
+
+  return relativePath;
+}
+
+function normalizeRemoteSyncUri(value: unknown, label: string): string {
+  return normalizeRequiredProtocolString(value, label, extensionHostProtocolLimits.remoteSyncUriLength);
+}
+
+function normalizeOptionalProtocolRemoteSyncNumber<Key extends string>(
+  key: Key,
+  value: unknown,
+  label: string
+): Partial<Record<Key, number>> {
+  if (value === undefined) {
+    return {};
+  }
+
+  const normalizedValue = normalizeOptionalProtocolNumber(
+    value,
+    label,
+    0,
+    Number.MAX_SAFE_INTEGER
+  );
+
+  if (normalizedValue === undefined) {
+    return {};
+  }
+
+  return { [key]: normalizedValue } as Partial<Record<Key, number>>;
+}
+
+function normalizeRemoteSyncSummaryCount(value: unknown, key: keyof RemoteSyncSummary): number {
+  if (typeof value !== "number" || !Number.isInteger(value) || value < 0) {
+    throw new Error(`Extension host remote sync summary ${key} must be a non-negative integer`);
+  }
+
+  if (value > extensionHostProtocolLimits.remoteSyncOperationCount) {
+    throw new Error(
+      `Extension host remote sync summary ${key} must be at most ${extensionHostProtocolLimits.remoteSyncOperationCount}`
+    );
+  }
+
+  return value;
 }
 
 function normalizeExtensionId(value: unknown, label: string): string {

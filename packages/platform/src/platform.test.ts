@@ -21,6 +21,7 @@ import {
   NativeResourceService,
   parseContextKeyExpression,
   createDefaultWorkspaceIndexSnapshotStorage,
+  RemoteSyncService,
   defaultConfiguration,
   flattenFileTree,
   keybindingFromEvent,
@@ -1631,6 +1632,175 @@ describe("extensions", () => {
       .rejects.toThrow("No extension AI service registered");
   });
 
+  it("registers remote sync providers through the extension context", async () => {
+    const services = createExtensionServices((request) => {
+      request.context.remoteSync.registerProvider({
+        id: "notes.sync",
+        title: "Notes Sync",
+        createPlan(input) {
+          const resource = input.resources[0];
+
+          if (!resource) {
+            throw new Error("Expected a sync resource");
+          }
+
+          return {
+            operations: [{
+              kind: "create",
+              target: "remote",
+              relativePath: resource.relativePath,
+              localUri: resource.uri
+            }],
+            summary: {
+              creates: 1,
+              updates: 0,
+              deletes: 0,
+              skips: 0,
+              conflicts: 0
+            }
+          };
+        },
+        executePlan(plan) {
+          return {
+            operations: plan.operations,
+            summary: plan.summary,
+            completedAt: 123
+          };
+        }
+      });
+    });
+
+    const disposable = services.extensionService.registerExtension({
+      id: "notes.syncExtension",
+      activationEvents: ["onStartupFinished"]
+    });
+    const request = {
+      workspaceUri: URI.file("C:/Notes"),
+      resources: [{
+        uri: URI.file("C:/Notes/A.md"),
+        relativePath: "A.md",
+        kind: "file" as const
+      }],
+      direction: "push" as const
+    };
+
+    await services.extensionService.activateByEvent("onStartupFinished");
+
+    expect(services.remoteSyncService.getProviders()).toEqual([
+      { id: "notes.sync", title: "Notes Sync" }
+    ]);
+
+    const plan = await services.remoteSyncService.createPlan("notes.sync", request);
+
+    expect(plan).toEqual({
+      operations: [{
+        kind: "create",
+        target: "remote",
+        relativePath: "A.md",
+        localUri: URI.file("C:/Notes/A.md")
+      }],
+      summary: {
+        creates: 1,
+        updates: 0,
+        deletes: 0,
+        skips: 0,
+        conflicts: 0
+      }
+    });
+    await expect(services.remoteSyncService.executePlan("notes.sync", plan, request)).resolves.toEqual({
+      operations: plan.operations,
+      summary: plan.summary,
+      completedAt: 123
+    });
+
+    disposable.dispose();
+
+    expect(services.remoteSyncService.getProviders()).toEqual([]);
+    await expect(services.remoteSyncService.createPlan("notes.sync", request)).rejects.toThrow(
+      "No remote sync provider registered"
+    );
+  });
+
+  it("cleans up extension remote sync providers when activation fails", async () => {
+    const services = createExtensionServices((request) => {
+      request.context.remoteSync.registerProvider({
+        id: "notes.failedSync",
+        title: "Failed Sync",
+        createPlan() {
+          return {
+            operations: [],
+            summary: {
+              creates: 0,
+              updates: 0,
+              deletes: 0,
+              skips: 0,
+              conflicts: 0
+            }
+          };
+        },
+        executePlan(plan) {
+          return {
+            operations: plan.operations,
+            summary: plan.summary
+          };
+        }
+      });
+      throw new Error("Activation failed");
+    });
+
+    services.extensionService.registerExtension({
+      id: "notes.failedSync",
+      activationEvents: ["onStartupFinished"]
+    });
+
+    await expect(services.extensionService.activateByEvent("onStartupFinished")).rejects.toThrow("Activation failed");
+    expect(services.remoteSyncService.getProviders()).toEqual([]);
+  });
+
+  it("requires a remote sync service for extension remote sync providers", async () => {
+    const serviceCollection = new ServiceCollection();
+    const commandService = new CommandService(serviceCollection);
+    const extensionService = new ExtensionService(
+      commandService,
+      new MenuService(),
+      new KeybindingService(),
+      {
+        activationHandler: (request) => {
+          request.context.remoteSync.registerProvider({
+            id: "notes.noRemoteSyncService",
+            title: "No Remote Sync Service",
+            createPlan() {
+              return {
+                operations: [],
+                summary: {
+                  creates: 0,
+                  updates: 0,
+                  deletes: 0,
+                  skips: 0,
+                  conflicts: 0
+                }
+              };
+            },
+            executePlan(plan) {
+              return {
+                operations: plan.operations,
+                summary: plan.summary
+              };
+            }
+          });
+        }
+      }
+    );
+
+    extensionService.registerExtension({
+      id: "notes.noRemoteSyncService",
+      activationEvents: ["onStartupFinished"]
+    });
+
+    await expect(extensionService.activateByEvent("onStartupFinished"))
+      .rejects.toThrow("No extension remote sync service registered");
+  });
+
   it("registers export providers through the extension context", async () => {
     const services = createExtensionServices((request) => {
       request.context.exports.registerProvider({
@@ -3224,6 +3394,7 @@ function createExtensionServices(activationHandler?: ExtensionActivationHandler)
     browserSave: () => true
   });
   const themeService = new ThemeService();
+  const remoteSyncService = new RemoteSyncService();
   const markdownRendererService = new MarkdownRendererService({
     activationHandler: async (rendererId) => {
       await extensionService?.activateByEvent(`onMarkdownRenderer:${rendererId}`);
@@ -3238,6 +3409,7 @@ function createExtensionServices(activationHandler?: ExtensionActivationHandler)
       contextKeyService,
       exportService,
       markdownRendererService,
+      remoteSyncService,
       themeService,
       ...(activationHandler ? { activationHandler } : {})
     }
@@ -3252,6 +3424,7 @@ function createExtensionServices(activationHandler?: ExtensionActivationHandler)
     keybindingService,
     markdownRendererService,
     menuService,
+    remoteSyncService,
     themeService
   };
 }

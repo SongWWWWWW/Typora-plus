@@ -125,6 +125,10 @@ function createExtensionContext(extension: RegisteredExtension): ExtensionContex
       getRenderers: () => [],
       registerRendererProvider: () => toDisposable(() => undefined)
     },
+    remoteSync: {
+      getProviders: () => [],
+      registerProvider: () => toDisposable(() => undefined)
+    },
     subscriptions: {
       add(disposable) {
         return disposable;

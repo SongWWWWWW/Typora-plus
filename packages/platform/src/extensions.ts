@@ -19,6 +19,7 @@ import type {
   RegisteredMarkdownRenderer
 } from "./markdownRenderers";
 import type { IMenuService, MenuIconId, MenuId, MenuItemToggle } from "./menus";
+import type { IRemoteSyncService, RegisteredRemoteSyncProvider, RemoteSyncProvider } from "./remoteSync";
 import type { IThemeService, ThemeColorScheme, ThemeContribution } from "./themes";
 
 export interface ExtensionManifest {
@@ -99,6 +100,7 @@ export interface ExtensionServiceOptions {
   readonly contextKeyService?: IContextKeyService;
   readonly exportService?: IExportService;
   readonly markdownRendererService?: IMarkdownRendererService;
+  readonly remoteSyncService?: IRemoteSyncService;
   readonly themeService?: IThemeService;
 }
 
@@ -116,6 +118,7 @@ export interface ExtensionContext {
   readonly ai: ExtensionAiApi;
   readonly exports: ExtensionExportApi;
   readonly markdown: ExtensionMarkdownApi;
+  readonly remoteSync: ExtensionRemoteSyncApi;
 }
 
 export interface ExtensionSubscriptionStore {
@@ -149,6 +152,11 @@ export interface ExtensionMarkdownApi {
     metadata?: MarkdownRendererRuntimeMetadata
   ): IDisposable;
   getRenderers(): readonly RegisteredMarkdownRenderer[];
+}
+
+export interface ExtensionRemoteSyncApi {
+  registerProvider(provider: RemoteSyncProvider): IDisposable;
+  getProviders(): readonly RegisteredRemoteSyncProvider[];
 }
 
 export type ExtensionCommandHandler = (...args: unknown[]) => unknown;
@@ -291,7 +299,8 @@ export class ExtensionService extends Disposable implements IExtensionService {
             this.options.aiService,
             this.options.contextKeyService,
             this.options.exportService,
-            this.options.markdownRendererService
+            this.options.markdownRendererService,
+            this.options.remoteSyncService
           )
         });
       }).then(() => {
@@ -734,7 +743,8 @@ function createExtensionContext(
   aiService: IAiService | undefined,
   contextKeyService: IContextKeyService | undefined,
   exportService: IExportService | undefined,
-  markdownRendererService: IMarkdownRendererService | undefined
+  markdownRendererService: IMarkdownRendererService | undefined,
+  remoteSyncService: IRemoteSyncService | undefined
 ): ExtensionContext {
   return {
     extension,
@@ -812,6 +822,17 @@ function createExtensionContext(
         return record.runtimeDisposables.add(disposable);
       },
       getRenderers: () => markdownRendererService?.getRenderers() ?? []
+    },
+    remoteSync: {
+      registerProvider(provider) {
+        if (!remoteSyncService) {
+          throw new Error(`No extension remote sync service registered: ${record.manifest.id}`);
+        }
+
+        const disposable = remoteSyncService.registerProvider(provider);
+        return record.runtimeDisposables.add(disposable);
+      },
+      getProviders: () => remoteSyncService?.getProviders() ?? []
     }
   };
 }

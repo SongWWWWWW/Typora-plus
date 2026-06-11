@@ -6488,3 +6488,34 @@ Known limitations:
 
 - No built-in AI provider, credential bridge, streaming response UI, insertion workflow, workspace-grounded retrieval provider, or external extension loader exists yet.
 - Remote sync provider registration is still not exposed through extension/runtime APIs.
+
+## 2026-06-11 - P2 Extension Remote Sync Provider Runtime API
+
+Completed:
+
+- Added `ExtensionContext.remoteSync` so activated extensions can register workspace sync providers through `IRemoteSyncService`.
+- Wired Workbench's `IRemoteSyncService` into `ExtensionService`, keeping future Feishu Drive, raw Markdown/assets mirrors, document publishing, or other cloud providers behind extension/runtime provider registration.
+- Extended the extension-host protocol with wire-safe remote sync provider registration, unregistration, create-plan request/result, and execute-plan request/result messages.
+- Added broker/runtime/session support so remote extension hosts can proxy remote sync providers and service create-plan/execute-plan callbacks through bounded protocol messages.
+- Preserved provider neutrality: no Feishu endpoint, OAuth scope, token, storage path, OpenAI, Codex, model id, credential behavior, or provider id was hard-coded.
+- Updated maintained docs to include extension/runtime remote sync provider registration and the Feishu feasibility split.
+
+Quality gate:
+
+- `npx vitest run packages/platform/src/platform.test.ts packages/platform/src/extensionHostProtocol.test.ts packages/platform/src/extensionHostRuntimeBroker.test.ts packages/platform/src/extensionHostProtocolRuntime.test.ts packages/platform/src/extensionHostProtocolSession.test.ts packages/platform/src/extensionHostProtocolTransport.test.ts packages/platform/src/extensionHostProtocolWireTransport.test.ts packages/workbench/src/services.test.ts packages/workbench/src/workbenchExtensionActivation.test.ts`: passed, 9 files / 163 tests
+- `npm run verify`: passed, 65 files / 637 tests, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Dev server smoke check: passed at `http://127.0.0.1:5173`; status 200 and root element present
+
+Review:
+
+- Remote sync provider implementation can now live in an extension or future external host instead of being built into Workbench UI code.
+- The protocol mirrors the AI/export/Markdown renderer provider pattern: registration sends metadata, provider callbacks cross the request/response channel, and unregister/dispose clears runtime contributions.
+- URI values are serialized as strings across the extension-host boundary and converted back to platform `URI` values at the edge; `AbortSignal` remains local and is not sent over the protocol.
+- The first Feishu implementation should remain a raw Markdown/assets mirror provider. Feishu Docs import/publish can be added later as a one-way adapter, while full bidirectional Docs sync remains a separate high-risk conversion and conflict-resolution project.
+
+Known limitations:
+
+- No built-in Feishu provider, OAuth flow, secret storage, Electron network bridge, sync command UI, sync preview UI, or external extension loader exists yet.
+- Remote sync protocol cancellation and streaming progress messages are not modeled yet.

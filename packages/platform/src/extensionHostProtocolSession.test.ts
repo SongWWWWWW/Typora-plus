@@ -5,6 +5,7 @@ import type { CommandMetadata } from "./commands";
 import type { ExtensionCommandHandler, ExtensionContext } from "./extensions";
 import type { ExportProvider } from "./exports";
 import type { MarkdownRendererProvider, MarkdownRendererRuntimeMetadata } from "./markdownRenderers";
+import type { RemoteSyncProvider } from "./remoteSync";
 import {
   createExtensionHostActivationErrorMessage,
   createExtensionHostActivationResultMessage,
@@ -15,6 +16,9 @@ import {
   createExtensionHostCommandExecuteRequestMessage,
   createExtensionHostCommandRegisterRequestMessage,
   createExtensionHostHandshakeResultMessage,
+  createExtensionHostRemoteSyncCreatePlanRequestMessage,
+  createExtensionHostRemoteSyncCreatePlanResultMessage,
+  createExtensionHostRemoteSyncProviderRegisterRequestMessage,
   extensionHostProtocolMessageTypes,
   readExtensionHostProtocolMessage,
   type ExtensionHostProtocolMessage
@@ -104,6 +108,7 @@ describe("extension host protocol session", () => {
         "contextKeys",
         "exports",
         "markdownRenderers",
+        "remoteSyncProviders",
         "remoteCallbacks",
         "unregister"
       ]
@@ -309,6 +314,78 @@ describe("extension host protocol session", () => {
     }));
 
     await expect(aiExecution).resolves.toEqual({ value: "Summary" });
+
+    transport.receive(createExtensionHostRemoteSyncProviderRegisterRequestMessage("remote-sync-1", "notes.remote", {
+      id: "notes.remote.sync",
+      title: "Remote Sync"
+    }));
+    await flushPromises();
+
+    expect(controls.remoteSyncProviders).toHaveLength(1);
+    expect(transport.sent[4]).toEqual(createExtensionHostApiResultMessage("remote-sync-1", "notes.remote"));
+
+    const syncPlan = controls.remoteSyncProviders[0]!.createPlan({
+      workspaceUri: URI.file("C:/Notes"),
+      resources: [{
+        uri: URI.file("C:/Notes/A.md"),
+        relativePath: "A.md",
+        kind: "file"
+      }],
+      direction: "push"
+    });
+    await flushPromises();
+
+    expect(transport.sent[5]).toEqual(createExtensionHostRemoteSyncCreatePlanRequestMessage(
+      "remoteSyncCreatePlan-3",
+      "notes.remote",
+      "notes.remote.sync",
+      {
+        workspaceUri: "file://C:/Notes",
+        resources: [{
+          uri: "file://C:/Notes/A.md",
+          relativePath: "A.md",
+          kind: "file"
+        }],
+        direction: "push"
+      }
+    ));
+
+    transport.receive(createExtensionHostRemoteSyncCreatePlanResultMessage(
+      "remoteSyncCreatePlan-3",
+      "notes.remote",
+      "notes.remote.sync",
+      {
+        operations: [{
+          kind: "create",
+          target: "remote",
+          relativePath: "A.md",
+          localUri: "file://C:/Notes/A.md"
+        }],
+        summary: {
+          creates: 1,
+          updates: 0,
+          deletes: 0,
+          skips: 0,
+          conflicts: 0
+        }
+      }
+    ));
+
+    await expect(syncPlan).resolves.toEqual({
+      operations: [{
+        kind: "create",
+        target: "remote",
+        relativePath: "A.md",
+        localUri: URI.file("C:/Notes/A.md")
+      }],
+      summary: {
+        creates: 1,
+        updates: 0,
+        deletes: 0,
+        skips: 0,
+        conflicts: 0
+      }
+    });
   });
 
   it("rejects proxy callback requests that miss the configured timeout", async () => {
@@ -513,6 +590,7 @@ interface SessionTestControls {
     readonly provider: MarkdownRendererProvider;
     readonly metadata?: MarkdownRendererRuntimeMetadata;
   }[];
+  readonly remoteSyncProviders: RemoteSyncProvider[];
 }
 
 function createMemoryTransport(): MemoryTransport {
@@ -538,7 +616,8 @@ function createSessionTestContext(): { readonly context: ExtensionContext; reado
     commandMetadata: [],
     executeCommand: async (command, args) => ({ args, command }),
     exportProviders: [],
-    markdownProviders: []
+    markdownProviders: [],
+    remoteSyncProviders: []
   };
   const context: ExtensionContext = {
     commands: {
@@ -581,6 +660,13 @@ function createSessionTestContext(): { readonly context: ExtensionContext; reado
         const registration = { provider, ...(metadata ? { metadata } : {}) };
         controls.markdownProviders.push(registration);
         return removeFromArrayDisposable(controls.markdownProviders, registration);
+      }
+    },
+    remoteSync: {
+      getProviders: () => controls.remoteSyncProviders.map((provider) => ({ id: provider.id, title: provider.title })),
+      registerProvider(provider) {
+        controls.remoteSyncProviders.push(provider);
+        return removeFromArrayDisposable(controls.remoteSyncProviders, provider);
       }
     },
     subscriptions: {

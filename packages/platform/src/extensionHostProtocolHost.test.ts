@@ -270,6 +270,10 @@ function createExtensionContext(extension: RegisteredExtension): TestExtensionCo
       getRenderers: () => [],
       registerRendererProvider: () => toDisposable(() => undefined)
     },
+    remoteSync: {
+      getProviders: () => [],
+      registerProvider: () => toDisposable(() => undefined)
+    },
     subscriptions: {
       add<T extends IDisposable>(disposable: T): T {
         disposables.push(disposable);

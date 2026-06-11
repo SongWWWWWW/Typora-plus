@@ -7,7 +7,8 @@ import type {
   ExtensionContext,
   ExportProvider,
   MarkdownRendererProvider,
-  MarkdownRendererRuntimeMetadata
+  MarkdownRendererRuntimeMetadata,
+  RemoteSyncProvider
 } from "./index";
 import {
   createExtensionHostApiErrorMessage,
@@ -28,6 +29,12 @@ import {
   createExtensionHostMarkdownRendererRegisterRequestMessage,
   createExtensionHostMarkdownRendererRenderResultMessage,
   createExtensionHostMarkdownRendererUnregisterRequestMessage,
+  createExtensionHostRemoteSyncCreatePlanRequestMessage,
+  createExtensionHostRemoteSyncCreatePlanResultMessage,
+  createExtensionHostRemoteSyncExecutePlanRequestMessage,
+  createExtensionHostRemoteSyncExecutePlanResultMessage,
+  createExtensionHostRemoteSyncProviderRegisterRequestMessage,
+  createExtensionHostRemoteSyncProviderUnregisterRequestMessage,
   extensionHostProtocolMessageTypes,
   readExtensionHostProtocolMessage,
   type ExtensionHostProtocolMessage
@@ -211,6 +218,153 @@ describe("extension host runtime broker", () => {
       "notes.remote.ai"
     ))).resolves.toEqual(createExtensionHostApiResultMessage("request-ai-2", "notes.remote"));
     expect(controls.aiProviders).toEqual([]);
+  });
+
+  it("registers remote sync provider proxies that call the remote host", async () => {
+    const { context, controls } = createBrokerTestContext();
+    const requests: ExtensionHostProtocolMessage[] = [];
+    const broker = new ExtensionHostRuntimeBroker(context, {
+      createRequestId: createSequentialRequestId(),
+      request: (message) => {
+        const request = readExtensionHostProtocolMessage(message);
+        requests.push(request);
+
+        if (request.type === extensionHostProtocolMessageTypes.remoteSyncCreatePlan) {
+          expect("signal" in request.request).toBe(false);
+          const resource = request.request.resources[0];
+
+          if (!resource) {
+            throw new Error("Expected a sync resource");
+          }
+
+          return createExtensionHostRemoteSyncCreatePlanResultMessage(
+            request.requestId,
+            request.extensionId,
+            request.providerId,
+            {
+              operations: [{
+                kind: "create",
+                target: "remote",
+                relativePath: resource.relativePath,
+                localUri: resource.uri
+              }],
+              summary: {
+                creates: 1,
+                updates: 0,
+                deletes: 0,
+                skips: 0,
+                conflicts: 0
+              }
+            }
+          );
+        }
+
+        if (request.type === extensionHostProtocolMessageTypes.remoteSyncExecutePlan) {
+          return createExtensionHostRemoteSyncExecutePlanResultMessage(
+            request.requestId,
+            request.extensionId,
+            request.providerId,
+            {
+              operations: request.plan.operations,
+              summary: request.plan.summary,
+              completedAt: 456
+            }
+          );
+        }
+
+        throw new Error(`Unexpected request: ${request.type}`);
+      }
+    });
+    const syncRequest = {
+      workspaceUri: URI.file("C:/Notes"),
+      resources: [{
+        uri: URI.file("C:/Notes/A.md"),
+        relativePath: "A.md",
+        kind: "file" as const
+      }],
+      direction: "push" as const,
+      signal: new AbortController().signal
+    };
+
+    await expect(broker.handleMessage(createExtensionHostRemoteSyncProviderRegisterRequestMessage(
+      "request-sync-1",
+      "notes.remote",
+      {
+        id: "notes.remote.sync",
+        title: "Remote Sync"
+      }
+    ))).resolves.toEqual(createExtensionHostApiResultMessage("request-sync-1", "notes.remote"));
+    expect(controls.remoteSyncProviders.map((provider) => ({ id: provider.id, title: provider.title }))).toEqual([
+      { id: "notes.remote.sync", title: "Remote Sync" }
+    ]);
+
+    const plan = await controls.remoteSyncProviders[0]!.createPlan(syncRequest);
+
+    expect(plan).toEqual({
+      operations: [{
+        kind: "create",
+        target: "remote",
+        relativePath: "A.md",
+        localUri: URI.file("C:/Notes/A.md")
+      }],
+      summary: {
+        creates: 1,
+        updates: 0,
+        deletes: 0,
+        skips: 0,
+        conflicts: 0
+      }
+    });
+    expect(requests[0]).toEqual(createExtensionHostRemoteSyncCreatePlanRequestMessage(
+      "remoteSyncCreatePlan-1",
+      "notes.remote",
+      "notes.remote.sync",
+      {
+        workspaceUri: "file://C:/Notes",
+        resources: [{
+          uri: "file://C:/Notes/A.md",
+          relativePath: "A.md",
+          kind: "file"
+        }],
+        direction: "push"
+      }
+    ));
+
+    await expect(controls.remoteSyncProviders[0]!.executePlan(plan, syncRequest)).resolves.toEqual({
+      operations: plan.operations,
+      summary: plan.summary,
+      completedAt: 456
+    });
+    expect(requests[1]).toEqual(createExtensionHostRemoteSyncExecutePlanRequestMessage(
+      "remoteSyncExecutePlan-2",
+      "notes.remote",
+      "notes.remote.sync",
+      {
+        operations: [{
+          kind: "create",
+          target: "remote",
+          relativePath: "A.md",
+          localUri: "file://C:/Notes/A.md"
+        }],
+        summary: plan.summary
+      },
+      {
+        workspaceUri: "file://C:/Notes",
+        resources: [{
+          uri: "file://C:/Notes/A.md",
+          relativePath: "A.md",
+          kind: "file"
+        }],
+        direction: "push"
+      }
+    ));
+
+    await expect(broker.handleMessage(createExtensionHostRemoteSyncProviderUnregisterRequestMessage(
+      "request-sync-2",
+      "notes.remote",
+      "notes.remote.sync"
+    ))).resolves.toEqual(createExtensionHostApiResultMessage("request-sync-2", "notes.remote"));
+    expect(controls.remoteSyncProviders).toEqual([]);
   });
 
   it("registers export and Markdown renderer proxies that call the remote host", async () => {
@@ -465,6 +619,7 @@ interface BrokerTestControls {
     readonly provider: MarkdownRendererProvider;
     readonly metadata?: MarkdownRendererRuntimeMetadata;
   }[];
+  readonly remoteSyncProviders: RemoteSyncProvider[];
 }
 
 function createBrokerTestContext(): { readonly context: ExtensionContext; readonly controls: BrokerTestControls } {
@@ -475,7 +630,8 @@ function createBrokerTestContext(): { readonly context: ExtensionContext; readon
     executeCommand: async (command, args) => ({ args, command }),
     contextValues: new Map(),
     exportProviders: [],
-    markdownProviders: []
+    markdownProviders: [],
+    remoteSyncProviders: []
   };
   const context: ExtensionContext = {
     commands: {
@@ -525,6 +681,13 @@ function createBrokerTestContext(): { readonly context: ExtensionContext; readon
         const registration = { provider, ...(metadata ? { metadata } : {}) };
         controls.markdownProviders.push(registration);
         return removeFromArrayDisposable(controls.markdownProviders, registration);
+      }
+    },
+    remoteSync: {
+      getProviders: () => controls.remoteSyncProviders.map((provider) => ({ id: provider.id, title: provider.title })),
+      registerProvider(provider) {
+        controls.remoteSyncProviders.push(provider);
+        return removeFromArrayDisposable(controls.remoteSyncProviders, provider);
       }
     },
     subscriptions: {

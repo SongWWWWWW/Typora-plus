@@ -172,6 +172,7 @@ export function createWorkbenchServices(): WorkbenchServices {
     contextKeyService,
     exportService,
     markdownRendererService,
+    remoteSyncService,
     themeService
   });
   serviceCollection.set(IExtensionService, extensionService);
