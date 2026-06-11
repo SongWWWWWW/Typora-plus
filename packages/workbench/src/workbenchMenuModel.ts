@@ -11,6 +11,12 @@ import type { WorkbenchSideView } from "./workbenchSideViewModel";
 
 export type WorkbenchMenuContext = Readonly<Record<string, boolean | string | null>>;
 
+export const workbenchMenuIds = {
+  titlebarPrimary: "titlebar.primary",
+  activitybarPrimary: "activitybar.primary",
+  activitybarSecondary: "activitybar.secondary"
+} as const satisfies Record<string, MenuId>;
+
 export interface WorkbenchMenuConfiguration {
   readonly editor: Pick<TyporaPlusConfiguration["editor"], "focusMode" | "typewriterMode">;
 }

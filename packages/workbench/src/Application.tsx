@@ -90,6 +90,7 @@ import {
   getWorkbenchMenuItems,
   isWorkbenchMenuItemActive,
   registerWorkbenchMenuItemsSubscription,
+  workbenchMenuIds,
   workbenchMenuItemTitle
 } from "./workbenchMenuModel";
 import {
@@ -169,9 +170,9 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
   const [indexStatus, setIndexStatus] = useState<WorkspaceIndexStatus>(initialState.indexStatus);
   const [markdownRendererRevision, setMarkdownRendererRevision] = useState(0);
   const editorRef = useRef<MarkdownEditorHandle | null>(null);
-  const titlebarMenuItems = useMenuItems(services, "titlebar.primary");
-  const activitybarPrimaryMenuItems = useMenuItems(services, "activitybar.primary");
-  const activitybarSecondaryMenuItems = useMenuItems(services, "activitybar.secondary");
+  const titlebarMenuItems = useMenuItems(services, workbenchMenuIds.titlebarPrimary);
+  const activitybarPrimaryMenuItems = useMenuItems(services, workbenchMenuIds.activitybarPrimary);
+  const activitybarSecondaryMenuItems = useMenuItems(services, workbenchMenuIds.activitybarSecondary);
   const capabilityContext = createWorkbenchCapabilityContext(services);
   const commandSurface = createWorkbenchCommandSurface(services);
   const executeCommand = createWorkbenchCommandExecutor(services, {

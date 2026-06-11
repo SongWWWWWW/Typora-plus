@@ -7,6 +7,7 @@ import {
   isWorkbenchMenuItemActive,
   registerWorkbenchMenuItemsSubscription,
   workbenchCommandTitle,
+  workbenchMenuIds,
   workbenchMenuItemTitle
 } from "./workbenchMenuModel";
 
@@ -19,6 +20,14 @@ describe("workbench menu model", () => {
   it("resolves command titles with command id fallback", () => {
     expect(workbenchCommandTitle(commands, "file.save")).toBe("Save");
     expect(workbenchCommandTitle(commands, "missing.command")).toBe("missing.command");
+  });
+
+  it("defines stable Workbench menu contribution points", () => {
+    expect(workbenchMenuIds).toEqual({
+      titlebarPrimary: "titlebar.primary",
+      activitybarPrimary: "activitybar.primary",
+      activitybarSecondary: "activitybar.secondary"
+    });
   });
 
   it("prefers contributed menu titles over command titles", () => {

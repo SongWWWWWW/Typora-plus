@@ -5649,3 +5649,31 @@ Review:
 Known limitations:
 
 - Sidebar close and search query remain direct shell state because they are local view interaction state.
+
+## 2026-06-11 - P2 Workbench Menu Id Constants
+
+Completed:
+
+- Added focused Workbench menu id constants for titlebar primary, activitybar primary, and activitybar secondary contribution points.
+- Routed `Application.tsx` menu subscriptions and default Workbench menu contributions through the shared menu ids instead of repeating menu id strings.
+- Preserved titlebar and activitybar menu contribution ordering, filtering, toggled state, and command routing.
+- Covered stable menu ids alongside existing menu model and contribution tests.
+
+Quality gate:
+
+- `npx vitest run packages/workbench/src/workbenchMenuModel.test.ts packages/workbench/src/workbenchContributions.test.ts`: passed, 16 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 56 files / 570 tests, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Dev server smoke check: passed at `http://127.0.0.1:5173`; status 200 and root element present
+
+Review:
+
+- Workbench menu contribution point ids now live in the focused menu model, matching the existing command/keybinding/menu contribution split.
+- `Application.tsx` and `workbenchContributions` consume the same ids, reducing shell-local string duplication without changing platform `MenuId` extensibility.
+- No new dependency, configuration key, storage path, visual token, extra documentation file, or hard-coded platform assumption was introduced.
+
+Known limitations:
+
+- Menu item icon rendering still maps contributed icon ids to local React icons in `Application.tsx`.

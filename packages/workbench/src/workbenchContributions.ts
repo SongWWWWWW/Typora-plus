@@ -15,6 +15,7 @@ import {
   workbenchStatusRendererLanguage
 } from "./statusMarkdownRenderer";
 import { workbenchContextKeys } from "./workbenchContextModel";
+import { workbenchMenuIds } from "./workbenchMenuModel";
 
 export const editorTaskCommandMetadata = {
   removeTaskMarkers: {
@@ -36,7 +37,7 @@ export const defaultWorkbenchExtensionManifest = {
     menus: [
       {
         id: "titlebar.file.newUntitled",
-        menu: "titlebar.primary",
+        menu: workbenchMenuIds.titlebarPrimary,
         command: "file.newUntitled",
         title: "New Note",
         icon: "file-plus",
@@ -45,7 +46,7 @@ export const defaultWorkbenchExtensionManifest = {
       },
       {
         id: "titlebar.file.openWorkspace",
-        menu: "titlebar.primary",
+        menu: workbenchMenuIds.titlebarPrimary,
         command: "file.openWorkspace",
         title: "Open Workspace",
         icon: "folder-open",
@@ -55,7 +56,7 @@ export const defaultWorkbenchExtensionManifest = {
       },
       {
         id: "titlebar.file.save",
-        menu: "titlebar.primary",
+        menu: workbenchMenuIds.titlebarPrimary,
         command: "file.save",
         title: "Save",
         icon: "save",
@@ -65,7 +66,7 @@ export const defaultWorkbenchExtensionManifest = {
       },
       {
         id: "titlebar.file.saveAs",
-        menu: "titlebar.primary",
+        menu: workbenchMenuIds.titlebarPrimary,
         command: "file.saveAs",
         title: "Save As",
         icon: "file-text",
@@ -76,7 +77,7 @@ export const defaultWorkbenchExtensionManifest = {
       },
       {
         id: "titlebar.file.exportHtml",
-        menu: "titlebar.primary",
+        menu: workbenchMenuIds.titlebarPrimary,
         command: "file.exportHtml",
         title: "Export HTML",
         icon: "file-down",
@@ -86,7 +87,7 @@ export const defaultWorkbenchExtensionManifest = {
       },
       {
         id: "titlebar.editor.focusMode",
-        menu: "titlebar.primary",
+        menu: workbenchMenuIds.titlebarPrimary,
         command: "editor.focusMode.toggle",
         title: "Focus Mode",
         icon: "target",
@@ -97,7 +98,7 @@ export const defaultWorkbenchExtensionManifest = {
       },
       {
         id: "titlebar.editor.typewriterMode",
-        menu: "titlebar.primary",
+        menu: workbenchMenuIds.titlebarPrimary,
         command: "editor.typewriterMode.toggle",
         title: "Typewriter Mode",
         icon: "type",
@@ -108,7 +109,7 @@ export const defaultWorkbenchExtensionManifest = {
       },
       {
         id: "titlebar.workbench.theme",
-        menu: "titlebar.primary",
+        menu: workbenchMenuIds.titlebarPrimary,
         command: "theme.toggle",
         title: "Theme",
         icon: "theme",
@@ -118,7 +119,7 @@ export const defaultWorkbenchExtensionManifest = {
       },
       {
         id: "titlebar.workbench.commandPalette",
-        menu: "titlebar.primary",
+        menu: workbenchMenuIds.titlebarPrimary,
         command: "workbench.commandPalette.open",
         title: "Command Palette",
         icon: "command",
@@ -127,7 +128,7 @@ export const defaultWorkbenchExtensionManifest = {
       },
       {
         id: "activitybar.primary.files",
-        menu: "activitybar.primary",
+        menu: workbenchMenuIds.activitybarPrimary,
         command: "workbench.sidebar.files",
         title: "Files",
         icon: "file-text",
@@ -137,7 +138,7 @@ export const defaultWorkbenchExtensionManifest = {
       },
       {
         id: "activitybar.primary.search",
-        menu: "activitybar.primary",
+        menu: workbenchMenuIds.activitybarPrimary,
         command: "workbench.sidebar.search",
         title: "Search",
         icon: "search",
@@ -146,7 +147,7 @@ export const defaultWorkbenchExtensionManifest = {
       },
       {
         id: "activitybar.primary.outline",
-        menu: "activitybar.primary",
+        menu: workbenchMenuIds.activitybarPrimary,
         command: "workbench.sidebar.outline",
         title: "Outline",
         icon: "list-tree",
@@ -155,7 +156,7 @@ export const defaultWorkbenchExtensionManifest = {
       },
       {
         id: "activitybar.primary.backlinks",
-        menu: "activitybar.primary",
+        menu: workbenchMenuIds.activitybarPrimary,
         command: "workbench.sidebar.backlinks",
         title: "Backlinks",
         icon: "link",
@@ -165,7 +166,7 @@ export const defaultWorkbenchExtensionManifest = {
       },
       {
         id: "activitybar.primary.tags",
-        menu: "activitybar.primary",
+        menu: workbenchMenuIds.activitybarPrimary,
         command: "workbench.sidebar.tags",
         title: "Tags",
         icon: "hash",
@@ -175,7 +176,7 @@ export const defaultWorkbenchExtensionManifest = {
       },
       {
         id: "activitybar.secondary.settings",
-        menu: "activitybar.secondary",
+        menu: workbenchMenuIds.activitybarSecondary,
         command: "workbench.settings.open",
         title: "Settings",
         icon: "settings",
@@ -183,7 +184,7 @@ export const defaultWorkbenchExtensionManifest = {
       },
       {
         id: "activitybar.secondary.commandPalette",
-        menu: "activitybar.secondary",
+        menu: workbenchMenuIds.activitybarSecondary,
         command: "workbench.commandPalette.open",
         title: "Command Palette",
         icon: "command",
