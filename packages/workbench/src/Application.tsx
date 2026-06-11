@@ -86,6 +86,12 @@ import {
   refreshWorkbenchWorkspace,
   workspaceStateFromFiles
 } from "./workbenchWorkspaceOpening";
+import {
+  getWorkbenchBacklinks,
+  getWorkbenchSearchResults,
+  getWorkbenchTaggedResources,
+  getWorkbenchTags
+} from "./workbenchNavigationQueries";
 import { filterQuickOpenFiles } from "./workbenchQuickOpenModel";
 import {
   createWorkbenchRecentResourceRows,
@@ -95,7 +101,6 @@ import {
   backlinkKey,
   formatBacklinkPreview,
   isWorkspaceSearchResult,
-  searchDocument,
   searchResultKey,
   tagResourceKey,
   type WorkbenchSearchResult
@@ -148,23 +153,21 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
   const outline = useMemo(() => extractOutline(model.value), [model.value]);
   const stats = useMemo(() => calculateMarkdownStats(model.value), [model.value]);
   const searchResults = useMemo(
-    () => workspace.files
-      ? services.indexService.query(searchQuery)
-      : searchDocument(model.value, searchQuery, { maxResults: configuration.workspace.searchMaxResults }),
+    () => getWorkbenchSearchResults(services, workspace, model, searchQuery, {
+      maxDocumentResults: configuration.workspace.searchMaxResults
+    }),
     [configuration.workspace.searchMaxResults, indexStatus.updatedAt, model.value, searchQuery, services, workspace.files]
   );
   const backlinks = useMemo(
-    () => workspace.files && model.uri.scheme === "file"
-      ? services.indexService.getBacklinks(model.uri)
-      : [],
+    () => getWorkbenchBacklinks(services, workspace, model),
     [indexStatus.updatedAt, model.uri, services, workspace.files]
   );
   const tags = useMemo(
-    () => workspace.files ? services.indexService.getTags() : [],
+    () => getWorkbenchTags(services, workspace),
     [indexStatus.updatedAt, services, workspace.files]
   );
   const taggedResources = useMemo(
-    () => workspace.files && selectedTag ? services.indexService.getTaggedResources(selectedTag) : [],
+    () => getWorkbenchTaggedResources(services, workspace, selectedTag),
     [indexStatus.updatedAt, selectedTag, services, workspace.files]
   );
 

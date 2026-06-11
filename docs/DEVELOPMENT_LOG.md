@@ -4466,3 +4466,33 @@ Review:
 Known limitations:
 
 - Conflict detection and conflict error classification still belong to the platform text-file/file-service layer and the shared Workbench action runner; this helper only owns user-selected resolution actions.
+
+## 2026-06-11 - P2 Workbench Navigation Queries
+
+Completed:
+
+- Added a focused Workbench navigation query helper for search results, backlinks, tags, and tagged resources.
+- Moved local-document-versus-workspace search selection out of `Application.tsx`.
+- Moved workspace/file-resource guards for backlinks, tags, and tagged resources into a tested query boundary.
+- Kept UI rendering and result-opening behavior in the shell.
+- Added focused tests for local document search, workspace index search, backlink availability, tag availability, and tagged-resource availability.
+
+Quality gate:
+
+- `npx vitest run packages/workbench/src/workbenchNavigationQueries.test.ts packages/workbench/src/workbenchSearchResultsModel.test.ts packages/workbench/src/workbenchTagsModel.test.ts`: passed, 17 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 486 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Dev server smoke check: passed at `http://127.0.0.1:5173`; status 200 and root element present
+
+Review:
+
+- Navigation query behavior remains Workbench-local and consumes platform `IIndexService`, `TextFileModel`, and `WorkspaceState` contracts without adding storage or Electron dependencies.
+- Search now has one tested decision point for falling back to local document search when no workspace index is available.
+- Backlinks and tag queries now share tested workspace-open guards instead of embedding availability policy in React memo callbacks.
+- No new dependency, configuration key, storage path, visual token, extra documentation file, or hard-coded platform assumption was introduced.
+
+Known limitations:
+
+- Query results are still read synchronously from the current in-memory/index service boundary; a future async or remote index provider may need loading/cancellation state in this helper.
