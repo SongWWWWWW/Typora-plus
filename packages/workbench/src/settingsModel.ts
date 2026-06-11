@@ -8,6 +8,7 @@ import {
   normalizeRemoteSyncProviderConfiguration,
   remoteSyncConfiguredRawMirrorAdapterName,
   remoteSyncConfiguredRawMirrorMetadataKeys,
+  remoteSyncConfiguredRawMirrorRetryLimits,
   type AiProviderConfiguration,
   type AiProviderReasoningEffort,
   type AiProviderTextVerbosity,
@@ -223,6 +224,7 @@ const settingsEntryById = new Map<SettingsEntryId, SettingsEntryDefinition>(
 const settingsRemoteSyncProviderInvalidIssue =
   "Complete provider id, title, HTTPS or loopback base URL, and valid profile bindings.";
 const settingsRawMirrorMetadataInvalidIssue = "Complete raw mirror metadata paths and header binding.";
+const settingsRawMirrorRetryInvalidIssue = "Complete raw mirror retry metadata.";
 
 export const settingsNumberConstraints = {
   aiWorkspaceContextMaxPreviewLength: configurationNumberConstraints.aiWorkspaceContextMaxPreviewLength,
@@ -654,6 +656,10 @@ function getSettingsRawMirrorMetadataIssue(
     return settingsRawMirrorMetadataInvalidIssue;
   }
 
+  if (!isSettingsRawMirrorRetryMetadataComplete(metadata)) {
+    return settingsRawMirrorRetryInvalidIssue;
+  }
+
   return undefined;
 }
 
@@ -709,6 +715,66 @@ function isSettingsRawMirrorHeaderName(value: string): boolean {
 
 function isSettingsRawMirrorHeaderScheme(value: string | undefined): boolean {
   return value === undefined || (value.length <= 128 && !/[\r\n]/.test(value));
+}
+
+function isSettingsRawMirrorRetryMetadataComplete(metadata: Readonly<Record<string, string>>): boolean {
+  const statusCodes = normalizeSettingsRawMirrorMetadataValue(
+    metadata[remoteSyncConfiguredRawMirrorMetadataKeys.retryStatusCodes]
+  );
+  const maxRetries = normalizeSettingsRawMirrorMetadataValue(
+    metadata[remoteSyncConfiguredRawMirrorMetadataKeys.retryMaxRetries]
+  );
+  const delayMs = normalizeSettingsRawMirrorMetadataValue(
+    metadata[remoteSyncConfiguredRawMirrorMetadataKeys.retryDelayMs]
+  );
+
+  if (!statusCodes && !maxRetries && !delayMs) {
+    return true;
+  }
+
+  return !!statusCodes &&
+    isSettingsRawMirrorRetryStatusCodes(statusCodes) &&
+    isSettingsRawMirrorOptionalInteger(maxRetries, 0, remoteSyncConfiguredRawMirrorRetryLimits.maxRetries) &&
+    isSettingsRawMirrorOptionalInteger(delayMs, 0, remoteSyncConfiguredRawMirrorRetryLimits.maxDelayMs);
+}
+
+function isSettingsRawMirrorRetryStatusCodes(value: string): boolean {
+  const statusCodes = new Set<number>();
+
+  for (const part of value.split(/[\s,]+/)) {
+    if (!part) {
+      continue;
+    }
+
+    const statusCode = Number(part);
+
+    if (
+      !Number.isInteger(statusCode) ||
+      statusCode < 400 ||
+      statusCode > 599 ||
+      statusCodes.size >= remoteSyncConfiguredRawMirrorRetryLimits.maxStatusCodes
+    ) {
+      return false;
+    }
+
+    statusCodes.add(statusCode);
+  }
+
+  return statusCodes.size > 0;
+}
+
+function isSettingsRawMirrorOptionalInteger(
+  value: string | undefined,
+  min: number,
+  max: number
+): boolean {
+  if (value === undefined) {
+    return true;
+  }
+
+  const parsed = Number(value);
+
+  return Number.isInteger(parsed) && parsed >= min && parsed <= max;
 }
 
 function hasSettingsRawMirrorParentTraversal(path: string): boolean {

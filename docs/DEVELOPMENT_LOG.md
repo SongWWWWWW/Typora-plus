@@ -8016,3 +8016,35 @@ Known limitations:
 
 - Settings still edits remote sync metadata as key-value text; a guided raw mirror profile editor remains future UX work.
 - Direct Feishu Drive API translation, token lifecycle handling, provider-specific retries, remote folder mapping, and multipart upload sessions remain future adapter work.
+
+## 2026-06-12 - P2 Configured Raw Mirror Gateway Retry Metadata
+
+Completed:
+
+- Added metadata-gated bounded retry support for configured raw mirror gateway calls.
+- Added platform-owned retry metadata keys for retryable status codes, maximum retries, and retry delay.
+- Kept retry behavior opt-in, provider-neutral, and bounded by exported retry limits.
+- Honored standard `Retry-After` response headers before falling back to configured delay values.
+- Added Settings validation for retry metadata so incomplete or out-of-range retry profiles cannot be saved.
+- Covered retry-before-parse behavior, retry exhaustion, valid retry metadata, invalid retry status codes, incomplete retry metadata, and retry-count limits with focused tests.
+
+Quality gate:
+
+- `npx vitest run packages/platform/src/remoteSyncConfiguredRawMirrorProvider.test.ts packages/workbench/src/settingsModel.test.ts`: passed, 2 files / 35 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 87 files / 823 tests, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Configured raw mirror retry metadata hardcode scan for OpenAI endpoints, model ids, API keys, Feishu endpoints, OAuth/token/secret literals, and provider credentials: passed
+
+Review:
+
+- Retry happens before response parsing, so stale or invalid error bodies cannot enter raw mirror snapshot parsing while a retryable gateway status is still recoverable.
+- The platform only implements generic HTTP retry mechanics; provider-specific token refresh, rate-limit body semantics, remote folder mapping, and multipart sessions remain adapter-owned.
+- No Feishu endpoint, OAuth scope, token name, folder id, model id, provider id, storage path, or credential literal was added.
+
+Known limitations:
+
+- Retry is only available for configured raw mirror HTTP gateway profiles that opt in through metadata.
+- Settings still exposes raw mirror retry settings through metadata text rather than a guided profile editor.
+- Direct Feishu Drive API translation and OAuth token lifecycle handling remain future adapter work.

@@ -283,9 +283,115 @@ describe("configured raw mirror remote sync provider", () => {
       dryRun: true
     })).rejects.toThrow("Configured raw mirror list request failed: 503 Service Unavailable");
   });
+
+  it("retries configured gateway status codes before parsing raw mirror responses", async () => {
+    const requests: RemoteSyncNativeRequestInput[] = [];
+    const providers = createConfiguredRemoteSyncProviders([
+      configuration({
+        metadata: {
+          [remoteSyncConfiguredRawMirrorMetadataKeys.retryStatusCodes]: "429, 503",
+          [remoteSyncConfiguredRawMirrorMetadataKeys.retryMaxRetries]: "2",
+          [remoteSyncConfiguredRawMirrorMetadataKeys.retryDelayMs]: "0"
+        }
+      })
+    ], {
+      transport: createSequenceTransport(requests, [
+        {
+          status: 503,
+          statusText: "Service Unavailable",
+          headers: {},
+          body: {
+            resources: [
+              {
+                relativePath: "../invalid",
+                kind: "file"
+              }
+            ]
+          }
+        },
+        {
+          status: 200,
+          statusText: "OK",
+          headers: {},
+          body: { resources: [] }
+        }
+      ]),
+      workspaceResources: {
+        readResource: vi.fn(),
+        writeResource: vi.fn(),
+        deleteResource: vi.fn()
+      },
+      createProvider: createRemoteSyncConfiguredRawMirrorProviderFactory({
+        manifestStorage: createMemoryManifestStorage()
+      })
+    });
+
+    await expect(providers[0]!.createPlan({
+      workspaceUri: URI.file("C:/Notes"),
+      resources: [],
+      direction: "pull",
+      dryRun: true
+    })).resolves.toMatchObject({
+      operations: [],
+      summary: {
+        creates: 0,
+        updates: 0,
+        deletes: 0,
+        skips: 0,
+        conflicts: 0
+      }
+    });
+    expect(requests).toHaveLength(2);
+  });
+
+  it("stops retrying configured gateway status codes after the configured limit", async () => {
+    const requests: RemoteSyncNativeRequestInput[] = [];
+    const providers = createConfiguredRemoteSyncProviders([
+      configuration({
+        metadata: {
+          [remoteSyncConfiguredRawMirrorMetadataKeys.retryStatusCodes]: "503",
+          [remoteSyncConfiguredRawMirrorMetadataKeys.retryMaxRetries]: "1",
+          [remoteSyncConfiguredRawMirrorMetadataKeys.retryDelayMs]: "0"
+        }
+      })
+    ], {
+      transport: createSequenceTransport(requests, [
+        {
+          status: 503,
+          statusText: "Service Unavailable",
+          headers: {},
+          body: { resources: [] }
+        },
+        {
+          status: 503,
+          statusText: "Service Unavailable",
+          headers: {},
+          body: { resources: [] }
+        }
+      ]),
+      workspaceResources: {
+        readResource: vi.fn(),
+        writeResource: vi.fn(),
+        deleteResource: vi.fn()
+      },
+      createProvider: createRemoteSyncConfiguredRawMirrorProviderFactory({
+        manifestStorage: createMemoryManifestStorage()
+      })
+    });
+
+    await expect(providers[0]!.createPlan({
+      workspaceUri: URI.file("C:/Notes"),
+      resources: [],
+      direction: "pull",
+      dryRun: true
+    })).rejects.toThrow("Configured raw mirror list request failed: 503 Service Unavailable");
+    expect(requests).toHaveLength(2);
+  });
 });
 
-function configuration(): RemoteSyncProviderConfiguration {
+function configuration(
+  overrides: { readonly metadata?: Readonly<Record<string, string>> } = {}
+): RemoteSyncProviderConfiguration {
   return {
     id: "notes.raw",
     title: "Notes Raw Mirror",
@@ -300,7 +406,8 @@ function configuration(): RemoteSyncProviderConfiguration {
       [remoteSyncConfiguredRawMirrorMetadataKeys.deletePath]: "mirror/delete",
       [remoteSyncConfiguredRawMirrorMetadataKeys.headerBinding]: "session",
       [remoteSyncConfiguredRawMirrorMetadataKeys.headerName]: "Authorization",
-      [remoteSyncConfiguredRawMirrorMetadataKeys.headerScheme]: "Bearer"
+      [remoteSyncConfiguredRawMirrorMetadataKeys.headerScheme]: "Bearer",
+      ...overrides.metadata
     },
     secrets: [
       {
@@ -359,6 +466,30 @@ function createStatusTransport(
     headers: {},
     body
   }));
+}
+
+function createSequenceTransport(
+  requests: RemoteSyncNativeRequestInput[],
+  responses: readonly {
+    readonly status: number;
+    readonly statusText: string;
+    readonly headers: Readonly<Record<string, string>>;
+    readonly body: unknown;
+  }[]
+): RemoteSyncNativeRequestTransport {
+  const responseQueue = [...responses];
+
+  return vi.fn(async (request) => {
+    requests.push(request);
+
+    const response = responseQueue.shift();
+
+    if (!response) {
+      throw new Error("Unexpected raw mirror request");
+    }
+
+    return response;
+  });
 }
 
 function createMemoryManifestStorage(): RemoteSyncManifestStorage {

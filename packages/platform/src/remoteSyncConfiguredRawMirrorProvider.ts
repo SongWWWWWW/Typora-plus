@@ -10,7 +10,8 @@ import {
   type RemoteSyncManifestStorage
 } from "./remoteSync";
 import type { RemoteSyncConfiguredProviderFactory } from "./remoteSyncConfiguredProviders";
-import type { RemoteSyncProfileRequestTransport } from "./remoteSyncProfileRequest";
+import type { RemoteSyncNativeResponse } from "./remoteSyncNativeRequest";
+import type { RemoteSyncProfileRequestInput, RemoteSyncProfileRequestTransport } from "./remoteSyncProfileRequest";
 import {
   createRemoteSyncRawMirrorProvider,
   type RemoteSyncRawMirrorExecuteRequest,
@@ -35,7 +36,18 @@ export const remoteSyncConfiguredRawMirrorMetadataKeys = {
   deletePath: "rawMirror.deletePath",
   headerBinding: "rawMirror.headerBinding",
   headerName: "rawMirror.headerName",
-  headerScheme: "rawMirror.headerScheme"
+  headerScheme: "rawMirror.headerScheme",
+  retryDelayMs: "rawMirror.retryDelayMs",
+  retryMaxRetries: "rawMirror.retryMaxRetries",
+  retryStatusCodes: "rawMirror.retryStatusCodes"
+} as const;
+
+export const remoteSyncConfiguredRawMirrorRetryLimits = {
+  defaultDelayMs: 250,
+  defaultMaxRetries: 2,
+  maxDelayMs: 30_000,
+  maxRetries: 5,
+  maxStatusCodes: 16
 } as const;
 
 export interface RemoteSyncConfiguredRawMirrorProviderFactoryOptions {
@@ -51,6 +63,11 @@ interface RemoteSyncConfiguredRawMirrorProfile {
     readonly name: string;
     readonly secretName: string;
     readonly prefix?: string;
+  };
+  readonly retry?: {
+    readonly delayMs: number;
+    readonly maxRetries: number;
+    readonly statusCodes: readonly number[];
   };
 }
 
@@ -103,7 +120,7 @@ async function listConfiguredRawMirrorResources(
   context: RemoteSyncConfiguredRawMirrorRequestContext,
   listRequest: RemoteSyncRawMirrorListRequest
 ): Promise<readonly RemoteSyncRemoteResource[]> {
-  const response = await context.request({
+  const response = await requestConfiguredRawMirror(context, {
     path: context.rawMirror.listPath,
     method: "GET",
     query: createConfiguredRawMirrorBaseQuery(context.profile, listRequest.direction),
@@ -208,7 +225,7 @@ async function requestConfiguredRawMirrorUpload(
   resource: RemoteSyncResource,
   uploadContent: RemoteSyncRawMirrorUploadFileContent
 ): Promise<void> {
-  ensureConfiguredRawMirrorResponseOk(await context.request({
+  ensureConfiguredRawMirrorResponseOk(await requestConfiguredRawMirror(context, {
     path: context.rawMirror.uploadPath,
     method: "PUT",
     query: createConfiguredRawMirrorOperationQuery(context.profile, operation),
@@ -240,7 +257,7 @@ async function requestConfiguredRawMirrorDelete(
   executeRequest: RemoteSyncRawMirrorExecuteRequest,
   operation: RemoteSyncOperation
 ): Promise<void> {
-  ensureConfiguredRawMirrorResponseOk(await context.request({
+  ensureConfiguredRawMirrorResponseOk(await requestConfiguredRawMirror(context, {
     path: context.rawMirror.deletePath,
     method: "DELETE",
     query: createConfiguredRawMirrorOperationQuery(context.profile, operation),
@@ -267,7 +284,7 @@ async function downloadConfiguredRawMirrorFile(
     throw new Error(`Configured raw mirror download ${operation.relativePath} only supports files`);
   }
 
-  const response = await context.request({
+  const response = await requestConfiguredRawMirror(context, {
     path: context.rawMirror.downloadPath,
     method: "GET",
     query: createConfiguredRawMirrorOperationQuery(context.profile, operation),
@@ -319,6 +336,95 @@ function createConfiguredRawMirrorSecretRequest(
   };
 }
 
+async function requestConfiguredRawMirror(
+  context: RemoteSyncConfiguredRawMirrorRequestContext,
+  request: RemoteSyncProfileRequestInput
+): Promise<RemoteSyncNativeResponse> {
+  const retry = context.rawMirror.retry;
+  let retryCount = 0;
+
+  for (;;) {
+    const response = await context.request(request);
+
+    if (!retry || retryCount >= retry.maxRetries || !retry.statusCodes.includes(response.status)) {
+      return response;
+    }
+
+    retryCount += 1;
+    await waitConfiguredRawMirrorRetryDelay(
+      readConfiguredRawMirrorRetryDelayMs(response) ?? retry.delayMs,
+      request.signal
+    );
+  }
+}
+
+function readConfiguredRawMirrorRetryDelayMs(response: RemoteSyncNativeResponse): number | undefined {
+  const retryAfter = readConfiguredRawMirrorHeader(response.headers, "retry-after");
+
+  if (!retryAfter) {
+    return undefined;
+  }
+
+  const seconds = Number(retryAfter);
+
+  if (Number.isFinite(seconds) && seconds >= 0) {
+    return clampConfiguredRawMirrorRetryDelay(Math.ceil(seconds * 1000));
+  }
+
+  const retryAt = Date.parse(retryAfter);
+
+  if (!Number.isFinite(retryAt)) {
+    return undefined;
+  }
+
+  return clampConfiguredRawMirrorRetryDelay(Math.max(0, retryAt - Date.now()));
+}
+
+function readConfiguredRawMirrorHeader(
+  headers: Readonly<Record<string, string>>,
+  name: string
+): string | undefined {
+  const lowerName = name.toLowerCase();
+  const entry = Object.entries(headers).find(([key]) => key.toLowerCase() === lowerName);
+
+  return entry?.[1]?.trim() || undefined;
+}
+
+function waitConfiguredRawMirrorRetryDelay(delayMs: number, signal: AbortSignal | undefined): Promise<void> {
+  throwIfConfiguredRawMirrorAborted(signal);
+
+  const clampedDelayMs = clampConfiguredRawMirrorRetryDelay(delayMs);
+
+  if (clampedDelayMs === 0) {
+    return Promise.resolve();
+  }
+
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      cleanup();
+      resolve();
+    }, clampedDelayMs);
+    const abort = () => {
+      cleanup();
+      reject(new Error("Configured raw mirror request was aborted"));
+    };
+    const cleanup = () => {
+      clearTimeout(timeout);
+      signal?.removeEventListener("abort", abort);
+    };
+
+    signal?.addEventListener("abort", abort, { once: true });
+  });
+}
+
+function clampConfiguredRawMirrorRetryDelay(value: number): number {
+  if (!Number.isFinite(value) || value <= 0) {
+    return 0;
+  }
+
+  return Math.min(Math.ceil(value), remoteSyncConfiguredRawMirrorRetryLimits.maxDelayMs);
+}
+
 function createConfiguredRawMirrorJsonBody(value: unknown): string {
   const body = JSON.stringify(value);
 
@@ -357,6 +463,7 @@ function readConfiguredRawMirrorProfile(
   );
   const deletePath = readConfiguredRawMirrorMetadataPath(metadata, remoteSyncConfiguredRawMirrorMetadataKeys.deletePath);
   const secretHeader = readConfiguredRawMirrorSecretHeader(metadata);
+  const retry = readConfiguredRawMirrorRetryPolicy(metadata);
 
   if (!listPath || !uploadPath || !downloadPath || !deletePath) {
     return undefined;
@@ -367,8 +474,96 @@ function readConfiguredRawMirrorProfile(
     uploadPath,
     downloadPath,
     deletePath,
-    ...(secretHeader !== undefined ? { secretHeader } : {})
+    ...(secretHeader !== undefined ? { secretHeader } : {}),
+    ...(retry !== undefined ? { retry } : {})
   };
+}
+
+function readConfiguredRawMirrorRetryPolicy(
+  metadata: Readonly<Record<string, string>>
+): RemoteSyncConfiguredRawMirrorProfile["retry"] | undefined {
+  const statusCodes = readConfiguredRawMirrorRetryStatusCodes(
+    metadata[remoteSyncConfiguredRawMirrorMetadataKeys.retryStatusCodes]
+  );
+
+  if (!statusCodes || statusCodes.length === 0) {
+    return undefined;
+  }
+
+  const maxRetries = readConfiguredRawMirrorOptionalInteger(
+    metadata[remoteSyncConfiguredRawMirrorMetadataKeys.retryMaxRetries],
+    remoteSyncConfiguredRawMirrorRetryLimits.defaultMaxRetries,
+    0,
+    remoteSyncConfiguredRawMirrorRetryLimits.maxRetries
+  );
+  const delayMs = readConfiguredRawMirrorOptionalInteger(
+    metadata[remoteSyncConfiguredRawMirrorMetadataKeys.retryDelayMs],
+    remoteSyncConfiguredRawMirrorRetryLimits.defaultDelayMs,
+    0,
+    remoteSyncConfiguredRawMirrorRetryLimits.maxDelayMs
+  );
+
+  if (maxRetries === undefined || maxRetries <= 0 || delayMs === undefined) {
+    return undefined;
+  }
+
+  return {
+    delayMs,
+    maxRetries,
+    statusCodes
+  };
+}
+
+function readConfiguredRawMirrorRetryStatusCodes(value: unknown): readonly number[] | undefined {
+  const normalized = normalizeConfiguredRawMirrorMetadataValue(value);
+
+  if (!normalized) {
+    return [];
+  }
+
+  const statusCodes = new Set<number>();
+
+  for (const part of normalized.split(/[\s,]+/)) {
+    if (!part) {
+      continue;
+    }
+
+    const statusCode = Number(part);
+
+    if (
+      !Number.isInteger(statusCode) ||
+      statusCode < 400 ||
+      statusCode > 599 ||
+      statusCodes.size >= remoteSyncConfiguredRawMirrorRetryLimits.maxStatusCodes
+    ) {
+      return undefined;
+    }
+
+    statusCodes.add(statusCode);
+  }
+
+  return [...statusCodes].sort((first, second) => first - second);
+}
+
+function readConfiguredRawMirrorOptionalInteger(
+  value: unknown,
+  defaultValue: number,
+  min: number,
+  max: number
+): number | undefined {
+  const normalized = normalizeConfiguredRawMirrorMetadataValue(value);
+
+  if (!normalized) {
+    return defaultValue;
+  }
+
+  const parsed = Number(normalized);
+
+  if (!Number.isInteger(parsed) || parsed < min || parsed > max) {
+    return undefined;
+  }
+
+  return parsed;
 }
 
 function readConfiguredRawMirrorSecretHeader(

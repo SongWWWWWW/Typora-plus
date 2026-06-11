@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   remoteSyncConfiguredRawMirrorAdapterName,
-  remoteSyncConfiguredRawMirrorMetadataKeys
+  remoteSyncConfiguredRawMirrorMetadataKeys,
+  remoteSyncConfiguredRawMirrorRetryLimits
 } from "@typora-plus/platform";
 import {
   bytesToMegabytes,
@@ -554,6 +555,22 @@ describe("settings model", () => {
       issues: []
     });
 
+    expect(validateSettingsRemoteSyncProviderDraft(
+      createSettingsRemoteSyncProviderDraft({
+        ...provider,
+        metadata: createRawMirrorMetadata({
+          [remoteSyncConfiguredRawMirrorMetadataKeys.retryStatusCodes]: "429, 503",
+          [remoteSyncConfiguredRawMirrorMetadataKeys.retryMaxRetries]: "2",
+          [remoteSyncConfiguredRawMirrorMetadataKeys.retryDelayMs]: "0"
+        })
+      }),
+      [],
+      undefined
+    )).toMatchObject({
+      canSave: true,
+      issues: []
+    });
+
     const missingPathValidation = validateSettingsRemoteSyncProviderDraft({
       ...createSettingsRemoteSyncProviderDraft(provider),
       metadataText: formatRawMirrorMetadataText(createRawMirrorMetadata({
@@ -595,6 +612,38 @@ describe("settings model", () => {
 
     expect(unboundHeaderValidation.canSave).toBe(false);
     expect(unboundHeaderValidation.issues).toContain("Complete raw mirror metadata paths and header binding.");
+
+    const invalidRetryStatusValidation = validateSettingsRemoteSyncProviderDraft({
+      ...createSettingsRemoteSyncProviderDraft(provider),
+      metadataText: formatRawMirrorMetadataText(createRawMirrorMetadata({
+        [remoteSyncConfiguredRawMirrorMetadataKeys.retryStatusCodes]: "200"
+      }))
+    }, [], undefined);
+
+    expect(invalidRetryStatusValidation.canSave).toBe(false);
+    expect(invalidRetryStatusValidation.issues).toContain("Complete raw mirror retry metadata.");
+
+    const incompleteRetryValidation = validateSettingsRemoteSyncProviderDraft({
+      ...createSettingsRemoteSyncProviderDraft(provider),
+      metadataText: formatRawMirrorMetadataText(createRawMirrorMetadata({
+        [remoteSyncConfiguredRawMirrorMetadataKeys.retryMaxRetries]: "2"
+      }))
+    }, [], undefined);
+
+    expect(incompleteRetryValidation.canSave).toBe(false);
+    expect(incompleteRetryValidation.issues).toContain("Complete raw mirror retry metadata.");
+
+    const highRetryValidation = validateSettingsRemoteSyncProviderDraft({
+      ...createSettingsRemoteSyncProviderDraft(provider),
+      metadataText: formatRawMirrorMetadataText(createRawMirrorMetadata({
+        [remoteSyncConfiguredRawMirrorMetadataKeys.retryStatusCodes]: "503",
+        [remoteSyncConfiguredRawMirrorMetadataKeys.retryMaxRetries]:
+          String(remoteSyncConfiguredRawMirrorRetryLimits.maxRetries + 1)
+      }))
+    }, [], undefined);
+
+    expect(highRetryValidation.canSave).toBe(false);
+    expect(highRetryValidation.issues).toContain("Complete raw mirror retry metadata.");
   });
 
   it("upserts and removes remote sync provider configuration without duplicate ids", () => {
