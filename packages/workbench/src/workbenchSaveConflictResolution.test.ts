@@ -8,6 +8,7 @@ import type {
 } from "@typora-plus/platform";
 import { describe, expect, it, vi } from "vitest";
 import {
+  createWorkbenchSaveConflictActionCallbacks,
   overwriteWorkbenchSaveConflictAction,
   overwriteWorkbenchSaveConflict,
   reloadWorkbenchSaveConflictAction,
@@ -16,6 +17,24 @@ import {
 } from "./workbenchSaveConflictResolution";
 
 describe("workbench save conflict resolution", () => {
+  it("creates action callbacks from shell conflict setters", () => {
+    const setOperationError = vi.fn();
+    const setSaveConflict = vi.fn();
+    const callbacks = createWorkbenchSaveConflictActionCallbacks({
+      setOperationError,
+      setSaveConflict
+    });
+    const conflict = saveConflict("C:/Notes/a.md");
+
+    callbacks.clearSaveConflict();
+    callbacks.setOperationError("Reload failed");
+    callbacks.setSaveConflict(conflict);
+
+    expect(setSaveConflict).toHaveBeenCalledWith(undefined);
+    expect(setSaveConflict).toHaveBeenCalledWith(conflict);
+    expect(setOperationError).toHaveBeenCalledWith("Reload failed");
+  });
+
   it("reloads the conflicted file, records it as recent, clears the conflict, and returns the model", async () => {
     const conflict = saveConflict("C:/Notes/a.md");
     const opened = model("C:/Notes/a.md", "# Disk");

@@ -71,6 +71,7 @@ import {
   type WorkbenchInitialState
 } from "./workbenchInitialState";
 import {
+  createWorkbenchSaveConflictActionCallbacks,
   overwriteWorkbenchSaveConflictAction,
   reloadWorkbenchSaveConflictAction
 } from "./workbenchSaveConflictResolution";
@@ -331,6 +332,10 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
       setSaveConflict
     }
   );
+  const saveConflictActionCallbacks = createWorkbenchSaveConflictActionCallbacks({
+    setOperationError,
+    setSaveConflict
+  });
 
   return (
     <main className={[
@@ -409,20 +414,12 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
       {saveConflict ? (
         <SaveConflictDialog
           conflict={saveConflict}
-          onClose={() => setSaveConflict(undefined)}
+          onClose={saveConflictActionCallbacks.clearSaveConflict}
           onReload={() => {
-            void reloadWorkbenchSaveConflictAction(services, saveConflict, {
-              clearSaveConflict: () => setSaveConflict(undefined),
-              setOperationError,
-              setSaveConflict
-            });
+            void reloadWorkbenchSaveConflictAction(services, saveConflict, saveConflictActionCallbacks);
           }}
           onOverwrite={() => {
-            void overwriteWorkbenchSaveConflictAction(services, workspace.files, {
-              clearSaveConflict: () => setSaveConflict(undefined),
-              setOperationError,
-              setSaveConflict
-            });
+            void overwriteWorkbenchSaveConflictAction(services, workspace.files, saveConflictActionCallbacks);
           }}
         />
       ) : null}

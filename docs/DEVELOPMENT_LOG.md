@@ -5341,3 +5341,31 @@ Review:
 Known limitations:
 
 - Save-conflict dialog actions still assemble their reload/overwrite callbacks directly in `Application.tsx`.
+
+## 2026-06-11 - P2 Workbench Save Conflict Callbacks
+
+Completed:
+
+- Added a focused save-conflict action callback factory that maps shell setters to clear-conflict, operation-error, and save-conflict callbacks.
+- Routed `Application.tsx` Save Conflict dialog close, reload, and overwrite actions through the shared callbacks instead of assembling them inline.
+- Preserved reload/overwrite behavior: successful actions clear the dialog, while failed reload or overwrite attempts keep the conflict visible.
+- Covered callback setter forwarding alongside existing reload, overwrite, action handling, and failure behavior.
+
+Quality gate:
+
+- `npx vitest run packages/workbench/src/workbenchSaveConflictResolution.test.ts`: passed, 7 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 558 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Dev server smoke check: passed at `http://127.0.0.1:5173`; status 200 and root element present
+
+Review:
+
+- Save Conflict dialog actions now share the same Workbench-local callback boundary as the conflict-resolution workflow.
+- `Application.tsx` still decides when the dialog is rendered, while `workbenchSaveConflictResolution` owns how dialog actions clear conflicts and map failures.
+- No new dependency, configuration key, storage path, visual token, extra documentation file, or hard-coded platform assumption was introduced.
+
+Known limitations:
+
+- Command Palette execution still owns its close-after-dispatch follow-up in `commandPaletteModel`.

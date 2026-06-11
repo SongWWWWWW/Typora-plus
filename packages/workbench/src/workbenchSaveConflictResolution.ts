@@ -28,6 +28,25 @@ export interface WorkbenchSaveConflictActionCallbacks extends WorkbenchSaveConfl
   readonly setSaveConflict: WorkbenchSaveConflictSetter;
 }
 
+export interface WorkbenchSaveConflictShellCallbacks {
+  readonly setOperationError: WorkbenchOperationErrorSetter;
+  readonly setSaveConflict: WorkbenchSaveConflictSetter;
+}
+
+export interface WorkbenchSaveConflictShellActionCallbacks extends WorkbenchSaveConflictActionCallbacks {
+  readonly clearSaveConflict: () => void;
+}
+
+export function createWorkbenchSaveConflictActionCallbacks(
+  callbacks: WorkbenchSaveConflictShellCallbacks
+): WorkbenchSaveConflictShellActionCallbacks {
+  return {
+    clearSaveConflict: () => callbacks.setSaveConflict(undefined),
+    setOperationError: callbacks.setOperationError,
+    setSaveConflict: callbacks.setSaveConflict
+  };
+}
+
 export function reloadWorkbenchSaveConflictAction(
   services: WorkbenchSaveConflictResolutionServices,
   conflict: FileSaveConflict,
