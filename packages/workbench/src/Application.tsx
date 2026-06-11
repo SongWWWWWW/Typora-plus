@@ -399,15 +399,10 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
             value={model.value}
             configuration={editorAdapter.configuration}
             onChange={(value) => services.textFileService.updateContent(value)}
+            onPasteImage={editorAdapter.onPasteImage}
             resolveImageSource={editorAdapter.resolveImageSource}
             renderCodeFence={editorAdapter.renderCodeFence}
             renderInline={editorAdapter.renderInline}
-            onPasteImage={services.attachmentService.isAvailable()
-              ? async (image) => {
-                const saved = await services.attachmentService.saveImage(model.uri, image);
-                return saved?.markdown;
-              }
-              : undefined}
           />
         </section>
       </div>

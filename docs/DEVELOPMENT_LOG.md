@@ -4752,3 +4752,31 @@ Review:
 Known limitations:
 
 - Command Palette still closes itself inline after command execution because that focus/visibility behavior is local to the palette surface.
+
+## 2026-06-11 - P2 Workbench Paste Image Adapter
+
+Completed:
+
+- Moved pasted-image attachment handling behind the Workbench editor adapter.
+- Replaced inline `Application.tsx` attachment-service checks and `saveImage()` calls with the adapter-provided `onPasteImage` handler.
+- Kept paste handling disabled unless the attachment service is available and the active document uses a file URI.
+- Covered paste handler availability, attachment save payloads, Markdown return values, and full editor adapter composition.
+
+Quality gate:
+
+- `npx vitest run packages/workbench/src/workbenchEditorAdapter.test.ts packages/workbench/src/markdownRendererPreview.test.ts`: passed, 16 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 516 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Dev server smoke check: passed at `http://127.0.0.1:5173`; status 200 and root element present
+
+Review:
+
+- Editor paste behavior now consumes the public attachment service boundary from the same adapter that already owns editor preferences, image resource resolution, and Markdown renderer adapters.
+- `Application.tsx` passes editor adapter props without directly reaching into attachment persistence.
+- No new dependency, configuration key, storage path, visual token, extra documentation file, or hard-coded platform assumption was introduced.
+
+Known limitations:
+
+- Save-conflict dialog reload/overwrite callbacks still stay inline because they are dialog-specific and already share the existing file-opening and file-saving coordinators.

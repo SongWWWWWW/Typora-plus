@@ -1,10 +1,12 @@
 import type {
+  PastedEditorImage,
   MarkdownCodeFenceRenderer,
   MarkdownEditorConfiguration,
   MarkdownImageSourceResolver,
   MarkdownInlineRenderer
 } from "@typora-plus/editor";
 import type {
+  IAttachmentService,
   IMarkdownRendererService,
   IResourceService,
   TextFileModel,
@@ -16,12 +18,14 @@ import {
 } from "./markdownRendererPreview";
 
 export interface WorkbenchEditorAdapterServices {
+  readonly attachmentService: Pick<IAttachmentService, "isAvailable" | "saveImage">;
   readonly markdownRendererService: IMarkdownRendererService;
   readonly resourceService: Pick<IResourceService, "isAvailable" | "resolveImageSource">;
 }
 
 export interface WorkbenchEditorAdapter {
   readonly configuration: MarkdownEditorConfiguration;
+  readonly onPasteImage?: (image: PastedEditorImage) => Promise<string | undefined>;
   readonly renderCodeFence: MarkdownCodeFenceRenderer;
   readonly renderInline: MarkdownInlineRenderer;
   readonly resolveImageSource?: MarkdownImageSourceResolver;
@@ -35,7 +39,8 @@ export function createWorkbenchEditorAdapter(
   return {
     configuration: createWorkbenchEditorConfiguration(configuration),
     ...createWorkbenchMarkdownRendererAdapters(configuration, services, model),
-    ...createWorkbenchImageSourceResolverEntry(services, model)
+    ...createWorkbenchImageSourceResolverEntry(services, model),
+    ...createWorkbenchPasteImageHandlerEntry(services, model)
   };
 }
 
@@ -57,6 +62,18 @@ export function createWorkbenchImageSourceResolver(
 ): MarkdownImageSourceResolver | undefined {
   return services.resourceService.isAvailable() && model.uri.scheme === "file"
     ? (source: string) => services.resourceService.resolveImageSource(model.uri, source)
+    : undefined;
+}
+
+export function createWorkbenchPasteImageHandler(
+  services: Pick<WorkbenchEditorAdapterServices, "attachmentService">,
+  model: Pick<TextFileModel, "uri">
+): ((image: PastedEditorImage) => Promise<string | undefined>) | undefined {
+  return services.attachmentService.isAvailable() && model.uri.scheme === "file"
+    ? async (image) => {
+      const saved = await services.attachmentService.saveImage(model.uri, image);
+      return saved?.markdown;
+    }
     : undefined;
 }
 
@@ -85,4 +102,12 @@ function createWorkbenchImageSourceResolverEntry(
 ): Pick<WorkbenchEditorAdapter, "resolveImageSource"> {
   const resolveImageSource = createWorkbenchImageSourceResolver(services, model);
   return resolveImageSource ? { resolveImageSource } : {};
+}
+
+function createWorkbenchPasteImageHandlerEntry(
+  services: Pick<WorkbenchEditorAdapterServices, "attachmentService">,
+  model: Pick<TextFileModel, "uri">
+): Pick<WorkbenchEditorAdapter, "onPasteImage"> {
+  const onPasteImage = createWorkbenchPasteImageHandler(services, model);
+  return onPasteImage ? { onPasteImage } : {};
 }

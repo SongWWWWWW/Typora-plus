@@ -1,5 +1,10 @@
 import { URI } from "@typora-plus/base";
-import type { IResourceService, TextFileModel, TyporaPlusConfiguration } from "@typora-plus/platform";
+import type {
+  IAttachmentService,
+  IResourceService,
+  TextFileModel,
+  TyporaPlusConfiguration
+} from "@typora-plus/platform";
 import { defaultConfiguration, MarkdownRendererService } from "@typora-plus/platform";
 import { describe, expect, it, vi } from "vitest";
 import {
@@ -7,6 +12,7 @@ import {
   createWorkbenchEditorConfiguration,
   createWorkbenchImageSourceResolver,
   createWorkbenchMarkdownRendererAdapters,
+  createWorkbenchPasteImageHandler,
   type WorkbenchEditorAdapterServices
 } from "./workbenchEditorAdapter";
 
@@ -44,6 +50,35 @@ describe("workbench editor adapter", () => {
 
     expect(createWorkbenchImageSourceResolver(unavailableServices, fileModel)).toBeUndefined();
     expect(unavailableServices.resourceService.resolveImageSource).not.toHaveBeenCalled();
+  });
+
+  it("creates paste-image handlers only for available file attachments", async () => {
+    const services = createServices({
+      attachmentAvailable: true,
+      resourceAvailable: false
+    });
+    const fileModel = model("file:///C:/Notes/a.md");
+    const handler = createWorkbenchPasteImageHandler(services, fileModel);
+
+    await expect(handler?.({
+      name: "chart.png",
+      mimeType: "image/png",
+      base64: "abc"
+    })).resolves.toBe("![chart](assets/chart.png)");
+    expect(services.attachmentService.saveImage).toHaveBeenCalledWith(fileModel.uri, {
+      name: "chart.png",
+      mimeType: "image/png",
+      base64: "abc"
+    });
+    expect(createWorkbenchPasteImageHandler(services, model("untitled://default"))).toBeUndefined();
+
+    const unavailableServices = createServices({
+      attachmentAvailable: false,
+      resourceAvailable: false
+    });
+
+    expect(createWorkbenchPasteImageHandler(unavailableServices, fileModel)).toBeUndefined();
+    expect(unavailableServices.attachmentService.saveImage).not.toHaveBeenCalled();
   });
 
   it("creates renderer adapters with active document context and configured cache limits", async () => {
@@ -94,14 +129,26 @@ describe("workbench editor adapter", () => {
     }), services, model("file:///C:/Notes/a.md"));
 
     expect(adapter.configuration.focusMode).toBe(true);
+    expect(adapter.onPasteImage).toBeDefined();
     expect(adapter.resolveImageSource).toBeDefined();
     expect(adapter.renderCodeFence).toBeDefined();
     expect(adapter.renderInline).toBeDefined();
   });
 });
 
-function createServices(options: { readonly resourceAvailable: boolean }): WorkbenchEditorAdapterServices {
+function createServices(options: {
+  readonly attachmentAvailable?: boolean;
+  readonly resourceAvailable: boolean;
+}): WorkbenchEditorAdapterServices {
   return {
+    attachmentService: {
+      isAvailable: vi.fn(() => options.attachmentAvailable ?? true),
+      saveImage: vi.fn(async () => ({
+        uri: URI.file("C:/Notes/assets/chart.png"),
+        relativePath: "assets/chart.png",
+        markdown: "![chart](assets/chart.png)"
+      }))
+    } satisfies Pick<IAttachmentService, "isAvailable" | "saveImage">,
     markdownRendererService: new MarkdownRendererService(),
     resourceService: {
       isAvailable: vi.fn(() => options.resourceAvailable),
