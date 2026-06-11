@@ -1,4 +1,4 @@
-import { keybindingFromEvent } from "@typora-plus/platform";
+import { keybindingFromEvent, remoteSyncConfiguredRawMirrorRetryLimits } from "@typora-plus/platform";
 import type {
   AiProviderConfiguration,
   AiTextResponse,
@@ -24,6 +24,8 @@ import {
   canAddSettingsAiProvider,
   canAddSettingsRemoteSyncProvider,
   createSettingsAiProviderDraft,
+  applySettingsRawMirrorMetadataDraft,
+  createSettingsRawMirrorMetadataDraft,
   createSettingsRemoteSyncProviderDraft,
   createSettingsSearchResult,
   createSettingsThemeOptions,
@@ -54,6 +56,7 @@ import {
   validateSettingsAiProviderDraft,
   validateSettingsRemoteSyncProviderDraft,
   type SettingsAiProviderDraft,
+  type SettingsRawMirrorMetadataDraft,
   type SettingsRemoteSyncProviderDraft,
   type SettingsSectionId,
   type NumberSettingConstraint
@@ -973,6 +976,11 @@ export function SettingsDialog({
                                 onChange={(event) => updateRemoteSyncProviderDraft(draft.key, { remoteScopeId: event.target.value })}
                               />
                             </SettingsField>
+                            <RawMirrorSettingsFields
+                              draft={draft}
+                              onChange={(updatedDraft) =>
+                                updateRemoteSyncProviderDraft(draft.key, { metadataText: updatedDraft.metadataText })}
+                            />
                             <SettingsField label="Secret Bindings">
                               <textarea
                                 className="tp-settings-textarea"
@@ -1409,6 +1417,134 @@ function SettingsField({
       <span className="tp-settings-label">{label}</span>
       <span className="tp-settings-control">{children}</span>
     </div>
+  );
+}
+
+function RawMirrorSettingsFields({
+  draft,
+  onChange
+}: {
+  readonly draft: SettingsRemoteSyncProviderDraft;
+  readonly onChange: (draft: SettingsRemoteSyncProviderDraft) => void;
+}) {
+  const rawMirrorDraft = createSettingsRawMirrorMetadataDraft(draft);
+  const updateRawMirrorDraft = (value: Partial<SettingsRawMirrorMetadataDraft>) => {
+    onChange(applySettingsRawMirrorMetadataDraft(draft, {
+      ...rawMirrorDraft,
+      ...value
+    }));
+  };
+
+  return (
+    <>
+      <SettingsField label="Raw Mirror">
+        <ToggleControl
+          checked={rawMirrorDraft.enabled}
+          label="Raw Mirror"
+          onChange={(enabled) => updateRawMirrorDraft({ enabled })}
+        />
+      </SettingsField>
+      {rawMirrorDraft.enabled ? (
+        <>
+          <SettingsField label="List Path">
+            <input
+              className="tp-settings-text-input"
+              type="text"
+              value={rawMirrorDraft.listPath}
+              aria-label="Raw Mirror List Path"
+              onChange={(event) => updateRawMirrorDraft({ listPath: event.target.value })}
+            />
+          </SettingsField>
+          <SettingsField label="Upload Path">
+            <input
+              className="tp-settings-text-input"
+              type="text"
+              value={rawMirrorDraft.uploadPath}
+              aria-label="Raw Mirror Upload Path"
+              onChange={(event) => updateRawMirrorDraft({ uploadPath: event.target.value })}
+            />
+          </SettingsField>
+          <SettingsField label="Download Path">
+            <input
+              className="tp-settings-text-input"
+              type="text"
+              value={rawMirrorDraft.downloadPath}
+              aria-label="Raw Mirror Download Path"
+              onChange={(event) => updateRawMirrorDraft({ downloadPath: event.target.value })}
+            />
+          </SettingsField>
+          <SettingsField label="Delete Path">
+            <input
+              className="tp-settings-text-input"
+              type="text"
+              value={rawMirrorDraft.deletePath}
+              aria-label="Raw Mirror Delete Path"
+              onChange={(event) => updateRawMirrorDraft({ deletePath: event.target.value })}
+            />
+          </SettingsField>
+          <SettingsField label="Header Binding">
+            <input
+              className="tp-settings-text-input"
+              type="text"
+              value={rawMirrorDraft.headerBinding}
+              aria-label="Raw Mirror Header Binding"
+              onChange={(event) => updateRawMirrorDraft({ headerBinding: event.target.value })}
+            />
+          </SettingsField>
+          <SettingsField label="Header Name">
+            <input
+              className="tp-settings-text-input"
+              type="text"
+              value={rawMirrorDraft.headerName}
+              aria-label="Raw Mirror Header Name"
+              onChange={(event) => updateRawMirrorDraft({ headerName: event.target.value })}
+            />
+          </SettingsField>
+          <SettingsField label="Header Scheme">
+            <input
+              className="tp-settings-text-input"
+              type="text"
+              value={rawMirrorDraft.headerScheme}
+              aria-label="Raw Mirror Header Scheme"
+              onChange={(event) => updateRawMirrorDraft({ headerScheme: event.target.value })}
+            />
+          </SettingsField>
+          <SettingsField label="Retry Status">
+            <input
+              className="tp-settings-text-input"
+              type="text"
+              value={rawMirrorDraft.retryStatusCodes}
+              aria-label="Raw Mirror Retry Status"
+              onChange={(event) => updateRawMirrorDraft({ retryStatusCodes: event.target.value })}
+            />
+          </SettingsField>
+          <SettingsField label="Retry Count">
+            <input
+              className="tp-settings-number-input"
+              type="number"
+              min={0}
+              max={remoteSyncConfiguredRawMirrorRetryLimits.maxRetries}
+              step={1}
+              value={rawMirrorDraft.retryMaxRetries}
+              aria-label="Raw Mirror Retry Count"
+              onChange={(event) => updateRawMirrorDraft({ retryMaxRetries: event.target.value })}
+            />
+          </SettingsField>
+          <SettingsField label="Retry Delay">
+            <input
+              className="tp-settings-number-input"
+              type="number"
+              min={0}
+              max={remoteSyncConfiguredRawMirrorRetryLimits.maxDelayMs}
+              step={1}
+              value={rawMirrorDraft.retryDelayMs}
+              aria-label="Raw Mirror Retry Delay"
+              onChange={(event) => updateRawMirrorDraft({ retryDelayMs: event.target.value })}
+            />
+          </SettingsField>
+        </>
+      ) : null}
+    </>
   );
 }
 

@@ -8078,3 +8078,33 @@ Known limitations:
 
 - Settings still renders remote sync metadata as key-value text until the guided form is wired into the dialog.
 - Direct Feishu Drive API translation, token lifecycle handling, remote folder mapping, and multipart upload sessions remain future adapter work.
+
+## 2026-06-12 - P2 Guided Raw Mirror Settings Fields
+
+Completed:
+
+- Wired the Settings remote sync profile editor to the structured raw mirror metadata draft model.
+- Added guided fields for raw mirror enablement, list/upload/download/delete paths, secret header binding/name/scheme, retry status codes, retry count, and retry delay.
+- Kept the underlying metadata text synchronized through the Settings model helper so unknown provider metadata remains preserved.
+- Kept retry count and delay inputs bounded by platform-owned raw mirror retry limits instead of UI-owned numeric constants.
+- Verified the Settings dialog locally in the in-app browser: raw mirror fields expand, field edits synchronize to metadata text, and no console warnings/errors were emitted.
+
+Quality gate:
+
+- `npx vitest run packages/workbench/src/settingsModel.test.ts`: passed, 1 file / 31 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 87 files / 826 tests, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Guided raw mirror Settings hardcode scan for OpenAI endpoints, model ids, API keys, Feishu endpoints, OAuth/token/secret literals, and provider credentials: passed
+
+Review:
+
+- React now consumes the model boundary instead of manipulating `rawMirror.*` metadata keys directly.
+- The raw metadata textarea remains available for provider-specific metadata while guided raw mirror fields cover the common gateway profile path.
+- No Feishu endpoint, OAuth scope, token name, folder id, model id, provider id, storage path, or credential literal was added.
+
+Known limitations:
+
+- The guided form configures the generic raw mirror gateway only; direct Feishu Drive API translation remains adapter work.
+- The UI still depends on provider profile authors knowing their gateway route paths and secret binding names.
