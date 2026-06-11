@@ -6,6 +6,22 @@ export interface WorkbenchTagRow {
   readonly active: boolean;
 }
 
+export interface WorkbenchTagSelectionCallbacks {
+  readonly setSelectedTag: (tag: string | undefined) => void;
+}
+
+export function syncWorkbenchSelectedTag(
+  tags: readonly WorkspaceIndexedTagSummary[],
+  selectedTag: string | undefined,
+  callbacks: WorkbenchTagSelectionCallbacks
+): void {
+  const nextSelectedTag = nextWorkbenchSelectedTag(tags, selectedTag);
+
+  if (nextSelectedTag !== selectedTag) {
+    callbacks.setSelectedTag(nextSelectedTag);
+  }
+}
+
 export function nextWorkbenchSelectedTag(
   tags: readonly WorkspaceIndexedTagSummary[],
   selectedTag: string | undefined

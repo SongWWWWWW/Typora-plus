@@ -127,7 +127,7 @@ import {
 import { createWorkbenchSidebarCommandHandlers } from "./workbenchSidebarCommands";
 import {
   createWorkbenchTagRows,
-  nextWorkbenchSelectedTag
+  syncWorkbenchSelectedTag
 } from "./workbenchTagsModel";
 import { registerWorkbenchStateSubscriptions } from "./workbenchStateSubscriptions";
 import {
@@ -226,11 +226,7 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
   ]);
 
   useEffect(() => {
-    const nextSelectedTag = nextWorkbenchSelectedTag(tags, selectedTag);
-
-    if (nextSelectedTag !== selectedTag) {
-      setSelectedTag(nextSelectedTag);
-    }
+    syncWorkbenchSelectedTag(tags, selectedTag, { setSelectedTag });
   }, [selectedTag, tags]);
 
   useEffect(() => {

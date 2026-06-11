@@ -1,9 +1,10 @@
 import type { WorkspaceIndexedTagSummary } from "@typora-plus/platform";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   createWorkbenchTagRows,
   nextWorkbenchSelectedTag,
   normalizeWorkbenchTagName,
+  syncWorkbenchSelectedTag,
   workbenchTagKey
 } from "./workbenchTagsModel";
 
@@ -53,6 +54,19 @@ describe("workbench tags model", () => {
     expect(normalizeWorkbenchTagName(" Project ")).toBe("project");
     expect(normalizeWorkbenchTagName(undefined)).toBe("");
     expect(workbenchTagKey(tag(" Project "))).toBe(" Project ");
+  });
+
+  it("syncs selected tag only when the normalized selection changes", () => {
+    const setSelectedTag = vi.fn();
+    const tags = [tag("Project"), tag("todo")];
+
+    syncWorkbenchSelectedTag(tags, " project ", { setSelectedTag });
+    syncWorkbenchSelectedTag(tags, "todo", { setSelectedTag });
+    syncWorkbenchSelectedTag([], "todo", { setSelectedTag });
+
+    expect(setSelectedTag).toHaveBeenCalledWith("Project");
+    expect(setSelectedTag).toHaveBeenCalledWith(undefined);
+    expect(setSelectedTag).toHaveBeenCalledTimes(2);
   });
 });
 

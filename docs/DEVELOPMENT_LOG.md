@@ -5621,3 +5621,31 @@ Review:
 Known limitations:
 
 - The effect trigger still lives in `Application.tsx` because it depends on React's configuration and workspace lifecycle.
+
+## 2026-06-11 - P2 Tag Selection Synchronization
+
+Completed:
+
+- Added a focused tag selection synchronization helper that owns selected-tag fallback and setter dispatch.
+- Routed `Application.tsx` tag synchronization effect through the tags model instead of calculating and applying the next selected tag inline.
+- Preserved empty-tag clearing, blank-selection fallback, case-insensitive matching, current-casing restoration, and no-op behavior when the selected tag is already current.
+- Covered synchronization behavior alongside existing tag normalization and row-state tests.
+
+Quality gate:
+
+- `npx vitest run packages/workbench/src/workbenchTagsModel.test.ts`: passed, 7 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 56 files / 569 tests, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Dev server smoke check: passed at `http://127.0.0.1:5173`; status 200 and root element present
+
+Review:
+
+- Sidebar tag selection policy now lives fully in `workbenchTagsModel`, including normalization, invalid-selection fallback, active rows, and selected-tag synchronization.
+- `Application.tsx` still owns the selected-tag state value because it drives sidebar rendering and tagged-resource queries, but it no longer duplicates the synchronization policy.
+- No new dependency, configuration key, storage path, visual token, extra documentation file, or hard-coded platform assumption was introduced.
+
+Known limitations:
+
+- Sidebar close and search query remain direct shell state because they are local view interaction state.
