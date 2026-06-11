@@ -6978,6 +6978,40 @@ Known limitations:
 - Execution result feedback is summary-level; per-operation execution status remains provider-returned operation data only.
 - Workspace context is keyword search/snippet based, not semantic or vector retrieval.
 
+## 2026-06-11 - P2 Remote Sync Execution Operation Feedback
+
+Completed:
+
+- Extended the focused remote sync dialog model with bounded operation previews and operation detail formatting.
+- Reused the same preview model for dry-run plan operations and provider-returned execution result operations.
+- Updated the remote sync plan dialog to show execution result operations after a provider run, including provider-returned operation messages when present.
+- Kept operation previews bounded to avoid oversized result dialogs for large workspaces.
+- Added model tests for operation preview truncation, empty preview behavior, and operation detail formatting.
+- Updated maintained docs to record result operation feedback without adding provider-specific Feishu behavior.
+
+Quality gate:
+
+- `npx vitest run packages/workbench/src/workbenchRemoteSyncDialogModel.test.ts`: passed, 1 file / 8 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 75 files / 700 tests, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Dev server smoke check at `http://127.0.0.1:5173/`: status 200 and root element present
+
+Review:
+
+- Result feedback remains provider-neutral and uses normalized `RemoteSyncOperation` data already returned by the platform service.
+- No Feishu provider id, endpoint, OAuth scope, token, storage path, or credential behavior was introduced.
+- The React dialog delegates operation slicing and detail text to the focused model instead of duplicating policy inline.
+- Large workspaces remain bounded in the UI, while provider summaries still expose total operation counts.
+
+Known limitations:
+
+- Feishu OAuth and a built-in Feishu provider remain future work.
+- Remote sync progress streaming and richer conflict-resolution UI are still not implemented.
+- Execution result operations are provider-returned final state, not live progress events.
+- Workspace context is keyword search/snippet based, not semantic or vector retrieval.
+
 ## 2026-06-11 - P2 Remote Sync Execution Cancellation UI
 
 Completed:

@@ -7,6 +7,7 @@ import type {
   MenuId,
   MenuItem,
   RecentResource,
+  RemoteSyncOperation,
   TextFileModel,
   TyporaPlusConfiguration,
   WorkspaceIndexedLink,
@@ -57,7 +58,9 @@ import {
   type WorkbenchRemoteSyncPlanResult
 } from "./workbenchRemoteSyncActions";
 import {
+  createWorkbenchRemoteSyncDialogOperationPreview,
   createWorkbenchRemoteSyncDialogExecutionState,
+  formatWorkbenchRemoteSyncOperationDetail,
   formatWorkbenchRemoteSyncSummary
 } from "./workbenchRemoteSyncDialogModel";
 import {
@@ -1299,8 +1302,16 @@ function RemoteSyncPlanDialog({
   readonly result: WorkbenchRemoteSyncPlanResult;
   readonly onClose: () => void;
 }) {
-  const visibleOperations = result.plan.operations.slice(0, 6);
-  const hiddenOperationCount = Math.max(result.plan.operations.length - visibleOperations.length, 0);
+  const planOperationPreview = createWorkbenchRemoteSyncDialogOperationPreview(result.plan.operations, {
+    emptyMessage: "No operations planned",
+    maxOperations: 6
+  });
+  const executionOperationPreview = execution
+    ? createWorkbenchRemoteSyncDialogOperationPreview(execution.result.operations, {
+      emptyMessage: "No operations executed",
+      maxOperations: 6
+    })
+    : undefined;
   const executionState = createWorkbenchRemoteSyncDialogExecutionState(result.plan, {
     executing,
     execution
@@ -1333,30 +1344,16 @@ function RemoteSyncPlanDialog({
           <p className="tp-ai-response">
             {formatWorkbenchRemoteSyncSummary(result.plan.summary)}
           </p>
-          {visibleOperations.length > 0 ? (
-            <div className="tp-result-list">
-              {visibleOperations.map((operation, index) => (
-                <div className="tp-result-row" key={`${operation.relativePath}:${operation.kind}:${index}`}>
-                  <span className="tp-result-line">{operation.kind}</span>
-                  <span className="tp-result-body">
-                    <small>{operation.target}</small>
-                    <span className="tp-result-preview">{operation.relativePath}</span>
-                  </span>
-                </div>
-              ))}
-              {hiddenOperationCount > 0 ? (
-                <div className="tp-empty-row">{hiddenOperationCount} more operations</div>
-              ) : null}
-            </div>
-          ) : (
-            <div className="tp-empty-row">No operations planned</div>
-          )}
+          <RemoteSyncOperationPreviewList preview={planOperationPreview} />
           {executionState.statusMessage ? (
             execution ? (
               <p className="tp-ai-response">{executionState.statusMessage}</p>
             ) : (
               <div className="tp-empty-row">{executionState.statusMessage}</div>
             )
+          ) : null}
+          {executionOperationPreview ? (
+            <RemoteSyncOperationPreviewList preview={executionOperationPreview} />
           ) : null}
         </div>
         <div className="tp-dialog-actions">
@@ -1382,6 +1379,37 @@ function RemoteSyncPlanDialog({
           </button>
         </div>
       </section>
+    </div>
+  );
+}
+
+function RemoteSyncOperationPreviewList({
+  preview
+}: {
+  readonly preview: {
+    readonly emptyMessage: string;
+    readonly hiddenOperationCount: number;
+    readonly operations: readonly RemoteSyncOperation[];
+  };
+}) {
+  if (preview.operations.length === 0) {
+    return <div className="tp-empty-row">{preview.emptyMessage}</div>;
+  }
+
+  return (
+    <div className="tp-result-list">
+      {preview.operations.map((operation, index) => (
+        <div className="tp-result-row" key={`${operation.relativePath}:${operation.kind}:${index}`}>
+          <span className="tp-result-line">{operation.kind}</span>
+          <span className="tp-result-body">
+            <small>{formatWorkbenchRemoteSyncOperationDetail(operation)}</small>
+            <span className="tp-result-preview">{operation.relativePath}</span>
+          </span>
+        </div>
+      ))}
+      {preview.hiddenOperationCount > 0 ? (
+        <div className="tp-empty-row">{preview.hiddenOperationCount} more operations</div>
+      ) : null}
     </div>
   );
 }

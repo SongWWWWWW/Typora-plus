@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import { URI } from "@typora-plus/base";
 import type { RemoteSyncPlan, RemoteSyncResult } from "@typora-plus/platform";
 import {
+  createWorkbenchRemoteSyncDialogOperationPreview,
   createWorkbenchRemoteSyncDialogExecutionState,
+  formatWorkbenchRemoteSyncOperationDetail,
   formatWorkbenchRemoteSyncSummary
 } from "./workbenchRemoteSyncDialogModel";
 
@@ -68,6 +70,44 @@ describe("workbench remote sync dialog model", () => {
     expect(formatWorkbenchRemoteSyncSummary(result().summary))
       .toBe("1 create, 2 update, 0 delete, 3 skip, 0 conflict");
   });
+
+  it("creates bounded operation previews", () => {
+    const preview = createWorkbenchRemoteSyncDialogOperationPreview([
+      operation("create", "A.md"),
+      operation("update", "B.md"),
+      operation("delete", "C.md")
+    ], {
+      emptyMessage: "No operations",
+      maxOperations: 2
+    });
+
+    expect(preview).toEqual({
+      emptyMessage: "No operations",
+      hiddenOperationCount: 1,
+      operations: [
+        operation("create", "A.md"),
+        operation("update", "B.md")
+      ]
+    });
+  });
+
+  it("keeps operation previews stable for empty or invalid limits", () => {
+    expect(createWorkbenchRemoteSyncDialogOperationPreview([operation("create", "A.md")], {
+      emptyMessage: "No result operations",
+      maxOperations: -1
+    })).toEqual({
+      emptyMessage: "No result operations",
+      hiddenOperationCount: 1,
+      operations: []
+    });
+  });
+
+  it("formats operation details with provider messages when present", () => {
+    expect(formatWorkbenchRemoteSyncOperationDetail(operation("update", "A.md", "uploaded")))
+      .toBe("remote: uploaded");
+    expect(formatWorkbenchRemoteSyncOperationDetail(operation("skip", "B.md")))
+      .toBe("none");
+  });
 });
 
 function plan(kind: RemoteSyncPlan["operations"][number]["kind"]): RemoteSyncPlan {
@@ -84,6 +124,21 @@ function plan(kind: RemoteSyncPlan["operations"][number]["kind"]): RemoteSyncPla
       skips: kind === "skip" ? 1 : 0,
       conflicts: kind === "conflict" ? 1 : 0
     }
+  };
+}
+
+function operation(
+  kind: RemoteSyncPlan["operations"][number]["kind"],
+  relativePath: string,
+  message?: string
+): RemoteSyncPlan["operations"][number] {
+  const target = kind === "conflict" ? "both" : kind === "skip" ? "none" : "remote";
+
+  return {
+    kind,
+    target,
+    relativePath,
+    ...(message ? { message } : {})
   };
 }
 
