@@ -4695,3 +4695,32 @@ Review:
 Known limitations:
 
 - Browser `matchMedia` theme synchronization still stays in the shell because it is DOM-facing and depends on the document root.
+
+## 2026-06-11 - P2 Workbench Resource Opening Coordinator
+
+Completed:
+
+- Added a focused Workbench resource-opening helper for file tree selections, Quick Open selections, and trusted recent workspace selections.
+- Replaced inline `Application.tsx` file/recent workspace open flows with helper calls that reuse the existing file-opening and workspace-opening coordinators.
+- Moved Quick Open close, Files view reveal, and stale save-conflict clearing into explicit shell callbacks owned by the helper.
+- Narrowed workspace-opening service contracts so open, trusted recent reopen, and refresh flows declare only the file-service methods they actually consume.
+- Covered file resource opening, Quick Open close ordering, recent workspace follow-up ordering, and canceled recent workspace behavior.
+
+Quality gate:
+
+- `npx vitest run packages/workbench/src/workbenchResourceOpening.test.ts packages/workbench/src/workbenchFileOpening.test.ts packages/workbench/src/workbenchWorkspaceOpening.test.ts`: passed, 11 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 512 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Dev server smoke check: passed at `http://127.0.0.1:5173`; status 200 and root element present
+
+Review:
+
+- Resource opening remains Workbench-local and consumes platform URI, file, recent, text-file, and workspace service contracts without reaching into Electron or storage.
+- `Application.tsx` now wires user gestures to resource-opening operations but no longer sequences recent workspace follow-up or Quick Open closing inline.
+- No new dependency, configuration key, storage path, visual token, extra documentation file, or hard-coded platform assumption was introduced.
+
+Known limitations:
+
+- Save-conflict dialog reload/overwrite callbacks still stay inline because they are dialog-specific and already share the existing file-opening and file-saving coordinators.

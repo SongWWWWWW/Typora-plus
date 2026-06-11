@@ -9,10 +9,22 @@ import type {
 } from "@typora-plus/platform";
 import { openWorkbenchFile } from "./workbenchFileOpening";
 
-export interface WorkbenchWorkspaceOpeningServices {
-  readonly fileService: Pick<IFileService, "openRecentWorkspace" | "openWorkspace" | "refreshWorkspace">;
+export interface WorkbenchOpenedWorkspaceServices {
   readonly recentService: Pick<IRecentService, "addRecentFile" | "addRecentWorkspace">;
   readonly textFileService: Pick<ITextFileService, "openFile">;
+  readonly workspaceService: Pick<IWorkspaceService, "setWorkspace">;
+}
+
+export interface WorkbenchWorkspaceOpeningServices extends WorkbenchOpenedWorkspaceServices {
+  readonly fileService: Pick<IFileService, "openWorkspace">;
+}
+
+export interface WorkbenchRecentWorkspaceOpeningServices extends WorkbenchOpenedWorkspaceServices {
+  readonly fileService: Pick<IFileService, "openRecentWorkspace">;
+}
+
+export interface WorkbenchWorkspaceRefreshServices {
+  readonly fileService: Pick<IFileService, "refreshWorkspace">;
   readonly workspaceService: Pick<IWorkspaceService, "setWorkspace">;
 }
 
@@ -36,7 +48,7 @@ export async function openWorkbenchWorkspace(
 }
 
 export async function openRecentWorkbenchWorkspace(
-  services: WorkbenchWorkspaceOpeningServices,
+  services: WorkbenchRecentWorkspaceOpeningServices,
   uri: URI,
   callbacks: WorkbenchWorkspaceOpeningCallbacks = {}
 ): Promise<WorkspaceFileTree | undefined> {
@@ -51,7 +63,7 @@ export async function openRecentWorkbenchWorkspace(
 }
 
 export async function refreshWorkbenchWorkspace(
-  services: Pick<WorkbenchWorkspaceOpeningServices, "fileService" | "workspaceService">
+  services: WorkbenchWorkspaceRefreshServices
 ): Promise<WorkspaceFileTree | undefined> {
   const workspaceFiles = await services.fileService.refreshWorkspace();
 
@@ -72,7 +84,7 @@ export function workspaceStateFromFiles(workspaceFiles: WorkspaceFileTree): Work
 }
 
 async function applyOpenedWorkbenchWorkspace(
-  services: WorkbenchWorkspaceOpeningServices,
+  services: WorkbenchOpenedWorkspaceServices,
   workspaceFiles: WorkspaceFileTree,
   callbacks: WorkbenchWorkspaceOpeningCallbacks
 ): Promise<void> {

@@ -61,7 +61,6 @@ import {
   createWorkbenchFileTreeRows,
   type WorkbenchFileTreeRow
 } from "./workbenchFileTreeModel";
-import { openWorkbenchFile } from "./workbenchFileOpening";
 import {
   overwriteWorkbenchSaveConflict,
   reloadWorkbenchFileAfterSaveConflict
@@ -76,7 +75,6 @@ import {
   workbenchCommandTitle,
   workbenchMenuItemTitle
 } from "./workbenchMenuModel";
-import { openRecentWorkbenchWorkspace } from "./workbenchWorkspaceOpening";
 import {
   getWorkbenchBacklinks,
   getWorkbenchSearchResults,
@@ -96,6 +94,11 @@ import {
   tagResourceKey,
   type WorkbenchSearchResult
 } from "./workbenchSearchResultsModel";
+import {
+  openWorkbenchFileResource,
+  openWorkbenchQuickOpenFile,
+  openWorkbenchRecentWorkspaceResource
+} from "./workbenchResourceOpening";
 import {
   defaultWorkbenchSideView,
   workbenchSideViewTitle,
@@ -298,8 +301,13 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
       services
     ]
   );
-  const lineNavigationCallbacks = {
+  const resourceOpeningCallbacks = {
     clearSaveConflict: () => setSaveConflict(undefined),
+    closeQuickOpen: () => setQuickOpen(false),
+    showFilesView: () => setSideView("files")
+  };
+  const lineNavigationCallbacks = {
+    clearSaveConflict: resourceOpeningCallbacks.clearSaveConflict,
     defer: (callback: () => void) => {
       window.setTimeout(callback, 0);
     },
@@ -375,22 +383,19 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
             }}
             onOpenWorkspace={() => executeCommand("file.openWorkspace")}
             onOpenRecentWorkspace={(recent) => {
-              void runWorkbenchAction(async () => {
-                await openRecentWorkbenchWorkspace(services, recent.uri, {
-                  didOpenWorkspace: () => {
-                    setSideView("files");
-                    setSaveConflict(undefined);
-                  }
-                });
-              }, setOperationError, setSaveConflict);
+              void runWorkbenchAction(
+                () => openWorkbenchRecentWorkspaceResource(services, recent, resourceOpeningCallbacks),
+                setOperationError,
+                setSaveConflict
+              );
             }}
             onRefreshWorkspace={() => executeCommand("file.refreshWorkspace")}
             onOpenFile={(entry) => {
-              void runWorkbenchAction(async () => {
-                await openWorkbenchFile(services, entry.uri, {
-                  clearSaveConflict: () => setSaveConflict(undefined)
-                });
-              }, setOperationError, setSaveConflict);
+              void runWorkbenchAction(
+                () => openWorkbenchFileResource(services, entry, resourceOpeningCallbacks),
+                setOperationError,
+                setSaveConflict
+              );
             }}
           />
         ) : null}
@@ -450,12 +455,11 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
         maxResults={configuration.workspace.quickOpenMaxResults}
         onClose={() => setQuickOpen(false)}
         onOpen={(entry) => {
-          void runWorkbenchAction(async () => {
-            await openWorkbenchFile(services, entry.uri, {
-              clearSaveConflict: () => setSaveConflict(undefined)
-            });
-            setQuickOpen(false);
-          }, setOperationError, setSaveConflict);
+          void runWorkbenchAction(
+            () => openWorkbenchQuickOpenFile(services, entry, resourceOpeningCallbacks),
+            setOperationError,
+            setSaveConflict
+          );
         }}
       />
       <SettingsDialog
