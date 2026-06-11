@@ -205,6 +205,27 @@ describe("remote sync workspace resources", () => {
     expect(resources[0]?.contentHash).toBe("sha256:native");
   });
 
+  it("does not reread resources that already have content hashes", async () => {
+    const readResource = vi.fn();
+
+    await expect(createRemoteSyncResourcesWithContentHashes({
+      workspaceUri: URI.file("C:/Notes"),
+      resources: [{
+        uri: URI.file("C:/Notes/A.md"),
+        relativePath: "A.md",
+        kind: "file" as const,
+        contentHash: "sha256:existing"
+      }],
+      resourceService: { readResource }
+    })).resolves.toEqual([{
+      uri: URI.file("C:/Notes/A.md"),
+      relativePath: "A.md",
+      kind: "file",
+      contentHash: "sha256:existing"
+    }]);
+    expect(readResource).not.toHaveBeenCalled();
+  });
+
   it("aborts resource hashing before native reads", async () => {
     const controller = new AbortController();
     const readResource = vi.fn();

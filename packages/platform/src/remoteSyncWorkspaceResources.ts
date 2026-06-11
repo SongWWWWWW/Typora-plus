@@ -182,7 +182,7 @@ export async function createRemoteSyncResourcesWithContentHashes(
       nextIndex += 1;
 
       const resource = resources[resourceIndex]!;
-      const hashedResource = resource.kind === "file"
+      const hashedResource = resource.kind === "file" && !resource.contentHash
         ? await createRemoteSyncResourceWithContentHash(input.workspaceUri, resource, input.resourceService, input.signal)
         : resource;
 

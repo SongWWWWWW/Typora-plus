@@ -116,6 +116,55 @@ describe("workbench remote sync actions", () => {
     expect(services.remoteSyncService.createPlan).toHaveBeenCalledWith("a.sync", result.request);
   });
 
+  it("adds Markdown-linked local assets before remote sync planning", async () => {
+    const services = {
+      ...createServices(),
+      remoteSyncWorkspaceResourceService: {
+        isAvailable: vi.fn(() => true),
+        readResource: vi.fn(async ({ relativePath }: { readonly relativePath: string }) => {
+          if (relativePath === "A.md") {
+            return {
+              workspaceUri: URI.file("C:/Notes"),
+              relativePath,
+              value: btoa("![Chart](assets/chart.png)\n[Spec](files/spec.pdf)"),
+              encoding: "base64" as const,
+              size: 48,
+              mtime: 30,
+              contentHash: "sha256:note"
+            };
+          }
+
+          return {
+            workspaceUri: URI.file("C:/Notes"),
+            relativePath,
+            value: "",
+            encoding: "base64" as const,
+            size: relativePath.endsWith(".png") ? 120 : 240,
+            mtime: relativePath.endsWith(".png") ? 40 : 50,
+            contentHash: relativePath.endsWith(".png") ? "sha256:chart" : "sha256:spec"
+          };
+        })
+      }
+    };
+
+    const result = await runWorkbenchPlanWorkspaceRemoteSyncAction(services);
+
+    expect(result.request.resources.map((resource) => resource.relativePath)).toEqual([
+      "A.md",
+      "assets/chart.png",
+      "files/spec.pdf"
+    ]);
+    expect(result.request.resources[1]).toMatchObject({
+      uri: URI.file("C:/Notes/assets/chart.png"),
+      kind: "file",
+      name: "chart.png",
+      size: 120,
+      mtime: 40,
+      contentHash: "sha256:chart"
+    });
+    expect(services.remoteSyncService.createPlan).toHaveBeenCalledWith("a.sync", result.request);
+  });
+
   it("executes an existing workspace plan with a non-dry-run request", async () => {
     const signal = new AbortController().signal;
     const onProgress = vi.fn();

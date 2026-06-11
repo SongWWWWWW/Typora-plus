@@ -7779,3 +7779,33 @@ Known limitations:
 
 - No concrete Feishu/raw-mirror adapter consumes the hashed resources yet.
 - Pull-side manifest refresh still needs post-write local snapshots after future download adapters write local files.
+
+## 2026-06-12 - P2 Remote Sync Markdown Asset Discovery
+
+Completed:
+
+- Added provider-neutral Markdown local resource discovery for inline and reference-style images plus local link attachments.
+- Resolved discovered paths relative to the source note, stripped query/fragment suffixes, URL-decoded safe path text, deduplicated by workspace-relative path, and rejected URL schemes, absolute paths, invalid encodings, and root-escaping traversal.
+- Wired Workbench remote sync planning to read Markdown files through `IRemoteSyncWorkspaceResourceService`, verify discovered assets through the same trusted-workspace bridge, skip missing assets, and add verified resources before provider planning.
+- Preserved bridge-unavailable behavior and skipped duplicate content reads for resources that already carry a `contentHash`.
+- Kept Markdown parsing in `@typora-plus/markdown`, Workbench orchestration in focused remote-sync helpers, and future provider adapters free of Markdown syntax parsing.
+
+Quality gate:
+
+- `npx vitest run packages/markdown/src/resourceReferences.test.ts packages/workbench/src/workbenchRemoteSyncMarkdownAssets.test.ts packages/workbench/src/workbenchRemoteSyncActions.test.ts packages/platform/src/remoteSyncWorkspaceResources.test.ts`: passed, 4 files / 25 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 85 files / 804 tests, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Markdown asset discovery implementation hardcode scan for Feishu endpoints, OAuth scopes, token/secret names, model ids, provider ids, and credential literals: passed
+
+Review:
+
+- The stage closes a concrete raw mirror prerequisite: Markdown notes and their local assets now enter the same provider-neutral sync plan when the trusted resource bridge is available.
+- The implementation still has no Feishu endpoints, OAuth scopes, token names, folder ids, model ids, provider ids, or retry defaults.
+- Unsafe links are filtered before native reads, and every added asset still passes through the Electron-owned trusted workspace resource boundary.
+
+Known limitations:
+
+- No concrete Feishu/raw-mirror adapter consumes the expanded resource list yet.
+- HTML `<img>` tags and wiki-style embeds are not included in this parser-backed discovery pass.

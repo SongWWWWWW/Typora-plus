@@ -8,6 +8,7 @@ import type {
   RemoteSyncResult
 } from "@typora-plus/platform";
 import { createRemoteSyncResourcesWithContentHashes } from "@typora-plus/platform";
+import { createWorkbenchRemoteSyncResourcesWithMarkdownAssets } from "./workbenchRemoteSyncMarkdownAssets";
 import {
   createWorkbenchWorkspaceRemoteSyncPlanRequest,
   workbenchRemoteSyncRequestActions,
@@ -80,13 +81,23 @@ async function createWorkbenchRemoteSyncPlanRequestWithContentHashes(
     return request;
   }
 
-  return {
+  const requestWithAssets = {
     ...request,
-    resources: await createRemoteSyncResourcesWithContentHashes({
+    resources: await createWorkbenchRemoteSyncResourcesWithMarkdownAssets({
       workspaceUri: request.workspaceUri,
       resources: request.resources,
       resourceService: services.remoteSyncWorkspaceResourceService,
       ...(request.signal !== undefined ? { signal: request.signal } : {})
+    })
+  };
+
+  return {
+    ...requestWithAssets,
+    resources: await createRemoteSyncResourcesWithContentHashes({
+      workspaceUri: requestWithAssets.workspaceUri,
+      resources: requestWithAssets.resources,
+      resourceService: services.remoteSyncWorkspaceResourceService,
+      ...(requestWithAssets.signal !== undefined ? { signal: requestWithAssets.signal } : {})
     })
   };
 }
