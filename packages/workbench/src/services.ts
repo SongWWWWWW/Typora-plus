@@ -1,5 +1,6 @@
 import { createWelcomeDocument, markdownHtmlExportProvider } from "@typora-plus/markdown";
 import {
+  AiService,
   CommandService,
   ConfigurationService,
   ContextKeyService,
@@ -7,6 +8,7 @@ import {
   ExtensionService,
   ExportService,
   IAttachmentService,
+  IAiService,
   IConfigurationService,
   IContextKeyService,
   ICommandService,
@@ -20,6 +22,7 @@ import {
   IMenuService,
   IRecentService,
   IResourceService,
+  IRemoteSyncService,
   ITextFileService,
   IThemeService,
   IWorkspaceService,
@@ -31,6 +34,7 @@ import {
   NativeResourceService,
   PersistedWorkspaceIndexProvider,
   RecentService,
+  RemoteSyncService,
   ServiceCollection,
   ThemeService,
   WorkspaceIndexService,
@@ -38,6 +42,7 @@ import {
   WorkspaceService,
   createDefaultWorkspaceIndexSnapshotStorage,
   type IAttachmentService as AttachmentServiceContract,
+  type IAiService as AiServiceContract,
   type IConfigurationService as ConfigurationServiceContract,
   type IContextKeyService as ContextKeyServiceContract,
   type ICommandService as CommandServiceContract,
@@ -51,6 +56,7 @@ import {
   type IMenuService as MenuServiceContract,
   type IRecentService as RecentServiceContract,
   type IResourceService as ResourceServiceContract,
+  type IRemoteSyncService as RemoteSyncServiceContract,
   type ITextFileService as TextFileServiceContract,
   type IThemeService as ThemeServiceContract,
   type IWorkspaceService as WorkspaceServiceContract
@@ -66,6 +72,7 @@ export interface WorkbenchServices {
   readonly serviceCollection: ServiceCollection;
   readonly commandService: CommandServiceContract;
   readonly attachmentService: AttachmentServiceContract;
+  readonly aiService: AiServiceContract;
   readonly configurationService: ConfigurationServiceContract;
   readonly contextKeyService: ContextKeyServiceContract;
   readonly extensionHostService: ExtensionHostServiceContract;
@@ -77,6 +84,7 @@ export interface WorkbenchServices {
   readonly markdownRendererService: MarkdownRendererServiceContract;
   readonly menuService: MenuServiceContract;
   readonly recentService: RecentServiceContract;
+  readonly remoteSyncService: RemoteSyncServiceContract;
   readonly resourceService: ResourceServiceContract;
   readonly textFileService: TextFileServiceContract;
   readonly themeService: ThemeServiceContract;
@@ -88,6 +96,7 @@ export function createWorkbenchServices(): WorkbenchServices {
   let extensionService: ExtensionServiceContract | undefined;
 
   const configurationService = new ConfigurationService();
+  const aiService = new AiService();
   const workspaceService = new WorkspaceService({
     name: "Typora Plus"
   });
@@ -96,6 +105,7 @@ export function createWorkbenchServices(): WorkbenchServices {
   const exportService = new ExportService({ resourceService });
   const contextKeyService = new ContextKeyService();
   const themeService = new ThemeService();
+  const remoteSyncService = new RemoteSyncService();
   const extensionHostService = new ExtensionHostService();
   const markdownRendererService = new MarkdownRendererService({
     activationHandler: async (rendererId) => {
@@ -124,6 +134,7 @@ export function createWorkbenchServices(): WorkbenchServices {
   });
 
   serviceCollection.set(IAttachmentService, attachmentService);
+  serviceCollection.set(IAiService, aiService);
   serviceCollection.set(IConfigurationService, configurationService);
   serviceCollection.set(IContextKeyService, contextKeyService);
   serviceCollection.set(IExtensionHostService, extensionHostService);
@@ -134,6 +145,7 @@ export function createWorkbenchServices(): WorkbenchServices {
   serviceCollection.set(IMarkdownRendererService, markdownRendererService);
   serviceCollection.set(IMenuService, menuService);
   serviceCollection.set(IRecentService, recentService);
+  serviceCollection.set(IRemoteSyncService, remoteSyncService);
   serviceCollection.set(IResourceService, resourceService);
   serviceCollection.set(IThemeService, themeService);
   serviceCollection.set(IWorkspaceService, workspaceService);
@@ -174,6 +186,7 @@ export function createWorkbenchServices(): WorkbenchServices {
     serviceCollection,
     commandService,
     attachmentService,
+    aiService,
     configurationService,
     contextKeyService,
     extensionHostService,
@@ -185,6 +198,7 @@ export function createWorkbenchServices(): WorkbenchServices {
     markdownRendererService,
     menuService,
     recentService,
+    remoteSyncService,
     resourceService,
     textFileService,
     themeService,

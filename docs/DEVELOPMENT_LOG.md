@@ -6157,3 +6157,32 @@ Known limitations:
 
 - No built-in Feishu provider, OAuth flow, Electron network bridge, remote state cache, or sync UI is wired yet.
 - Operation targets classify intended mutation side; actual local file writes, remote uploads, and conflict dialogs still belong to future execution adapters.
+
+## 2026-06-11 - P2 AI And Remote Sync Workbench Service Wiring
+
+Completed:
+
+- Registered `IAiService` and `IRemoteSyncService` during Workbench service bootstrap so future commands, providers, and extension/runtime adapters can resolve them from `ServiceCollection`.
+- Exposed the Workbench-owned AI and remote sync service instances through `WorkbenchServices`.
+- Added a focused Workbench service construction test that verifies both services are registered and start without built-in providers.
+- Updated the architecture notes with the current feasibility split: AI writing assistance should use provider-backed text requests, Codex is better suited to coding-agent workflows, Feishu raw file mirroring is the first sync path, and Feishu Docs bidirectional sync remains a higher-risk document-conversion problem.
+
+Quality gate:
+
+- `npx vitest run packages/workbench/src/services.test.ts`: passed, 1 test
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 62 files / 614 tests, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Dev server smoke check: passed at `http://127.0.0.1:5173`; status 200 and root element present
+
+Review:
+
+- Workbench can now resolve both future-facing service boundaries without forcing UI code to know provider internals.
+- No OpenAI, Codex, Feishu, OAuth, network bridge, endpoint, token, model id, storage path, or credential behavior was hard-coded.
+- The current shape keeps AI and sync integration consistent with existing export and Markdown renderer provider patterns.
+
+Known limitations:
+
+- No built-in AI provider, Feishu provider, AI command UI, sync UI, OAuth flow, secret storage, or Electron network bridge is wired yet.
+- Extension/runtime APIs still do not expose AI or remote sync registration surfaces.
