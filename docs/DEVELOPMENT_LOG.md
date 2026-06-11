@@ -7986,3 +7986,33 @@ Known limitations:
 
 - Directory create/delete semantics remain adapter-specific.
 - Provider-specific retries, rate-limit handling, remote folder mapping, and multipart upload sessions remain future adapter work.
+
+## 2026-06-12 - P2 Raw Mirror Settings Metadata Validation
+
+Completed:
+
+- Added Settings-side validation for configured raw mirror remote sync metadata before provider profiles are saved.
+- Reused the platform-owned raw mirror adapter name and metadata keys instead of duplicating provider ids or route key strings in Workbench.
+- Required configured raw mirror profiles to provide relative list/upload/download/delete gateway paths that do not contain schemes, query/fragment data, backslashes, absolute roots, or parent traversal.
+- Required optional raw mirror secret header metadata to provide both a header binding and header name, validate the header name shape, and bind to an existing profile secret.
+- Covered valid unauthenticated and header-authenticated raw mirror metadata plus missing path, invalid path, incomplete header, and unbound header failures with focused Settings model tests.
+
+Quality gate:
+
+- `npx vitest run packages/workbench/src/settingsModel.test.ts packages/platform/src/remoteSyncConfiguredRawMirrorProvider.test.ts packages/platform/src/platform.test.ts`: passed, 3 files / 138 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 87 files / 821 tests, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Raw mirror Settings validation hardcode scan for OpenAI endpoints, model ids, API keys, Feishu endpoints, OAuth/token/secret literals, and provider credentials: passed
+
+Review:
+
+- The change prevents metadata-gated raw mirror profiles from being saved in a state where provider registration would be skipped or requests would run without the intended native secret header injection.
+- Settings remains a draft-validation layer; platform configuration still owns generic profile sanitization, and the configured raw mirror factory still owns execution-time gateway behavior.
+- No Feishu endpoint, OAuth scope, token name, folder id, model id, provider id, storage path, or credential literal was added.
+
+Known limitations:
+
+- Settings still edits remote sync metadata as key-value text; a guided raw mirror profile editor remains future UX work.
+- Direct Feishu Drive API translation, token lifecycle handling, provider-specific retries, remote folder mapping, and multipart upload sessions remain future adapter work.

@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  remoteSyncConfiguredRawMirrorAdapterName,
+  remoteSyncConfiguredRawMirrorMetadataKeys
+} from "@typora-plus/platform";
+import {
   bytesToMegabytes,
   canAddSettingsAiProvider,
   canAddSettingsRemoteSyncProvider,
@@ -509,6 +513,90 @@ describe("settings model", () => {
     });
   });
 
+  it("validates configured raw mirror remote sync metadata before save", () => {
+    const provider = {
+      id: "mirror.sync",
+      title: "Mirror Sync",
+      kind: "native-request" as const,
+      baseUrl: "https://sync.example.test/root",
+      secrets: [
+        {
+          name: "access",
+          secretRef: "typora-plus.remote-sync.mirror.access"
+        }
+      ],
+      metadata: createRawMirrorMetadata({
+        [remoteSyncConfiguredRawMirrorMetadataKeys.headerBinding]: "access",
+        [remoteSyncConfiguredRawMirrorMetadataKeys.headerName]: "Authorization",
+        [remoteSyncConfiguredRawMirrorMetadataKeys.headerScheme]: "Bearer"
+      })
+    };
+
+    expect(validateSettingsRemoteSyncProviderDraft(
+      createSettingsRemoteSyncProviderDraft(provider),
+      [],
+      undefined
+    )).toMatchObject({
+      provider,
+      canSave: true,
+      issues: []
+    });
+
+    expect(validateSettingsRemoteSyncProviderDraft(
+      createSettingsRemoteSyncProviderDraft({
+        ...provider,
+        metadata: createRawMirrorMetadata()
+      }),
+      [],
+      undefined
+    )).toMatchObject({
+      canSave: true,
+      issues: []
+    });
+
+    const missingPathValidation = validateSettingsRemoteSyncProviderDraft({
+      ...createSettingsRemoteSyncProviderDraft(provider),
+      metadataText: formatRawMirrorMetadataText(createRawMirrorMetadata({
+        [remoteSyncConfiguredRawMirrorMetadataKeys.downloadPath]: undefined
+      }))
+    }, [], undefined);
+
+    expect(missingPathValidation.canSave).toBe(false);
+    expect(missingPathValidation.issues).toContain("Complete raw mirror metadata paths and header binding.");
+
+    const invalidPathValidation = validateSettingsRemoteSyncProviderDraft({
+      ...createSettingsRemoteSyncProviderDraft(provider),
+      metadataText: formatRawMirrorMetadataText(createRawMirrorMetadata({
+        [remoteSyncConfiguredRawMirrorMetadataKeys.uploadPath]: "../upload"
+      }))
+    }, [], undefined);
+
+    expect(invalidPathValidation.canSave).toBe(false);
+    expect(invalidPathValidation.issues).toContain("Complete raw mirror metadata paths and header binding.");
+
+    const incompleteHeaderValidation = validateSettingsRemoteSyncProviderDraft({
+      ...createSettingsRemoteSyncProviderDraft(provider),
+      metadataText: formatRawMirrorMetadataText(createRawMirrorMetadata({
+        [remoteSyncConfiguredRawMirrorMetadataKeys.headerBinding]: "access",
+        [remoteSyncConfiguredRawMirrorMetadataKeys.headerName]: undefined
+      }))
+    }, [], undefined);
+
+    expect(incompleteHeaderValidation.canSave).toBe(false);
+    expect(incompleteHeaderValidation.issues).toContain("Complete raw mirror metadata paths and header binding.");
+
+    const unboundHeaderValidation = validateSettingsRemoteSyncProviderDraft({
+      ...createSettingsRemoteSyncProviderDraft(provider),
+      metadataText: formatRawMirrorMetadataText(createRawMirrorMetadata({
+        [remoteSyncConfiguredRawMirrorMetadataKeys.headerBinding]: "missing",
+        [remoteSyncConfiguredRawMirrorMetadataKeys.headerName]: "Authorization"
+      }))
+    }, [], undefined);
+
+    expect(unboundHeaderValidation.canSave).toBe(false);
+    expect(unboundHeaderValidation.issues).toContain("Complete raw mirror metadata paths and header binding.");
+  });
+
   it("upserts and removes remote sync provider configuration without duplicate ids", () => {
     const existing = {
       id: "existing.sync",
@@ -575,3 +663,24 @@ describe("settings model", () => {
     }))).toBe(providers);
   });
 });
+
+function createRawMirrorMetadata(
+  overrides: Readonly<Record<string, string | undefined>> = {}
+): Record<string, string> {
+  const metadata: Record<string, string | undefined> = {
+    [remoteSyncConfiguredRawMirrorMetadataKeys.adapter]: remoteSyncConfiguredRawMirrorAdapterName,
+    [remoteSyncConfiguredRawMirrorMetadataKeys.listPath]: "mirror/list",
+    [remoteSyncConfiguredRawMirrorMetadataKeys.uploadPath]: "mirror/upload",
+    [remoteSyncConfiguredRawMirrorMetadataKeys.downloadPath]: "mirror/download",
+    [remoteSyncConfiguredRawMirrorMetadataKeys.deletePath]: "mirror/delete",
+    ...overrides
+  };
+
+  return Object.fromEntries(
+    Object.entries(metadata).filter((entry): entry is [string, string] => entry[1] !== undefined)
+  );
+}
+
+function formatRawMirrorMetadataText(metadata: Readonly<Record<string, string>>): string {
+  return Object.entries(metadata).map(([key, value]) => `${key}=${value}`).join("\n");
+}

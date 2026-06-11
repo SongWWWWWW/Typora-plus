@@ -6,6 +6,8 @@ import {
   configurationNumberConstraints,
   normalizeAiProviderConfiguration,
   normalizeRemoteSyncProviderConfiguration,
+  remoteSyncConfiguredRawMirrorAdapterName,
+  remoteSyncConfiguredRawMirrorMetadataKeys,
   type AiProviderConfiguration,
   type AiProviderReasoningEffort,
   type AiProviderTextVerbosity,
@@ -218,6 +220,10 @@ const settingsEntryById = new Map<SettingsEntryId, SettingsEntryDefinition>(
   settingsEntries.map((entry) => [entry.id, entry])
 );
 
+const settingsRemoteSyncProviderInvalidIssue =
+  "Complete provider id, title, HTTPS or loopback base URL, and valid profile bindings.";
+const settingsRawMirrorMetadataInvalidIssue = "Complete raw mirror metadata paths and header binding.";
+
 export const settingsNumberConstraints = {
   aiWorkspaceContextMaxPreviewLength: configurationNumberConstraints.aiWorkspaceContextMaxPreviewLength,
   aiWorkspaceContextMaxResults: configurationNumberConstraints.aiWorkspaceContextMaxResults,
@@ -374,9 +380,16 @@ export function validateSettingsRemoteSyncProviderDraft(
   const issues: string[] = [];
 
   if (!provider) {
-    issues.push("Complete provider id, title, HTTPS or loopback base URL, and valid profile bindings.");
-  } else if (providers.some((candidate) => candidate.id === provider.id && candidate.id !== originalId)) {
-    issues.push("Provider id is already used.");
+    issues.push(settingsRemoteSyncProviderInvalidIssue);
+  } else {
+    if (providers.some((candidate) => candidate.id === provider.id && candidate.id !== originalId)) {
+      issues.push("Provider id is already used.");
+    }
+
+    const rawMirrorIssue = getSettingsRawMirrorMetadataIssue(provider);
+    if (rawMirrorIssue) {
+      issues.push(rawMirrorIssue);
+    }
   }
 
   return {
@@ -617,6 +630,98 @@ function normalizeSettingsRemoteSyncProviderDraft(
     remoteScopeId: draft.remoteScopeId || undefined,
     secrets: secretLines.map(([name, secretRef]): RemoteSyncProviderSecretConfiguration => ({ name, secretRef })),
     metadata: Object.fromEntries(metadataLines)
+  });
+}
+
+function getSettingsRawMirrorMetadataIssue(
+  provider: RemoteSyncProviderConfiguration
+): string | undefined {
+  const metadata = provider.metadata ?? {};
+
+  if (
+    metadata[remoteSyncConfiguredRawMirrorMetadataKeys.adapter] !== remoteSyncConfiguredRawMirrorAdapterName
+  ) {
+    return undefined;
+  }
+
+  if (
+    !isSettingsRawMirrorMetadataPath(metadata[remoteSyncConfiguredRawMirrorMetadataKeys.listPath]) ||
+    !isSettingsRawMirrorMetadataPath(metadata[remoteSyncConfiguredRawMirrorMetadataKeys.uploadPath]) ||
+    !isSettingsRawMirrorMetadataPath(metadata[remoteSyncConfiguredRawMirrorMetadataKeys.downloadPath]) ||
+    !isSettingsRawMirrorMetadataPath(metadata[remoteSyncConfiguredRawMirrorMetadataKeys.deletePath]) ||
+    !isSettingsRawMirrorHeaderMetadataComplete(provider, metadata)
+  ) {
+    return settingsRawMirrorMetadataInvalidIssue;
+  }
+
+  return undefined;
+}
+
+function isSettingsRawMirrorMetadataPath(value: unknown): boolean {
+  const normalized = normalizeSettingsRawMirrorMetadataValue(value);
+
+  if (!normalized) {
+    return false;
+  }
+
+  return !(
+    normalized.startsWith("/") ||
+    normalized.startsWith("//") ||
+    normalized.includes("\\") ||
+    /[?#]/.test(normalized) ||
+    /^[A-Za-z][A-Za-z0-9+.-]*:/.test(normalized) ||
+    hasSettingsRawMirrorParentTraversal(normalized)
+  );
+}
+
+function isSettingsRawMirrorHeaderMetadataComplete(
+  provider: RemoteSyncProviderConfiguration,
+  metadata: Readonly<Record<string, string>>
+): boolean {
+  const binding = normalizeSettingsRawMirrorMetadataValue(
+    metadata[remoteSyncConfiguredRawMirrorMetadataKeys.headerBinding]
+  );
+  const name = normalizeSettingsRawMirrorMetadataValue(
+    metadata[remoteSyncConfiguredRawMirrorMetadataKeys.headerName]
+  );
+  const scheme = normalizeSettingsRawMirrorMetadataValue(
+    metadata[remoteSyncConfiguredRawMirrorMetadataKeys.headerScheme]
+  );
+
+  if (!binding && !name && !scheme) {
+    return true;
+  }
+
+  return !!binding &&
+    !!name &&
+    isSettingsRawMirrorHeaderName(name) &&
+    isSettingsRawMirrorHeaderScheme(scheme) &&
+    provider.secrets.some((secret) => secret.name === binding);
+}
+
+function normalizeSettingsRawMirrorMetadataValue(value: unknown): string | undefined {
+  return typeof value === "string" ? value.trim() || undefined : undefined;
+}
+
+function isSettingsRawMirrorHeaderName(value: string): boolean {
+  return /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/.test(value);
+}
+
+function isSettingsRawMirrorHeaderScheme(value: string | undefined): boolean {
+  return value === undefined || (value.length <= 128 && !/[\r\n]/.test(value));
+}
+
+function hasSettingsRawMirrorParentTraversal(path: string): boolean {
+  return path.split("/").some((segment) => {
+    if (segment === "..") {
+      return true;
+    }
+
+    try {
+      return decodeURIComponent(segment) === "..";
+    } catch {
+      return false;
+    }
   });
 }
 
