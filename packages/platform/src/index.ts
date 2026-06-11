@@ -23,6 +23,7 @@ export * from "./markdownRenderers";
 export * from "./menus";
 export * from "./remoteSync";
 export * from "./remoteSyncNativeRequest";
+export * from "./remoteSyncProfileRequest";
 export * from "./responsesAiProvider";
 export * from "./recents";
 export * from "./resources";

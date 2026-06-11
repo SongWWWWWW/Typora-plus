@@ -7502,3 +7502,35 @@ Known limitations:
 - The profiles are still preparatory; no configured remote sync provider factory consumes them yet.
 - The secret binding and metadata editors use bounded key/value lines rather than a richer structured row editor.
 - No Feishu Drive provider, OAuth flow, token refresh flow, upload/download adapter, or streaming transfer path is implemented yet.
+
+## 2026-06-12 - P2 Remote Sync Profile Request Helper
+
+Completed:
+
+- Added a provider-neutral remote sync profile request helper that composes validated profile base URLs, strict relative request paths, structured query values, and named profile secret bindings into the native request transport.
+- Rejected absolute/protocol paths, parent traversal including encoded parent segments, query/fragment data inside path strings, backslash-separated paths, oversized paths, oversized query values, invalid query keys, non-finite numeric query values, and missing named secret bindings.
+- Exported the helper through the platform package so future configured-provider factories can consume it without importing internal files.
+- Recorded the AI feasibility position from official OpenAI docs: Responses-style providers fit Markdown writing assistance and workspace-grounded Q&A, while Codex is feasible for coding-agent or repository automation workflows but should remain behind a provider/extension boundary rather than becoming the default note-writing path.
+- Recorded the Feishu feasibility position from official Feishu Open Platform pages: raw Markdown/assets mirroring is the safest first sync target because it maps to Drive file/folder upload, listing, download, and conflict metadata; Feishu Docs publish/import can follow as a one-way export path; full bidirectional Docs sync remains high-risk because it requires structured document conversion, permissions, comments, assets, and remote-edit conflict handling.
+- Kept Feishu endpoints, OAuth scopes, app ids, folder tokens, access tokens, provider ids, token refresh policy, model defaults, and decrypted secret values out of defaults and implementation code.
+
+Quality gate:
+
+- `npx vitest run packages/platform/src/remoteSyncProfileRequest.test.ts packages/platform/src/remoteSyncNativeRequest.test.ts packages/platform/src/platform.test.ts`: passed, 3 files / 129 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 79 files / 759 tests, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Remote sync profile request implementation hardcode scan for endpoint/OAuth/token/secret/model/provider literals: passed
+
+Review:
+
+- The helper is intentionally small and pure around profile normalization plus request construction; native network execution and secret injection remain in Electron main through the existing bridge.
+- Future Feishu adapters can keep route names, pagination, retry, upload mode, and OAuth refresh logic inside a provider implementation while reusing shared profile validation and native secret binding.
+- Query data now goes through the `query` object instead of being smuggled into path strings, which keeps URL construction structured and testable.
+
+Known limitations:
+
+- No configured remote sync provider factory consumes profiles yet.
+- No Feishu Drive provider, OAuth authorization flow, token refresh flow, upload/download adapter, folder mapping, pagination, rate-limit backoff, or streaming transfer path is implemented yet.
+- No Codex SDK/app-server integration is implemented; AI user-facing note commands still rely on registered text providers, with no built-in provider defaults.
