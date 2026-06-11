@@ -90,6 +90,19 @@ export interface RemoteSyncDiffPlanInput {
   readonly deleteMissing?: boolean;
 }
 
+export interface RemoteSyncManifestResource {
+  readonly relativePath: string;
+  readonly kind: FileKind;
+  readonly remoteId?: string;
+  readonly size?: number;
+  readonly mtime?: number;
+  readonly contentHash?: string;
+}
+
+export interface RemoteSyncManifestPlanInput extends RemoteSyncDiffPlanInput {
+  readonly manifestResources: readonly RemoteSyncManifestResource[];
+}
+
 export interface RegisteredRemoteSyncProvider {
   readonly id: RemoteSyncProviderId;
   readonly title: string;
@@ -135,6 +148,39 @@ export function createRemoteSyncPlanFromDiff(input: RemoteSyncDiffPlanInput): Re
     const remote = remoteByPath.get(relativePath);
 
     operations.push(createRemoteSyncDiffOperation(relativePath, direction, deleteMissing, local, remote));
+  }
+
+  return normalizeRemoteSyncPlan({
+    operations,
+    summary: summarizeRemoteSyncOperations(operations)
+  });
+}
+
+export function createRemoteSyncPlanFromManifest(input: RemoteSyncManifestPlanInput): RemoteSyncPlan {
+  const record = expectRecord(input, "Remote sync manifest plan input");
+  const direction = normalizeRemoteSyncDirection(record.direction);
+
+  if (direction !== "bidirectional") {
+    return createRemoteSyncPlanFromDiff(input);
+  }
+
+  const deleteMissing = record.deleteMissing === true;
+  const localResources = normalizeRemoteSyncResources(record.localResources);
+  const remoteResources = normalizeRemoteSyncRemoteResources(record.remoteResources);
+  const manifestResources = normalizeRemoteSyncManifestResources(record.manifestResources);
+  const localByPath = mapRemoteSyncResources(localResources, "local");
+  const remoteByPath = mapRemoteSyncResources(remoteResources, "remote");
+  const manifestByPath = mapRemoteSyncResources(manifestResources, "manifest");
+  const operations: RemoteSyncOperation[] = [];
+
+  for (const relativePath of sortRemoteSyncPaths(localByPath, remoteByPath, manifestByPath)) {
+    operations.push(createRemoteSyncManifestOperation(
+      relativePath,
+      deleteMissing,
+      localByPath.get(relativePath),
+      remoteByPath.get(relativePath),
+      manifestByPath.get(relativePath)
+    ));
   }
 
   return normalizeRemoteSyncPlan({
@@ -276,6 +322,171 @@ function createRemoteSyncDiffOperation(
   });
 }
 
+function createRemoteSyncManifestOperation(
+  relativePath: string,
+  deleteMissing: boolean,
+  local: RemoteSyncResource | undefined,
+  remote: RemoteSyncRemoteResource | undefined,
+  manifest: RemoteSyncManifestResource | undefined
+): RemoteSyncOperation {
+  if (local && remote) {
+    return createRemoteSyncManifestPresentOperation(relativePath, local, remote, manifest);
+  }
+
+  if (local && !remote) {
+    return createRemoteSyncManifestLocalOnlyOperation(relativePath, deleteMissing, local, manifest);
+  }
+
+  if (!local && remote) {
+    return createRemoteSyncManifestRemoteOnlyOperation(relativePath, deleteMissing, remote, manifest);
+  }
+
+  return createRemoteSyncOperation("skip", "none", relativePath, {
+    ...(manifest?.remoteId ? { remoteId: manifest.remoteId } : {}),
+    message: "Resource is missing locally and remotely"
+  });
+}
+
+function createRemoteSyncManifestPresentOperation(
+  relativePath: string,
+  local: RemoteSyncResource,
+  remote: RemoteSyncRemoteResource,
+  manifest: RemoteSyncManifestResource | undefined
+): RemoteSyncOperation {
+  if (local.kind !== remote.kind) {
+    return createRemoteSyncOperation("conflict", "both", relativePath, {
+      localUri: local.uri,
+      remoteId: remote.remoteId,
+      message: "Resource kind differs"
+    });
+  }
+
+  const currentComparison = compareRemoteSyncResources(local, remote);
+
+  if (currentComparison === "same") {
+    return createRemoteSyncOperation("skip", "none", relativePath, {
+      localUri: local.uri,
+      remoteId: remote.remoteId
+    });
+  }
+
+  if (!manifest) {
+    return createRemoteSyncOperation("conflict", "both", relativePath, {
+      localUri: local.uri,
+      remoteId: remote.remoteId,
+      message: currentComparison === "unknown"
+        ? "Resource state cannot be compared"
+        : "Resource has no synced baseline"
+    });
+  }
+
+  if (manifest.kind !== local.kind || manifest.kind !== remote.kind) {
+    return createRemoteSyncOperation("conflict", "both", relativePath, {
+      localUri: local.uri,
+      remoteId: remote.remoteId,
+      message: "Synced baseline kind differs"
+    });
+  }
+
+  const localState = compareRemoteSyncResourceToManifest(local, manifest);
+  const remoteState = compareRemoteSyncResourceToManifest(remote, manifest);
+
+  if (localState === "unknown" || remoteState === "unknown") {
+    return createRemoteSyncOperation("conflict", "both", relativePath, {
+      localUri: local.uri,
+      remoteId: remote.remoteId,
+      message: "Resource state cannot be compared"
+    });
+  }
+
+  if (localState === "same" && remoteState === "changed") {
+    return createRemoteSyncOperation("update", "local", relativePath, {
+      localUri: local.uri,
+      remoteId: remote.remoteId
+    });
+  }
+
+  if (localState === "changed" && remoteState === "same") {
+    return createRemoteSyncOperation("update", "remote", relativePath, {
+      localUri: local.uri,
+      remoteId: remote.remoteId
+    });
+  }
+
+  return createRemoteSyncOperation("conflict", "both", relativePath, {
+    localUri: local.uri,
+    remoteId: remote.remoteId,
+    message: "Resource changed on both sides"
+  });
+}
+
+function createRemoteSyncManifestLocalOnlyOperation(
+  relativePath: string,
+  deleteMissing: boolean,
+  local: RemoteSyncResource,
+  manifest: RemoteSyncManifestResource | undefined
+): RemoteSyncOperation {
+  if (!manifest) {
+    return createRemoteSyncOperation("create", "remote", relativePath, { localUri: local.uri });
+  }
+
+  const localState = compareRemoteSyncResourceToManifest(local, manifest);
+
+  if (localState === "changed" || localState === "unknown") {
+    return createRemoteSyncOperation("conflict", "both", relativePath, {
+      localUri: local.uri,
+      remoteId: manifest.remoteId,
+      message: localState === "unknown"
+        ? "Resource state cannot be compared"
+        : "Remote resource is missing and local resource changed"
+    });
+  }
+
+  return deleteMissing
+    ? createRemoteSyncOperation("delete", "local", relativePath, {
+      localUri: local.uri,
+      remoteId: manifest.remoteId,
+      message: "Remote resource is missing"
+    })
+    : createRemoteSyncOperation("skip", "none", relativePath, {
+      localUri: local.uri,
+      remoteId: manifest.remoteId,
+      message: "Remote resource is missing"
+    });
+}
+
+function createRemoteSyncManifestRemoteOnlyOperation(
+  relativePath: string,
+  deleteMissing: boolean,
+  remote: RemoteSyncRemoteResource,
+  manifest: RemoteSyncManifestResource | undefined
+): RemoteSyncOperation {
+  if (!manifest) {
+    return createRemoteSyncOperation("create", "local", relativePath, { remoteId: remote.remoteId });
+  }
+
+  const remoteState = compareRemoteSyncResourceToManifest(remote, manifest);
+
+  if (remoteState === "changed" || remoteState === "unknown") {
+    return createRemoteSyncOperation("conflict", "both", relativePath, {
+      remoteId: remote.remoteId,
+      message: remoteState === "unknown"
+        ? "Resource state cannot be compared"
+        : "Local resource is missing and remote resource changed"
+    });
+  }
+
+  return deleteMissing
+    ? createRemoteSyncOperation("delete", "remote", relativePath, {
+      remoteId: remote.remoteId,
+      message: "Local resource is missing"
+    })
+    : createRemoteSyncOperation("skip", "none", relativePath, {
+      remoteId: remote.remoteId,
+      message: "Local resource is missing"
+    });
+}
+
 function createRemoteSyncOperation(
   kind: RemoteSyncOperationKind,
   target: RemoteSyncOperationTarget,
@@ -300,12 +511,30 @@ function compareRemoteSyncResources(
   local: RemoteSyncResource,
   remote: RemoteSyncRemoteResource
 ): "same" | "changed" | "unknown" {
-  if (local.contentHash && remote.contentHash) {
-    return local.contentHash === remote.contentHash ? "same" : "changed";
+  return compareRemoteSyncResourceMetadata(local, remote);
+}
+
+function compareRemoteSyncResourceToManifest(
+  resource: RemoteSyncResource | RemoteSyncRemoteResource,
+  manifest: RemoteSyncManifestResource
+): "same" | "changed" | "unknown" {
+  if (resource.kind !== manifest.kind) {
+    return "changed";
   }
 
-  if (local.size !== undefined && remote.size !== undefined && local.mtime !== undefined && remote.mtime !== undefined) {
-    return local.size === remote.size && local.mtime === remote.mtime ? "same" : "changed";
+  return compareRemoteSyncResourceMetadata(resource, manifest);
+}
+
+function compareRemoteSyncResourceMetadata(
+  first: Pick<RemoteSyncResource, "contentHash" | "mtime" | "size">,
+  second: Pick<RemoteSyncRemoteResource, "contentHash" | "mtime" | "size">
+): "same" | "changed" | "unknown" {
+  if (first.contentHash && second.contentHash) {
+    return first.contentHash === second.contentHash ? "same" : "changed";
+  }
+
+  if (first.size !== undefined && second.size !== undefined && first.mtime !== undefined && second.mtime !== undefined) {
+    return first.size === second.size && first.mtime === second.mtime ? "same" : "changed";
   }
 
   return "unknown";
@@ -340,9 +569,14 @@ function mapRemoteSyncResources<Resource extends { readonly relativePath: string
 
 function sortRemoteSyncPaths(
   localByPath: ReadonlyMap<string, RemoteSyncResource>,
-  remoteByPath: ReadonlyMap<string, RemoteSyncRemoteResource>
+  remoteByPath: ReadonlyMap<string, RemoteSyncRemoteResource>,
+  manifestByPath?: ReadonlyMap<string, RemoteSyncManifestResource>
 ): readonly string[] {
-  return [...new Set([...localByPath.keys(), ...remoteByPath.keys()])]
+  return [...new Set([
+    ...localByPath.keys(),
+    ...remoteByPath.keys(),
+    ...(manifestByPath ? manifestByPath.keys() : [])
+  ])]
     .sort((first, second) => first.localeCompare(second));
 }
 
@@ -451,6 +685,27 @@ function normalizeRemoteSyncRemoteResources(value: unknown): readonly RemoteSync
       ...(remoteId ? { remoteId } : {}),
       ...readOptionalNonNegativeNumber("size", record.size, `Remote sync remote resource ${index} size`),
       ...readOptionalNonNegativeNumber("mtime", record.mtime, `Remote sync remote resource ${index} mtime`),
+      ...(contentHash ? { contentHash } : {})
+    };
+  });
+}
+
+function normalizeRemoteSyncManifestResources(value: unknown): readonly RemoteSyncManifestResource[] {
+  if (!Array.isArray(value)) {
+    throw new Error("Remote sync manifest resources must be an array");
+  }
+
+  return value.map((resource, index) => {
+    const record = expectRecord(resource, `Remote sync manifest resource ${index}`);
+    const remoteId = readOptionalString(record.remoteId, `Remote sync manifest resource ${index} remote id`);
+    const contentHash = readOptionalString(record.contentHash, `Remote sync manifest resource ${index} content hash`);
+
+    return {
+      relativePath: normalizeRelativePath(record.relativePath, `Remote sync manifest resource ${index} relative path`),
+      kind: normalizeFileKind(record.kind, `Remote sync manifest resource ${index} kind`),
+      ...(remoteId ? { remoteId } : {}),
+      ...readOptionalNonNegativeNumber("size", record.size, `Remote sync manifest resource ${index} size`),
+      ...readOptionalNonNegativeNumber("mtime", record.mtime, `Remote sync manifest resource ${index} mtime`),
       ...(contentHash ? { contentHash } : {})
     };
   });

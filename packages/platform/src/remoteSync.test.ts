@@ -3,8 +3,10 @@ import { describe, expect, it } from "vitest";
 import type { FileTreeEntry, WorkspaceFileTree } from "./files";
 import {
   createRemoteSyncPlanFromDiff,
+  createRemoteSyncPlanFromManifest,
   createRemoteSyncResourcesFromWorkspace,
   RemoteSyncService,
+  type RemoteSyncManifestResource,
   type RemoteSyncPlan,
   type RemoteSyncPlanRequest,
   type RemoteSyncProgress,
@@ -646,6 +648,201 @@ describe("remote sync service", () => {
     });
   });
 
+  it("uses sync manifests to resolve single-sided bidirectional changes", () => {
+    const plan = createRemoteSyncPlanFromManifest({
+      direction: "bidirectional",
+      localResources: [
+        localResource("local-changed.md", { contentHash: "local-v2" }),
+        localResource("local-only.md", { contentHash: "local-new" }),
+        localResource("remote-changed.md", { contentHash: "base" }),
+        localResource("same.md", { contentHash: "same" })
+      ],
+      remoteResources: [
+        remoteResource("local-changed.md", { remoteId: "local-changed", contentHash: "base" }),
+        remoteResource("remote-changed.md", { remoteId: "remote-changed", contentHash: "remote-v2" }),
+        remoteResource("remote-only.md", { remoteId: "remote-only", contentHash: "remote-new" }),
+        remoteResource("same.md", { remoteId: "same", contentHash: "same" })
+      ],
+      manifestResources: [
+        manifestResource("local-changed.md", { remoteId: "local-changed", contentHash: "base" }),
+        manifestResource("remote-changed.md", { remoteId: "remote-changed", contentHash: "base" }),
+        manifestResource("same.md", { remoteId: "same", contentHash: "same" })
+      ]
+    });
+
+    expect(plan).toEqual({
+      operations: [
+        {
+          kind: "update",
+          target: "remote",
+          relativePath: "local-changed.md",
+          localUri: URI.file("C:/Notes/local-changed.md"),
+          remoteId: "local-changed"
+        },
+        {
+          kind: "create",
+          target: "remote",
+          relativePath: "local-only.md",
+          localUri: URI.file("C:/Notes/local-only.md")
+        },
+        {
+          kind: "update",
+          target: "local",
+          relativePath: "remote-changed.md",
+          localUri: URI.file("C:/Notes/remote-changed.md"),
+          remoteId: "remote-changed"
+        },
+        {
+          kind: "create",
+          target: "local",
+          relativePath: "remote-only.md",
+          remoteId: "remote-only"
+        },
+        {
+          kind: "skip",
+          target: "none",
+          relativePath: "same.md",
+          localUri: URI.file("C:/Notes/same.md"),
+          remoteId: "same"
+        }
+      ],
+      summary: {
+        creates: 2,
+        updates: 2,
+        deletes: 0,
+        skips: 1,
+        conflicts: 0
+      }
+    });
+  });
+
+  it("keeps manifest-backed deletions non-destructive unless explicitly enabled", () => {
+    const input = {
+      direction: "bidirectional" as const,
+      localResources: [
+        localResource("remote-deleted.md", { contentHash: "base" })
+      ],
+      remoteResources: [
+        remoteResource("local-deleted.md", { remoteId: "local-deleted", contentHash: "base" })
+      ],
+      manifestResources: [
+        manifestResource("local-deleted.md", { remoteId: "local-deleted", contentHash: "base" }),
+        manifestResource("remote-deleted.md", { remoteId: "remote-deleted", contentHash: "base" })
+      ]
+    };
+
+    expect(createRemoteSyncPlanFromManifest(input).operations).toEqual([
+      {
+        kind: "skip",
+        target: "none",
+        relativePath: "local-deleted.md",
+        remoteId: "local-deleted",
+        message: "Local resource is missing"
+      },
+      {
+        kind: "skip",
+        target: "none",
+        relativePath: "remote-deleted.md",
+        localUri: URI.file("C:/Notes/remote-deleted.md"),
+        remoteId: "remote-deleted",
+        message: "Remote resource is missing"
+      }
+    ]);
+
+    expect(createRemoteSyncPlanFromManifest({ ...input, deleteMissing: true }).operations).toEqual([
+      {
+        kind: "delete",
+        target: "remote",
+        relativePath: "local-deleted.md",
+        remoteId: "local-deleted",
+        message: "Local resource is missing"
+      },
+      {
+        kind: "delete",
+        target: "local",
+        relativePath: "remote-deleted.md",
+        localUri: URI.file("C:/Notes/remote-deleted.md"),
+        remoteId: "remote-deleted",
+        message: "Remote resource is missing"
+      }
+    ]);
+  });
+
+  it("uses manifests to surface bidirectional conflicts instead of guessing", () => {
+    const plan = createRemoteSyncPlanFromManifest({
+      direction: "bidirectional",
+      localResources: [
+        localResource("both-changed.md", { contentHash: "local" }),
+        localResource("local-changed-remote-missing.md", { contentHash: "local" }),
+        localResource("no-baseline.md", { contentHash: "local" }),
+        localResource("unknown.md")
+      ],
+      remoteResources: [
+        remoteResource("both-changed.md", { remoteId: "both-changed", contentHash: "remote" }),
+        remoteResource("local-missing-remote-changed.md", { remoteId: "local-missing", contentHash: "remote" }),
+        remoteResource("no-baseline.md", { remoteId: "no-baseline", contentHash: "remote" }),
+        remoteResource("unknown.md", { remoteId: "unknown" })
+      ],
+      manifestResources: [
+        manifestResource("both-changed.md", { remoteId: "both-changed", contentHash: "base" }),
+        manifestResource("local-changed-remote-missing.md", { remoteId: "remote-missing", contentHash: "base" }),
+        manifestResource("local-missing-remote-changed.md", { remoteId: "local-missing", contentHash: "base" }),
+        manifestResource("unknown.md", { remoteId: "unknown", contentHash: "base" })
+      ]
+    });
+
+    expect(plan).toEqual({
+      operations: [
+        {
+          kind: "conflict",
+          target: "both",
+          relativePath: "both-changed.md",
+          localUri: URI.file("C:/Notes/both-changed.md"),
+          remoteId: "both-changed",
+          message: "Resource changed on both sides"
+        },
+        {
+          kind: "conflict",
+          target: "both",
+          relativePath: "local-changed-remote-missing.md",
+          localUri: URI.file("C:/Notes/local-changed-remote-missing.md"),
+          remoteId: "remote-missing",
+          message: "Remote resource is missing and local resource changed"
+        },
+        {
+          kind: "conflict",
+          target: "both",
+          relativePath: "local-missing-remote-changed.md",
+          remoteId: "local-missing",
+          message: "Local resource is missing and remote resource changed"
+        },
+        {
+          kind: "conflict",
+          target: "both",
+          relativePath: "no-baseline.md",
+          localUri: URI.file("C:/Notes/no-baseline.md"),
+          remoteId: "no-baseline",
+          message: "Resource has no synced baseline"
+        },
+        {
+          kind: "conflict",
+          target: "both",
+          relativePath: "unknown.md",
+          localUri: URI.file("C:/Notes/unknown.md"),
+          remoteId: "unknown",
+          message: "Resource state cannot be compared"
+        }
+      ],
+      summary: {
+        creates: 0,
+        updates: 0,
+        deletes: 0,
+        skips: 0,
+        conflicts: 5
+      }
+    });
+  });
+
   it("rejects ambiguous diff inputs", () => {
     expect(() => createRemoteSyncPlanFromDiff({
       direction: "push",
@@ -670,6 +867,26 @@ describe("remote sync service", () => {
         remoteResource("../escape.md")
       ]
     })).toThrow("Remote sync remote resource 0 relative path must not contain parent traversal");
+  });
+
+  it("rejects ambiguous manifest inputs", () => {
+    expect(() => createRemoteSyncPlanFromManifest({
+      direction: "bidirectional",
+      localResources: [],
+      remoteResources: [],
+      manifestResources: [
+        manifestResource("same.md"),
+        manifestResource("same.md")
+      ]
+    })).toThrow("Duplicate manifest remote sync resource: same.md");
+    expect(() => createRemoteSyncPlanFromManifest({
+      direction: "bidirectional",
+      localResources: [],
+      remoteResources: [],
+      manifestResources: [
+        manifestResource("../escape.md")
+      ]
+    })).toThrow("Remote sync manifest resource 0 relative path must not contain parent traversal");
   });
 });
 
@@ -755,6 +972,20 @@ function remoteResource(
   relativePath: string,
   metadata: Partial<RemoteSyncRemoteResource> = {}
 ): RemoteSyncRemoteResource {
+  return {
+    relativePath,
+    kind: metadata.kind ?? "file",
+    ...(metadata.remoteId === undefined ? {} : { remoteId: metadata.remoteId }),
+    ...(metadata.size === undefined ? {} : { size: metadata.size }),
+    ...(metadata.mtime === undefined ? {} : { mtime: metadata.mtime }),
+    ...(metadata.contentHash === undefined ? {} : { contentHash: metadata.contentHash })
+  };
+}
+
+function manifestResource(
+  relativePath: string,
+  metadata: Partial<RemoteSyncManifestResource> = {}
+): RemoteSyncManifestResource {
   return {
     relativePath,
     kind: metadata.kind ?? "file",

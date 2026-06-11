@@ -7243,3 +7243,35 @@ Known limitations:
 - Rewrite replacement applies to the whole active note, not a selected range.
 - Translation and free-form workspace Q&A still need target-language/question input surfaces before they should be exposed.
 - No built-in AI provider is registered by default; users still need a configured provider and saved secret.
+
+## 2026-06-12 - P2 Remote Sync Manifest Planning
+
+Completed:
+
+- Added a provider-neutral remote sync manifest planning model for bidirectional mirrors.
+- Reused the existing platform sync resource, remote snapshot, operation target, and summary contracts instead of introducing Feishu-specific UI state.
+- Resolved single-sided changes through the manifest baseline: local-only changes update remote, remote-only changes update local.
+- Kept deletions non-destructive by default; baseline deletions become delete operations only when missing-resource deletion is explicitly enabled.
+- Preserved conservative conflict behavior for both-side changes, missing baselines, changed resources on a missing side, kind drift, and unknown comparison state.
+- Kept Feishu endpoints, OAuth scopes, app ids, folder tokens, access tokens, storage paths, and credentials out of the platform model.
+
+Quality gate:
+
+- `npx vitest run packages/platform/src/remoteSync.test.ts`: passed, 1 file / 18 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 76 files / 717 tests, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Remote sync implementation hardcode scan for endpoint/secret/token/model literal patterns: passed
+
+Review:
+
+- The manifest planner is still pure platform logic and does not read or write any manifest file by itself.
+- Providers remain responsible for supplying normalized remote snapshots and persisted last-sync resources.
+- Workbench still receives only provider-normalized plans, so UI surfaces do not infer mutation direction from resource ids.
+
+Known limitations:
+
+- No Feishu Drive provider is registered yet.
+- No manifest persistence boundary exists yet; future providers need a storage bridge or metadata file strategy.
+- Current comparison quality depends on provider-supplied content hashes or size/mtime pairs.
