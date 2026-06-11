@@ -7565,3 +7565,35 @@ Known limitations:
 - The adapter factory is still absent; profiles can be synchronized only when a future Feishu/raw-mirror provider implementation supplies one.
 - No Feishu Drive snapshot, pagination, folder mapping, OAuth authorization/refresh, upload/download, rate-limit backoff, or streaming transfer implementation exists yet.
 - Workbench service creation currently passes `undefined` adapter options, so configured remote sync profiles remain inert by default.
+
+## 2026-06-12 - P2 Remote Sync Raw Mirror Provider Helper
+
+Completed:
+
+- Added a provider-neutral raw mirror provider helper that combines remote snapshot listing, manifest-backed plan creation, delegated execution, and manifest refresh after execution.
+- Scoped manifest reads and writes by workspace URI, provider id, and remote scope id through the existing `RemoteSyncManifestStore`.
+- Delegated cloud-specific list/upload/download/delete behavior to an injected adapter instead of embedding provider routes, token handling, folder mapping, or transport decisions.
+- Filtered execution to create/update/delete operations and left skip/conflict handling at the planning/UI boundary.
+- Refreshed the last-sync manifest from adapter-returned post-execution remote snapshots using the existing execution-manifest reconciliation helper.
+- Exported the helper through the platform package for future configured Feishu/raw-mirror adapters.
+
+Quality gate:
+
+- `npx vitest run packages/platform/src/remoteSyncRawMirrorProvider.test.ts packages/platform/src/remoteSync.test.ts packages/platform/src/remoteSyncConfiguredProviders.test.ts`: passed, 3 files / 33 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 82 files / 769 tests, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Raw mirror provider implementation hardcode scan for endpoint/OAuth/token/secret/model/provider literals: passed
+
+Review:
+
+- The helper keeps sync control flow in platform code while preserving provider ownership of remote APIs and file transfer mechanics.
+- Manifest updates still require post-execution local and remote resources to be comparable; if an adapter cannot prove synchronization, the existing manifest update helper will reject the refresh instead of recording a weak baseline.
+- The provider does not introduce default endpoints, scopes, provider ids, folder tokens, access tokens, or OAuth policy.
+
+Known limitations:
+
+- No concrete Feishu/raw-mirror adapter is implemented yet.
+- The helper delegates actual file reads, writes, uploads, downloads, deletes, pagination, retry, and rate-limit backoff to future adapters.
+- The no-op execution path returns an empty result because Workbench already blocks no-op/conflict plans before execution.

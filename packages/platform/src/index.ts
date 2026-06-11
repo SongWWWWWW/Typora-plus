@@ -25,6 +25,7 @@ export * from "./remoteSync";
 export * from "./remoteSyncConfiguredProviders";
 export * from "./remoteSyncNativeRequest";
 export * from "./remoteSyncProfileRequest";
+export * from "./remoteSyncRawMirrorProvider";
 export * from "./responsesAiProvider";
 export * from "./recents";
 export * from "./resources";
