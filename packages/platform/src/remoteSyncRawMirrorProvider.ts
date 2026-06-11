@@ -78,13 +78,15 @@ export function createRemoteSyncRawMirrorProvider(options: RemoteSyncRawMirrorPr
     },
     executePlan: async (plan, request) => {
       throwIfRawMirrorAborted(request.signal);
+      throwIfRawMirrorDryRunExecution(request);
+      throwIfRawMirrorConflicts(plan);
 
       const operations = getExecutableRawMirrorOperations(plan);
 
       if (operations.length === 0) {
         return {
-          operations,
-          summary: summarizeRawMirrorOperations(operations)
+          operations: plan.operations,
+          summary: summarizeRawMirrorOperations(plan.operations)
         };
       }
 
@@ -179,5 +181,17 @@ function summarizeRawMirrorOperations(operations: readonly RemoteSyncOperation[]
 function throwIfRawMirrorAborted(signal: AbortSignal | undefined): void {
   if (signal?.aborted) {
     throw new Error("Remote sync raw mirror request was aborted");
+  }
+}
+
+function throwIfRawMirrorDryRunExecution(request: RemoteSyncPlanRequest): void {
+  if (request.dryRun === true) {
+    throw new Error("Remote sync raw mirror execution requires a non-dry-run request");
+  }
+}
+
+function throwIfRawMirrorConflicts(plan: RemoteSyncPlan): void {
+  if (plan.operations.some((operation) => operation.kind === "conflict")) {
+    throw new Error("Remote sync raw mirror conflicts must be resolved before execution");
   }
 }

@@ -7596,4 +7596,34 @@ Known limitations:
 
 - No concrete Feishu/raw-mirror adapter is implemented yet.
 - The helper delegates actual file reads, writes, uploads, downloads, deletes, pagination, retry, and rate-limit backoff to future adapters.
-- The no-op execution path returns an empty result because Workbench already blocks no-op/conflict plans before execution.
+- Raw mirror execution guards for dry-run, conflict, and no-op plans were tightened in the following stage.
+
+## 2026-06-12 - P2 Remote Sync Raw Mirror Execution Guards
+
+Completed:
+
+- Hardened raw mirror execution so dry-run execution requests are rejected before any adapter call.
+- Rejected conflict plans inside the raw mirror provider instead of relying only on Workbench dialog blocking.
+- Preserved skip-only no-op plans as explicit no-op execution results instead of dropping operations to an empty result.
+- Added focused coverage for no-op preservation, dry-run execution rejection, conflict rejection, and existing abort behavior.
+- Kept the raw mirror helper provider-neutral with no endpoint, OAuth, token, provider id, folder id, or transfer policy defaults.
+
+Quality gate:
+
+- `npx vitest run packages/platform/src/remoteSyncRawMirrorProvider.test.ts packages/platform/src/remoteSync.test.ts packages/workbench/src/workbenchRemoteSyncActions.test.ts`: passed, 3 files / 35 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 82 files / 771 tests, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Raw mirror execution guard hardcode scan for endpoint/OAuth/token/secret/model/provider literals: passed
+
+Review:
+
+- Workbench already blocks no-op and conflict plans, but the provider now defends itself when called directly through tests, extensions, or future headless workflows.
+- Rejecting dry-run execution keeps `dryRun` semantically meaningful across service boundaries and avoids accidental remote mutations by adapter implementations.
+- Returning skip-only plans as no-op results preserves user-visible context for direct callers without invoking remote adapters.
+
+Known limitations:
+
+- No concrete Feishu/raw-mirror adapter is implemented yet.
+- Adapter-returned execution operations are still trusted to represent the executed subset; a later stage can add stricter operation-set validation before manifest refresh.

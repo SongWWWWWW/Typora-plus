@@ -142,7 +142,7 @@ describe("remote sync raw mirror provider", () => {
       }
     });
 
-    await expect(provider.executePlan({
+    const plan = {
       operations: [{
         kind: "skip",
         target: "none",
@@ -155,17 +155,86 @@ describe("remote sync raw mirror provider", () => {
         skips: 1,
         conflicts: 0
       }
-    }, planRequest())).resolves.toEqual({
-      operations: [],
+    } as const;
+
+    await expect(provider.executePlan(plan, planRequest())).resolves.toEqual({
+      operations: plan.operations,
       summary: {
         creates: 0,
+        updates: 0,
+        deletes: 0,
+        skips: 1,
+        conflicts: 0
+      }
+    });
+    expect(executeOperations).not.toHaveBeenCalled();
+  });
+
+  it("rejects dry-run execution requests before adapter calls", async () => {
+    const adapter = {
+      listResources: vi.fn(() => []),
+      executeOperations: vi.fn(() => ({
+        remoteResources: []
+      }))
+    };
+    const provider = createRemoteSyncRawMirrorProvider({
+      id: "raw.mirror",
+      title: "Raw Mirror",
+      manifestStore: new RemoteSyncManifestStore({ storage: createMemoryStorage() }),
+      adapter
+    });
+
+    await expect(provider.executePlan({
+      operations: [{
+        kind: "create",
+        target: "remote",
+        relativePath: "daily/today.md"
+      }],
+      summary: {
+        creates: 1,
         updates: 0,
         deletes: 0,
         skips: 0,
         conflicts: 0
       }
+    }, planRequest({
+      dryRun: true
+    }))).rejects.toThrow("Remote sync raw mirror execution requires a non-dry-run request");
+    expect(adapter.listResources).not.toHaveBeenCalled();
+    expect(adapter.executeOperations).not.toHaveBeenCalled();
+  });
+
+  it("rejects conflict plans before adapter calls", async () => {
+    const adapter = {
+      listResources: vi.fn(() => []),
+      executeOperations: vi.fn(() => ({
+        remoteResources: []
+      }))
+    };
+    const provider = createRemoteSyncRawMirrorProvider({
+      id: "raw.mirror",
+      title: "Raw Mirror",
+      manifestStore: new RemoteSyncManifestStore({ storage: createMemoryStorage() }),
+      adapter
     });
-    expect(executeOperations).not.toHaveBeenCalled();
+
+    await expect(provider.executePlan({
+      operations: [{
+        kind: "conflict",
+        target: "both",
+        relativePath: "daily/today.md",
+        message: "changed on both sides"
+      }],
+      summary: {
+        creates: 0,
+        updates: 0,
+        deletes: 0,
+        skips: 0,
+        conflicts: 1
+      }
+    }, planRequest())).rejects.toThrow("Remote sync raw mirror conflicts must be resolved before execution");
+    expect(adapter.listResources).not.toHaveBeenCalled();
+    expect(adapter.executeOperations).not.toHaveBeenCalled();
   });
 
   it("aborts planning and execution before adapter calls", async () => {
