@@ -124,6 +124,7 @@ import {
   workbenchSideViewTitle,
   type WorkbenchSideView
 } from "./workbenchSideViewModel";
+import { createWorkbenchSidebarCommandHandlers } from "./workbenchSidebarCommands";
 import {
   createWorkbenchTagRows,
   nextWorkbenchSelectedTag
@@ -374,6 +375,7 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
   const settingsUpdateHandler = createWorkbenchConfigurationUpdateHandler(services, {
     setOperationError
   });
+  const sidebarCommandHandlers = createWorkbenchSidebarCommandHandlers(executeCommand);
 
   return (
     <main className={[
@@ -419,9 +421,9 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
             onOpenBacklink={lineTargetOpenHandler}
             onSelectTag={setSelectedTag}
             onOpenTaggedResource={lineTargetOpenHandler}
-            onOpenWorkspace={() => executeCommand("file.openWorkspace")}
+            onOpenWorkspace={sidebarCommandHandlers.openWorkspace}
             onOpenRecentWorkspace={recentWorkspaceResourceOpenHandler}
-            onRefreshWorkspace={() => executeCommand("file.refreshWorkspace")}
+            onRefreshWorkspace={sidebarCommandHandlers.refreshWorkspace}
             onOpenFile={fileResourceOpenHandler}
           />
         ) : null}

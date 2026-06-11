@@ -5565,3 +5565,31 @@ Review:
 Known limitations:
 
 - Command Palette query and active-row state remain local to the overlay because they are surface interaction state.
+
+## 2026-06-11 - P2 Sidebar Command Handlers
+
+Completed:
+
+- Added a focused Sidebar command model that centralizes Open Workspace and Refresh Workspace command ids.
+- Routed `Application.tsx` Sidebar `onOpenWorkspace` and `onRefreshWorkspace` wiring through command handlers instead of hard-coded shell command strings.
+- Preserved command executor dispatch, Workbench action-runner behavior, and existing workspace open/refresh command registration.
+- Covered Sidebar command handler delegation with focused tests.
+
+Quality gate:
+
+- `npx vitest run packages/workbench/src/workbenchSidebarCommands.test.ts`: passed, 1 test
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 56 files / 567 tests, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Dev server smoke check: passed at `http://127.0.0.1:5173`; status 200 and root element present
+
+Review:
+
+- Sidebar command buttons now reach `ICommandService` through the shared command executor and a Workbench-local command handler model instead of shell-local command string literals.
+- `Application.tsx` still renders the Sidebar and supplies the shared command executor, while `workbenchSidebarCommands` owns the Sidebar-specific command id mapping.
+- No new dependency, configuration key, storage path, visual token, extra documentation file, or hard-coded platform assumption was introduced.
+
+Known limitations:
+
+- Sidebar close, selected tag, and search query remain direct shell state because they are local view interaction state.
