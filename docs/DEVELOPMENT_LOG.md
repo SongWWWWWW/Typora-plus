@@ -5705,3 +5705,31 @@ Review:
 Known limitations:
 
 - Sidebar, search, Quick Open, and save-conflict icons still live in their local React surfaces because they are not menu contribution metadata.
+
+## 2026-06-11 - P2 Workbench Command Id Model
+
+Completed:
+
+- Added a focused Workbench command id model for built-in file, workbench, editor, task, and theme command ids.
+- Routed command registration, default menu contributions, default keybindings, editor task command metadata, and sidebar command dispatch through the shared command ids.
+- Preserved command registration order, menu contribution ordering, keybinding defaults, task command metadata, and sidebar command execution behavior.
+- Covered stable command ids, uniqueness, contribution references, command registration wiring, contribution order, and sidebar command delegation with focused tests.
+
+Quality gate:
+
+- `npx vitest run packages/workbench/src/workbenchCommandIds.test.ts packages/workbench/src/workbenchContributions.test.ts packages/workbench/src/workbenchCommandRegistration.test.ts packages/workbench/src/workbenchSidebarCommands.test.ts`: passed, 17 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 58 files / 578 tests, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Dev server smoke check: passed at `http://127.0.0.1:5173`; status 200 and root element present
+
+Review:
+
+- Workbench command ids now have one pure model, matching the existing separation between command metadata, executable handlers, keybindings, menus, and context keys.
+- Tests keep the external command id strings stable in one focused place while production call sites consume the shared constants.
+- No new dependency, configuration key, storage path, visual token, extra documentation file, or hard-coded platform assumption was introduced.
+
+Known limitations:
+
+- Command titles and categories still live near their command metadata/handlers; this is acceptable until repeated title/category policy emerges.

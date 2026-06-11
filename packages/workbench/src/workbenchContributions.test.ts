@@ -6,6 +6,7 @@ import {
   defaultWorkbenchMenuItems,
   editorTaskCommandMetadata
 } from "./workbenchContributions";
+import { workbenchCommandIds } from "./workbenchCommandIds";
 import {
   workbenchMermaidRendererId,
   workbenchMermaidRendererLanguage
@@ -21,15 +22,15 @@ describe("workbench contributions", () => {
       fileSystemAvailable: true,
       workspaceOpen: true
     })).toEqual([
-      "file.newUntitled",
-      "file.openWorkspace",
-      "file.save",
-      "file.saveAs",
-      "file.exportHtml",
-      "editor.focusMode.toggle",
-      "editor.typewriterMode.toggle",
-      "theme.toggle",
-      "workbench.commandPalette.open"
+      workbenchCommandIds.file.newUntitled,
+      workbenchCommandIds.file.openWorkspace,
+      workbenchCommandIds.file.save,
+      workbenchCommandIds.file.saveAs,
+      workbenchCommandIds.file.exportHtml,
+      workbenchCommandIds.editor.focusModeToggle,
+      workbenchCommandIds.editor.typewriterModeToggle,
+      workbenchCommandIds.theme.toggle,
+      workbenchCommandIds.workbench.commandPaletteOpen
     ]);
   });
 
@@ -38,18 +39,18 @@ describe("workbench contributions", () => {
       fileSystemAvailable: true,
       workspaceOpen: true
     })).toEqual([
-      "workbench.sidebar.files",
-      "workbench.sidebar.search",
-      "workbench.sidebar.outline",
-      "workbench.sidebar.backlinks",
-      "workbench.sidebar.tags"
+      workbenchCommandIds.workbench.sidebarFiles,
+      workbenchCommandIds.workbench.sidebarSearch,
+      workbenchCommandIds.workbench.sidebarOutline,
+      workbenchCommandIds.workbench.sidebarBacklinks,
+      workbenchCommandIds.workbench.sidebarTags
     ]);
     expect(workbenchMenuCommands("activitybar.secondary", {
       fileSystemAvailable: true,
       workspaceOpen: true
     })).toEqual([
-      "workbench.settings.open",
-      "workbench.commandPalette.open"
+      workbenchCommandIds.workbench.settingsOpen,
+      workbenchCommandIds.workbench.commandPaletteOpen
     ]);
   });
 
@@ -69,12 +70,12 @@ describe("workbench contributions", () => {
     expect(Object.values(editorTaskCommandMetadata)).toEqual([
       {
         category: "Editor",
-        id: "editor.task.removeMarkers",
+        id: workbenchCommandIds.editor.taskRemoveMarkers,
         title: "Remove Task Markers"
       },
       {
         category: "Editor",
-        id: "editor.task.toggleLines",
+        id: workbenchCommandIds.editor.taskToggleLines,
         title: "Toggle Task Lines"
       }
     ]);
@@ -116,19 +117,19 @@ describe("workbench contributions", () => {
       fileSystemAvailable: false,
       workspaceOpen: false
     })).toEqual([
-      "file.newUntitled",
-      "file.exportHtml",
-      "editor.focusMode.toggle",
-      "editor.typewriterMode.toggle",
-      "theme.toggle",
-      "workbench.commandPalette.open"
+      workbenchCommandIds.file.newUntitled,
+      workbenchCommandIds.file.exportHtml,
+      workbenchCommandIds.editor.focusModeToggle,
+      workbenchCommandIds.editor.typewriterModeToggle,
+      workbenchCommandIds.theme.toggle,
+      workbenchCommandIds.workbench.commandPaletteOpen
     ]);
     expect(workbenchMenuCommands("activitybar.primary", {
       fileSystemAvailable: false,
       workspaceOpen: false
     })).toEqual([
-      "workbench.sidebar.search",
-      "workbench.sidebar.outline"
+      workbenchCommandIds.workbench.sidebarSearch,
+      workbenchCommandIds.workbench.sidebarOutline
     ]);
   });
 });

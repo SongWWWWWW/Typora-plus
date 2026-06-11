@@ -14,18 +14,19 @@ import {
   workbenchStatusRendererId,
   workbenchStatusRendererLanguage
 } from "./statusMarkdownRenderer";
+import { workbenchCommandIds } from "./workbenchCommandIds";
 import { workbenchContextKeys } from "./workbenchContextModel";
 import { workbenchMenuIconIds } from "./workbenchMenuIconModel";
 import { workbenchMenuIds } from "./workbenchMenuModel";
 
 export const editorTaskCommandMetadata = {
   removeTaskMarkers: {
-    id: "editor.task.removeMarkers",
+    id: workbenchCommandIds.editor.taskRemoveMarkers,
     title: "Remove Task Markers",
     category: "Editor"
   },
   toggleTaskLines: {
-    id: "editor.task.toggleLines",
+    id: workbenchCommandIds.editor.taskToggleLines,
     title: "Toggle Task Lines",
     category: "Editor"
   }
@@ -39,7 +40,7 @@ export const defaultWorkbenchExtensionManifest = {
       {
         id: "titlebar.file.newUntitled",
         menu: workbenchMenuIds.titlebarPrimary,
-        command: "file.newUntitled",
+        command: workbenchCommandIds.file.newUntitled,
         title: "New Note",
         icon: workbenchMenuIconIds.filePlus,
         group: "10_file",
@@ -48,7 +49,7 @@ export const defaultWorkbenchExtensionManifest = {
       {
         id: "titlebar.file.openWorkspace",
         menu: workbenchMenuIds.titlebarPrimary,
-        command: "file.openWorkspace",
+        command: workbenchCommandIds.file.openWorkspace,
         title: "Open Workspace",
         icon: workbenchMenuIconIds.folderOpen,
         group: "10_file",
@@ -58,7 +59,7 @@ export const defaultWorkbenchExtensionManifest = {
       {
         id: "titlebar.file.save",
         menu: workbenchMenuIds.titlebarPrimary,
-        command: "file.save",
+        command: workbenchCommandIds.file.save,
         title: "Save",
         icon: workbenchMenuIconIds.save,
         group: "10_file",
@@ -68,7 +69,7 @@ export const defaultWorkbenchExtensionManifest = {
       {
         id: "titlebar.file.saveAs",
         menu: workbenchMenuIds.titlebarPrimary,
-        command: "file.saveAs",
+        command: workbenchCommandIds.file.saveAs,
         title: "Save As",
         icon: workbenchMenuIconIds.fileText,
         group: "10_file",
@@ -79,7 +80,7 @@ export const defaultWorkbenchExtensionManifest = {
       {
         id: "titlebar.file.exportHtml",
         menu: workbenchMenuIds.titlebarPrimary,
-        command: "file.exportHtml",
+        command: workbenchCommandIds.file.exportHtml,
         title: "Export HTML",
         icon: workbenchMenuIconIds.fileDown,
         group: "10_file",
@@ -89,7 +90,7 @@ export const defaultWorkbenchExtensionManifest = {
       {
         id: "titlebar.editor.focusMode",
         menu: workbenchMenuIds.titlebarPrimary,
-        command: "editor.focusMode.toggle",
+        command: workbenchCommandIds.editor.focusModeToggle,
         title: "Focus Mode",
         icon: workbenchMenuIconIds.target,
         group: "20_editor",
@@ -100,7 +101,7 @@ export const defaultWorkbenchExtensionManifest = {
       {
         id: "titlebar.editor.typewriterMode",
         menu: workbenchMenuIds.titlebarPrimary,
-        command: "editor.typewriterMode.toggle",
+        command: workbenchCommandIds.editor.typewriterModeToggle,
         title: "Typewriter Mode",
         icon: workbenchMenuIconIds.type,
         group: "20_editor",
@@ -111,7 +112,7 @@ export const defaultWorkbenchExtensionManifest = {
       {
         id: "titlebar.workbench.theme",
         menu: workbenchMenuIds.titlebarPrimary,
-        command: "theme.toggle",
+        command: workbenchCommandIds.theme.toggle,
         title: "Theme",
         icon: workbenchMenuIconIds.theme,
         group: "30_workbench",
@@ -121,7 +122,7 @@ export const defaultWorkbenchExtensionManifest = {
       {
         id: "titlebar.workbench.commandPalette",
         menu: workbenchMenuIds.titlebarPrimary,
-        command: "workbench.commandPalette.open",
+        command: workbenchCommandIds.workbench.commandPaletteOpen,
         title: "Command Palette",
         icon: workbenchMenuIconIds.command,
         group: "30_workbench",
@@ -130,7 +131,7 @@ export const defaultWorkbenchExtensionManifest = {
       {
         id: "activitybar.primary.files",
         menu: workbenchMenuIds.activitybarPrimary,
-        command: "workbench.sidebar.files",
+        command: workbenchCommandIds.workbench.sidebarFiles,
         title: "Files",
         icon: workbenchMenuIconIds.fileText,
         order: 10,
@@ -140,7 +141,7 @@ export const defaultWorkbenchExtensionManifest = {
       {
         id: "activitybar.primary.search",
         menu: workbenchMenuIds.activitybarPrimary,
-        command: "workbench.sidebar.search",
+        command: workbenchCommandIds.workbench.sidebarSearch,
         title: "Search",
         icon: workbenchMenuIconIds.search,
         order: 20,
@@ -149,7 +150,7 @@ export const defaultWorkbenchExtensionManifest = {
       {
         id: "activitybar.primary.outline",
         menu: workbenchMenuIds.activitybarPrimary,
-        command: "workbench.sidebar.outline",
+        command: workbenchCommandIds.workbench.sidebarOutline,
         title: "Outline",
         icon: workbenchMenuIconIds.listTree,
         order: 30,
@@ -158,7 +159,7 @@ export const defaultWorkbenchExtensionManifest = {
       {
         id: "activitybar.primary.backlinks",
         menu: workbenchMenuIds.activitybarPrimary,
-        command: "workbench.sidebar.backlinks",
+        command: workbenchCommandIds.workbench.sidebarBacklinks,
         title: "Backlinks",
         icon: workbenchMenuIconIds.link,
         order: 40,
@@ -168,7 +169,7 @@ export const defaultWorkbenchExtensionManifest = {
       {
         id: "activitybar.primary.tags",
         menu: workbenchMenuIds.activitybarPrimary,
-        command: "workbench.sidebar.tags",
+        command: workbenchCommandIds.workbench.sidebarTags,
         title: "Tags",
         icon: workbenchMenuIconIds.hash,
         order: 50,
@@ -178,7 +179,7 @@ export const defaultWorkbenchExtensionManifest = {
       {
         id: "activitybar.secondary.settings",
         menu: workbenchMenuIds.activitybarSecondary,
-        command: "workbench.settings.open",
+        command: workbenchCommandIds.workbench.settingsOpen,
         title: "Settings",
         icon: workbenchMenuIconIds.settings,
         order: 10
@@ -186,7 +187,7 @@ export const defaultWorkbenchExtensionManifest = {
       {
         id: "activitybar.secondary.commandPalette",
         menu: workbenchMenuIds.activitybarSecondary,
-        command: "workbench.commandPalette.open",
+        command: workbenchCommandIds.workbench.commandPaletteOpen,
         title: "Command Palette",
         icon: workbenchMenuIconIds.command,
         order: 20
@@ -194,27 +195,27 @@ export const defaultWorkbenchExtensionManifest = {
     ],
     keybindings: [
       {
-        command: "workbench.commandPalette.open",
+        command: workbenchCommandIds.workbench.commandPaletteOpen,
         keybinding: { key: "p", primary: true, shift: true }
       },
       {
-        command: "workbench.quickOpen",
+        command: workbenchCommandIds.workbench.quickOpen,
         keybinding: { key: "p", primary: true }
       },
       {
-        command: "workbench.settings.open",
+        command: workbenchCommandIds.workbench.settingsOpen,
         keybinding: { key: ",", primary: true }
       },
       {
-        command: "file.save",
+        command: workbenchCommandIds.file.save,
         keybinding: { key: "s", primary: true }
       },
       {
-        command: "file.saveAs",
+        command: workbenchCommandIds.file.saveAs,
         keybinding: { key: "s", primary: true, shift: true }
       },
       {
-        command: "file.exportHtml",
+        command: workbenchCommandIds.file.exportHtml,
         keybinding: { key: "e", primary: true, shift: true }
       }
     ],

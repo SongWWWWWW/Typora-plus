@@ -11,6 +11,7 @@ import {
   type WorkbenchOperationErrorSetter,
   type WorkbenchSaveConflictSetter
 } from "./workbenchActionRunner";
+import { workbenchCommandIds } from "./workbenchCommandIds";
 import { editorTaskCommandMetadata } from "./workbenchContributions";
 import {
   saveWorkbenchFile,
@@ -54,7 +55,7 @@ export function registerWorkbenchCommands(
   const disposables = new DisposableStore();
 
   disposables.add(services.commandService.registerCommand({
-    id: "file.newUntitled",
+    id: workbenchCommandIds.file.newUntitled,
     title: "New Note",
     category: "File",
     run: () => {
@@ -63,7 +64,7 @@ export function registerWorkbenchCommands(
     }
   }));
   disposables.add(services.commandService.registerCommand({
-    id: "file.openWorkspace",
+    id: workbenchCommandIds.file.openWorkspace,
     title: "Open Workspace",
     category: "File",
     run: () => runWorkbenchAction(async () => {
@@ -74,7 +75,7 @@ export function registerWorkbenchCommands(
     }, callbacks.setOperationError, callbacks.setSaveConflict)
   }));
   disposables.add(services.commandService.registerCommand({
-    id: "file.refreshWorkspace",
+    id: workbenchCommandIds.file.refreshWorkspace,
     title: "Refresh Workspace",
     category: "File",
     run: () => runWorkbenchAction(
@@ -84,55 +85,55 @@ export function registerWorkbenchCommands(
     )
   }));
   disposables.add(services.commandService.registerCommand({
-    id: "workbench.quickOpen",
+    id: workbenchCommandIds.workbench.quickOpen,
     title: "Quick Open",
     category: "Workbench",
     run: () => callbacks.setQuickOpen(true)
   }));
   disposables.add(services.commandService.registerCommand({
-    id: "workbench.commandPalette.open",
+    id: workbenchCommandIds.workbench.commandPaletteOpen,
     title: "Command Palette",
     category: "Workbench",
     run: () => callbacks.setPaletteOpen(true)
   }));
   disposables.add(services.commandService.registerCommand({
-    id: "workbench.settings.open",
+    id: workbenchCommandIds.workbench.settingsOpen,
     title: "Settings",
     category: "Workbench",
     run: () => callbacks.setSettingsOpen(true)
   }));
   disposables.add(services.commandService.registerCommand({
-    id: "workbench.sidebar.files",
+    id: workbenchCommandIds.workbench.sidebarFiles,
     title: "Show Files",
     category: "Workbench",
     run: () => callbacks.setSideView((activeView) => toggleWorkbenchSideView(workbenchFilesSideView, activeView))
   }));
   disposables.add(services.commandService.registerCommand({
-    id: "workbench.sidebar.search",
+    id: workbenchCommandIds.workbench.sidebarSearch,
     title: "Show Search",
     category: "Workbench",
     run: () => callbacks.setSideView((activeView) => toggleWorkbenchSideView("search", activeView))
   }));
   disposables.add(services.commandService.registerCommand({
-    id: "workbench.sidebar.outline",
+    id: workbenchCommandIds.workbench.sidebarOutline,
     title: "Show Outline",
     category: "Workbench",
     run: () => callbacks.setSideView((activeView) => toggleWorkbenchSideView("outline", activeView))
   }));
   disposables.add(services.commandService.registerCommand({
-    id: "workbench.sidebar.backlinks",
+    id: workbenchCommandIds.workbench.sidebarBacklinks,
     title: "Show Backlinks",
     category: "Workbench",
     run: () => callbacks.setSideView((activeView) => toggleWorkbenchSideView("backlinks", activeView))
   }));
   disposables.add(services.commandService.registerCommand({
-    id: "workbench.sidebar.tags",
+    id: workbenchCommandIds.workbench.sidebarTags,
     title: "Show Tags",
     category: "Workbench",
     run: () => callbacks.setSideView((activeView) => toggleWorkbenchSideView("tags", activeView))
   }));
   disposables.add(services.commandService.registerCommand({
-    id: "file.save",
+    id: workbenchCommandIds.file.save,
     title: "Save",
     category: "File",
     run: () => runWorkbenchAction(
@@ -142,7 +143,7 @@ export function registerWorkbenchCommands(
     )
   }));
   disposables.add(services.commandService.registerCommand({
-    id: "file.saveAs",
+    id: workbenchCommandIds.file.saveAs,
     title: "Save As",
     category: "File",
     run: () => runWorkbenchAction(
@@ -152,7 +153,7 @@ export function registerWorkbenchCommands(
     )
   }));
   disposables.add(services.commandService.registerCommand({
-    id: "file.exportHtml",
+    id: workbenchCommandIds.file.exportHtml,
     title: "Export HTML",
     category: "File",
     run: () => runWorkbenchAction(async () => {
@@ -166,7 +167,7 @@ export function registerWorkbenchCommands(
     }, callbacks.setOperationError, callbacks.setSaveConflict)
   }));
   disposables.add(services.commandService.registerCommand({
-    id: "editor.focusMode.toggle",
+    id: workbenchCommandIds.editor.focusModeToggle,
     title: "Toggle Focus Mode",
     category: "Editor",
     run: () => services.configurationService.updateValue({
@@ -176,7 +177,7 @@ export function registerWorkbenchCommands(
     })
   }));
   disposables.add(services.commandService.registerCommand({
-    id: "editor.typewriterMode.toggle",
+    id: workbenchCommandIds.editor.typewriterModeToggle,
     title: "Toggle Typewriter Mode",
     category: "Editor",
     run: () => services.configurationService.updateValue({
@@ -194,7 +195,7 @@ export function registerWorkbenchCommands(
     run: () => callbacks.getEditorHandle()?.removeTaskListMarkers() ?? false
   }));
   disposables.add(services.commandService.registerCommand({
-    id: "theme.toggle",
+    id: workbenchCommandIds.theme.toggle,
     title: "Toggle Theme",
     category: "Workbench",
     run: () => services.configurationService.updateValue({

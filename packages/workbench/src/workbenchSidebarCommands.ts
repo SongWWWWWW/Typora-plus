@@ -1,6 +1,8 @@
+import { workbenchCommandIds } from "./workbenchCommandIds";
+
 export const workbenchSidebarCommandIds = {
-  openWorkspace: "file.openWorkspace",
-  refreshWorkspace: "file.refreshWorkspace"
+  openWorkspace: workbenchCommandIds.file.openWorkspace,
+  refreshWorkspace: workbenchCommandIds.file.refreshWorkspace
 } as const;
 
 export interface WorkbenchSidebarCommandHandlers {

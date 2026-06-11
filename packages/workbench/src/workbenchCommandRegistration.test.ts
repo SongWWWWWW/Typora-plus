@@ -10,6 +10,7 @@ import {
   type WorkbenchCommandRegistrationCallbacks
 } from "./workbenchCommandRegistration";
 import type { WorkbenchServices } from "./services";
+import { workbenchCommandIds } from "./workbenchCommandIds";
 import type { WorkbenchSideView } from "./workbenchSideViewModel";
 
 describe("workbench command registration", () => {
@@ -20,25 +21,25 @@ describe("workbench command registration", () => {
     const disposable = registerWorkbenchCommands(services, state(), callbacks());
 
     expect([...registered.keys()]).toEqual([
-      "file.newUntitled",
-      "file.openWorkspace",
-      "file.refreshWorkspace",
-      "workbench.quickOpen",
-      "workbench.commandPalette.open",
-      "workbench.settings.open",
-      "workbench.sidebar.files",
-      "workbench.sidebar.search",
-      "workbench.sidebar.outline",
-      "workbench.sidebar.backlinks",
-      "workbench.sidebar.tags",
-      "file.save",
-      "file.saveAs",
-      "file.exportHtml",
-      "editor.focusMode.toggle",
-      "editor.typewriterMode.toggle",
-      "editor.task.toggleLines",
-      "editor.task.removeMarkers",
-      "theme.toggle"
+      workbenchCommandIds.file.newUntitled,
+      workbenchCommandIds.file.openWorkspace,
+      workbenchCommandIds.file.refreshWorkspace,
+      workbenchCommandIds.workbench.quickOpen,
+      workbenchCommandIds.workbench.commandPaletteOpen,
+      workbenchCommandIds.workbench.settingsOpen,
+      workbenchCommandIds.workbench.sidebarFiles,
+      workbenchCommandIds.workbench.sidebarSearch,
+      workbenchCommandIds.workbench.sidebarOutline,
+      workbenchCommandIds.workbench.sidebarBacklinks,
+      workbenchCommandIds.workbench.sidebarTags,
+      workbenchCommandIds.file.save,
+      workbenchCommandIds.file.saveAs,
+      workbenchCommandIds.file.exportHtml,
+      workbenchCommandIds.editor.focusModeToggle,
+      workbenchCommandIds.editor.typewriterModeToggle,
+      workbenchCommandIds.editor.taskToggleLines,
+      workbenchCommandIds.editor.taskRemoveMarkers,
+      workbenchCommandIds.theme.toggle
     ]);
 
     disposable.dispose();
@@ -52,10 +53,10 @@ describe("workbench command registration", () => {
 
     registerWorkbenchCommands(createServices(registered), state(), testCallbacks);
 
-    registered.get("workbench.quickOpen")?.run({} as never);
-    registered.get("workbench.commandPalette.open")?.run({} as never);
-    registered.get("workbench.settings.open")?.run({} as never);
-    registered.get("workbench.sidebar.files")?.run({} as never);
+    registered.get(workbenchCommandIds.workbench.quickOpen)?.run({} as never);
+    registered.get(workbenchCommandIds.workbench.commandPaletteOpen)?.run({} as never);
+    registered.get(workbenchCommandIds.workbench.settingsOpen)?.run({} as never);
+    registered.get(workbenchCommandIds.workbench.sidebarFiles)?.run({} as never);
 
     expect(testCallbacks.setQuickOpen).toHaveBeenCalledWith(true);
     expect(testCallbacks.setPaletteOpen).toHaveBeenCalledWith(true);
@@ -74,7 +75,7 @@ describe("workbench command registration", () => {
 
     registerWorkbenchCommands(services, state(), callbacks());
 
-    await registered.get("file.exportHtml")?.run({} as never);
+    await registered.get(workbenchCommandIds.file.exportHtml)?.run({} as never);
 
     expect(services.exportService.exportAndSave).toHaveBeenCalledWith({
       uri: URI.file("C:/Notes/a.md"),
@@ -106,11 +107,11 @@ describe("workbench command registration", () => {
       }
     }), testCallbacks);
 
-    expect(registered.get("editor.focusMode.toggle")?.run({} as never)).toBeUndefined();
-    expect(registered.get("editor.typewriterMode.toggle")?.run({} as never)).toBeUndefined();
-    expect(registered.get("theme.toggle")?.run({} as never)).toBeUndefined();
-    expect(registered.get("editor.task.toggleLines")?.run({} as never)).toBe(true);
-    expect(registered.get("editor.task.removeMarkers")?.run({} as never)).toBe(true);
+    expect(registered.get(workbenchCommandIds.editor.focusModeToggle)?.run({} as never)).toBeUndefined();
+    expect(registered.get(workbenchCommandIds.editor.typewriterModeToggle)?.run({} as never)).toBeUndefined();
+    expect(registered.get(workbenchCommandIds.theme.toggle)?.run({} as never)).toBeUndefined();
+    expect(registered.get(workbenchCommandIds.editor.taskToggleLines)?.run({} as never)).toBe(true);
+    expect(registered.get(workbenchCommandIds.editor.taskRemoveMarkers)?.run({} as never)).toBe(true);
 
     expect(services.configurationService.updateValue).toHaveBeenCalledWith({
       editor: {
