@@ -5257,3 +5257,31 @@ Review:
 Known limitations:
 
 - `Application.tsx` still coordinates effect timing for browser-backed helpers such as keybinding dispatch, auto-save, line navigation, overlay focus, and theme synchronization.
+
+## 2026-06-11 - P2 Workbench Keybinding Dispatch Target
+
+Completed:
+
+- Added a focused keybinding dispatch target factory that adapts browser `keydown` targets into the Workbench dispatch boundary.
+- Routed `Application.tsx` keybinding listener registration through the factory instead of passing the browser target directly.
+- Preserved keybinding resolution, default prevention, command execution, and listener disposal behavior.
+- Covered browser target forwarding alongside existing dispatch and registration tests.
+
+Quality gate:
+
+- `npx vitest run packages/workbench/src/workbenchKeybindingDispatch.test.ts`: passed, 4 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 554 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Dev server smoke check: passed at `http://127.0.0.1:5173`; status 200 and root element present
+
+Review:
+
+- Keybinding dispatch now owns browser keydown target adaptation together with listener lifecycle and command dispatch semantics.
+- `Application.tsx` still supplies the concrete browser target at effect registration time, while `workbenchKeybindingDispatch` owns how it becomes a dispatch target.
+- No new dependency, configuration key, storage path, visual token, extra documentation file, or hard-coded platform assumption was introduced.
+
+Known limitations:
+
+- `Application.tsx` still assembles the top-level Workbench effect timing and callback wiring for browser-backed helpers.

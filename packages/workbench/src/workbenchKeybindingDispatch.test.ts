@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  createWorkbenchKeybindingDispatchTarget,
   dispatchWorkbenchKeybinding,
   registerWorkbenchKeybindingDispatch,
   type WorkbenchKeybindingDispatchServices,
@@ -7,6 +8,21 @@ import {
 } from "./workbenchKeybindingDispatch";
 
 describe("workbench keybinding dispatch", () => {
+  it("creates a dispatch target from a browser keydown target", () => {
+    const browserTarget = {
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn()
+    };
+    const target = createWorkbenchKeybindingDispatchTarget(browserTarget);
+    const listener = vi.fn();
+
+    target.addEventListener("keydown", listener);
+    target.removeEventListener("keydown", listener);
+
+    expect(browserTarget.addEventListener).toHaveBeenCalledWith("keydown", listener);
+    expect(browserTarget.removeEventListener).toHaveBeenCalledWith("keydown", listener);
+  });
+
   it("does not prevent default or execute a command when no keybinding resolves", () => {
     const services = createServices();
     const event = createEvent();

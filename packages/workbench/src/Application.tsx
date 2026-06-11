@@ -80,7 +80,10 @@ import {
   openWorkbenchLineTargetAction,
   scrollWorkbenchLine
 } from "./workbenchLineNavigation";
-import { registerWorkbenchKeybindingDispatch } from "./workbenchKeybindingDispatch";
+import {
+  createWorkbenchKeybindingDispatchTarget,
+  registerWorkbenchKeybindingDispatch
+} from "./workbenchKeybindingDispatch";
 import {
   createWorkbenchMenuContext,
   getWorkbenchMenuItems,
@@ -284,10 +287,14 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
   }, [configuration, services, workspace.files]);
 
   useEffect(() => {
-    const disposable = registerWorkbenchKeybindingDispatch(window, services, {
-      setOperationError,
-      setSaveConflict
-    });
+    const disposable = registerWorkbenchKeybindingDispatch(
+      createWorkbenchKeybindingDispatchTarget(window),
+      services,
+      {
+        setOperationError,
+        setSaveConflict
+      }
+    );
 
     return () => disposable.dispose();
   }, [services]);

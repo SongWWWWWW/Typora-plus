@@ -19,6 +19,11 @@ export interface WorkbenchKeybindingDispatchTarget {
   removeEventListener(type: "keydown", listener: (event: WorkbenchKeydownEvent) => void): void;
 }
 
+export interface WorkbenchKeybindingDispatchBrowserTarget {
+  addEventListener(type: "keydown", listener: (event: KeyboardEvent) => void): void;
+  removeEventListener(type: "keydown", listener: (event: KeyboardEvent) => void): void;
+}
+
 export interface WorkbenchKeybindingDispatchServices {
   readonly commandService: Pick<ICommandService, "executeCommand">;
   readonly keybindingService: Pick<IKeybindingService, "resolve">;
@@ -27,6 +32,19 @@ export interface WorkbenchKeybindingDispatchServices {
 export interface WorkbenchKeybindingDispatchCallbacks {
   readonly setOperationError: WorkbenchOperationErrorSetter;
   readonly setSaveConflict?: (conflict: FileSaveConflict | undefined) => void;
+}
+
+export function createWorkbenchKeybindingDispatchTarget(
+  target: WorkbenchKeybindingDispatchBrowserTarget
+): WorkbenchKeybindingDispatchTarget {
+  return {
+    addEventListener(type, listener) {
+      target.addEventListener(type, listener as (event: KeyboardEvent) => void);
+    },
+    removeEventListener(type, listener) {
+      target.removeEventListener(type, listener as (event: KeyboardEvent) => void);
+    }
+  };
 }
 
 export function dispatchWorkbenchKeybinding(
