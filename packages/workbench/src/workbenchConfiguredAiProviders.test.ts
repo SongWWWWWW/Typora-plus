@@ -141,6 +141,7 @@ function configuration(
   return {
     ...defaultConfiguration,
     ai: {
+      ...defaultConfiguration.ai,
       providers
     }
   };

@@ -729,6 +729,23 @@ export function SettingsDialog({
                     </div>
                   </>
                 ) : null}
+                {isSettingsEntryVisible(settingsVisibility, settingsEntryIds.ai.workspaceContextMaxResults) ? (
+                  <NumberSetting
+                    label={getSettingsEntryLabel(settingsEntryIds.ai.workspaceContextMaxResults)}
+                    value={configuration.ai.workspaceContextMaxResults}
+                    constraint={settingsNumberConstraints.aiWorkspaceContextMaxResults}
+                    onChange={(workspaceContextMaxResults) => onUpdate({ ai: { workspaceContextMaxResults } })}
+                  />
+                ) : null}
+                {isSettingsEntryVisible(settingsVisibility, settingsEntryIds.ai.workspaceContextMaxPreviewLength) ? (
+                  <NumberSetting
+                    label={getSettingsEntryLabel(settingsEntryIds.ai.workspaceContextMaxPreviewLength)}
+                    value={configuration.ai.workspaceContextMaxPreviewLength}
+                    constraint={settingsNumberConstraints.aiWorkspaceContextMaxPreviewLength}
+                    unit="chars"
+                    onChange={(workspaceContextMaxPreviewLength) => onUpdate({ ai: { workspaceContextMaxPreviewLength } })}
+                  />
+                ) : null}
               </SettingsSection>
             ) : null}
 

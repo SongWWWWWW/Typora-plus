@@ -6898,5 +6898,48 @@ Review:
 Known limitations:
 
 - No live model discovery yet.
-- Streaming, tool calls, workspace-grounded retrieval, Feishu OAuth, and a built-in Feishu provider remain future work.
+- Streaming, tool calls, Feishu OAuth, and a built-in Feishu provider remain future work.
 - Remote sync progress streaming and richer conflict-resolution UI are still not implemented.
+
+## 2026-06-11 - P2 Workspace-Grounded AI Context
+
+Completed:
+
+- Added configuration-bounded workspace context limits for AI requests, including maximum search results and snippet preview length.
+- Added per-call workspace index query options so AI context selection can request tighter result and preview bounds without changing global search settings.
+- Added a Workbench AI workspace context helper that derives stable search queries from the active note name, Markdown headings, and tags.
+- Excluded the active note from generated workspace context and deduplicated indexed matches by URI and line before sending provider-neutral `workspace-search` context items.
+- Updated summarize-active-note command execution to merge explicit context with generated workspace search context through the existing `IAiService.requestText()` path.
+- Added Settings controls for AI context result count and snippet preview length, backed by platform-owned numeric constraints.
+- Updated maintained docs to record that first-pass workspace-grounded AI now uses `IIndexService` snippets rather than provider-specific retrieval or UI-owned SDK calls.
+
+Quality gate:
+
+- `npx vitest run packages/platform/src/configurationAi.test.ts packages/platform/src/platform.test.ts packages/workbench/src/workbenchAiWorkspaceContext.test.ts packages/workbench/src/workbenchAiActions.test.ts packages/workbench/src/workbenchCommandRegistration.test.ts packages/workbench/src/settingsModel.test.ts`: passed, 6 files / 146 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 74 files / 690 tests, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Dev server smoke check at `http://127.0.0.1:5173/`: status 200 and root element present
+
+Research notes:
+
+- OpenAI Responses remains the correct default product API surface for Typora Plus writing assistance because direct text requests, instructions, structured outputs, hosted/custom tools, and state can all sit behind the existing provider contract.
+- OpenAI Agents SDK is relevant once Typora Plus owns multi-step orchestration, tool execution, guardrails, tracing, or sandboxed runs; it should be a later provider/runtime concern rather than a Workbench dependency.
+- OpenAI Codex is documented as a software-development agent across app, CLI, IDE, cloud, and SDK surfaces. It is feasible for repository automation, plugin development, or developer workflows, but it is not the default fit for Markdown writing assistance.
+- Feishu raw Markdown/assets mirroring is feasible through the existing remote sync boundary because Drive file/folder APIs can provide remote snapshots plus upload/download execution while platform diff planning keeps conflict behavior provider-neutral.
+- Feishu Docs publish/import is feasible as a later one-way adapter. Full bidirectional Feishu Docs sync remains higher risk because Markdown must round-trip through Feishu's structured document block model, asset/media APIs, permissions, remote edits, and unsupported Markdown syntax.
+
+Review:
+
+- No hardcoded model/provider id, endpoint, OAuth scope, token, storage path, or credential behavior was introduced.
+- Workbench uses `IIndexService` for context selection and sends only bounded `AiTextContextItem` snippets to providers.
+- React owns only Settings controls for context limits; index strategy and AI provider execution remain in service/action helpers.
+- The active note is excluded from workspace context, and generated result count plus preview length are bounded by configuration.
+
+Known limitations:
+
+- No live model discovery yet.
+- Streaming, tool calls, Feishu OAuth, and a built-in Feishu provider remain future work.
+- Remote sync progress streaming and richer conflict-resolution UI are still not implemented.
+- Workspace context is keyword search/snippet based, not semantic or vector retrieval.

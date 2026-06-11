@@ -5,7 +5,8 @@ import {
   type Command,
   type RemoteSyncPlanRequest,
   type TextFileModel,
-  type WorkspaceFileTree
+  type WorkspaceFileTree,
+  type WorkspaceIndexStatus
 } from "@typora-plus/platform";
 import { describe, expect, it, vi } from "vitest";
 import {
@@ -100,6 +101,10 @@ describe("workbench command registration", () => {
     expect(testCallbacks.setAiResponse).toHaveBeenCalledWith({
       providerId: "openai.responses",
       value: "Summary"
+    });
+    expect(services.indexService.query).toHaveBeenCalledWith("a", {
+      maxPreviewLength: defaultConfiguration.ai.workspaceContextMaxPreviewLength,
+      maxResults: defaultConfiguration.ai.workspaceContextMaxResults + 1
     });
 
     const noProviderCommands = new Map<string, Command>();
@@ -334,7 +339,7 @@ function createServices(
     indexService: {
       onDidChangeStatus: vi.fn(),
       configure: vi.fn(),
-      getStatus: vi.fn(),
+      getStatus: vi.fn(() => indexStatus("ready")),
       indexWorkspace: vi.fn(),
       indexFile: vi.fn(),
       query: vi.fn(() => []),
@@ -409,6 +414,16 @@ function createServices(
       has: vi.fn()
     }
   } as unknown as WorkbenchServices;
+}
+
+function indexStatus(state: WorkspaceIndexStatus["state"]): WorkspaceIndexStatus {
+  return {
+    state,
+    indexedFiles: 0,
+    totalFiles: 0,
+    skippedFiles: 0,
+    updatedAt: 1
+  };
 }
 
 function callbacks(

@@ -37,6 +37,8 @@ export interface TyporaPlusConfiguration {
   };
   readonly ai: {
     readonly providers: readonly AiProviderConfiguration[];
+    readonly workspaceContextMaxPreviewLength: number;
+    readonly workspaceContextMaxResults: number;
   };
   readonly editor: {
     readonly fontSize: number;
@@ -121,6 +123,8 @@ export const configurationMaxMarkdownStatusBadgeAliases = 30;
 export const configurationMaxMarkdownStatusBadgeTextLength = 64;
 
 export const configurationNumberConstraints = {
+  aiWorkspaceContextMaxPreviewLength: { min: 80, max: 320, step: 20 },
+  aiWorkspaceContextMaxResults: { min: 0, max: 12, step: 1 },
   editorFontSize: { min: 13, max: 24, step: 1 },
   editorLineHeight: { min: 1.2, max: 2.2, step: 0.01 },
   editorMaxWidth: { min: 560, max: 1120, step: 20 },
@@ -180,7 +184,9 @@ export const defaultConfiguration: TyporaPlusConfiguration = {
     density: "comfortable"
   },
   ai: {
-    providers: []
+    providers: [],
+    workspaceContextMaxPreviewLength: 160,
+    workspaceContextMaxResults: 5
   },
   editor: {
     fontSize: 17,
@@ -357,7 +363,17 @@ function sanitizeAiConfiguration(value: Record<string, unknown>): Partial<Typora
   const providers = sanitizeAiProviderConfigurations(value.providers);
 
   return {
-    ...(providers !== undefined ? { providers } : {})
+    ...(providers !== undefined ? { providers } : {}),
+    ...sanitizeNumberProperty(
+      "workspaceContextMaxPreviewLength",
+      value.workspaceContextMaxPreviewLength,
+      configurationNumberConstraints.aiWorkspaceContextMaxPreviewLength
+    ),
+    ...sanitizeNumberProperty(
+      "workspaceContextMaxResults",
+      value.workspaceContextMaxResults,
+      configurationNumberConstraints.aiWorkspaceContextMaxResults
+    )
   };
 }
 

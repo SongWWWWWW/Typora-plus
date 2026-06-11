@@ -100,6 +100,10 @@ export function registerWorkbenchCommands(
         const response = await runWorkbenchSummarizeActiveNoteAiAction(services, {
           metadata: {
             surface: "command"
+          },
+          workspaceContext: {
+            maxPreviewLength: state.configuration.ai.workspaceContextMaxPreviewLength,
+            maxResults: state.configuration.ai.workspaceContextMaxResults
           }
         });
         callbacks.setAiResponse(response);

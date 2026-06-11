@@ -89,7 +89,7 @@ export interface IIndexService {
   getStatus(): WorkspaceIndexStatus;
   indexWorkspace(workspace: WorkspaceFileTree): Promise<void>;
   indexFile(file: FileTreeEntry, value?: string): Promise<void>;
-  query(value: string): readonly WorkspaceSearchResult[];
+  query(value: string, options?: Partial<WorkspaceIndexQueryOptions>): readonly WorkspaceSearchResult[];
   getMetadata(): WorkspaceIndexMetadata;
   getTags(): readonly WorkspaceIndexedTagSummary[];
   getTaggedResources(tag: string): readonly WorkspaceIndexedTag[];
@@ -524,10 +524,10 @@ export class WorkspaceIndexService implements IIndexService {
     this.emitIndexChanged();
   }
 
-  query(value: string): readonly WorkspaceSearchResult[] {
+  query(value: string, options: Partial<WorkspaceIndexQueryOptions> = {}): readonly WorkspaceSearchResult[] {
     return this.provider.query(value, {
-      maxPreviewLength: this.options.maxPreviewLength,
-      maxResults: this.options.maxResults
+      maxPreviewLength: options.maxPreviewLength ?? this.options.maxPreviewLength,
+      maxResults: options.maxResults ?? this.options.maxResults
     });
   }
 

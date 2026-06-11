@@ -2863,6 +2863,19 @@ describe("workspace index", () => {
       }
     });
     expect(results.map((result) => result.relativePath)).toEqual(["provider.md"]);
+
+    service.query("shared", {
+      maxPreviewLength: 40,
+      maxResults: 2
+    });
+
+    expect(provider.lastQuery).toEqual({
+      value: "shared",
+      options: {
+        maxPreviewLength: 40,
+        maxResults: 2
+      }
+    });
   });
 
   it("persists indexed snapshots through injected provider storage", async () => {

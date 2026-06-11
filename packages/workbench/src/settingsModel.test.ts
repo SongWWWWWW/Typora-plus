@@ -66,7 +66,9 @@ describe("settings model", () => {
         rendererPreviewCacheEntries: "editor.rendererPreviewCacheEntries"
       },
       ai: {
-        providers: "ai.providers"
+        providers: "ai.providers",
+        workspaceContextMaxPreviewLength: "ai.workspaceContextMaxPreviewLength",
+        workspaceContextMaxResults: "ai.workspaceContextMaxResults"
       },
       workspace: {
         defaultAssetFolder: "workspace.defaultAssetFolder",
@@ -186,7 +188,10 @@ describe("settings model", () => {
 
     const workspaceSettings = createSettingsVisibilityState(createSettingsSearchResult("workspace"));
     expect(workspaceSettings.hasResults).toBe(true);
-    expect(workspaceSettings.visibleSections.map((section) => section.id)).toEqual([settingsSectionIds.workspace]);
+    expect(workspaceSettings.visibleSections.map((section) => section.id)).toEqual([
+      settingsSectionIds.ai,
+      settingsSectionIds.workspace
+    ]);
     expect(isSettingsSectionVisible(workspaceSettings, settingsSectionIds.workspace)).toBe(true);
     expect(isSettingsSectionVisible(workspaceSettings, settingsSectionIds.editor)).toBe(false);
     expect(isSettingsEntryVisible(workspaceSettings, settingsEntryIds.workspace.searchMaxResults)).toBe(true);
@@ -195,6 +200,8 @@ describe("settings model", () => {
 
   it("matches complete sections and individual settings entries", () => {
     expect(createSettingsSearchResult("workspace").visibleEntries).toEqual([
+      "ai.workspaceContextMaxResults",
+      "ai.workspaceContextMaxPreviewLength",
       "workspace.defaultAssetFolder",
       "workspace.quickOpenMaxResults",
       "workspace.searchMaxFileSize",
@@ -206,6 +213,8 @@ describe("settings model", () => {
     expect(createSettingsSearchResult("renderer cache").visibleEntries).toEqual(["editor.rendererPreviewCacheEntries"]);
     expect(createSettingsSearchResult("api key").visibleEntries).toEqual(["ai.providers"]);
     expect(createSettingsSearchResult("responses model").visibleEntries).toEqual(["ai.providers"]);
+    expect(createSettingsSearchResult("grounded context").visibleEntries).toEqual(["ai.workspaceContextMaxResults"]);
+    expect(createSettingsSearchResult("snippet preview").visibleEntries).toEqual(["ai.workspaceContextMaxPreviewLength"]);
     expect(createSettingsSearchResult("shortcut").visibleEntries).toEqual(["keybindings.editor"]);
     expect(createSettingsSearchResult("search limit").visibleEntries).toEqual([
       "workspace.searchMaxFileSize",
@@ -258,6 +267,10 @@ describe("settings model", () => {
     expect(clampSettingNumber(5250, settingsNumberConstraints.editorAutoSaveDelayMs)).toBe(5000);
     expect(clampSettingNumber(-1, settingsNumberConstraints.editorRendererPreviewCacheEntries)).toBe(0);
     expect(clampSettingNumber(500, settingsNumberConstraints.editorRendererPreviewCacheEntries)).toBe(200);
+    expect(clampSettingNumber(-1, settingsNumberConstraints.aiWorkspaceContextMaxResults)).toBe(0);
+    expect(clampSettingNumber(99, settingsNumberConstraints.aiWorkspaceContextMaxResults)).toBe(12);
+    expect(clampSettingNumber(20, settingsNumberConstraints.aiWorkspaceContextMaxPreviewLength)).toBe(80);
+    expect(clampSettingNumber(999, settingsNumberConstraints.aiWorkspaceContextMaxPreviewLength)).toBe(320);
     expect(clampSettingNumber(5, settingsNumberConstraints.workspaceQuickOpenMaxResults)).toBe(20);
     expect(clampSettingNumber(500, settingsNumberConstraints.workspaceQuickOpenMaxResults)).toBe(300);
   });

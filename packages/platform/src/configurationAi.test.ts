@@ -46,6 +46,9 @@ describe("AI provider configuration", () => {
         store: false
       }
     ]);
+    expect(restored.getValue().ai.workspaceContextMaxResults).toBe(defaultConfiguration.ai.workspaceContextMaxResults);
+    expect(restored.getValue().ai.workspaceContextMaxPreviewLength)
+      .toBe(defaultConfiguration.ai.workspaceContextMaxPreviewLength);
   });
 
   it("drops invalid or duplicate configured AI providers without changing other configuration", () => {
@@ -116,6 +119,35 @@ describe("AI provider configuration", () => {
         secretRef: "typora-plus.ai.notes"
       }
     ]);
+    expect(service.getValue().ai.workspaceContextMaxResults).toBe(defaultConfiguration.ai.workspaceContextMaxResults);
+  });
+
+  it("sanitizes workspace context limits for AI requests", () => {
+    const storage = createMemoryStorage();
+    const service = new ConfigurationService({
+      storageKey: "configuration",
+      storage
+    });
+
+    service.updateValue({
+      ai: {
+        workspaceContextMaxPreviewLength: 999,
+        workspaceContextMaxResults: 99
+      }
+    });
+
+    expect(service.getValue().ai.workspaceContextMaxPreviewLength).toBe(320);
+    expect(service.getValue().ai.workspaceContextMaxResults).toBe(12);
+
+    service.updateValue({
+      ai: {
+        workspaceContextMaxPreviewLength: 20,
+        workspaceContextMaxResults: 0
+      }
+    });
+
+    expect(service.getValue().ai.workspaceContextMaxPreviewLength).toBe(80);
+    expect(service.getValue().ai.workspaceContextMaxResults).toBe(0);
   });
 
   it("allows loopback HTTP endpoints for local compatible providers", () => {
@@ -194,7 +226,9 @@ describe("AI provider configuration", () => {
             model: "notes-model",
             secretRef: "typora-plus.ai.notes"
           }
-        ]
+        ],
+        workspaceContextMaxPreviewLength: defaultConfiguration.ai.workspaceContextMaxPreviewLength,
+        workspaceContextMaxResults: defaultConfiguration.ai.workspaceContextMaxResults
       }
     };
 
@@ -208,6 +242,14 @@ describe("AI provider configuration", () => {
         providers: []
       }
     }).ai.providers).toEqual([]);
+    expect(mergeConfiguration(base, {
+      ai: {
+        workspaceContextMaxResults: 3
+      }
+    }).ai).toEqual({
+      ...base.ai,
+      workspaceContextMaxResults: 3
+    });
   });
 });
 

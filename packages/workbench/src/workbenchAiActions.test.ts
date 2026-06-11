@@ -2,6 +2,7 @@ import { URI } from "@typora-plus/base";
 import type {
   AiTextRequest,
   AiTextResponse,
+  WorkspaceIndexStatus,
   TextFileModel
 } from "@typora-plus/platform";
 import { describe, expect, it, vi } from "vitest";
@@ -26,6 +27,14 @@ describe("workbench AI actions", () => {
       value: "Summary"
     };
     const requestText = vi.fn(async (_providerId: string, _request: AiTextRequest) => response);
+    const query = vi.fn(() => [{
+      uri: URI.file("/workspace/related.md"),
+      name: "related.md",
+      relativePath: "related.md",
+      line: 4,
+      preview: "Related indexed context",
+      score: 10
+    }]);
     const services = {
       aiService: {
         getProviders: vi.fn(() => [
@@ -33,6 +42,10 @@ describe("workbench AI actions", () => {
           { id: "a.provider", title: "Assistant" }
         ]),
         requestText
+      },
+      indexService: {
+        getStatus: vi.fn(() => indexStatus("ready")),
+        query
       },
       textFileService: {
         getActiveModel: vi.fn(() => model()),
@@ -45,7 +58,11 @@ describe("workbench AI actions", () => {
       metadata: {
         surface: "command"
       },
-      signal
+      signal,
+      workspaceContext: {
+        maxPreviewLength: 140,
+        maxResults: 2
+      }
     })).resolves.toBe(response);
 
     expect(services.aiService.getProviders).toHaveBeenCalledOnce();
@@ -53,7 +70,19 @@ describe("workbench AI actions", () => {
     expect(requestText).toHaveBeenCalledWith("a.provider", {
       instruction: workbenchAiInstructions.summarizeActiveNote,
       input: "# Note\n\nShip AI action runner.",
-      context,
+      context: [
+        ...context,
+        {
+          kind: "workspace-search",
+          title: "related.md:4",
+          uri: URI.file("/workspace/related.md"),
+          value: [
+            "Path: related.md",
+            "Line: 4",
+            "Related indexed context"
+          ].join("\n")
+        }
+      ],
       metadata: {
         surface: "command",
         action: "summarizeActiveNote",
@@ -63,6 +92,10 @@ describe("workbench AI actions", () => {
         languageId: "markdown"
       },
       signal
+    });
+    expect(query).toHaveBeenCalledWith("note", {
+      maxPreviewLength: 140,
+      maxResults: 3
     });
   });
 
@@ -74,6 +107,10 @@ describe("workbench AI actions", () => {
         getProviders: vi.fn(() => []),
         requestText
       },
+      indexService: {
+        getStatus: vi.fn(() => indexStatus("ready")),
+        query: vi.fn(() => [])
+      },
       textFileService: {
         getActiveModel,
         updateContent: vi.fn()
@@ -84,6 +121,7 @@ describe("workbench AI actions", () => {
       .rejects.toThrow("No AI provider available for active note summary");
     expect(getActiveModel).not.toHaveBeenCalled();
     expect(requestText).not.toHaveBeenCalled();
+    expect(services.indexService.query).not.toHaveBeenCalled();
   });
 
   it("appends an AI response to the active note through the text model", () => {
@@ -140,5 +178,15 @@ function model(overrides: Partial<TextFileModel> = {}): TextFileModel {
     dirty: false,
     version: 1,
     ...overrides
+  };
+}
+
+function indexStatus(state: WorkspaceIndexStatus["state"]): WorkspaceIndexStatus {
+  return {
+    state,
+    indexedFiles: 0,
+    totalFiles: 0,
+    skippedFiles: 0,
+    updatedAt: 1
   };
 }

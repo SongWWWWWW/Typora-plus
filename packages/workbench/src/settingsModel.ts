@@ -45,7 +45,9 @@ export const settingsEntryIds = {
     rendererPreviewCacheEntries: "editor.rendererPreviewCacheEntries"
   },
   ai: {
-    providers: "ai.providers"
+    providers: "ai.providers",
+    workspaceContextMaxPreviewLength: "ai.workspaceContextMaxPreviewLength",
+    workspaceContextMaxResults: "ai.workspaceContextMaxResults"
   },
   workspace: {
     defaultAssetFolder: "workspace.defaultAssetFolder",
@@ -156,6 +158,8 @@ export const settingsEntries = [
   { id: settingsEntryIds.editor.maxWidth, sectionId: settingsSectionIds.editor, label: "Editor Width", keywords: ["width", "content"] },
   { id: settingsEntryIds.editor.rendererPreviewCacheEntries, sectionId: settingsSectionIds.editor, label: "Renderer Cache", keywords: ["preview", "renderer", "cache", "mermaid"] },
   { id: settingsEntryIds.ai.providers, sectionId: settingsSectionIds.ai, label: "Providers", keywords: ["openai", "responses", "assistant", "model", "endpoint", "secret", "api key"] },
+  { id: settingsEntryIds.ai.workspaceContextMaxResults, sectionId: settingsSectionIds.ai, label: "Context Results", keywords: ["workspace", "context", "search", "retrieval", "grounded"] },
+  { id: settingsEntryIds.ai.workspaceContextMaxPreviewLength, sectionId: settingsSectionIds.ai, label: "Context Preview", keywords: ["workspace", "context", "preview", "snippet", "retrieval"] },
   { id: settingsEntryIds.workspace.defaultAssetFolder, sectionId: settingsSectionIds.workspace, label: "Asset Folder", keywords: ["assets", "images", "attachments", "folder"] },
   { id: settingsEntryIds.workspace.quickOpenMaxResults, sectionId: settingsSectionIds.workspace, label: "Quick Open Results", keywords: ["quick open", "files", "results", "limit"] },
   { id: settingsEntryIds.workspace.searchMaxFileSize, sectionId: settingsSectionIds.workspace, label: "Search File Limit", keywords: ["search", "index", "file", "size", "limit"] },
@@ -168,6 +172,8 @@ const settingsEntryById = new Map<SettingsEntryId, SettingsEntryDefinition>(
 );
 
 export const settingsNumberConstraints = {
+  aiWorkspaceContextMaxPreviewLength: configurationNumberConstraints.aiWorkspaceContextMaxPreviewLength,
+  aiWorkspaceContextMaxResults: configurationNumberConstraints.aiWorkspaceContextMaxResults,
   editorFontSize: configurationNumberConstraints.editorFontSize,
   editorLineHeight: configurationNumberConstraints.editorLineHeight,
   editorMaxWidth: configurationNumberConstraints.editorMaxWidth,
