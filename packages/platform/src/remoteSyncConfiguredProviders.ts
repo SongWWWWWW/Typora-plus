@@ -1,6 +1,7 @@
 import type { RemoteSyncProviderConfiguration } from "./configuration";
 import { normalizeRemoteSyncProviderConfiguration } from "./configuration";
 import type { RemoteSyncProvider } from "./remoteSync";
+import type { IRemoteSyncWorkspaceResourceService } from "./remoteSyncWorkspaceResources";
 import {
   createNativeRemoteSyncRequestTransport,
   type RemoteSyncNativeRequestTransport
@@ -13,6 +14,10 @@ import {
 export interface RemoteSyncConfiguredProviderFactoryContext {
   readonly profile: RemoteSyncProviderConfiguration;
   readonly request: RemoteSyncProfileRequestTransport;
+  readonly workspaceResources?: Pick<
+    IRemoteSyncWorkspaceResourceService,
+    "deleteResource" | "readResource" | "writeResource"
+  >;
 }
 
 export type RemoteSyncConfiguredProviderFactory =
@@ -21,6 +26,10 @@ export type RemoteSyncConfiguredProviderFactory =
 export interface RemoteSyncConfiguredProviderFactoryOptions {
   readonly transport: RemoteSyncNativeRequestTransport;
   readonly createProvider: RemoteSyncConfiguredProviderFactory;
+  readonly workspaceResources?: Pick<
+    IRemoteSyncWorkspaceResourceService,
+    "deleteResource" | "readResource" | "writeResource"
+  >;
 }
 
 export function createConfiguredRemoteSyncProviders(
@@ -44,7 +53,8 @@ export function createConfiguredRemoteSyncProviders(
 
     const provider = options.createProvider({
       profile,
-      request
+      request,
+      ...(options.workspaceResources !== undefined ? { workspaceResources: options.workspaceResources } : {})
     });
 
     if (provider) {
@@ -57,7 +67,8 @@ export function createConfiguredRemoteSyncProviders(
 
 export function createNativeRemoteSyncConfiguredProviderFactoryOptions(
   createProvider: RemoteSyncConfiguredProviderFactory,
-  transport: RemoteSyncNativeRequestTransport | undefined = createNativeRemoteSyncRequestTransport()
+  transport: RemoteSyncNativeRequestTransport | undefined = createNativeRemoteSyncRequestTransport(),
+  workspaceResources?: Pick<IRemoteSyncWorkspaceResourceService, "deleteResource" | "readResource" | "writeResource">
 ): RemoteSyncConfiguredProviderFactoryOptions | undefined {
   if (!transport) {
     return undefined;
@@ -65,6 +76,7 @@ export function createNativeRemoteSyncConfiguredProviderFactoryOptions(
 
   return {
     transport,
-    createProvider
+    createProvider,
+    ...(workspaceResources !== undefined ? { workspaceResources } : {})
   };
 }

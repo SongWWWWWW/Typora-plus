@@ -162,6 +162,12 @@ Registered block and inline Markdown renderer providers are connected to preview
 
 Extensions must not receive direct DOM or unrestricted Node access.
 
+## Remote Sync Adapter Notes
+
+Configured remote sync provider factories may receive three bounded inputs: the normalized provider profile, a profile-scoped native request transport, and an optional trusted workspace resource bridge. Future cloud adapters should use those inputs instead of reading global state, constructing absolute filesystem paths, or storing decrypted credentials in renderer code.
+
+Raw mirror upload staging is provider-neutral. `readRemoteSyncRawMirrorUploadFileContents()` reads only local file resources for executable create/update operations targeting the remote side, refreshes size/mtime/content hash metadata from `IRemoteSyncWorkspaceResourceService`, reports per-resource progress, and rejects missing, duplicate, aborted, or mismatched reads before provider-specific upload code runs. Directory creation, remote upload endpoints, remote folder ids, retry policy, and provider-specific response parsing remain adapter responsibilities.
+
 ## Stage Review Rules
 
 At the end of every stage:

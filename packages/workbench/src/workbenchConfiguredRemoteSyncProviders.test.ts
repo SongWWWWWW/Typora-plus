@@ -15,6 +15,11 @@ describe("workbench configured remote sync providers", () => {
       providerConfiguration("notes.primary", "Primary")
     ]));
     const nativeRequests: RemoteSyncNativeRequestInput[] = [];
+    const workspaceResources = {
+      readResource: vi.fn(),
+      writeResource: vi.fn(),
+      deleteResource: vi.fn()
+    };
 
     const disposable = synchronizeWorkbenchConfiguredRemoteSyncProviders(harness.services, {
       transport: async (request) => {
@@ -26,10 +31,12 @@ describe("workbench configured remote sync providers", () => {
           body: { ok: true }
         };
       },
-      createProvider: ({ profile, request }) => ({
+      workspaceResources,
+      createProvider: ({ profile, request, workspaceResources: contextWorkspaceResources }) => ({
         id: profile.id,
         title: profile.title,
         async createPlan(planRequest) {
+          expect(contextWorkspaceResources).toBe(workspaceResources);
           await request({
             path: "snapshot",
             method: "GET",

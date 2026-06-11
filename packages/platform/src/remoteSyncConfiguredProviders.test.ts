@@ -11,14 +11,21 @@ describe("configured remote sync providers", () => {
   it("creates profile-backed providers through an injected factory", async () => {
     const nativeRequests: RemoteSyncNativeRequestInput[] = [];
     const transport = createNativeTransport(nativeRequests);
+    const workspaceResources = {
+      readResource: vi.fn(),
+      writeResource: vi.fn(),
+      deleteResource: vi.fn()
+    };
     const providers = createConfiguredRemoteSyncProviders([
       configuration("notes.primary", "Primary")
     ], {
       transport,
-      createProvider: ({ profile, request }) => ({
+      workspaceResources,
+      createProvider: ({ profile, request, workspaceResources: contextWorkspaceResources }) => ({
         id: profile.id,
         title: profile.title,
         async createPlan(planRequest) {
+          expect(contextWorkspaceResources).toBe(workspaceResources);
           await request({
             path: "snapshot/list",
             query: {
@@ -119,11 +126,21 @@ describe("configured remote sync providers", () => {
   it("creates native factory options only when a native transport is available", () => {
     const createProvider = vi.fn();
     const transport = createNativeTransport();
+    const workspaceResources = {
+      readResource: vi.fn(),
+      writeResource: vi.fn(),
+      deleteResource: vi.fn()
+    };
 
     expect(createNativeRemoteSyncConfiguredProviderFactoryOptions(createProvider, undefined)).toBeUndefined();
-    expect(createNativeRemoteSyncConfiguredProviderFactoryOptions(createProvider, transport)).toEqual({
+    expect(createNativeRemoteSyncConfiguredProviderFactoryOptions(
+      createProvider,
       transport,
-      createProvider
+      workspaceResources
+    )).toEqual({
+      transport,
+      createProvider,
+      workspaceResources
     });
   });
 });

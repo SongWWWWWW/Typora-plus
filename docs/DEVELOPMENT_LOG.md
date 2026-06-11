@@ -7809,3 +7809,33 @@ Known limitations:
 
 - No concrete Feishu/raw-mirror adapter consumes the expanded resource list yet.
 - HTML `<img>` tags and wiki-style embeds are not included in this parser-backed discovery pass.
+
+## 2026-06-12 - P2 Remote Sync Raw Mirror Upload Staging
+
+Completed:
+
+- Added a provider-neutral raw mirror upload staging helper that reads local file contents for executable create/update operations targeting the remote side.
+- Routed upload staging through `IRemoteSyncWorkspaceResourceService` so future cloud adapters can reuse trusted workspace reads instead of touching filesystem APIs directly.
+- Refreshed staged upload resource metadata from native read results, including size, mtime, and content hash.
+- Added cancellation, progress, missing-resource, duplicate-resource, and mismatched-read validation around upload staging.
+- Extended configured remote sync provider factory context so future adapters can receive the bounded workspace resource bridge alongside profile-scoped native requests.
+
+Quality gate:
+
+- `npx vitest run packages/platform/src/remoteSyncRawMirrorWorkspaceResources.test.ts packages/platform/src/remoteSyncConfiguredProviders.test.ts packages/workbench/src/workbenchConfiguredRemoteSyncProviders.test.ts`: passed, 3 files / 11 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 86 files / 808 tests, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Raw mirror upload staging implementation hardcode scan for Feishu endpoints, OAuth scopes, token/secret names, model ids, provider ids, and credential literals: passed
+
+Review:
+
+- The stage moves raw mirror execution closer to a real Feishu Drive or other cloud upload adapter without adding provider ids, endpoints, OAuth scopes, token names, folder ids, model ids, storage paths, or credential literals.
+- Provider-specific route mapping, folder creation, download writes, retry policy, and response parsing remain outside the platform helper.
+- The helper reads only file resources for remote create/update operations; directory and delete semantics stay with the adapter because cloud providers differ there.
+
+Known limitations:
+
+- No concrete Feishu/raw-mirror adapter consumes the staged upload contents yet.
+- Pull/download-side local write staging is still pending.
