@@ -2,6 +2,7 @@ import { URI } from "@typora-plus/base";
 import { FileSaveConflictError } from "@typora-plus/platform";
 import { describe, expect, it, vi } from "vitest";
 import {
+  createWorkbenchCommandExecutor,
   executeWorkbenchCommand,
   runWorkbenchAction
 } from "./workbenchActionRunner";
@@ -91,5 +92,44 @@ describe("workbench action runner", () => {
 
     expect(executeCommand).toHaveBeenCalledWith("file.save");
     expect(operationErrors).toEqual([undefined, "Command failed"]);
+  });
+
+  it("creates a reusable command executor with the shared action boundary", async () => {
+    const operationErrors: Array<string | undefined> = [];
+    const saveConflicts: unknown[] = [];
+    const conflict = {
+      uri: URI.file("/workspace/note.md"),
+      expectedMtime: 1,
+      diskMtime: 2
+    };
+    const executeCommand = vi.fn(async (command: string) => {
+      if (command === "file.save") {
+        throw new FileSaveConflictError(conflict);
+      }
+    });
+    const runCommand = createWorkbenchCommandExecutor(
+      {
+        commandService: {
+          async executeCommand<T = unknown>(command: string): Promise<T> {
+            await executeCommand(command);
+            return undefined as T;
+          }
+        }
+      },
+      {
+        setOperationError: (value) => operationErrors.push(value),
+        setSaveConflict: (value) => saveConflicts.push(value)
+      }
+    );
+
+    runCommand("workbench.quickOpen");
+    runCommand("file.save");
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(executeCommand).toHaveBeenCalledWith("workbench.quickOpen");
+    expect(executeCommand).toHaveBeenCalledWith("file.save");
+    expect(operationErrors).toEqual([undefined, undefined, "File changed on disk"]);
+    expect(saveConflicts).toEqual([conflict]);
   });
 });

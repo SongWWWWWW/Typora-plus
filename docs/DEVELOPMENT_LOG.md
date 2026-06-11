@@ -5285,3 +5285,31 @@ Review:
 Known limitations:
 
 - `Application.tsx` still assembles the top-level Workbench effect timing and callback wiring for browser-backed helpers.
+
+## 2026-06-11 - P2 Workbench Command Executor
+
+Completed:
+
+- Added a reusable Workbench command executor factory on the shared action-runner boundary.
+- Routed titlebar, activitybar, and sidebar command dispatch in `Application.tsx` through the factory instead of a shell-local wrapper.
+- Preserved command service execution, stale operation-error clearing, save-conflict mapping, and generic command failure handling.
+- Covered reusable command execution and save-conflict propagation alongside the existing action-runner tests.
+
+Quality gate:
+
+- `npx vitest run packages/workbench/src/workbenchActionRunner.test.ts`: passed, 6 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 555 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Dev server smoke check: passed at `http://127.0.0.1:5173`; status 200 and root element present
+
+Review:
+
+- Command execution callbacks now cross into `ICommandService` through the same action-runner factory used by other Workbench command surfaces.
+- `Application.tsx` still decides which UI surfaces receive command handlers, while `workbenchActionRunner` owns how command execution maps failures into shell state.
+- No new dependency, configuration key, storage path, visual token, extra documentation file, or hard-coded platform assumption was introduced.
+
+Known limitations:
+
+- Command Palette execution still closes the palette through its own focused command-palette model after dispatching through the shared command action boundary.

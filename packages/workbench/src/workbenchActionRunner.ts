@@ -11,6 +11,25 @@ export interface WorkbenchCommandExecutionServices {
 export type WorkbenchOperationErrorSetter = (value: string | undefined) => void;
 export type WorkbenchSaveConflictSetter = (value: FileSaveConflict | undefined) => void;
 
+export interface WorkbenchCommandExecutionCallbacks {
+  readonly setOperationError: WorkbenchOperationErrorSetter;
+  readonly setSaveConflict?: WorkbenchSaveConflictSetter;
+}
+
+export function createWorkbenchCommandExecutor(
+  services: WorkbenchCommandExecutionServices,
+  callbacks: WorkbenchCommandExecutionCallbacks
+): (command: string) => void {
+  return (command) => {
+    executeWorkbenchCommand(
+      services,
+      command,
+      callbacks.setOperationError,
+      callbacks.setSaveConflict
+    );
+  };
+}
+
 export function executeWorkbenchCommand(
   services: WorkbenchCommandExecutionServices,
   command: string,

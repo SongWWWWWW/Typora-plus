@@ -49,7 +49,7 @@ import {
 } from "./listNavigationModel";
 import { SettingsDialog } from "./SettingsDialog";
 import type { WorkbenchServices } from "./services";
-import { executeWorkbenchCommand } from "./workbenchActionRunner";
+import { createWorkbenchCommandExecutor } from "./workbenchActionRunner";
 import {
   createWorkbenchAutoSaveScheduler,
   scheduleWorkbenchAutoSave
@@ -171,9 +171,10 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
   const activitybarSecondaryMenuItems = useMenuItems(services, "activitybar.secondary");
   const capabilityContext = createWorkbenchCapabilityContext(services);
   const commandSurface = createWorkbenchCommandSurface(services);
-  const executeCommand = (id: string) => {
-    executeWorkbenchCommand(services, id, setOperationError, setSaveConflict);
-  };
+  const executeCommand = createWorkbenchCommandExecutor(services, {
+    setOperationError,
+    setSaveConflict
+  });
 
   const outline = useMemo(() => extractOutline(model.value), [model.value]);
   const stats = useMemo(() => calculateMarkdownStats(model.value), [model.value]);
