@@ -7,6 +7,7 @@ import { registerNativeExportIpc } from "./nativeExportIpc.js";
 import { registerNativeFileIpc } from "./nativeFileIpc.js";
 import { registerNativeIndexSnapshotIpc } from "./nativeIndexSnapshotIpc.js";
 import { registerNativeRemoteSyncManifestIpc } from "./nativeRemoteSyncManifestIpc.js";
+import { registerNativeRemoteSyncRequestIpc } from "./nativeRemoteSyncRequestIpc.js";
 import { registerNativeRemoteSyncSecretIpc } from "./nativeRemoteSyncSecretIpc.js";
 import { desktopShellConfig } from "./shellConfig.js";
 
@@ -17,6 +18,10 @@ registerNativeConfigurationIpc(desktopShellConfig.configuration);
 registerNativeExportIpc(desktopShellConfig.exportDocuments);
 registerNativeIndexSnapshotIpc(desktopShellConfig.indexSnapshots);
 registerNativeRemoteSyncManifestIpc(desktopShellConfig.remoteSyncManifests);
+registerNativeRemoteSyncRequestIpc({
+  ...desktopShellConfig.remoteSyncSecrets,
+  ...desktopShellConfig.remoteSyncRequests
+});
 registerNativeRemoteSyncSecretIpc(desktopShellConfig.remoteSyncSecrets);
 registerNativeFileIpc(desktopShellConfig.workspace);
 

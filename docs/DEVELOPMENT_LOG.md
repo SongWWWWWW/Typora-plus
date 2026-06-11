@@ -7403,3 +7403,36 @@ Known limitations:
 - No remote sync provider configuration UI is wired to this bridge yet.
 - No Feishu OAuth flow, token refresh flow, upload/download transport, or provider is registered yet.
 - Native secret storage depends on Electron `safeStorage` availability; unavailable encryption still surfaces as an operation failure.
+
+## 2026-06-12 - P2 Native Remote Sync Request Boundary
+
+Completed:
+
+- Added a provider-neutral Electron remote sync request IPC bridge with generated request ids, timeout handling, and cancellation.
+- Added bounded validation for request URL, method, headers, body encoding, response mode, response size, and secret bindings.
+- Blocked sensitive plain request headers and injected stored secrets only inside Electron main as request headers or top-level JSON fields.
+- Added JSON, text, and base64 response modes while filtering response `set-cookie` headers before data returns to the renderer.
+- Added a platform transport helper that resolves the preload bridge, assigns request ids, and forwards `AbortSignal` cancellation through the native bridge.
+- Kept Feishu endpoints, OAuth scopes, app ids, folder tokens, access tokens, provider ids, token refresh policy, model defaults, and decrypted secret reads out of Workbench and platform defaults.
+- Updated maintained docs without adding new documentation surfaces.
+
+Quality gate:
+
+- `npx vitest run packages/platform/src/remoteSyncNativeRequest.test.ts packages/workbench/src/workbenchRemoteSyncSecrets.test.ts packages/platform/src/remoteSync.test.ts`: passed, 3 files / 35 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 78 files / 735 tests, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Remote sync native request implementation hardcode scan for endpoint/OAuth/token/secret/model/provider literals: passed
+
+Review:
+
+- The request bridge is intentionally transport-shaped and provider-neutral: renderer code supplies request metadata and `secretRef` bindings, while Electron owns secret injection, timeout, cancellation, and network execution.
+- Sensitive credentials are never returned to the renderer; secret material is read only inside the main process and only for a specific request binding.
+- Header count, header value, request body, response body, secret binding, and base64 validation are enforced before execution so future providers cannot bypass configured bounds through preload.
+
+Known limitations:
+
+- No Feishu Drive provider, OAuth flow, token refresh flow, upload/download adapter, or provider configuration UI is registered yet.
+- The native request bridge does not implement provider-specific retry, pagination, rate-limit backoff, or resumable uploads; those remain provider responsibilities behind the remote sync service boundary.
+- Request execution currently buffers responses for bounded JSON/text/base64 return values; streaming upload/download remains future work.

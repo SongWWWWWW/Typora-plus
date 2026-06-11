@@ -35,6 +35,11 @@ interface Window {
       setSecret(secretRef: string, value: string): Promise<boolean>;
       deleteSecret(secretRef: string): Promise<boolean>;
     };
+    readonly remoteSyncRequests?: {
+      readonly isAvailable: boolean;
+      request(request: unknown): Promise<unknown>;
+      cancel(requestId: string): void;
+    };
     readonly documentExport?: {
       readonly isAvailable: boolean;
       saveDocument(document: unknown): Promise<boolean>;

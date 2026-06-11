@@ -5,6 +5,7 @@ import { nativeExportIpcChannels } from "./nativeExportIpc.js";
 import { nativeFileIpcChannels } from "./nativeFileIpc.js";
 import { nativeIndexSnapshotIpcChannels } from "./nativeIndexSnapshotIpc.js";
 import { nativeRemoteSyncManifestIpcChannels } from "./nativeRemoteSyncManifestIpc.js";
+import { nativeRemoteSyncRequestIpcChannels } from "./nativeRemoteSyncRequestIpc.js";
 import { nativeRemoteSyncSecretIpcChannels } from "./nativeRemoteSyncSecretIpc.js";
 
 contextBridge.exposeInMainWorld("typoraPlus", {
@@ -46,6 +47,11 @@ contextBridge.exposeInMainWorld("typoraPlus", {
       ipcRenderer.invoke(nativeRemoteSyncSecretIpcChannels.setSecret, secretRef, value),
     deleteSecret: (secretRef: string) =>
       ipcRenderer.invoke(nativeRemoteSyncSecretIpcChannels.deleteSecret, secretRef)
+  },
+  remoteSyncRequests: {
+    isAvailable: true,
+    request: (request: unknown) => ipcRenderer.invoke(nativeRemoteSyncRequestIpcChannels.request, request),
+    cancel: (requestId: string) => ipcRenderer.send(nativeRemoteSyncRequestIpcChannels.cancel, requestId)
   },
   documentExport: {
     isAvailable: true,
