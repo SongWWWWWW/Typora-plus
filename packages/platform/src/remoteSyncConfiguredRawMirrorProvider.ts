@@ -50,6 +50,32 @@ export const remoteSyncConfiguredRawMirrorRetryLimits = {
   maxStatusCodes: 16
 } as const;
 
+export const remoteSyncConfiguredRawMirrorMetadataIssueCodes = {
+  incompleteHeader: "incomplete-header",
+  incompleteRetry: "incomplete-retry",
+  invalidHeaderName: "invalid-header-name",
+  invalidHeaderScheme: "invalid-header-scheme",
+  invalidPath: "invalid-path",
+  invalidRetryDelayMs: "invalid-retry-delay-ms",
+  invalidRetryMaxRetries: "invalid-retry-max-retries",
+  invalidRetryStatusCodes: "invalid-retry-status-codes",
+  missingPath: "missing-path",
+  unboundHeader: "unbound-header"
+} as const;
+
+export type RemoteSyncConfiguredRawMirrorMetadataIssueCode =
+  typeof remoteSyncConfiguredRawMirrorMetadataIssueCodes[
+    keyof typeof remoteSyncConfiguredRawMirrorMetadataIssueCodes
+  ];
+
+export type RemoteSyncConfiguredRawMirrorMetadataKey =
+  typeof remoteSyncConfiguredRawMirrorMetadataKeys[keyof typeof remoteSyncConfiguredRawMirrorMetadataKeys];
+
+export interface RemoteSyncConfiguredRawMirrorMetadataIssue {
+  readonly code: RemoteSyncConfiguredRawMirrorMetadataIssueCode;
+  readonly key?: RemoteSyncConfiguredRawMirrorMetadataKey;
+}
+
 export interface RemoteSyncConfiguredRawMirrorProviderFactoryOptions {
   readonly manifestStorage?: RemoteSyncManifestStorage;
 }
@@ -83,6 +109,13 @@ const configuredRawMirrorLimits = {
   maxResponseResources: 20_000
 } as const;
 
+const configuredRawMirrorPathMetadataKeys = [
+  remoteSyncConfiguredRawMirrorMetadataKeys.listPath,
+  remoteSyncConfiguredRawMirrorMetadataKeys.uploadPath,
+  remoteSyncConfiguredRawMirrorMetadataKeys.downloadPath,
+  remoteSyncConfiguredRawMirrorMetadataKeys.deletePath
+] as const satisfies readonly RemoteSyncConfiguredRawMirrorMetadataKey[];
+
 export function createRemoteSyncConfiguredRawMirrorProviderFactory(
   options: RemoteSyncConfiguredRawMirrorProviderFactoryOptions = {}
 ): RemoteSyncConfiguredProviderFactory {
@@ -114,6 +147,40 @@ export function createRemoteSyncConfiguredRawMirrorProviderFactory(
       }
     });
   };
+}
+
+export function diagnoseRemoteSyncConfiguredRawMirrorMetadata(
+  profile: RemoteSyncProviderConfiguration
+): readonly RemoteSyncConfiguredRawMirrorMetadataIssue[] {
+  const metadata = profile.metadata ?? {};
+
+  if (metadata[remoteSyncConfiguredRawMirrorMetadataKeys.adapter] !== remoteSyncConfiguredRawMirrorAdapterName) {
+    return [];
+  }
+
+  const issues: RemoteSyncConfiguredRawMirrorMetadataIssue[] = [];
+
+  for (const key of configuredRawMirrorPathMetadataKeys) {
+    const issue = diagnoseConfiguredRawMirrorMetadataPath(metadata, key);
+
+    if (issue) {
+      issues.push(issue);
+    }
+  }
+
+  const headerIssue = diagnoseConfiguredRawMirrorSecretHeaderMetadata(profile, metadata);
+
+  if (headerIssue) {
+    issues.push(headerIssue);
+  }
+
+  const retryIssue = diagnoseConfiguredRawMirrorRetryMetadata(metadata);
+
+  if (retryIssue) {
+    issues.push(retryIssue);
+  }
+
+  return issues;
 }
 
 async function listConfiguredRawMirrorResources(
@@ -455,6 +522,10 @@ function readConfiguredRawMirrorProfile(
     return undefined;
   }
 
+  if (diagnoseRemoteSyncConfiguredRawMirrorMetadata(profile).length > 0) {
+    return undefined;
+  }
+
   const listPath = readConfiguredRawMirrorMetadataPath(metadata, remoteSyncConfiguredRawMirrorMetadataKeys.listPath);
   const uploadPath = readConfiguredRawMirrorMetadataPath(metadata, remoteSyncConfiguredRawMirrorMetadataKeys.uploadPath);
   const downloadPath = readConfiguredRawMirrorMetadataPath(
@@ -477,6 +548,142 @@ function readConfiguredRawMirrorProfile(
     ...(secretHeader !== undefined ? { secretHeader } : {}),
     ...(retry !== undefined ? { retry } : {})
   };
+}
+
+function diagnoseConfiguredRawMirrorMetadataPath(
+  metadata: Readonly<Record<string, string>>,
+  key: RemoteSyncConfiguredRawMirrorMetadataKey
+): RemoteSyncConfiguredRawMirrorMetadataIssue | undefined {
+  const normalized = normalizeConfiguredRawMirrorMetadataValue(metadata[key]);
+
+  if (!normalized) {
+    return {
+      code: remoteSyncConfiguredRawMirrorMetadataIssueCodes.missingPath,
+      key
+    };
+  }
+
+  if (!isConfiguredRawMirrorMetadataPath(normalized)) {
+    return {
+      code: remoteSyncConfiguredRawMirrorMetadataIssueCodes.invalidPath,
+      key
+    };
+  }
+
+  return undefined;
+}
+
+function diagnoseConfiguredRawMirrorSecretHeaderMetadata(
+  profile: RemoteSyncProviderConfiguration,
+  metadata: Readonly<Record<string, string>>
+): RemoteSyncConfiguredRawMirrorMetadataIssue | undefined {
+  const secretName = normalizeConfiguredRawMirrorMetadataValue(
+    metadata[remoteSyncConfiguredRawMirrorMetadataKeys.headerBinding]
+  );
+  const headerName = normalizeConfiguredRawMirrorMetadataValue(
+    metadata[remoteSyncConfiguredRawMirrorMetadataKeys.headerName]
+  );
+  const scheme = normalizeConfiguredRawMirrorMetadataValue(
+    metadata[remoteSyncConfiguredRawMirrorMetadataKeys.headerScheme]
+  );
+
+  if (!secretName && !headerName && !scheme) {
+    return undefined;
+  }
+
+  if (!secretName || !headerName) {
+    return {
+      code: remoteSyncConfiguredRawMirrorMetadataIssueCodes.incompleteHeader,
+      key: !secretName
+        ? remoteSyncConfiguredRawMirrorMetadataKeys.headerBinding
+        : remoteSyncConfiguredRawMirrorMetadataKeys.headerName
+    };
+  }
+
+  if (!isConfiguredRawMirrorHeaderName(headerName)) {
+    return {
+      code: remoteSyncConfiguredRawMirrorMetadataIssueCodes.invalidHeaderName,
+      key: remoteSyncConfiguredRawMirrorMetadataKeys.headerName
+    };
+  }
+
+  if (!isConfiguredRawMirrorHeaderScheme(scheme)) {
+    return {
+      code: remoteSyncConfiguredRawMirrorMetadataIssueCodes.invalidHeaderScheme,
+      key: remoteSyncConfiguredRawMirrorMetadataKeys.headerScheme
+    };
+  }
+
+  if (!profile.secrets.some((secret) => secret.name === secretName)) {
+    return {
+      code: remoteSyncConfiguredRawMirrorMetadataIssueCodes.unboundHeader,
+      key: remoteSyncConfiguredRawMirrorMetadataKeys.headerBinding
+    };
+  }
+
+  return undefined;
+}
+
+function diagnoseConfiguredRawMirrorRetryMetadata(
+  metadata: Readonly<Record<string, string>>
+): RemoteSyncConfiguredRawMirrorMetadataIssue | undefined {
+  const statusCodes = normalizeConfiguredRawMirrorMetadataValue(
+    metadata[remoteSyncConfiguredRawMirrorMetadataKeys.retryStatusCodes]
+  );
+  const maxRetries = normalizeConfiguredRawMirrorMetadataValue(
+    metadata[remoteSyncConfiguredRawMirrorMetadataKeys.retryMaxRetries]
+  );
+  const delayMs = normalizeConfiguredRawMirrorMetadataValue(
+    metadata[remoteSyncConfiguredRawMirrorMetadataKeys.retryDelayMs]
+  );
+
+  if (!statusCodes && !maxRetries && !delayMs) {
+    return undefined;
+  }
+
+  if (!statusCodes) {
+    return {
+      code: remoteSyncConfiguredRawMirrorMetadataIssueCodes.incompleteRetry,
+      key: remoteSyncConfiguredRawMirrorMetadataKeys.retryStatusCodes
+    };
+  }
+
+  if (!readConfiguredRawMirrorRetryStatusCodes(statusCodes)) {
+    return {
+      code: remoteSyncConfiguredRawMirrorMetadataIssueCodes.invalidRetryStatusCodes,
+      key: remoteSyncConfiguredRawMirrorMetadataKeys.retryStatusCodes
+    };
+  }
+
+  if (
+    readConfiguredRawMirrorOptionalInteger(
+      maxRetries,
+      remoteSyncConfiguredRawMirrorRetryLimits.defaultMaxRetries,
+      0,
+      remoteSyncConfiguredRawMirrorRetryLimits.maxRetries
+    ) === undefined
+  ) {
+    return {
+      code: remoteSyncConfiguredRawMirrorMetadataIssueCodes.invalidRetryMaxRetries,
+      key: remoteSyncConfiguredRawMirrorMetadataKeys.retryMaxRetries
+    };
+  }
+
+  if (
+    readConfiguredRawMirrorOptionalInteger(
+      delayMs,
+      remoteSyncConfiguredRawMirrorRetryLimits.defaultDelayMs,
+      0,
+      remoteSyncConfiguredRawMirrorRetryLimits.maxDelayMs
+    ) === undefined
+  ) {
+    return {
+      code: remoteSyncConfiguredRawMirrorMetadataIssueCodes.invalidRetryDelayMs,
+      key: remoteSyncConfiguredRawMirrorMetadataKeys.retryDelayMs
+    };
+  }
+
+  return undefined;
 }
 
 function readConfiguredRawMirrorRetryPolicy(
@@ -601,22 +808,32 @@ function readConfiguredRawMirrorMetadataPath(
 ): string | undefined {
   const normalized = normalizeConfiguredRawMirrorMetadataValue(metadata[key]);
 
-  if (!normalized) {
-    return undefined;
-  }
-
-  if (
-    normalized.startsWith("/") ||
-    normalized.startsWith("//") ||
-    normalized.includes("\\") ||
-    /[?#]/.test(normalized) ||
-    /^[A-Za-z][A-Za-z0-9+.-]*:/.test(normalized) ||
-    hasConfiguredRawMirrorParentTraversal(normalized)
-  ) {
+  if (!normalized || !isConfiguredRawMirrorMetadataPath(normalized)) {
     return undefined;
   }
 
   return normalized;
+}
+
+function isConfiguredRawMirrorMetadataPath(normalized: string): boolean {
+  return !(
+    normalized.startsWith("/") ||
+    normalized.startsWith("//") ||
+    normalized.includes("\\") ||
+    normalized.length > configuredRawMirrorLimits.maxPathLength ||
+    /[?#]/.test(normalized) ||
+    /[\u0000-\u001f]/.test(normalized) ||
+    /^[A-Za-z][A-Za-z0-9+.-]*:/.test(normalized) ||
+    hasConfiguredRawMirrorParentTraversal(normalized)
+  );
+}
+
+function isConfiguredRawMirrorHeaderName(value: string): boolean {
+  return /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/.test(value);
+}
+
+function isConfiguredRawMirrorHeaderScheme(value: string | undefined): boolean {
+  return value === undefined || (value.length <= 128 && !/[\r\n]/.test(value));
 }
 
 function normalizeConfiguredRawMirrorMetadataValue(value: unknown): string | undefined {

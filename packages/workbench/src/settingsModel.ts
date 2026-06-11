@@ -4,11 +4,12 @@ import {
   clampConfigurationNumber,
   configurationBytesPerMegabyte,
   configurationNumberConstraints,
+  diagnoseRemoteSyncConfiguredRawMirrorMetadata,
   normalizeAiProviderConfiguration,
   normalizeRemoteSyncProviderConfiguration,
   remoteSyncConfiguredRawMirrorAdapterName,
+  remoteSyncConfiguredRawMirrorMetadataIssueCodes,
   remoteSyncConfiguredRawMirrorMetadataKeys,
-  remoteSyncConfiguredRawMirrorRetryLimits,
   type AiProviderConfiguration,
   type AiProviderReasoningEffort,
   type AiProviderTextVerbosity,
@@ -757,157 +758,24 @@ function readSettingsMetadataText(value: string): Readonly<Record<string, string
 function getSettingsRawMirrorMetadataIssue(
   provider: RemoteSyncProviderConfiguration
 ): string | undefined {
-  const metadata = provider.metadata ?? {};
+  const issues = diagnoseRemoteSyncConfiguredRawMirrorMetadata(provider);
 
-  if (
-    metadata[remoteSyncConfiguredRawMirrorMetadataKeys.adapter] !== remoteSyncConfiguredRawMirrorAdapterName
-  ) {
+  if (issues.length === 0) {
     return undefined;
   }
 
-  if (
-    !isSettingsRawMirrorMetadataPath(metadata[remoteSyncConfiguredRawMirrorMetadataKeys.listPath]) ||
-    !isSettingsRawMirrorMetadataPath(metadata[remoteSyncConfiguredRawMirrorMetadataKeys.uploadPath]) ||
-    !isSettingsRawMirrorMetadataPath(metadata[remoteSyncConfiguredRawMirrorMetadataKeys.downloadPath]) ||
-    !isSettingsRawMirrorMetadataPath(metadata[remoteSyncConfiguredRawMirrorMetadataKeys.deletePath]) ||
-    !isSettingsRawMirrorHeaderMetadataComplete(provider, metadata)
-  ) {
-    return settingsRawMirrorMetadataInvalidIssue;
-  }
-
-  if (!isSettingsRawMirrorRetryMetadataComplete(metadata)) {
+  if (issues.some((issue) => isSettingsRawMirrorRetryMetadataIssueCode(issue.code))) {
     return settingsRawMirrorRetryInvalidIssue;
   }
 
-  return undefined;
+  return settingsRawMirrorMetadataInvalidIssue;
 }
 
-function isSettingsRawMirrorMetadataPath(value: unknown): boolean {
-  const normalized = normalizeSettingsRawMirrorMetadataValue(value);
-
-  if (!normalized) {
-    return false;
-  }
-
-  return !(
-    normalized.startsWith("/") ||
-    normalized.startsWith("//") ||
-    normalized.includes("\\") ||
-    /[?#]/.test(normalized) ||
-    /^[A-Za-z][A-Za-z0-9+.-]*:/.test(normalized) ||
-    hasSettingsRawMirrorParentTraversal(normalized)
-  );
-}
-
-function isSettingsRawMirrorHeaderMetadataComplete(
-  provider: RemoteSyncProviderConfiguration,
-  metadata: Readonly<Record<string, string>>
-): boolean {
-  const binding = normalizeSettingsRawMirrorMetadataValue(
-    metadata[remoteSyncConfiguredRawMirrorMetadataKeys.headerBinding]
-  );
-  const name = normalizeSettingsRawMirrorMetadataValue(
-    metadata[remoteSyncConfiguredRawMirrorMetadataKeys.headerName]
-  );
-  const scheme = normalizeSettingsRawMirrorMetadataValue(
-    metadata[remoteSyncConfiguredRawMirrorMetadataKeys.headerScheme]
-  );
-
-  if (!binding && !name && !scheme) {
-    return true;
-  }
-
-  return !!binding &&
-    !!name &&
-    isSettingsRawMirrorHeaderName(name) &&
-    isSettingsRawMirrorHeaderScheme(scheme) &&
-    provider.secrets.some((secret) => secret.name === binding);
-}
-
-function normalizeSettingsRawMirrorMetadataValue(value: unknown): string | undefined {
-  return typeof value === "string" ? value.trim() || undefined : undefined;
-}
-
-function isSettingsRawMirrorHeaderName(value: string): boolean {
-  return /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/.test(value);
-}
-
-function isSettingsRawMirrorHeaderScheme(value: string | undefined): boolean {
-  return value === undefined || (value.length <= 128 && !/[\r\n]/.test(value));
-}
-
-function isSettingsRawMirrorRetryMetadataComplete(metadata: Readonly<Record<string, string>>): boolean {
-  const statusCodes = normalizeSettingsRawMirrorMetadataValue(
-    metadata[remoteSyncConfiguredRawMirrorMetadataKeys.retryStatusCodes]
-  );
-  const maxRetries = normalizeSettingsRawMirrorMetadataValue(
-    metadata[remoteSyncConfiguredRawMirrorMetadataKeys.retryMaxRetries]
-  );
-  const delayMs = normalizeSettingsRawMirrorMetadataValue(
-    metadata[remoteSyncConfiguredRawMirrorMetadataKeys.retryDelayMs]
-  );
-
-  if (!statusCodes && !maxRetries && !delayMs) {
-    return true;
-  }
-
-  return !!statusCodes &&
-    isSettingsRawMirrorRetryStatusCodes(statusCodes) &&
-    isSettingsRawMirrorOptionalInteger(maxRetries, 0, remoteSyncConfiguredRawMirrorRetryLimits.maxRetries) &&
-    isSettingsRawMirrorOptionalInteger(delayMs, 0, remoteSyncConfiguredRawMirrorRetryLimits.maxDelayMs);
-}
-
-function isSettingsRawMirrorRetryStatusCodes(value: string): boolean {
-  const statusCodes = new Set<number>();
-
-  for (const part of value.split(/[\s,]+/)) {
-    if (!part) {
-      continue;
-    }
-
-    const statusCode = Number(part);
-
-    if (
-      !Number.isInteger(statusCode) ||
-      statusCode < 400 ||
-      statusCode > 599 ||
-      statusCodes.size >= remoteSyncConfiguredRawMirrorRetryLimits.maxStatusCodes
-    ) {
-      return false;
-    }
-
-    statusCodes.add(statusCode);
-  }
-
-  return statusCodes.size > 0;
-}
-
-function isSettingsRawMirrorOptionalInteger(
-  value: string | undefined,
-  min: number,
-  max: number
-): boolean {
-  if (value === undefined) {
-    return true;
-  }
-
-  const parsed = Number(value);
-
-  return Number.isInteger(parsed) && parsed >= min && parsed <= max;
-}
-
-function hasSettingsRawMirrorParentTraversal(path: string): boolean {
-  return path.split("/").some((segment) => {
-    if (segment === "..") {
-      return true;
-    }
-
-    try {
-      return decodeURIComponent(segment) === "..";
-    } catch {
-      return false;
-    }
-  });
+function isSettingsRawMirrorRetryMetadataIssueCode(code: string): boolean {
+  return code === remoteSyncConfiguredRawMirrorMetadataIssueCodes.incompleteRetry ||
+    code === remoteSyncConfiguredRawMirrorMetadataIssueCodes.invalidRetryDelayMs ||
+    code === remoteSyncConfiguredRawMirrorMetadataIssueCodes.invalidRetryMaxRetries ||
+    code === remoteSyncConfiguredRawMirrorMetadataIssueCodes.invalidRetryStatusCodes;
 }
 
 function compareSettingsAiProviders(

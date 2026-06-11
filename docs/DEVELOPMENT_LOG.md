@@ -8108,3 +8108,32 @@ Known limitations:
 
 - The guided form configures the generic raw mirror gateway only; direct Feishu Drive API translation remains adapter work.
 - The UI still depends on provider profile authors knowing their gateway route paths and secret binding names.
+
+## 2026-06-12 - P2 Platform Raw Mirror Metadata Diagnostics
+
+Completed:
+
+- Added platform-owned configured raw mirror metadata diagnostics with stable issue codes.
+- Reused the same diagnostics before raw mirror provider registration and Settings save validation.
+- Removed duplicate Settings-side path, header, and retry parsing policy.
+- Kept Settings responsible only for mapping platform diagnostics to existing user-facing validation text.
+- Added focused coverage for missing/invalid paths, incomplete/invalid/unbound secret headers, incomplete/invalid retry metadata, and provider skipping when diagnostics fail.
+
+Quality gate:
+
+- `npx vitest run packages/platform/src/remoteSyncConfiguredRawMirrorProvider.test.ts packages/workbench/src/settingsModel.test.ts`: passed, 2 files / 40 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 87 files / 828 tests, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Raw mirror diagnostics hardcode scan for OpenAI endpoints, model ids, API keys, Feishu endpoints, OAuth/token/secret literals, and provider credentials: passed
+
+Review:
+
+- Provider registration and Settings validation now reject the same malformed raw mirror profiles instead of drifting.
+- This keeps future Feishu or other cloud adapters behind platform metadata semantics while Workbench remains a UI draft surface.
+- No Feishu endpoint, OAuth scope, token name, folder id, model id, provider id, storage path, or credential literal was added.
+
+Known limitations:
+
+- The diagnostics still validate the generic raw mirror gateway contract; direct Feishu Drive token lifecycle, remote folder mapping, pagination, and upload-session behavior remain adapter work.

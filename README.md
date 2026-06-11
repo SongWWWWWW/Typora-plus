@@ -62,6 +62,7 @@ P2 main progress is implemented:
 - Settings validates configured raw mirror metadata before saving remote sync profiles, including required relative gateway paths and optional secret header bindings, so metadata-gated providers do not fail silently after configuration changes.
 - configured raw mirror gateways can opt into bounded retry for selected HTTP status codes through non-sensitive metadata, with Settings validation for retry status, retry count, and delay values.
 - Settings includes structured raw mirror metadata draft helpers and guided raw mirror profile fields that preserve unknown profile metadata while editing raw mirror route, header, and retry metadata.
+- configured raw mirror metadata diagnostics are platform-owned and consumed by Settings, keeping provider registration and profile-edit validation aligned for future cloud adapters.
 
 ## Commands
 

@@ -3,9 +3,11 @@ import { describe, expect, it, vi } from "vitest";
 import type { RemoteSyncProviderConfiguration } from "./configuration";
 import {
   createConfiguredRemoteSyncProviders,
+  diagnoseRemoteSyncConfiguredRawMirrorMetadata,
   type RemoteSyncNativeRequestInput,
   type RemoteSyncNativeRequestTransport,
   remoteSyncConfiguredRawMirrorAdapterName,
+  remoteSyncConfiguredRawMirrorMetadataIssueCodes,
   remoteSyncConfiguredRawMirrorMetadataKeys,
   createRemoteSyncConfiguredRawMirrorProviderFactory
 } from "./index";
@@ -216,6 +218,127 @@ describe("configured raw mirror remote sync provider", () => {
     expect(providers).toEqual([]);
   });
 
+  it("diagnoses configured raw mirror metadata before provider registration", () => {
+    const keys = remoteSyncConfiguredRawMirrorMetadataKeys;
+    const codes = remoteSyncConfiguredRawMirrorMetadataIssueCodes;
+
+    expect(diagnoseRemoteSyncConfiguredRawMirrorMetadata(configuration())).toEqual([]);
+    expect(diagnoseRemoteSyncConfiguredRawMirrorMetadata(configuration({
+      metadata: {
+        [keys.downloadPath]: undefined
+      }
+    }))).toEqual([
+      {
+        code: codes.missingPath,
+        key: keys.downloadPath
+      }
+    ]);
+    expect(diagnoseRemoteSyncConfiguredRawMirrorMetadata(configuration({
+      metadata: {
+        [keys.uploadPath]: "../upload"
+      }
+    }))).toEqual([
+      {
+        code: codes.invalidPath,
+        key: keys.uploadPath
+      }
+    ]);
+    expect(diagnoseRemoteSyncConfiguredRawMirrorMetadata(configuration({
+      metadata: {
+        [keys.headerName]: undefined
+      }
+    }))).toEqual([
+      {
+        code: codes.incompleteHeader,
+        key: keys.headerName
+      }
+    ]);
+    expect(diagnoseRemoteSyncConfiguredRawMirrorMetadata(configuration({
+      metadata: {
+        [keys.headerName]: "Bad Header"
+      }
+    }))).toEqual([
+      {
+        code: codes.invalidHeaderName,
+        key: keys.headerName
+      }
+    ]);
+    expect(diagnoseRemoteSyncConfiguredRawMirrorMetadata(configuration({
+      metadata: {
+        [keys.headerBinding]: "missing"
+      }
+    }))).toEqual([
+      {
+        code: codes.unboundHeader,
+        key: keys.headerBinding
+      }
+    ]);
+    expect(diagnoseRemoteSyncConfiguredRawMirrorMetadata(configuration({
+      metadata: {
+        [keys.retryMaxRetries]: "2"
+      }
+    }))).toEqual([
+      {
+        code: codes.incompleteRetry,
+        key: keys.retryStatusCodes
+      }
+    ]);
+    expect(diagnoseRemoteSyncConfiguredRawMirrorMetadata(configuration({
+      metadata: {
+        [keys.retryStatusCodes]: "200"
+      }
+    }))).toEqual([
+      {
+        code: codes.invalidRetryStatusCodes,
+        key: keys.retryStatusCodes
+      }
+    ]);
+    expect(diagnoseRemoteSyncConfiguredRawMirrorMetadata(configuration({
+      metadata: {
+        [keys.retryStatusCodes]: "503",
+        [keys.retryMaxRetries]: "6"
+      }
+    }))).toEqual([
+      {
+        code: codes.invalidRetryMaxRetries,
+        key: keys.retryMaxRetries
+      }
+    ]);
+    expect(diagnoseRemoteSyncConfiguredRawMirrorMetadata(configuration({
+      metadata: {
+        [keys.retryStatusCodes]: "503",
+        [keys.retryDelayMs]: "-1"
+      }
+    }))).toEqual([
+      {
+        code: codes.invalidRetryDelayMs,
+        key: keys.retryDelayMs
+      }
+    ]);
+  });
+
+  it("skips raw mirror profiles with invalid metadata diagnostics", () => {
+    const providers = createConfiguredRemoteSyncProviders([
+      configuration({
+        metadata: {
+          [remoteSyncConfiguredRawMirrorMetadataKeys.headerBinding]: "missing"
+        }
+      })
+    ], {
+      transport: createTransport([], []),
+      workspaceResources: {
+        readResource: vi.fn(),
+        writeResource: vi.fn(),
+        deleteResource: vi.fn()
+      },
+      createProvider: createRemoteSyncConfiguredRawMirrorProviderFactory({
+        manifestStorage: createMemoryManifestStorage()
+      })
+    });
+
+    expect(providers).toEqual([]);
+  });
+
   it("keeps configured raw mirror snapshots file-only", async () => {
     const providers = createConfiguredRemoteSyncProviders([
       configuration()
@@ -390,25 +513,29 @@ describe("configured raw mirror remote sync provider", () => {
 });
 
 function configuration(
-  overrides: { readonly metadata?: Readonly<Record<string, string>> } = {}
+  overrides: { readonly metadata?: Readonly<Record<string, string | undefined>> } = {}
 ): RemoteSyncProviderConfiguration {
+  const metadata: Record<string, string | undefined> = {
+    [remoteSyncConfiguredRawMirrorMetadataKeys.adapter]: remoteSyncConfiguredRawMirrorAdapterName,
+    [remoteSyncConfiguredRawMirrorMetadataKeys.listPath]: "mirror/list",
+    [remoteSyncConfiguredRawMirrorMetadataKeys.uploadPath]: "mirror/upload",
+    [remoteSyncConfiguredRawMirrorMetadataKeys.downloadPath]: "mirror/download",
+    [remoteSyncConfiguredRawMirrorMetadataKeys.deletePath]: "mirror/delete",
+    [remoteSyncConfiguredRawMirrorMetadataKeys.headerBinding]: "session",
+    [remoteSyncConfiguredRawMirrorMetadataKeys.headerName]: "Authorization",
+    [remoteSyncConfiguredRawMirrorMetadataKeys.headerScheme]: "Bearer",
+    ...overrides.metadata
+  };
+
   return {
     id: "notes.raw",
     title: "Notes Raw Mirror",
     kind: "native-request",
     baseUrl: "https://sync.example.test/api/",
     remoteScopeId: "workspace-root",
-    metadata: {
-      [remoteSyncConfiguredRawMirrorMetadataKeys.adapter]: remoteSyncConfiguredRawMirrorAdapterName,
-      [remoteSyncConfiguredRawMirrorMetadataKeys.listPath]: "mirror/list",
-      [remoteSyncConfiguredRawMirrorMetadataKeys.uploadPath]: "mirror/upload",
-      [remoteSyncConfiguredRawMirrorMetadataKeys.downloadPath]: "mirror/download",
-      [remoteSyncConfiguredRawMirrorMetadataKeys.deletePath]: "mirror/delete",
-      [remoteSyncConfiguredRawMirrorMetadataKeys.headerBinding]: "session",
-      [remoteSyncConfiguredRawMirrorMetadataKeys.headerName]: "Authorization",
-      [remoteSyncConfiguredRawMirrorMetadataKeys.headerScheme]: "Bearer",
-      ...overrides.metadata
-    },
+    metadata: Object.fromEntries(
+      Object.entries(metadata).filter((entry): entry is [string, string] => entry[1] !== undefined)
+    ),
     secrets: [
       {
         name: "session",
