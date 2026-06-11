@@ -23,6 +23,10 @@ export const desktopShellConfig = {
     storageDirectory: "workspace-index",
     maxValueBytes: 5 * 1024 * 1024
   },
+  remoteSyncManifests: {
+    storageDirectory: "remote-sync-manifests",
+    maxValueBytes: 1 * 1024 * 1024
+  },
   exportDocuments: {
     maxValueBytes: 10 * 1024 * 1024,
     maxAssetBytes: 5 * 1024 * 1024,

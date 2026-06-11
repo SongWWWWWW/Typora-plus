@@ -7339,3 +7339,35 @@ Known limitations:
 - No Feishu Drive provider, OAuth flow, token storage, or upload/download execution adapter is registered yet.
 - Providers need post-execution snapshots with comparable metadata, preferably content hashes; size/mtime-only providers must ensure both sides normalize timestamps consistently.
 - The manifest update helper is not yet wired into a built-in provider because no built-in remote sync provider exists.
+
+## 2026-06-12 - P2 Native Remote Sync Manifest Storage
+
+Completed:
+
+- Added an Electron native IPC bridge for remote sync manifest storage, matching the existing index snapshot storage boundary.
+- Routed the platform default remote sync manifest storage through the native bridge when available, with browser storage retained as fallback.
+- Kept the native bridge narrow: renderer code can only read/write bounded string values by safe manifest storage key, while the main process owns app-data file access and value-size limits.
+- Added renderer typing for the manifest bridge and registered the IPC from the desktop main process.
+- Kept Feishu endpoints, OAuth scopes, app ids, folder tokens, access tokens, credentials, model defaults, and provider ids out of the native storage bridge.
+- Updated maintained docs without adding new documentation surfaces.
+
+Quality gate:
+
+- `npx vitest run packages/platform/src/platform.test.ts packages/platform/src/remoteSync.test.ts`: passed, 2 files / 129 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 76 files / 726 tests, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Remote sync/native manifest bridge hardcode scan for endpoint/secret/token/model/provider patterns: passed after excluding the pre-existing local dev-server URL in shell config
+
+Review:
+
+- The desktop bridge implements storage only; it does not execute sync, know provider ids, store credentials, or choose a Feishu remote target.
+- Platform still owns manifest snapshot validation and scope hashing, while Electron owns only bounded key/value file persistence under the app data boundary.
+- This mirrors the workspace index snapshot pattern, so future native storage changes can stay behind the same injected storage contract.
+
+Known limitations:
+
+- No Feishu Drive provider, OAuth flow, token storage, or upload/download execution adapter is registered yet.
+- The native storage bridge is synchronous like the existing index snapshot bridge; larger or more frequent manifest writes may eventually merit an async IPC variant.
+- Manifest values remain provider-neutral JSON snapshots; provider-specific remote metadata still needs to fit the normalized manifest resource contract.

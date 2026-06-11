@@ -21,6 +21,7 @@ import {
   NativeResourceService,
   parseContextKeyExpression,
   createDefaultWorkspaceIndexSnapshotStorage,
+  createDefaultRemoteSyncManifestStorage,
   RemoteSyncService,
   defaultConfiguration,
   flattenFileTree,
@@ -2724,6 +2725,37 @@ describe("workspace index", () => {
 
       expect(storage?.read("typora-plus.workspaceIndex.snapshot")).toBe("snapshot");
       expect(values.get("typora-plus.workspaceIndex.snapshot")).toBe("snapshot");
+    } finally {
+      (globalThis as { typoraPlus?: unknown }).typoraPlus = previousTyporaPlus;
+    }
+  });
+
+  it("uses a native remote sync manifest bridge when available", () => {
+    const previousTyporaPlus = (globalThis as { typoraPlus?: unknown }).typoraPlus;
+    const values = new Map<string, string>();
+    (globalThis as {
+      typoraPlus?: {
+        readonly remoteSyncManifests: {
+          readonly isAvailable: boolean;
+          read(key: string): string | undefined;
+          write(key: string, value: string): void;
+        };
+      };
+    }).typoraPlus = {
+      remoteSyncManifests: {
+        isAvailable: true,
+        read: (key) => values.get(key),
+        write: (key, value) => values.set(key, value)
+      }
+    };
+
+    try {
+      const storage = createDefaultRemoteSyncManifestStorage();
+
+      storage?.write("typora-plus.remoteSync.manifest", "manifest");
+
+      expect(storage?.read("typora-plus.remoteSync.manifest")).toBe("manifest");
+      expect(values.get("typora-plus.remoteSync.manifest")).toBe("manifest");
     } finally {
       (globalThis as { typoraPlus?: unknown }).typoraPlus = previousTyporaPlus;
     }

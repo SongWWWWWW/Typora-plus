@@ -132,6 +132,12 @@ export interface RemoteSyncManifestStorage {
   write(key: string, value: string): void;
 }
 
+export interface NativeRemoteSyncManifestBridge {
+  readonly isAvailable: boolean;
+  read(key: string): string | undefined;
+  write(key: string, value: string): void;
+}
+
 export interface RemoteSyncManifestStoreOptions {
   readonly storage: RemoteSyncManifestStorage;
   readonly storageKey?: string;
@@ -243,7 +249,7 @@ export function createRemoteSyncManifestStorageKey(
 }
 
 export function createDefaultRemoteSyncManifestStorage(): RemoteSyncManifestStorage | undefined {
-  return createBrowserRemoteSyncManifestStorage();
+  return createNativeRemoteSyncManifestStorage() ?? createBrowserRemoteSyncManifestStorage();
 }
 
 export function createBrowserRemoteSyncManifestStorage(): RemoteSyncManifestStorage | undefined {
@@ -258,6 +264,24 @@ export function createBrowserRemoteSyncManifestStorage(): RemoteSyncManifestStor
     write(key, value) {
       window.localStorage.setItem(key, value);
     }
+  };
+}
+
+function createNativeRemoteSyncManifestStorage(): RemoteSyncManifestStorage | undefined {
+  const candidate = globalThis as {
+    readonly typoraPlus?: {
+      readonly remoteSyncManifests?: NativeRemoteSyncManifestBridge;
+    };
+  };
+  const bridge = candidate.typoraPlus?.remoteSyncManifests;
+
+  if (!bridge?.isAvailable) {
+    return undefined;
+  }
+
+  return {
+    read: (key) => bridge.read(key),
+    write: (key, value) => bridge.write(key, value)
   };
 }
 

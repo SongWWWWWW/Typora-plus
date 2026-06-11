@@ -25,6 +25,11 @@ interface Window {
       read(key: string): string | undefined;
       write(key: string, value: string): boolean;
     };
+    readonly remoteSyncManifests?: {
+      readonly isAvailable: boolean;
+      read(key: string): string | undefined;
+      write(key: string, value: string): boolean;
+    };
     readonly documentExport?: {
       readonly isAvailable: boolean;
       saveDocument(document: unknown): Promise<boolean>;

@@ -6,6 +6,7 @@ import { registerNativeConfigurationIpc } from "./nativeConfigurationIpc.js";
 import { registerNativeExportIpc } from "./nativeExportIpc.js";
 import { registerNativeFileIpc } from "./nativeFileIpc.js";
 import { registerNativeIndexSnapshotIpc } from "./nativeIndexSnapshotIpc.js";
+import { registerNativeRemoteSyncManifestIpc } from "./nativeRemoteSyncManifestIpc.js";
 import { desktopShellConfig } from "./shellConfig.js";
 
 const currentDir = path.dirname(fileURLToPath(import.meta.url));
@@ -14,6 +15,7 @@ registerNativeAiIpc(desktopShellConfig.ai);
 registerNativeConfigurationIpc(desktopShellConfig.configuration);
 registerNativeExportIpc(desktopShellConfig.exportDocuments);
 registerNativeIndexSnapshotIpc(desktopShellConfig.indexSnapshots);
+registerNativeRemoteSyncManifestIpc(desktopShellConfig.remoteSyncManifests);
 registerNativeFileIpc(desktopShellConfig.workspace);
 
 async function createWindow(): Promise<void> {
