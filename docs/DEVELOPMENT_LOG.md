@@ -7749,3 +7749,33 @@ Known limitations:
 
 - No concrete Feishu/raw-mirror adapter consumes the bridge yet.
 - The bridge moves file content but does not compute content hashes or discover Markdown-linked assets; those remain future provider/resource-collection work.
+
+## 2026-06-12 - P2 Remote Sync Local Content Hash Enrichment
+
+Completed:
+
+- Added provider-neutral `sha256:` content hash enrichment for remote sync workspace file resources.
+- Let Electron compute SHA-256 hashes during trusted workspace resource reads, while preserving a Web Crypto fallback when a bridge returns base64 content without a hash.
+- Bounded hashing concurrency through a named platform constant and kept directory resources out of content reads.
+- Wired Workbench remote sync planning to enrich file resources with content hashes when the native resource bridge is available, while preserving the previous size/mtime-only path when it is not.
+- Added focused tests for native-provided hashes, Web Crypto fallback hashing, resource enrichment, cancellation before reads, and Workbench plan requests receiving local hashes.
+
+Quality gate:
+
+- `npx vitest run packages/platform/src/remoteSyncWorkspaceResources.test.ts packages/workbench/src/workbenchRemoteSyncActions.test.ts`: passed, 2 files / 15 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 83 files / 794 tests, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Local content hash enrichment implementation hardcode scan for Feishu endpoints, OAuth scopes, token/secret names, model ids, provider ids, and credential literals: passed
+
+Review:
+
+- Local planning now uses stable content identity before provider calls, reducing dependence on cloud timestamp precision for future Feishu/raw mirror comparisons.
+- Hashing stays provider-neutral and sits behind existing workspace resource and Workbench action boundaries; no provider ids, endpoints, OAuth scopes, token names, folder ids, or retry policy defaults were added.
+- Native hashing avoids unnecessary renderer-side decoding for Electron, and the platform fallback keeps the helper usable for alternate bridges.
+
+Known limitations:
+
+- No concrete Feishu/raw-mirror adapter consumes the hashed resources yet.
+- Pull-side manifest refresh still needs post-write local snapshots after future download adapters write local files.

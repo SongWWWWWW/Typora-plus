@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { watch, type FSWatcher, type Stats } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -108,6 +109,7 @@ interface SerializedRemoteSyncWorkspaceResourceReadResult {
   readonly encoding: "base64";
   readonly size: number;
   readonly mtime?: number;
+  readonly contentHash?: string;
 }
 
 interface SerializedRemoteSyncWorkspaceResourceWriteResult {
@@ -385,7 +387,8 @@ export function registerNativeFileIpc(config: NativeWorkspaceConfig): void {
         value: value.toString("base64"),
         encoding: "base64",
         size: stat.size,
-        mtime: stat.mtimeMs
+        mtime: stat.mtimeMs,
+        contentHash: createRemoteSyncWorkspaceResourceContentHash(value)
       } satisfies SerializedRemoteSyncWorkspaceResourceReadResult;
     }
   );
@@ -801,6 +804,10 @@ function decodeRemoteSyncWorkspaceResourceValue(
   }
 
   return Buffer.from(value, "base64");
+}
+
+function createRemoteSyncWorkspaceResourceContentHash(value: Buffer): string {
+  return `sha256:${createHash("sha256").update(value).digest("hex")}`;
 }
 
 function isBase64Value(value: string): boolean {

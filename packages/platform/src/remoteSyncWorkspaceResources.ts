@@ -1,7 +1,9 @@
 import { URI, type URI as URIType } from "@typora-plus/base";
 import { createServiceIdentifier } from "./instantiation";
+import type { RemoteSyncProgress, RemoteSyncResource } from "./remoteSync";
 
 export type RemoteSyncWorkspaceResourceEncoding = "base64";
+export const remoteSyncWorkspaceResourceHashDefaultConcurrency = 4;
 
 export interface RemoteSyncWorkspaceResourceReadRequest {
   readonly workspaceUri: URIType;
@@ -31,6 +33,7 @@ export interface RemoteSyncWorkspaceResourceReadResult {
   readonly encoding: RemoteSyncWorkspaceResourceEncoding;
   readonly size: number;
   readonly mtime?: number;
+  readonly contentHash?: string;
 }
 
 export interface RemoteSyncWorkspaceResourceWriteResult {
@@ -68,6 +71,7 @@ export interface SerializedRemoteSyncWorkspaceResourceReadResult {
   readonly encoding: RemoteSyncWorkspaceResourceEncoding;
   readonly size: number;
   readonly mtime?: number;
+  readonly contentHash?: string;
 }
 
 export interface SerializedRemoteSyncWorkspaceResourceWriteResult {
@@ -93,6 +97,15 @@ export interface IRemoteSyncWorkspaceResourceService {
   readResource(request: RemoteSyncWorkspaceResourceReadRequest): Promise<RemoteSyncWorkspaceResourceReadResult>;
   writeResource(request: RemoteSyncWorkspaceResourceWriteRequest): Promise<RemoteSyncWorkspaceResourceWriteResult>;
   deleteResource(request: RemoteSyncWorkspaceResourceDeleteRequest): Promise<boolean>;
+}
+
+export interface RemoteSyncWorkspaceResourceHashInput {
+  readonly workspaceUri: URIType;
+  readonly resources: readonly RemoteSyncResource[];
+  readonly resourceService: Pick<IRemoteSyncWorkspaceResourceService, "readResource">;
+  readonly maxConcurrency?: number;
+  readonly onProgress?: (progress: RemoteSyncProgress) => void;
+  readonly signal?: AbortSignal;
 }
 
 export const IRemoteSyncWorkspaceResourceService =
@@ -152,6 +165,81 @@ export function createNativeRemoteSyncWorkspaceResourceBridge():
   return bridge?.isAvailable ? bridge : undefined;
 }
 
+export async function createRemoteSyncResourcesWithContentHashes(
+  input: RemoteSyncWorkspaceResourceHashInput
+): Promise<readonly RemoteSyncResource[]> {
+  const resources = [...input.resources];
+  const hashedResources = new Array<RemoteSyncResource>(resources.length);
+  const maxConcurrency = normalizeRemoteSyncWorkspaceHashConcurrency(input.maxConcurrency, resources.length);
+  let nextIndex = 0;
+  let completed = 0;
+
+  const workers = Array.from({ length: maxConcurrency }, async () => {
+    while (nextIndex < resources.length) {
+      throwIfRemoteSyncWorkspaceHashingAborted(input.signal);
+
+      const resourceIndex = nextIndex;
+      nextIndex += 1;
+
+      const resource = resources[resourceIndex]!;
+      const hashedResource = resource.kind === "file"
+        ? await createRemoteSyncResourceWithContentHash(input.workspaceUri, resource, input.resourceService, input.signal)
+        : resource;
+
+      hashedResources[resourceIndex] = hashedResource;
+      completed += 1;
+      input.onProgress?.({
+        message: "Hashed workspace resource",
+        completed,
+        total: resources.length
+      });
+    }
+  });
+
+  await Promise.all(workers);
+  return hashedResources;
+}
+
+export async function createRemoteSyncContentHash(
+  value: string,
+  encoding: RemoteSyncWorkspaceResourceEncoding
+): Promise<string> {
+  if (encoding !== "base64") {
+    throw new Error("Remote sync workspace resource hashing requires base64 content");
+  }
+
+  const digest = await digestRemoteSyncWorkspaceBytes(decodeBase64RemoteSyncWorkspaceResource(value));
+  return `sha256:${hexRemoteSyncWorkspaceBytes(digest)}`;
+}
+
+async function createRemoteSyncResourceWithContentHash(
+  workspaceUri: URIType,
+  resource: RemoteSyncResource,
+  resourceService: Pick<IRemoteSyncWorkspaceResourceService, "readResource">,
+  signal: AbortSignal | undefined
+): Promise<RemoteSyncResource> {
+  throwIfRemoteSyncWorkspaceHashingAborted(signal);
+
+  const content = await resourceService.readResource({
+    workspaceUri,
+    relativePath: resource.relativePath
+  });
+
+  throwIfRemoteSyncWorkspaceHashingAborted(signal);
+
+  const contentHash = normalizeRemoteSyncWorkspaceContentHash(content.contentHash)
+    ?? await createRemoteSyncContentHash(content.value, content.encoding);
+
+  throwIfRemoteSyncWorkspaceHashingAborted(signal);
+
+  return {
+    ...resource,
+    size: content.size,
+    ...(content.mtime !== undefined ? { mtime: content.mtime } : {}),
+    contentHash
+  };
+}
+
 function serializeRemoteSyncWorkspaceReadRequest(
   request: RemoteSyncWorkspaceResourceReadRequest
 ): SerializedRemoteSyncWorkspaceResourceReadRequest {
@@ -209,7 +297,8 @@ function reviveRemoteSyncWorkspaceReadResult(
     value: normalizeRemoteSyncWorkspaceResourceValue(result.value),
     encoding: normalizeRemoteSyncWorkspaceResourceEncoding(result.encoding),
     size: normalizeNonNegativeFiniteNumber(result.size, "Remote sync workspace resource result size"),
-    ...(mtime !== undefined ? { mtime } : {})
+    ...(mtime !== undefined ? { mtime } : {}),
+    ...normalizeOptionalRemoteSyncWorkspaceContentHashResult(result.contentHash)
   };
 }
 
@@ -303,6 +392,31 @@ function normalizeRemoteSyncWorkspaceResourceEncoding(
   return value;
 }
 
+function normalizeRemoteSyncWorkspaceContentHash(value: unknown): string | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (typeof value !== "string") {
+    throw new Error("Remote sync workspace resource content hash must be a string");
+  }
+
+  const normalized = value.trim();
+
+  if (!normalized || normalized.length > 160 || !/^[A-Za-z0-9][A-Za-z0-9_.:+/-]*$/.test(normalized)) {
+    throw new Error("Remote sync workspace resource content hash is invalid");
+  }
+
+  return normalized;
+}
+
+function normalizeOptionalRemoteSyncWorkspaceContentHashResult(
+  value: unknown
+): { readonly contentHash?: string } {
+  const contentHash = normalizeRemoteSyncWorkspaceContentHash(value);
+  return contentHash ? { contentHash } : {};
+}
+
 function normalizeNonNegativeFiniteNumber(value: unknown, label: string): number {
   if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
     throw new Error(`${label} must be a non-negative finite number`);
@@ -317,4 +431,67 @@ function normalizeOptionalNonNegativeFiniteNumber(value: unknown, label: string)
   }
 
   return normalizeNonNegativeFiniteNumber(value, label);
+}
+
+function normalizeRemoteSyncWorkspaceHashConcurrency(value: unknown, resourceCount: number): number {
+  if (resourceCount === 0) {
+    return 0;
+  }
+
+  if (value === undefined) {
+    return Math.min(remoteSyncWorkspaceResourceHashDefaultConcurrency, resourceCount);
+  }
+
+  if (typeof value !== "number" || !Number.isInteger(value) || value < 1) {
+    throw new Error("Remote sync workspace resource hash concurrency must be a positive integer");
+  }
+
+  return Math.min(value, resourceCount);
+}
+
+function throwIfRemoteSyncWorkspaceHashingAborted(signal: AbortSignal | undefined): void {
+  if (signal?.aborted) {
+    throw new Error("Remote sync workspace resource hashing was aborted");
+  }
+}
+
+function decodeBase64RemoteSyncWorkspaceResource(value: string): Uint8Array {
+  const normalized = normalizeRemoteSyncWorkspaceResourceValue(value);
+
+  if (normalized === "") {
+    return new Uint8Array();
+  }
+
+  if (
+    normalized !== normalized.trim() ||
+    normalized.length % 4 !== 0 ||
+    !/^[A-Za-z0-9+/]*={0,2}$/.test(normalized)
+  ) {
+    throw new Error("Remote sync workspace resource value must be base64");
+  }
+
+  const decoded = atob(normalized);
+  const bytes = new Uint8Array(decoded.length);
+
+  for (let index = 0; index < decoded.length; index += 1) {
+    bytes[index] = decoded.charCodeAt(index);
+  }
+
+  return bytes;
+}
+
+async function digestRemoteSyncWorkspaceBytes(value: Uint8Array): Promise<Uint8Array> {
+  if (!globalThis.crypto?.subtle) {
+    throw new Error("Remote sync workspace resource hashing requires Web Crypto");
+  }
+
+  const copy = new Uint8Array(value.byteLength);
+  copy.set(value);
+  return new Uint8Array(await globalThis.crypto.subtle.digest("SHA-256", copy.buffer));
+}
+
+function hexRemoteSyncWorkspaceBytes(value: Uint8Array): string {
+  return [...value]
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
 }

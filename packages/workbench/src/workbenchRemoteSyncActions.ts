@@ -1,11 +1,13 @@
 import type {
   IRemoteSyncService,
+  IRemoteSyncWorkspaceResourceService,
   IWorkspaceService,
   RemoteSyncPlan,
   RemoteSyncPlanRequest,
   RemoteSyncProgress,
   RemoteSyncResult
 } from "@typora-plus/platform";
+import { createRemoteSyncResourcesWithContentHashes } from "@typora-plus/platform";
 import {
   createWorkbenchWorkspaceRemoteSyncPlanRequest,
   workbenchRemoteSyncRequestActions,
@@ -15,6 +17,10 @@ import { selectWorkbenchDefaultRemoteSyncProviderId } from "./workbenchProviderS
 
 export interface WorkbenchRemoteSyncActionServices {
   readonly remoteSyncService: Pick<IRemoteSyncService, "createPlan" | "executePlan" | "getProviders">;
+  readonly remoteSyncWorkspaceResourceService?: Pick<
+    IRemoteSyncWorkspaceResourceService,
+    "isAvailable" | "readResource"
+  >;
   readonly workspaceService: Pick<IWorkspaceService, "getWorkspace">;
 }
 
@@ -51,15 +57,37 @@ export async function runWorkbenchPlanWorkspaceRemoteSyncAction(
     throw new Error("No remote sync provider available for workspace sync planning");
   }
 
-  const request = createWorkbenchWorkspaceRemoteSyncPlanRequest(
-    services.workspaceService.getWorkspace(),
-    options
+  const request = await createWorkbenchRemoteSyncPlanRequestWithContentHashes(
+    services,
+    createWorkbenchWorkspaceRemoteSyncPlanRequest(
+      services.workspaceService.getWorkspace(),
+      options
+    )
   );
 
   return {
     providerId,
     request,
     plan: await services.remoteSyncService.createPlan(providerId, request)
+  };
+}
+
+async function createWorkbenchRemoteSyncPlanRequestWithContentHashes(
+  services: WorkbenchRemoteSyncActionServices,
+  request: RemoteSyncPlanRequest
+): Promise<RemoteSyncPlanRequest> {
+  if (!services.remoteSyncWorkspaceResourceService?.isAvailable()) {
+    return request;
+  }
+
+  return {
+    ...request,
+    resources: await createRemoteSyncResourcesWithContentHashes({
+      workspaceUri: request.workspaceUri,
+      resources: request.resources,
+      resourceService: services.remoteSyncWorkspaceResourceService,
+      ...(request.signal !== undefined ? { signal: request.signal } : {})
+    })
   };
 }
 

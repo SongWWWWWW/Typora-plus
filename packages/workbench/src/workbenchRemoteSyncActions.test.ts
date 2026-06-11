@@ -81,6 +81,41 @@ describe("workbench remote sync actions", () => {
     expect(services.remoteSyncService.createPlan).not.toHaveBeenCalled();
   });
 
+  it("adds content hashes to workspace plan resources when the native resource bridge is available", async () => {
+    const services = {
+      ...createServices(),
+      remoteSyncWorkspaceResourceService: {
+        isAvailable: vi.fn(() => true),
+        readResource: vi.fn(async () => ({
+          workspaceUri: URI.file("C:/Notes"),
+          relativePath: "A.md",
+          value: "",
+          encoding: "base64" as const,
+          size: 3,
+          mtime: 30,
+          contentHash: "sha256:local"
+        }))
+      }
+    };
+
+    const result = await runWorkbenchPlanWorkspaceRemoteSyncAction(services);
+
+    expect(result.request.resources).toEqual([{
+      uri: URI.file("C:/Notes/A.md"),
+      relativePath: "A.md",
+      kind: "file",
+      name: "A.md",
+      size: 3,
+      mtime: 30,
+      contentHash: "sha256:local"
+    }]);
+    expect(services.remoteSyncWorkspaceResourceService.readResource).toHaveBeenCalledWith({
+      workspaceUri: URI.file("C:/Notes"),
+      relativePath: "A.md"
+    });
+    expect(services.remoteSyncService.createPlan).toHaveBeenCalledWith("a.sync", result.request);
+  });
+
   it("executes an existing workspace plan with a non-dry-run request", async () => {
     const signal = new AbortController().signal;
     const onProgress = vi.fn();
