@@ -111,6 +111,7 @@ import {
   type WorkbenchSearchResult
 } from "./workbenchSearchResultsModel";
 import {
+  createWorkbenchResourceOpeningCallbacks,
   openWorkbenchFileResourceAction,
   openWorkbenchQuickOpenFileAction,
   openWorkbenchRecentWorkspaceResourceAction
@@ -315,13 +316,12 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
       services
     ]
   );
-  const resourceOpeningCallbacks = {
-    clearSaveConflict: () => setSaveConflict(undefined),
-    closeQuickOpen: () => setQuickOpen(false),
-    showFilesView: () => setSideView("files"),
+  const resourceOpeningCallbacks = createWorkbenchResourceOpeningCallbacks({
     setOperationError,
-    setSaveConflict
-  };
+    setQuickOpen,
+    setSaveConflict,
+    setSideView
+  });
   const lineNavigationCallbacks = createWorkbenchLineNavigationCallbacks(
     createWorkbenchLineNavigationEnvironment(window),
     { getEditorHandle: () => editorRef.current },

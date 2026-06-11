@@ -1,5 +1,6 @@
 export type WorkbenchSideView = "files" | "search" | "outline" | "backlinks" | "tags";
 
+export const workbenchFilesSideView: WorkbenchSideView = "files";
 export const defaultWorkbenchSideView: WorkbenchSideView = "outline";
 
 export function toggleWorkbenchSideView(

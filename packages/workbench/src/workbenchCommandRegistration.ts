@@ -22,6 +22,7 @@ import {
 } from "./workbenchWorkspaceOpening";
 import {
   toggleWorkbenchSideView,
+  workbenchFilesSideView,
   type WorkbenchSideView
 } from "./workbenchSideViewModel";
 
@@ -67,7 +68,7 @@ export function registerWorkbenchCommands(
     category: "File",
     run: () => runWorkbenchAction(async () => {
       await openWorkbenchWorkspace(services, {
-        didOpenWorkspace: () => callbacks.setSideView("files"),
+        didOpenWorkspace: () => callbacks.setSideView(workbenchFilesSideView),
         clearSaveConflict: () => callbacks.setSaveConflict(undefined)
       });
     }, callbacks.setOperationError, callbacks.setSaveConflict)
@@ -104,7 +105,7 @@ export function registerWorkbenchCommands(
     id: "workbench.sidebar.files",
     title: "Show Files",
     category: "Workbench",
-    run: () => callbacks.setSideView((activeView) => toggleWorkbenchSideView("files", activeView))
+    run: () => callbacks.setSideView((activeView) => toggleWorkbenchSideView(workbenchFilesSideView, activeView))
   }));
   disposables.add(services.commandService.registerCommand({
     id: "workbench.sidebar.search",

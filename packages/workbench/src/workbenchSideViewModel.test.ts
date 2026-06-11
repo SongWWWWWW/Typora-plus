@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   defaultWorkbenchSideView,
   toggleWorkbenchSideView,
+  workbenchFilesSideView,
   workbenchSideViewTitle,
   type WorkbenchSideView
 } from "./workbenchSideViewModel";
@@ -9,6 +10,10 @@ import {
 describe("workbench side view model", () => {
   it("defines the default side view", () => {
     expect(defaultWorkbenchSideView).toBe("outline");
+  });
+
+  it("defines the Files side view target", () => {
+    expect(workbenchFilesSideView).toBe("files");
   });
 
   it("toggles the active side view closed when selecting it again", () => {

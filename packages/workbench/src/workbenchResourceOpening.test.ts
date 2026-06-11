@@ -7,6 +7,7 @@ import type {
 import { FileSaveConflictError } from "@typora-plus/platform";
 import { describe, expect, it, vi } from "vitest";
 import {
+  createWorkbenchResourceOpeningCallbacks,
   openWorkbenchFileResourceAction,
   openWorkbenchFileResource,
   openWorkbenchQuickOpenFileAction,
@@ -16,9 +17,34 @@ import {
   type WorkbenchResourceOpeningActionCallbacks,
   type WorkbenchResourceOpeningCallbacks
 } from "./workbenchResourceOpening";
+import { workbenchFilesSideView } from "./workbenchSideViewModel";
 import { workspaceStateFromFiles } from "./workbenchWorkspaceOpening";
 
 describe("workbench resource opening", () => {
+  it("creates resource opening callbacks from shell state setters", () => {
+    const setOperationError = vi.fn();
+    const setQuickOpen = vi.fn();
+    const setSaveConflict = vi.fn();
+    const setSideView = vi.fn();
+    const callbacks = createWorkbenchResourceOpeningCallbacks({
+      setOperationError,
+      setQuickOpen,
+      setSaveConflict,
+      setSideView
+    });
+
+    callbacks.clearSaveConflict();
+    callbacks.closeQuickOpen();
+    callbacks.showFilesView();
+    callbacks.setOperationError("Open failed");
+    callbacks.setSaveConflict?.(undefined);
+
+    expect(setSaveConflict).toHaveBeenCalledWith(undefined);
+    expect(setQuickOpen).toHaveBeenCalledWith(false);
+    expect(setSideView).toHaveBeenCalledWith(workbenchFilesSideView);
+    expect(setOperationError).toHaveBeenCalledWith("Open failed");
+  });
+
   it("opens file resources through the shared file opening path", async () => {
     const entry = createFileEntry("notes/a.md");
     const openedModel = createModel(entry.uri, "a.md");

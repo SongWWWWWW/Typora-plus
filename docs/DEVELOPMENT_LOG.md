@@ -5313,3 +5313,31 @@ Review:
 Known limitations:
 
 - Command Palette execution still closes the palette through its own focused command-palette model after dispatching through the shared command action boundary.
+
+## 2026-06-11 - P2 Workbench Resource Opening Callbacks
+
+Completed:
+
+- Added a focused resource-opening callback factory that maps shell state setters to clear-conflict, close-Quick-Open, show-Files, and action-error callbacks.
+- Routed `Application.tsx` resource-opening callbacks through the factory instead of assembling follow-up behavior inline.
+- Added a named Files side view target in the side-view model and reused it from resource-opening follow-up and command registration.
+- Covered callback setter forwarding, Files target selection, side-view constants, resource-opening flows, and command registration behavior.
+
+Quality gate:
+
+- `npx vitest run packages/workbench/src/workbenchResourceOpening.test.ts packages/workbench/src/workbenchSideViewModel.test.ts packages/workbench/src/workbenchCommandRegistration.test.ts`: passed, 17 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 557 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Dev server smoke check: passed at `http://127.0.0.1:5173`; status 200 and root element present
+
+Review:
+
+- Resource-opening follow-up behavior now has one Workbench-local callback boundary instead of a shell-local object literal.
+- `Application.tsx` still supplies state setters, while `workbenchResourceOpening` owns how opening resources clears conflicts, closes Quick Open, and reveals the Files view.
+- No new dependency, configuration key, storage path, visual token, extra documentation file, or hard-coded platform assumption was introduced.
+
+Known limitations:
+
+- Save-conflict dialog actions still assemble their reload/overwrite callbacks directly in `Application.tsx`.

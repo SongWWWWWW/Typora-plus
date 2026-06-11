@@ -9,6 +9,10 @@ import {
   type WorkbenchSaveConflictSetter
 } from "./workbenchActionRunner";
 import {
+  workbenchFilesSideView,
+  type WorkbenchSideView
+} from "./workbenchSideViewModel";
+import {
   openWorkbenchFile,
   type WorkbenchFileOpeningServices
 } from "./workbenchFileOpening";
@@ -26,6 +30,25 @@ export interface WorkbenchResourceOpeningCallbacks {
 export interface WorkbenchResourceOpeningActionCallbacks extends WorkbenchResourceOpeningCallbacks {
   readonly setOperationError: WorkbenchOperationErrorSetter;
   readonly setSaveConflict?: WorkbenchSaveConflictSetter;
+}
+
+export interface WorkbenchResourceOpeningShellCallbacks {
+  readonly setOperationError: WorkbenchOperationErrorSetter;
+  readonly setQuickOpen: (open: boolean) => void;
+  readonly setSaveConflict: WorkbenchSaveConflictSetter;
+  readonly setSideView: (view: WorkbenchSideView | null) => void;
+}
+
+export function createWorkbenchResourceOpeningCallbacks(
+  callbacks: WorkbenchResourceOpeningShellCallbacks
+): WorkbenchResourceOpeningActionCallbacks {
+  return {
+    clearSaveConflict: () => callbacks.setSaveConflict(undefined),
+    closeQuickOpen: () => callbacks.setQuickOpen(false),
+    showFilesView: () => callbacks.setSideView(workbenchFilesSideView),
+    setOperationError: callbacks.setOperationError,
+    setSaveConflict: callbacks.setSaveConflict
+  };
 }
 
 export async function openWorkbenchFileResource(
