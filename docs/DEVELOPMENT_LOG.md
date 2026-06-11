@@ -6639,3 +6639,32 @@ Known limitations:
 
 - Clipboard contents are not asserted through the in-app browser automation path yet; the helper is covered by injected-environment unit tests.
 - Streaming responses, insert/replace workflows, and workspace-grounded retrieval remain future work.
+
+## 2026-06-11 - P2 AI Response Append Action
+
+Completed:
+
+- Added a focused Workbench AI append helper that appends provider output as a Markdown block through `ITextFileService.updateContent()`.
+- Added an explicit Append action to the AI summary response dialog with idle, appended, and failed states.
+- Kept note mutation user-initiated and provider-neutral: AI providers still return text only, while Workbench owns the visible append command.
+- Covered append formatting, active-note model updates, and empty-response no-op behavior with focused tests.
+- Updated maintained docs to record the explicit append workflow.
+
+Quality gate:
+
+- `npx vitest run packages/workbench/src/workbenchAiActions.test.ts packages/workbench/src/workbenchClipboard.test.ts`: passed, 2 files / 10 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 68 files / 653 tests, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Browser smoke check at `http://127.0.0.1:5173/`: Workbench loaded with root content and no console errors
+
+Review:
+
+- The append action deliberately appends to the note instead of pretending to support cursor insertion; cursor-aware edits should wait for an editor handle/API that can preserve CodeMirror selection and undo semantics.
+- The mutation path stays inside `ITextFileService`, so dirty-state tracking, autosave, and existing state subscriptions remain the source of truth.
+
+Known limitations:
+
+- Append is end-of-document only.
+- Streaming responses, replace workflows, and workspace-grounded retrieval remain future work.

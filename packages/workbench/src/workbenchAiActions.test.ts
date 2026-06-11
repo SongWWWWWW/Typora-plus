@@ -6,7 +6,11 @@ import type {
 } from "@typora-plus/platform";
 import { describe, expect, it, vi } from "vitest";
 import { workbenchAiInstructions } from "./workbenchAiRequestModel";
-import { runWorkbenchSummarizeActiveNoteAiAction } from "./workbenchAiActions";
+import {
+  appendWorkbenchAiResponseToActiveNote,
+  appendWorkbenchMarkdownBlock,
+  runWorkbenchSummarizeActiveNoteAiAction
+} from "./workbenchAiActions";
 
 describe("workbench AI actions", () => {
   it("summarizes the active note through the default AI provider", async () => {
@@ -31,7 +35,8 @@ describe("workbench AI actions", () => {
         requestText
       },
       textFileService: {
-        getActiveModel: vi.fn(() => model())
+        getActiveModel: vi.fn(() => model()),
+        updateContent: vi.fn()
       }
     };
 
@@ -70,7 +75,8 @@ describe("workbench AI actions", () => {
         requestText
       },
       textFileService: {
-        getActiveModel
+        getActiveModel,
+        updateContent: vi.fn()
       }
     };
 
@@ -78,6 +84,50 @@ describe("workbench AI actions", () => {
       .rejects.toThrow("No AI provider available for active note summary");
     expect(getActiveModel).not.toHaveBeenCalled();
     expect(requestText).not.toHaveBeenCalled();
+  });
+
+  it("appends an AI response to the active note through the text model", () => {
+    const activeModel = model({ value: "# Note" });
+    const updatedModel = model({ value: "# Note\n\nSummary\n" });
+    const updateContent = vi.fn(() => updatedModel);
+    const services = {
+      textFileService: {
+        getActiveModel: vi.fn(() => activeModel),
+        updateContent
+      }
+    };
+
+    expect(appendWorkbenchAiResponseToActiveNote(services, {
+      value: "\nSummary\n"
+    })).toBe(updatedModel);
+
+    expect(services.textFileService.getActiveModel).toHaveBeenCalledOnce();
+    expect(updateContent).toHaveBeenCalledWith("# Note\n\nSummary\n");
+  });
+
+  it("does not mutate the active note for an empty AI response", () => {
+    const activeModel = model({ value: "# Note" });
+    const updateContent = vi.fn();
+    const services = {
+      textFileService: {
+        getActiveModel: vi.fn(() => activeModel),
+        updateContent
+      }
+    };
+
+    expect(appendWorkbenchAiResponseToActiveNote(services, {
+      value: " \n\t "
+    })).toBe(activeModel);
+
+    expect(updateContent).not.toHaveBeenCalled();
+  });
+
+  it("formats appended Markdown blocks with stable separation", () => {
+    expect(appendWorkbenchMarkdownBlock("", "Summary")).toBe("Summary\n");
+    expect(appendWorkbenchMarkdownBlock("# Note", "Summary")).toBe("# Note\n\nSummary\n");
+    expect(appendWorkbenchMarkdownBlock("# Note\n", "Summary")).toBe("# Note\n\nSummary\n");
+    expect(appendWorkbenchMarkdownBlock("# Note\n\n", "Summary")).toBe("# Note\n\nSummary\n");
+    expect(appendWorkbenchMarkdownBlock("# Note", "\n  indented code\n")).toBe("# Note\n\n  indented code\n");
   });
 });
 

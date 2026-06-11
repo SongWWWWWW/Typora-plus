@@ -23,6 +23,7 @@ import {
   Folder,
   FolderOpen,
   PanelLeft,
+  Plus,
   RefreshCw,
   Save,
   Search,
@@ -42,7 +43,7 @@ import {
 } from "./listNavigationModel";
 import { SettingsDialog } from "./SettingsDialog";
 import type { WorkbenchServices } from "./services";
-import { createWorkbenchCommandExecutor } from "./workbenchActionRunner";
+import { createWorkbenchCommandExecutor, runWorkbenchAction } from "./workbenchActionRunner";
 import {
   createWorkbenchAutoSaveScheduler,
   scheduleWorkbenchAutoSave
@@ -57,6 +58,7 @@ import {
 } from "./workbenchContextModel";
 import { createWorkbenchConfigurationUpdateHandler } from "./workbenchConfigurationUpdates";
 import { createWorkbenchEditorAdapter } from "./workbenchEditorAdapter";
+import { appendWorkbenchAiResponseToActiveNote } from "./workbenchAiActions";
 import {
   createWorkbenchFileTreeRows,
   type WorkbenchFileTreeRow
@@ -462,6 +464,11 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
       {aiResponse ? (
         <AiResponseDialog
           response={aiResponse}
+          onAppend={() => runWorkbenchAction(
+            () => appendWorkbenchAiResponseToActiveNote(services, aiResponse),
+            setOperationError,
+            setSaveConflict
+          ).then(Boolean)}
           onClose={() => setAiResponse(undefined)}
         />
       ) : null}
@@ -1100,21 +1107,31 @@ function SaveConflictDialog({
 
 function AiResponseDialog({
   response,
+  onAppend,
   onClose
 }: {
   readonly response: AiTextResponse;
+  readonly onAppend: () => Promise<boolean>;
   readonly onClose: () => void;
 }) {
   const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
+  const [appendState, setAppendState] = useState<"idle" | "appended" | "failed">("idle");
   const canCopyResponse = response.value.length > 0;
+  const canAppendResponse = canCopyResponse && appendState !== "appended";
 
   useEffect(() => {
     setCopyState("idle");
+    setAppendState("idle");
   }, [response.value]);
 
   const onCopy = () => {
     void copyWorkbenchTextToClipboard(response.value).then((copied) => {
       setCopyState(copied ? "copied" : "failed");
+    });
+  };
+  const onAppendResponse = () => {
+    void onAppend().then((appended) => {
+      setAppendState(appended ? "appended" : "failed");
     });
   };
 
@@ -1153,6 +1170,15 @@ function AiResponseDialog({
             <Copy size={15} />
             <span>{formatAiResponseCopyLabel(copyState)}</span>
           </button>
+          <button
+            className="tp-dialog-button"
+            type="button"
+            disabled={!canAppendResponse}
+            onClick={onAppendResponse}
+          >
+            <Plus size={15} />
+            <span>{formatAiResponseAppendLabel(appendState)}</span>
+          </button>
           <button className="tp-dialog-button tp-dialog-button-primary" type="button" onClick={onClose}>
             <span>Close</span>
           </button>
@@ -1170,6 +1196,17 @@ function formatAiResponseCopyLabel(copyState: "idle" | "copied" | "failed"): str
       return "Copy failed";
     case "idle":
       return "Copy";
+  }
+}
+
+function formatAiResponseAppendLabel(appendState: "idle" | "appended" | "failed"): string {
+  switch (appendState) {
+    case "appended":
+      return "Appended";
+    case "failed":
+      return "Append failed";
+    case "idle":
+      return "Append";
   }
 }
 
