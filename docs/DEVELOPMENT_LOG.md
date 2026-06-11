@@ -7143,3 +7143,36 @@ Known limitations:
 - Richer remote sync conflict-resolution UI is still not implemented.
 - Progress history is dialog-scoped and is not persisted across dialog close or application restart.
 - Workspace AI context is keyword/snippet based, not semantic or vector retrieval.
+
+## 2026-06-12 - P2 Remote Sync Conflict Preview
+
+Completed:
+
+- Added a focused Workbench dialog model helper that derives bounded conflict previews from normalized remote sync operations.
+- Updated the remote sync plan dialog to show a dedicated conflict list when a plan contains conflicts.
+- Reused existing operation detail formatting so provider messages remain visible without adding provider-specific policy.
+- Kept the platform remote sync contract unchanged; this stage only improves Workbench conflict presentation.
+- Updated maintained docs without adding Feishu-specific provider ids, endpoints, OAuth scopes, tokens, storage paths, or credentials.
+
+Quality gate:
+
+- `npx vitest run packages/workbench/src/workbenchRemoteSyncDialogModel.test.ts packages/workbench/src/workbenchRemoteSyncActions.test.ts`: passed, 2 files / 17 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 75 files / 706 tests, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Workbench implementation hardcode scan for endpoint/secret/token/model patterns: passed
+- Dev server smoke check at `http://127.0.0.1:5173/`: status 200 and root element present
+
+Review:
+
+- Conflict filtering and preview bounds live in `workbenchRemoteSyncDialogModel` rather than JSX.
+- The dialog still blocks execution through the existing action/model path and now makes the blocking operations easier to inspect.
+- No cloud/provider-specific conflict resolution policy was introduced.
+
+Known limitations:
+
+- Feishu OAuth and a built-in Feishu provider remain future work.
+- Remote sync conflicts are still inspect-only; choose-local/choose-remote conflict resolution actions are not implemented.
+- Progress history is dialog-scoped and is not persisted across dialog close or application restart.
+- Workspace AI context is keyword/snippet based, not semantic or vector retrieval.

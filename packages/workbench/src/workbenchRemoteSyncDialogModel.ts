@@ -98,6 +98,19 @@ export function createWorkbenchRemoteSyncDialogOperationPreview(
   };
 }
 
+export function createWorkbenchRemoteSyncDialogConflictPreview(
+  operations: readonly RemoteSyncOperation[],
+  options: {
+    readonly emptyMessage: string;
+    readonly maxOperations: number;
+  }
+): WorkbenchRemoteSyncDialogOperationPreview {
+  return createWorkbenchRemoteSyncDialogOperationPreview(
+    operations.filter((operation) => operation.kind === "conflict"),
+    options
+  );
+}
+
 export function appendWorkbenchRemoteSyncProgressHistory(
   progressEvents: readonly RemoteSyncProgress[],
   progress: RemoteSyncProgress,

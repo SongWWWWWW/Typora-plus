@@ -60,6 +60,7 @@ import {
 } from "./workbenchRemoteSyncActions";
 import {
   appendWorkbenchRemoteSyncProgressHistory,
+  createWorkbenchRemoteSyncDialogConflictPreview,
   createWorkbenchRemoteSyncDialogProgressPreview,
   createWorkbenchRemoteSyncDialogOperationPreview,
   createWorkbenchRemoteSyncDialogExecutionState,
@@ -153,6 +154,7 @@ import {
 } from "./workbenchThemeSynchronization";
 
 const remoteSyncOperationPreviewLimit = 6;
+const remoteSyncConflictPreviewLimit = 6;
 const remoteSyncProgressHistoryLimit = 20;
 const remoteSyncProgressPreviewLimit = 6;
 
@@ -1331,6 +1333,12 @@ function RemoteSyncPlanDialog({
     emptyMessage: "No operations planned",
     maxOperations: remoteSyncOperationPreviewLimit
   });
+  const conflictOperationPreview = result.plan.summary.conflicts > 0
+    ? createWorkbenchRemoteSyncDialogConflictPreview(result.plan.operations, {
+      emptyMessage: "No conflicts",
+      maxOperations: remoteSyncConflictPreviewLimit
+    })
+    : undefined;
   const executionOperationPreview = execution
     ? createWorkbenchRemoteSyncDialogOperationPreview(execution.result.operations, {
       emptyMessage: "No operations executed",
@@ -1377,6 +1385,9 @@ function RemoteSyncPlanDialog({
             {formatWorkbenchRemoteSyncSummary(result.plan.summary)}
           </p>
           <RemoteSyncOperationPreviewList preview={planOperationPreview} />
+          {conflictOperationPreview ? (
+            <RemoteSyncOperationPreviewList label="Conflicts" preview={conflictOperationPreview} />
+          ) : null}
           {executionState.statusMessage ? (
             execution ? (
               <p className="tp-ai-response">{executionState.statusMessage}</p>
@@ -1419,8 +1430,10 @@ function RemoteSyncPlanDialog({
 }
 
 function RemoteSyncOperationPreviewList({
+  label,
   preview
 }: {
+  readonly label?: string;
   readonly preview: {
     readonly emptyMessage: string;
     readonly hiddenOperationCount: number;
@@ -1433,6 +1446,7 @@ function RemoteSyncOperationPreviewList({
 
   return (
     <div className="tp-result-list">
+      {label ? <div className="tp-empty-row">{label}</div> : null}
       {preview.operations.map((operation, index) => (
         <div className="tp-result-row" key={`${operation.relativePath}:${operation.kind}:${index}`}>
           <span className="tp-result-line">{operation.kind}</span>

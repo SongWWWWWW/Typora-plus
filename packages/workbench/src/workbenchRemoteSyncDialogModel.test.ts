@@ -3,6 +3,7 @@ import { URI } from "@typora-plus/base";
 import type { RemoteSyncPlan, RemoteSyncResult } from "@typora-plus/platform";
 import {
   appendWorkbenchRemoteSyncProgressHistory,
+  createWorkbenchRemoteSyncDialogConflictPreview,
   createWorkbenchRemoteSyncDialogProgressPreview,
   createWorkbenchRemoteSyncDialogOperationPreview,
   createWorkbenchRemoteSyncDialogExecutionState,
@@ -120,6 +121,34 @@ describe("workbench remote sync dialog model", () => {
     })).toEqual({
       emptyMessage: "No result operations",
       hiddenOperationCount: 1,
+      operations: []
+    });
+  });
+
+  it("creates bounded conflict previews from plan operations", () => {
+    const preview = createWorkbenchRemoteSyncDialogConflictPreview([
+      operation("create", "A.md"),
+      operation("conflict", "B.md", "changed locally and remotely"),
+      operation("conflict", "C.md"),
+      operation("update", "D.md")
+    ], {
+      emptyMessage: "No conflicts",
+      maxOperations: 1
+    });
+
+    expect(preview).toEqual({
+      emptyMessage: "No conflicts",
+      hiddenOperationCount: 1,
+      operations: [
+        operation("conflict", "B.md", "changed locally and remotely")
+      ]
+    });
+    expect(createWorkbenchRemoteSyncDialogConflictPreview([operation("update", "D.md")], {
+      emptyMessage: "No conflicts",
+      maxOperations: 4
+    })).toEqual({
+      emptyMessage: "No conflicts",
+      hiddenOperationCount: 0,
       operations: []
     });
   });
