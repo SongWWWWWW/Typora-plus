@@ -6943,3 +6943,37 @@ Known limitations:
 - Streaming, tool calls, Feishu OAuth, and a built-in Feishu provider remain future work.
 - Remote sync progress streaming and richer conflict-resolution UI are still not implemented.
 - Workspace context is keyword search/snippet based, not semantic or vector retrieval.
+
+## 2026-06-11 - P2 Remote Sync Explicit Execution
+
+Completed:
+
+- Added a provider-neutral Workbench remote sync execution action that consumes an existing plan result and calls `IRemoteSyncService.executePlan()`.
+- Converted execution requests from the reviewed plan request by setting `dryRun: false`, preserving workspace resources, direction, remote scope, and provider-neutral metadata.
+- Added execution metadata action `executeWorkspace` without hardcoding any Feishu provider id, endpoint, OAuth scope, token, or storage path.
+- Blocked execution for conflict plans and no-op plans before provider execution.
+- Updated the remote sync plan dialog with an explicit Execute button, disabled-state reason text, and normalized execution result summary.
+- Kept plan creation as the command/titlebar entry point so sync mutation requires an explicit second user action from the reviewed plan dialog.
+
+Quality gate:
+
+- `npx vitest run packages/workbench/src/workbenchRemoteSyncActions.test.ts packages/workbench/src/workbenchRemoteSyncRequestModel.test.ts packages/workbench/src/workbenchCommandRegistration.test.ts`: passed, 3 files / 13 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 74 files / 692 tests, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Dev server smoke check at `http://127.0.0.1:5173/`: status 200 and root element present
+
+Review:
+
+- Workbench still does not know Feishu, Drive endpoints, OAuth scopes, remote ids beyond provider-returned metadata, or credential storage.
+- Execution is routed through the same `IRemoteSyncService` boundary that extension/runtime providers already implement.
+- The UI exposes mutation only after a dry-run plan is visible and blocks conflict/no-op execution generically.
+- The request metadata remains provider-neutral and carries the surface/action/source context needed by future providers.
+
+Known limitations:
+
+- Feishu OAuth and a built-in Feishu provider remain future work.
+- Remote sync progress streaming and richer conflict-resolution UI are still not implemented.
+- Execution result feedback is summary-level; per-operation execution status remains provider-returned operation data only.
+- Workspace context is keyword search/snippet based, not semantic or vector retrieval.

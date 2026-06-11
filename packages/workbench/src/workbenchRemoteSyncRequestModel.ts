@@ -6,6 +6,7 @@ import type {
 import { createRemoteSyncResourcesFromWorkspace } from "@typora-plus/platform";
 
 export const workbenchRemoteSyncRequestActions = {
+  executeWorkspace: "executeWorkspace",
   planWorkspace: "planWorkspace"
 } as const;
 

@@ -51,7 +51,12 @@ import {
 import { registerWorkbenchCommands } from "./workbenchCommandRegistration";
 import { createWorkbenchCommandSurface } from "./workbenchCommandSurface";
 import { copyWorkbenchTextToClipboard } from "./workbenchClipboard";
-import type { WorkbenchRemoteSyncPlanResult } from "./workbenchRemoteSyncActions";
+import {
+  getWorkbenchRemoteSyncPlanExecutionBlockReason,
+  runWorkbenchExecuteWorkspaceRemoteSyncAction,
+  type WorkbenchRemoteSyncExecutionResult,
+  type WorkbenchRemoteSyncPlanResult
+} from "./workbenchRemoteSyncActions";
 import {
   applyWorkbenchStateContext,
   createWorkbenchCapabilityContext
@@ -168,6 +173,7 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
   const [operationError, setOperationError] = useState<string | undefined>();
   const [aiResponse, setAiResponse] = useState<AiTextResponse | undefined>();
   const [remoteSyncPlan, setRemoteSyncPlan] = useState<WorkbenchRemoteSyncPlanResult | undefined>();
+  const [remoteSyncExecution, setRemoteSyncExecution] = useState<WorkbenchRemoteSyncExecutionResult | undefined>();
   const [saveConflict, setSaveConflict] = useState<FileSaveConflict | undefined>();
   const [indexStatus, setIndexStatus] = useState<WorkspaceIndexStatus>(initialState.indexStatus);
   const [commandRevision, setCommandRevision] = useState(0);
@@ -295,7 +301,10 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
       setOperationError,
       setPaletteOpen,
       setQuickOpen,
-      setRemoteSyncPlan,
+      setRemoteSyncPlan: (result) => {
+        setRemoteSyncPlan(result);
+        setRemoteSyncExecution(undefined);
+      },
       setSaveConflict,
       setSettingsOpen,
       setSideView
@@ -485,7 +494,23 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
       {remoteSyncPlan ? (
         <RemoteSyncPlanDialog
           result={remoteSyncPlan}
-          onClose={() => setRemoteSyncPlan(undefined)}
+          execution={remoteSyncExecution}
+          onClose={() => {
+            setRemoteSyncPlan(undefined);
+            setRemoteSyncExecution(undefined);
+          }}
+          onExecute={() => runWorkbenchAction(
+            async () => {
+              const execution = await runWorkbenchExecuteWorkspaceRemoteSyncAction(services, remoteSyncPlan, {
+                metadata: {
+                  surface: "dialog"
+                }
+              });
+              setRemoteSyncExecution(execution);
+            },
+            setOperationError,
+            setSaveConflict
+          ).then(Boolean)}
         />
       ) : null}
       <CommandPalette
@@ -1223,14 +1248,20 @@ function formatAiResponseAppendLabel(appendState: "idle" | "appended" | "failed"
 }
 
 function RemoteSyncPlanDialog({
+  execution,
+  onExecute,
   result,
   onClose
 }: {
+  readonly execution: WorkbenchRemoteSyncExecutionResult | undefined;
+  readonly onExecute: () => Promise<boolean>;
   readonly result: WorkbenchRemoteSyncPlanResult;
   readonly onClose: () => void;
 }) {
   const visibleOperations = result.plan.operations.slice(0, 6);
   const hiddenOperationCount = Math.max(result.plan.operations.length - visibleOperations.length, 0);
+  const blockReason = getWorkbenchRemoteSyncPlanExecutionBlockReason(result.plan);
+  const canExecute = !execution && !blockReason;
 
   return (
     <div className="tp-dialog-overlay" role="presentation" onMouseDown={onClose}>
@@ -1277,8 +1308,23 @@ function RemoteSyncPlanDialog({
           ) : (
             <div className="tp-empty-row">No operations planned</div>
           )}
+          {execution ? (
+            <p className="tp-ai-response">
+              Executed: {formatRemoteSyncPlanSummary(execution.result.summary)}
+            </p>
+          ) : blockReason ? (
+            <div className="tp-empty-row">{blockReason}</div>
+          ) : null}
         </div>
         <div className="tp-dialog-actions">
+          <button
+            className="tp-dialog-button"
+            type="button"
+            onClick={onExecute}
+            disabled={!canExecute}
+          >
+            <span>{execution ? "Executed" : "Execute"}</span>
+          </button>
           <button className="tp-dialog-button tp-dialog-button-primary" type="button" onClick={onClose}>
             <span>Close</span>
           </button>
