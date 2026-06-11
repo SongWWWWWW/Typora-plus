@@ -6,7 +6,12 @@ import type {
   ITextFileService,
   TextFileModel
 } from "@typora-plus/platform";
-import { createWorkbenchSummarizeActiveNoteAiTextRequest } from "./workbenchAiRequestModel";
+import {
+  createWorkbenchActiveNoteAiTextRequestForAction,
+  workbenchAiActionTitles,
+  workbenchAiRequestActions,
+  type WorkbenchAiRequestAction
+} from "./workbenchAiRequestModel";
 import {
   createWorkbenchWorkspaceAiContext,
   type WorkbenchAiWorkspaceContextOptions
@@ -26,14 +31,15 @@ export interface WorkbenchAiActionOptions {
   readonly workspaceContext?: WorkbenchAiWorkspaceContextOptions;
 }
 
-export async function runWorkbenchSummarizeActiveNoteAiAction(
+export async function runWorkbenchActiveNoteAiAction(
   services: WorkbenchAiActionServices,
+  action: WorkbenchAiRequestAction,
   options: WorkbenchAiActionOptions = {}
 ): Promise<AiTextResponse> {
   const providerId = selectWorkbenchDefaultAiProviderId(services);
 
   if (!providerId) {
-    throw new Error("No AI provider available for active note summary");
+    throw new Error(`No AI provider available for ${workbenchAiActionTitles[action]}`);
   }
 
   const activeModel = services.textFileService.getActiveModel();
@@ -41,13 +47,25 @@ export async function runWorkbenchSummarizeActiveNoteAiAction(
 
   return services.aiService.requestText(
     providerId,
-    createWorkbenchSummarizeActiveNoteAiTextRequest(
+    createWorkbenchActiveNoteAiTextRequestForAction(
       activeModel,
+      action,
       {
         ...options,
         ...(context.length > 0 ? { context } : {})
       }
     )
+  );
+}
+
+export async function runWorkbenchSummarizeActiveNoteAiAction(
+  services: WorkbenchAiActionServices,
+  options: WorkbenchAiActionOptions = {}
+): Promise<AiTextResponse> {
+  return runWorkbenchActiveNoteAiAction(
+    services,
+    workbenchAiRequestActions.summarizeActiveNote,
+    options
   );
 }
 

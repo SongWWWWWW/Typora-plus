@@ -6,10 +6,14 @@ import type {
   TextFileModel
 } from "@typora-plus/platform";
 import { describe, expect, it, vi } from "vitest";
-import { workbenchAiInstructions } from "./workbenchAiRequestModel";
+import {
+  workbenchAiInstructions,
+  workbenchAiRequestActions
+} from "./workbenchAiRequestModel";
 import {
   appendWorkbenchAiResponseToActiveNote,
   appendWorkbenchMarkdownBlock,
+  runWorkbenchActiveNoteAiAction,
   runWorkbenchSummarizeActiveNoteAiAction
 } from "./workbenchAiActions";
 
@@ -99,6 +103,54 @@ describe("workbench AI actions", () => {
     });
   });
 
+  it("runs centralized active-note writing actions through the default provider", async () => {
+    const response: AiTextResponse = {
+      providerId: "a.provider",
+      value: "Rewritten note"
+    };
+    const requestText = vi.fn(async (_providerId: string, _request: AiTextRequest) => response);
+    const services = {
+      aiService: {
+        getProviders: vi.fn(() => [
+          { id: "a.provider", title: "Assistant" }
+        ]),
+        requestText
+      },
+      indexService: {
+        getStatus: vi.fn(() => indexStatus("idle")),
+        query: vi.fn(() => [])
+      },
+      textFileService: {
+        getActiveModel: vi.fn(() => model()),
+        updateContent: vi.fn()
+      }
+    };
+
+    await expect(runWorkbenchActiveNoteAiAction(
+      services,
+      workbenchAiRequestActions.rewriteActiveNote,
+      {
+        metadata: {
+          surface: "command"
+        }
+      }
+    )).resolves.toBe(response);
+
+    expect(requestText).toHaveBeenCalledWith("a.provider", {
+      instruction: workbenchAiInstructions.rewriteActiveNote,
+      input: "# Note\n\nShip AI action runner.",
+      metadata: {
+        surface: "command",
+        action: "rewriteActiveNote",
+        source: "active-note",
+        sourceName: "note.md",
+        sourceScheme: "file",
+        languageId: "markdown"
+      }
+    });
+    expect(services.indexService.query).not.toHaveBeenCalled();
+  });
+
   it("fails before reading the active note when no AI provider is available", async () => {
     const requestText = vi.fn();
     const getActiveModel = vi.fn(() => model());
@@ -118,7 +170,7 @@ describe("workbench AI actions", () => {
     };
 
     await expect(runWorkbenchSummarizeActiveNoteAiAction(services))
-      .rejects.toThrow("No AI provider available for active note summary");
+      .rejects.toThrow("No AI provider available for Summarize Active Note");
     expect(getActiveModel).not.toHaveBeenCalled();
     expect(requestText).not.toHaveBeenCalled();
     expect(services.indexService.query).not.toHaveBeenCalled();

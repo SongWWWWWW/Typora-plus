@@ -16,7 +16,11 @@ import {
   editorTaskCommandMetadata,
   workbenchCommandMetadata
 } from "./workbenchCommandMetadata";
-import { runWorkbenchSummarizeActiveNoteAiAction } from "./workbenchAiActions";
+import { runWorkbenchActiveNoteAiAction } from "./workbenchAiActions";
+import {
+  workbenchAiRequestActions,
+  type WorkbenchAiRequestAction
+} from "./workbenchAiRequestModel";
 import {
   runWorkbenchPlanWorkspaceRemoteSyncAction,
   type WorkbenchRemoteSyncPlanResult
@@ -39,6 +43,28 @@ import {
   workbenchSideViews,
   type WorkbenchSideView
 } from "./workbenchSideViewModel";
+
+const workbenchActiveNoteAiCommandActions: readonly {
+  readonly action: WorkbenchAiRequestAction;
+  readonly metadata: typeof workbenchCommandMetadata.ai[keyof typeof workbenchCommandMetadata.ai];
+}[] = [
+  {
+    action: workbenchAiRequestActions.continueActiveNote,
+    metadata: workbenchCommandMetadata.ai.continueActiveNote
+  },
+  {
+    action: workbenchAiRequestActions.extractTasksActiveNote,
+    metadata: workbenchCommandMetadata.ai.extractTasksActiveNote
+  },
+  {
+    action: workbenchAiRequestActions.rewriteActiveNote,
+    metadata: workbenchCommandMetadata.ai.rewriteActiveNote
+  },
+  {
+    action: workbenchAiRequestActions.summarizeActiveNote,
+    metadata: workbenchCommandMetadata.ai.summarizeActiveNote
+  }
+];
 
 export interface WorkbenchCommandRegistrationState {
   readonly configuration: TyporaPlusConfiguration;
@@ -94,21 +120,23 @@ export function registerWorkbenchCommands(
     )
   }));
   if (selectWorkbenchDefaultAiProviderId(services)) {
-    disposables.add(services.commandService.registerCommand({
-      ...workbenchCommandMetadata.ai.summarizeActiveNote,
-      run: () => runWorkbenchAction(async () => {
-        const response = await runWorkbenchSummarizeActiveNoteAiAction(services, {
-          metadata: {
-            surface: "command"
-          },
-          workspaceContext: {
-            maxPreviewLength: state.configuration.ai.workspaceContextMaxPreviewLength,
-            maxResults: state.configuration.ai.workspaceContextMaxResults
-          }
-        });
-        callbacks.setAiResponse(response);
-      }, callbacks.setOperationError, callbacks.setSaveConflict)
-    }));
+    for (const command of workbenchActiveNoteAiCommandActions) {
+      disposables.add(services.commandService.registerCommand({
+        ...command.metadata,
+        run: () => runWorkbenchAction(async () => {
+          const response = await runWorkbenchActiveNoteAiAction(services, command.action, {
+            metadata: {
+              surface: "command"
+            },
+            workspaceContext: {
+              maxPreviewLength: state.configuration.ai.workspaceContextMaxPreviewLength,
+              maxResults: state.configuration.ai.workspaceContextMaxResults
+            }
+          });
+          callbacks.setAiResponse(response);
+        }, callbacks.setOperationError, callbacks.setSaveConflict)
+      }));
+    }
   }
   if (state.workspaceFiles && selectWorkbenchDefaultRemoteSyncProviderId(services)) {
     disposables.add(services.commandService.registerCommand({

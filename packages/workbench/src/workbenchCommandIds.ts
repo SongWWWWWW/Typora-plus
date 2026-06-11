@@ -24,6 +24,9 @@ export const workbenchCommandIds = {
     taskRemoveMarkers: "editor.task.removeMarkers"
   },
   ai: {
+    continueActiveNote: "ai.continueActiveNote",
+    extractTasksActiveNote: "ai.extractTasksActiveNote",
+    rewriteActiveNote: "ai.rewriteActiveNote",
     summarizeActiveNote: "ai.summarizeActiveNote"
   },
   remoteSync: {

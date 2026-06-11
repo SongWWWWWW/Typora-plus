@@ -1242,14 +1242,14 @@ function AiResponseDialog({
       <section
         className="tp-dialog tp-ai-dialog"
         role="dialog"
-        aria-label="AI summary"
+        aria-label="AI response"
         aria-modal="true"
         onMouseDown={(event) => event.stopPropagation()}
       >
         <div className="tp-dialog-header">
           <div className="tp-dialog-title tp-ai-dialog-title">
             <FileText size={18} />
-            <span>AI Summary</span>
+            <span>AI Response</span>
           </div>
           <IconButton title="Close" onClick={onClose}>
             <X size={16} />

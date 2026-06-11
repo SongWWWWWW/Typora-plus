@@ -47,6 +47,12 @@ describe("workbench command metadata", () => {
       id: workbenchCommandIds.ai.summarizeActiveNote,
       title: "Summarize Active Note"
     });
+    expect(Object.values(workbenchCommandMetadata.ai).map((command) => command.title)).toEqual([
+      "Continue Active Note",
+      "Extract Tasks From Active Note",
+      "Rewrite Active Note",
+      "Summarize Active Note"
+    ]);
     expect(workbenchCommandMetadata.remoteSync.planWorkspace).toEqual({
       category: workbenchCommandCategories.remoteSync,
       id: workbenchCommandIds.remoteSync.planWorkspace,

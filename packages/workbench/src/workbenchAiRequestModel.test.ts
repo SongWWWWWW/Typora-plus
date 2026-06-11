@@ -2,7 +2,9 @@ import { URI } from "@typora-plus/base";
 import { describe, expect, it } from "vitest";
 import {
   createWorkbenchActiveNoteAiTextRequest,
+  createWorkbenchActiveNoteAiTextRequestForAction,
   createWorkbenchSummarizeActiveNoteAiTextRequest,
+  workbenchAiActionTitles,
   workbenchAiInstructions,
   workbenchAiRequestActions
 } from "./workbenchAiRequestModel";
@@ -58,6 +60,36 @@ describe("workbench AI request model", () => {
         source: "active-note",
         sourceName: "Untitled.md",
         sourceScheme: "untitled",
+        languageId: "markdown"
+      }
+    });
+  });
+
+  it("creates active-note action requests from centralized writing instructions", () => {
+    expect(workbenchAiActionTitles).toEqual({
+      continueActiveNote: "Continue Active Note",
+      extractTasksActiveNote: "Extract Tasks From Active Note",
+      rewriteActiveNote: "Rewrite Active Note",
+      summarizeActiveNote: "Summarize Active Note"
+    });
+
+    expect(createWorkbenchActiveNoteAiTextRequestForAction(
+      model(),
+      workbenchAiRequestActions.rewriteActiveNote,
+      {
+        metadata: {
+          surface: "command"
+        }
+      }
+    )).toEqual({
+      instruction: workbenchAiInstructions.rewriteActiveNote,
+      input: "# Plan\n\n- Ship provider model",
+      metadata: {
+        surface: "command",
+        action: "rewriteActiveNote",
+        source: "active-note",
+        sourceName: "plan.md",
+        sourceScheme: "file",
         languageId: "markdown"
       }
     });

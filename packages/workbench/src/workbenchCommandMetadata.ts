@@ -1,4 +1,5 @@
 import type { CommandMetadata } from "@typora-plus/platform";
+import { workbenchAiActionTitles } from "./workbenchAiRequestModel";
 import { workbenchCommandIds } from "./workbenchCommandIds";
 
 export const workbenchCommandCategories = {
@@ -107,9 +108,24 @@ export const workbenchCommandMetadata = {
     }
   },
   ai: {
+    continueActiveNote: {
+      id: workbenchCommandIds.ai.continueActiveNote,
+      title: workbenchAiActionTitles.continueActiveNote,
+      category: workbenchCommandCategories.ai
+    },
+    extractTasksActiveNote: {
+      id: workbenchCommandIds.ai.extractTasksActiveNote,
+      title: workbenchAiActionTitles.extractTasksActiveNote,
+      category: workbenchCommandCategories.ai
+    },
+    rewriteActiveNote: {
+      id: workbenchCommandIds.ai.rewriteActiveNote,
+      title: workbenchAiActionTitles.rewriteActiveNote,
+      category: workbenchCommandCategories.ai
+    },
     summarizeActiveNote: {
       id: workbenchCommandIds.ai.summarizeActiveNote,
-      title: "Summarize Active Note",
+      title: workbenchAiActionTitles.summarizeActiveNote,
       category: workbenchCommandCategories.ai
     }
   },

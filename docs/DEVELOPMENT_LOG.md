@@ -7176,3 +7176,37 @@ Known limitations:
 - Remote sync conflicts are still inspect-only; choose-local/choose-remote conflict resolution actions are not implemented.
 - Progress history is dialog-scoped and is not persisted across dialog close or application restart.
 - Workspace AI context is keyword/snippet based, not semantic or vector retrieval.
+
+## 2026-06-12 - P2 Active Note AI Writing Commands
+
+Completed:
+
+- Added centralized active-note AI action definitions for summarize, rewrite, continue, and task extraction.
+- Added a generic Workbench active-note AI action runner that reuses default provider selection, active note lookup, workspace-search context selection, and `IAiService.requestText()`.
+- Registered provider-gated command-palette commands for the new writing actions while keeping only the summary command in the titlebar.
+- Updated the AI response dialog title from summary-specific wording to provider-neutral response wording.
+- Kept all provider identity, endpoint, model, secret, token, OAuth, Codex, and Feishu behavior outside Workbench UI defaults.
+- Updated maintained docs without adding new documentation surfaces.
+
+Quality gate:
+
+- `npx vitest run packages/workbench/src/workbenchAiRequestModel.test.ts packages/workbench/src/workbenchAiActions.test.ts packages/workbench/src/workbenchCommandIds.test.ts packages/workbench/src/workbenchCommandMetadata.test.ts packages/workbench/src/workbenchCommandRegistration.test.ts packages/workbench/src/workbenchContributions.test.ts`: passed, 6 files / 33 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 75 files / 708 tests, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Workbench implementation hardcode scan for endpoint/secret/token/model literal patterns: passed
+- Dev server smoke check at `http://127.0.0.1:5173/`: status 200 and root element present
+
+Review:
+
+- AI action titles and instructions now live in `workbenchAiRequestModel`, keeping prompt policy out of JSX and command registration code.
+- Command registration remains provider-gated through `IAiService.getProviders()` and stable default provider selection; no command reaches around the AI service boundary.
+- Response mutation is still explicit: generated text is shown in the dialog and only appended through `ITextFileService.updateContent()` when the user chooses Append.
+
+Known limitations:
+
+- AI responses are still final-response only; streaming output remains future work.
+- Rewrite output is appendable but not an in-place replacement workflow yet.
+- Translation and free-form workspace Q&A still need target-language/question input surfaces before they should be exposed.
+- No built-in AI provider is registered by default; users still need a configured provider and saved secret.

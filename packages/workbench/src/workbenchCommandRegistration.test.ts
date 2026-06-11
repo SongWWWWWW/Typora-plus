@@ -73,7 +73,7 @@ describe("workbench command registration", () => {
       .toBe("files");
   });
 
-  it("registers the AI summarize command only when an AI provider is available", async () => {
+  it("registers active-note AI writing commands only when an AI provider is available", async () => {
     const registered = new Map<string, Command>();
     const testCallbacks = callbacks();
     const services = createServices(registered, [], {
@@ -83,15 +83,18 @@ describe("workbench command registration", () => {
     registerWorkbenchCommands(services, state(), testCallbacks);
 
     expect(registered.has(workbenchCommandIds.ai.summarizeActiveNote)).toBe(true);
+    expect(registered.has(workbenchCommandIds.ai.rewriteActiveNote)).toBe(true);
+    expect(registered.has(workbenchCommandIds.ai.continueActiveNote)).toBe(true);
+    expect(registered.has(workbenchCommandIds.ai.extractTasksActiveNote)).toBe(true);
 
-    await registered.get(workbenchCommandIds.ai.summarizeActiveNote)?.run({} as never);
+    await registered.get(workbenchCommandIds.ai.rewriteActiveNote)?.run({} as never);
 
     expect(services.aiService.requestText).toHaveBeenCalledWith("openai.responses", {
-      instruction: expect.stringContaining("Summarize"),
+      instruction: expect.stringContaining("Rewrite"),
       input: "# A",
       metadata: {
         surface: "command",
-        action: "summarizeActiveNote",
+        action: "rewriteActiveNote",
         source: "active-note",
         sourceName: "a.md",
         sourceScheme: "file",
@@ -111,6 +114,9 @@ describe("workbench command registration", () => {
     registerWorkbenchCommands(createServices(noProviderCommands), state(), callbacks());
 
     expect(noProviderCommands.has(workbenchCommandIds.ai.summarizeActiveNote)).toBe(false);
+    expect(noProviderCommands.has(workbenchCommandIds.ai.rewriteActiveNote)).toBe(false);
+    expect(noProviderCommands.has(workbenchCommandIds.ai.continueActiveNote)).toBe(false);
+    expect(noProviderCommands.has(workbenchCommandIds.ai.extractTasksActiveNote)).toBe(false);
   });
 
   it("registers the remote sync plan command only when a provider and workspace are available", async () => {
