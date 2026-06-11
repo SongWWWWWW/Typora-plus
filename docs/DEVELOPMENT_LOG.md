@@ -5677,3 +5677,31 @@ Review:
 Known limitations:
 
 - Menu item icon rendering still maps contributed icon ids to local React icons in `Application.tsx`.
+
+## 2026-06-11 - P2 Workbench Menu Icon Model
+
+Completed:
+
+- Added focused Workbench menu icon ids, known-id checks, theme-aware icon resolution, and a thin local React icon renderer.
+- Routed `Application.tsx` titlebar and activitybar menu icon rendering through the menu icon model instead of mapping contribution icon ids in the shell.
+- Routed default Workbench menu contributions through the shared icon id constants instead of repeating icon strings.
+- Covered stable icon ids, default contribution coverage, theme icon resolution, and unknown-icon fallback with focused tests.
+
+Quality gate:
+
+- `npx vitest run packages/workbench/src/workbenchMenuIcons.test.ts packages/workbench/src/workbenchContributions.test.ts packages/workbench/src/workbenchMenuModel.test.ts`: passed, 21 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 57 files / 575 tests, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Dev server smoke check: passed at `http://127.0.0.1:5173`; status 200 and root element present
+
+Review:
+
+- Menu icon ids remain renderer-agnostic contribution metadata, while a pure Workbench model owns icon resolution and a separate UI layer owns lucide rendering.
+- `Application.tsx` still renders titlebar and activitybar buttons, but it no longer owns contribution icon id policy.
+- No new dependency, configuration key, storage path, visual token, extra documentation file, or hard-coded platform assumption was introduced.
+
+Known limitations:
+
+- Sidebar, search, Quick Open, and save-conflict icons still live in their local React surfaces because they are not menu contribution metadata.

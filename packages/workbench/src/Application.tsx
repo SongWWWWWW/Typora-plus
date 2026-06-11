@@ -17,23 +17,13 @@ import type {
 import {
   AlertTriangle,
   Command as CommandIcon,
-  FileDown,
   FileText,
-  FilePlus,
   Folder,
   FolderOpen,
-  Hash,
-  Link2,
-  ListTree,
-  Moon,
   PanelLeft,
   RefreshCw,
   Save,
   Search,
-  Settings as SettingsIcon,
-  Sun,
-  Target,
-  Type,
   X
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -93,6 +83,7 @@ import {
   workbenchMenuIds,
   workbenchMenuItemTitle
 } from "./workbenchMenuModel";
+import { renderWorkbenchMenuIcon } from "./workbenchMenuIcons";
 import {
   getWorkbenchBacklinks,
   getWorkbenchSearchResults,
@@ -489,41 +480,6 @@ function useMenuItems(services: WorkbenchServices, menu: MenuId): readonly MenuI
   return items;
 }
 
-function renderMenuIcon(item: MenuItem, configuration: TyporaPlusConfiguration, size: number): ReactNode {
-  switch (item.icon) {
-    case "command":
-      return <CommandIcon size={size} />;
-    case "file-down":
-      return <FileDown size={size} />;
-    case "file-plus":
-      return <FilePlus size={size} />;
-    case "file-text":
-      return <FileText size={size} />;
-    case "folder-open":
-      return <FolderOpen size={size} />;
-    case "hash":
-      return <Hash size={size} />;
-    case "link":
-      return <Link2 size={size} />;
-    case "list-tree":
-      return <ListTree size={size} />;
-    case "save":
-      return <Save size={size} />;
-    case "search":
-      return <Search size={size} />;
-    case "settings":
-      return <SettingsIcon size={size} />;
-    case "target":
-      return <Target size={size} />;
-    case "theme":
-      return configuration.appearance.colorScheme === "dark" ? <Sun size={size} /> : <Moon size={size} />;
-    case "type":
-      return <Type size={size} />;
-    default:
-      return <CommandIcon size={size} />;
-  }
-}
-
 function Titlebar({
   model,
   workspaceName,
@@ -555,7 +511,7 @@ function Titlebar({
             key={item.id}
             onClick={() => onCommand(item.command)}
           >
-            {renderMenuIcon(item, configuration, 17)}
+            {renderWorkbenchMenuIcon(item, configuration, 17)}
           </IconButton>
         ))}
       </div>
@@ -589,7 +545,7 @@ function ActivityBar({
           key={item.id}
           onClick={() => onCommand(item.command)}
         >
-          {renderMenuIcon(item, configuration, 19)}
+          {renderWorkbenchMenuIcon(item, configuration, 19)}
         </IconButton>
       ))}
       <div className="tp-activitybar-spacer" />
@@ -600,7 +556,7 @@ function ActivityBar({
           key={item.id}
           onClick={() => onCommand(item.command)}
         >
-          {renderMenuIcon(item, configuration, 19)}
+          {renderWorkbenchMenuIcon(item, configuration, 19)}
         </IconButton>
       ))}
     </nav>
