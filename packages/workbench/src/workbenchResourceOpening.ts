@@ -4,6 +4,11 @@ import type {
   WorkspaceFileTree
 } from "@typora-plus/platform";
 import {
+  runWorkbenchAction,
+  type WorkbenchOperationErrorSetter,
+  type WorkbenchSaveConflictSetter
+} from "./workbenchActionRunner";
+import {
   openWorkbenchFile,
   type WorkbenchFileOpeningServices
 } from "./workbenchFileOpening";
@@ -18,6 +23,11 @@ export interface WorkbenchResourceOpeningCallbacks {
   readonly showFilesView: () => void;
 }
 
+export interface WorkbenchResourceOpeningActionCallbacks extends WorkbenchResourceOpeningCallbacks {
+  readonly setOperationError: WorkbenchOperationErrorSetter;
+  readonly setSaveConflict?: WorkbenchSaveConflictSetter;
+}
+
 export async function openWorkbenchFileResource(
   services: WorkbenchFileOpeningServices,
   entry: FileTreeEntry,
@@ -26,6 +36,42 @@ export async function openWorkbenchFileResource(
   await openWorkbenchFile(services, entry.uri, {
     clearSaveConflict: callbacks.clearSaveConflict
   });
+}
+
+export function openWorkbenchFileResourceAction(
+  services: WorkbenchFileOpeningServices,
+  entry: FileTreeEntry,
+  callbacks: WorkbenchResourceOpeningActionCallbacks
+): Promise<void | undefined> {
+  return runWorkbenchAction(
+    () => openWorkbenchFileResource(services, entry, callbacks),
+    callbacks.setOperationError,
+    callbacks.setSaveConflict
+  );
+}
+
+export function openWorkbenchQuickOpenFileAction(
+  services: WorkbenchFileOpeningServices,
+  entry: FileTreeEntry,
+  callbacks: WorkbenchResourceOpeningActionCallbacks
+): Promise<void | undefined> {
+  return runWorkbenchAction(
+    () => openWorkbenchQuickOpenFile(services, entry, callbacks),
+    callbacks.setOperationError,
+    callbacks.setSaveConflict
+  );
+}
+
+export function openWorkbenchRecentWorkspaceResourceAction(
+  services: WorkbenchRecentWorkspaceOpeningServices,
+  recent: Pick<RecentResource, "uri">,
+  callbacks: WorkbenchResourceOpeningActionCallbacks
+): Promise<WorkspaceFileTree | undefined> {
+  return runWorkbenchAction(
+    () => openWorkbenchRecentWorkspaceResource(services, recent, callbacks),
+    callbacks.setOperationError,
+    callbacks.setSaveConflict
+  );
 }
 
 export async function openWorkbenchQuickOpenFile(

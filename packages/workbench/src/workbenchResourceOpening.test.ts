@@ -4,11 +4,16 @@ import type {
   TextFileModel,
   WorkspaceFileTree
 } from "@typora-plus/platform";
+import { FileSaveConflictError } from "@typora-plus/platform";
 import { describe, expect, it, vi } from "vitest";
 import {
+  openWorkbenchFileResourceAction,
   openWorkbenchFileResource,
+  openWorkbenchQuickOpenFileAction,
   openWorkbenchQuickOpenFile,
+  openWorkbenchRecentWorkspaceResourceAction,
   openWorkbenchRecentWorkspaceResource,
+  type WorkbenchResourceOpeningActionCallbacks,
   type WorkbenchResourceOpeningCallbacks
 } from "./workbenchResourceOpening";
 import { workspaceStateFromFiles } from "./workbenchWorkspaceOpening";
@@ -112,6 +117,84 @@ describe("workbench resource opening", () => {
     expect(services.recentService.addRecentWorkspace).not.toHaveBeenCalled();
     expect(services.textFileService.openFile).not.toHaveBeenCalled();
   });
+
+  it("runs file resource actions through Workbench action handling", async () => {
+    const entry = createFileEntry("notes/a.md");
+    const operationErrors: Array<string | undefined> = [];
+    const callbacks = createActionCallbacks({
+      setOperationError: (value) => operationErrors.push(value)
+    });
+    const services = createServices({
+      openFile: async () => {
+        throw new Error("Open failed");
+      }
+    });
+
+    await expect(openWorkbenchFileResourceAction(services, entry, callbacks)).resolves.toBeUndefined();
+
+    expect(callbacks.clearSaveConflict).toHaveBeenCalledOnce();
+    expect(operationErrors).toEqual([undefined, "Open failed"]);
+  });
+
+  it("runs Quick Open file actions through Workbench action handling", async () => {
+    const entry = createFileEntry("notes/a.md");
+    const calls: string[] = [];
+    const callbacks = createActionCallbacks({
+      clearSaveConflict: () => calls.push("clear"),
+      closeQuickOpen: () => calls.push("close"),
+      setOperationError: (value) => calls.push(`error:${value ?? "none"}`)
+    });
+    const services = createServices({
+      openFile: async (uri) => {
+        calls.push(`open:${uri.toString()}`);
+        return createModel(uri, "a.md");
+      },
+      addRecentFile: (_uri, name) => calls.push(`recent:${name}`)
+    });
+
+    await expect(openWorkbenchQuickOpenFileAction(services, entry, callbacks)).resolves.toBeUndefined();
+
+    expect(calls).toEqual([
+      "error:none",
+      "clear",
+      "open:file:///workspace/notes/a.md",
+      "recent:a.md",
+      "close"
+    ]);
+  });
+
+  it("forwards save conflicts from recent workspace resource actions", async () => {
+    const conflict = {
+      uri: URI.file("/workspace/notes/a.md"),
+      expectedMtime: 1,
+      diskMtime: 2
+    };
+    const firstFile = createFileEntry("notes/a.md");
+    const workspaceFiles = createWorkspaceFileTree([firstFile]);
+    const operationErrors: Array<string | undefined> = [];
+    const saveConflicts: unknown[] = [];
+    const callbacks = createActionCallbacks({
+      setOperationError: (value) => operationErrors.push(value),
+      setSaveConflict: (value) => saveConflicts.push(value)
+    });
+    const services = createServices({
+      openRecentWorkspace: async () => workspaceFiles,
+      openFile: async () => {
+        throw new FileSaveConflictError(conflict);
+      }
+    });
+
+    await expect(openWorkbenchRecentWorkspaceResourceAction(
+      services,
+      { uri: workspaceFiles.root.uri },
+      callbacks
+    )).resolves.toBeUndefined();
+
+    expect(callbacks.showFilesView).toHaveBeenCalledOnce();
+    expect(callbacks.clearSaveConflict).toHaveBeenCalledOnce();
+    expect(saveConflicts).toEqual([conflict]);
+    expect(operationErrors).toEqual([undefined, "File changed on disk"]);
+  });
 });
 
 function createServices(overrides: {
@@ -145,6 +228,16 @@ function createCallbacks(
     clearSaveConflict: vi.fn(),
     closeQuickOpen: vi.fn(),
     showFilesView: vi.fn(),
+    ...overrides
+  };
+}
+
+function createActionCallbacks(
+  overrides: Partial<WorkbenchResourceOpeningActionCallbacks> = {}
+): WorkbenchResourceOpeningActionCallbacks {
+  return {
+    ...createCallbacks(overrides),
+    setOperationError: vi.fn(),
     ...overrides
   };
 }

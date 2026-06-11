@@ -4921,3 +4921,31 @@ Review:
 Known limitations:
 
 - Command Palette still keeps its query and active-row state locally because that state is specific to the overlay surface.
+
+## 2026-06-11 - P2 Workbench Resource Opening Actions
+
+Completed:
+
+- Added focused resource-opening action helpers for file tree rows, Quick Open file rows, and recent workspace rows.
+- Replaced remaining `Application.tsx` resource-opening `runWorkbenchAction()` wrappers with helper calls.
+- Preserved ordinary file opening, recent-file recording, recent-workspace reopening, Files view reveal, Quick Open close, and stale save-conflict clearing behavior.
+- Covered action success ordering, regular open-failure mapping, and save-conflict forwarding.
+
+Quality gate:
+
+- `npx vitest run packages/workbench/src/workbenchResourceOpening.test.ts packages/workbench/src/workbenchFileOpening.test.ts packages/workbench/src/workbenchWorkspaceOpening.test.ts packages/workbench/src/workbenchActionRunner.test.ts`: passed, 19 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 534 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Dev server smoke check: passed at `http://127.0.0.1:5173`; status 200 and root element present
+
+Review:
+
+- Resource-opening actions now share the same Workbench action-runner error and save-conflict boundary as command palette, shortcut dispatch, line navigation, and save-conflict dialog actions.
+- `Application.tsx` still supplies shell-only follow-up callbacks such as closing Quick Open and revealing Files, while resource-opening policy owns the service orchestration.
+- No new dependency, configuration key, storage path, visual token, extra documentation file, or hard-coded platform assumption was introduced.
+
+Known limitations:
+
+- Sidebar and Quick Open still own their local focus and active-row state because those are surface-specific interaction concerns.
