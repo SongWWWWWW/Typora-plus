@@ -56,6 +56,7 @@ import {
   applyWorkbenchContextValues,
   createWorkbenchStateContextValues
 } from "./workbenchContextModel";
+import { updateWorkbenchConfigurationAction } from "./workbenchConfigurationUpdates";
 import { createWorkbenchEditorAdapter } from "./workbenchEditorAdapter";
 import {
   createWorkbenchFileTreeRows,
@@ -431,7 +432,11 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
         getKeybindingLabel={(id) => services.keybindingService.getKeybindingLabel(id)}
         getKeybindingLabelForKeybinding={(keybinding) => services.keybindingService.getKeybindingLabelForKeybinding(keybinding)}
         onClose={() => setSettingsOpen(false)}
-        onUpdate={(value) => services.configurationService.updateValue(value)}
+        onUpdate={(value) => {
+          void updateWorkbenchConfigurationAction(services, value, {
+            setOperationError
+          });
+        }}
       />
     </main>
   );

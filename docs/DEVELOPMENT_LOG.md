@@ -4977,3 +4977,31 @@ Review:
 Known limitations:
 
 - Menu icon rendering remains local to the React shell because icon ids map to concrete React icon components there.
+
+## 2026-06-11 - P2 Workbench Configuration Update Actions
+
+Completed:
+
+- Added a focused Workbench configuration-update helper for applying partial configuration changes.
+- Routed Settings dialog updates through the Workbench action runner instead of calling `IConfigurationService.updateValue()` directly from `Application.tsx`.
+- Preserved Settings control behavior while clearing stale operation errors before updates and mapping configuration storage failures into the shared operation-error state.
+- Covered direct configuration update delegation, successful action handling, and failure mapping.
+
+Quality gate:
+
+- `npx vitest run packages/workbench/src/workbenchConfigurationUpdates.test.ts packages/workbench/src/workbenchActionRunner.test.ts`: passed, 8 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 539 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Dev server smoke check: passed at `http://127.0.0.1:5173`; status 200 and root element present
+
+Review:
+
+- Settings updates now share the same operation-error boundary as command palette, keybinding dispatch, resource opening, line navigation, and save-conflict actions.
+- `SettingsDialog` remains a controlled UI surface that emits partial configuration objects, while the Workbench configuration-update helper owns service orchestration and error mapping.
+- No new dependency, configuration key, storage path, visual token, extra documentation file, or hard-coded platform assumption was introduced.
+
+Known limitations:
+
+- Workbench command handlers that toggle configuration still rely on their caller running command execution through the Workbench command action boundary.
