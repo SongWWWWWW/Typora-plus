@@ -45,10 +45,6 @@ import {
   moveListSelection,
   normalizeListSelection
 } from "./listNavigationModel";
-import {
-  createMarkdownCodeFenceRenderer,
-  createMarkdownInlineRenderer
-} from "./markdownRendererPreview";
 import { SettingsDialog } from "./SettingsDialog";
 import type { WorkbenchServices } from "./services";
 import {
@@ -60,6 +56,7 @@ import {
   applyWorkbenchContextValues,
   createWorkbenchStateContextValues
 } from "./workbenchContextModel";
+import { createWorkbenchEditorAdapter } from "./workbenchEditorAdapter";
 import {
   createWorkbenchFileTreeRows,
   type WorkbenchFileTreeRow
@@ -453,34 +450,20 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [services]);
 
-  const editorConfiguration = {
-    fontSize: configuration.editor.fontSize,
-    lineHeight: configuration.editor.lineHeight,
-    maxWidth: configuration.editor.maxWidth,
-    focusMode: configuration.editor.focusMode,
-    typewriterMode: configuration.editor.typewriterMode
-  };
-  const resolveImageSource = useMemo(
-    () => services.resourceService.isAvailable() && model.uri.scheme === "file"
-      ? (source: string) => services.resourceService.resolveImageSource(model.uri, source)
-      : undefined,
-    [model.uri, services]
-  );
-  const renderCodeFence = useMemo(
-    () => createMarkdownCodeFenceRenderer({
-      cacheEntryLimit: configuration.editor.rendererPreviewCacheEntries,
-      getUri: () => model.uri,
-      markdownRendererService: services.markdownRendererService
-    }),
-    [configuration.editor.rendererPreviewCacheEntries, configuration.markdown, markdownRendererRevision, model.uri, services]
-  );
-  const renderInline = useMemo(
-    () => createMarkdownInlineRenderer({
-      cacheEntryLimit: configuration.editor.rendererPreviewCacheEntries,
-      getUri: () => model.uri,
-      markdownRendererService: services.markdownRendererService
-    }),
-    [configuration.editor.rendererPreviewCacheEntries, configuration.markdown, markdownRendererRevision, model.uri, services]
+  const editorAdapter = useMemo(
+    () => createWorkbenchEditorAdapter(configuration, services, model),
+    [
+      configuration.editor.focusMode,
+      configuration.editor.fontSize,
+      configuration.editor.lineHeight,
+      configuration.editor.maxWidth,
+      configuration.editor.rendererPreviewCacheEntries,
+      configuration.editor.typewriterMode,
+      configuration.markdown,
+      markdownRendererRevision,
+      model.uri,
+      services
+    ]
   );
 
   return (
@@ -578,11 +561,11 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
           <MarkdownEditor
             ref={editorRef}
             value={model.value}
-            configuration={editorConfiguration}
+            configuration={editorAdapter.configuration}
             onChange={(value) => services.textFileService.updateContent(value)}
-            resolveImageSource={resolveImageSource}
-            renderCodeFence={renderCodeFence}
-            renderInline={renderInline}
+            resolveImageSource={editorAdapter.resolveImageSource}
+            renderCodeFence={editorAdapter.renderCodeFence}
+            renderInline={editorAdapter.renderInline}
             onPasteImage={services.attachmentService.isAvailable()
               ? async (image) => {
                 const saved = await services.attachmentService.saveImage(model.uri, image);

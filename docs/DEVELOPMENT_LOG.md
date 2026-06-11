@@ -4525,3 +4525,32 @@ Review:
 Known limitations:
 
 - The browser `matchMedia` subscription still lives in `Application.tsx`; extracting that would require a small DOM-facing hook rather than a pure model.
+
+## 2026-06-11 - P2 Workbench Editor Adapter Model
+
+Completed:
+
+- Added a focused Workbench editor adapter helper for Markdown editor configuration, workspace image resource resolution, and Markdown block/inline renderer adapter creation.
+- Replaced inline editor prop assembly in `Application.tsx` with one memoized adapter object.
+- Preserved renderer cache invalidation on renderer service changes, Markdown configuration changes, active URI changes, and preview cache-size changes.
+- Added focused tests for editor preference mapping, file-only image resolution, active document context in renderer previews, cache-limit handoff, and complete adapter creation.
+
+Quality gate:
+
+- `npx vitest run packages/workbench/src/workbenchEditorAdapter.test.ts packages/workbench/src/markdownRendererPreview.test.ts`: passed, 15 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 494 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Dev server smoke check: passed at `http://127.0.0.1:5173`; status 200 and root element present
+
+Review:
+
+- Editor adapter behavior remains Workbench-local and consumes public editor/platform contracts without adding Electron, storage, or filesystem dependencies.
+- The shell keeps React subscription and memoization ownership, while the adapter owns translation from Workbench services/configuration to editor callbacks.
+- The memoized adapter avoids rebuilding editor configuration and renderer callbacks on ordinary content-only rerenders.
+- No new dependency, configuration key, storage path, visual token, extra documentation file, or hard-coded platform assumption was introduced.
+
+Known limitations:
+
+- Paste-image handling still remains inline beside the `MarkdownEditor` render because it depends on the current attachment service callback and active model URI; it can move behind the adapter if attachment behavior grows.
