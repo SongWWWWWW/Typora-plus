@@ -52,6 +52,7 @@ import {
   runWorkbenchAction
 } from "./workbenchActionRunner";
 import { editorTaskCommandMetadata } from "./workbenchContributions";
+import { applyWorkbenchConfigurationToServices } from "./workbenchConfigurationSync";
 import {
   applyWorkbenchContextValues,
   createWorkbenchStateContextValues
@@ -169,14 +170,7 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
   );
 
   useEffect(() => services.configurationService.onDidChangeConfiguration((nextConfiguration) => {
-    services.attachmentService.configure({
-      assetFolder: nextConfiguration.workspace.defaultAssetFolder
-    });
-    services.indexService.configure({
-      maxFileSizeBytes: nextConfiguration.workspace.searchMaxFileSizeBytes,
-      maxResults: nextConfiguration.workspace.searchMaxResults
-    });
-    services.keybindingService.setUserKeybindings(nextConfiguration.keybindings.overrides);
+    applyWorkbenchConfigurationToServices(services, nextConfiguration);
     setConfiguration(nextConfiguration);
   }).dispose, [services]);
 

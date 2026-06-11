@@ -4554,3 +4554,31 @@ Review:
 Known limitations:
 
 - Paste-image handling still remains inline beside the `MarkdownEditor` render because it depends on the current attachment service callback and active model URI; it can move behind the adapter if attachment behavior grows.
+
+## 2026-06-11 - P2 Workbench Configuration Sync Model
+
+Completed:
+
+- Added a focused Workbench configuration sync helper for applying persisted preferences to platform services.
+- Moved attachment asset-folder, workspace index-limit, and user keybinding override synchronization out of `Application.tsx`.
+- Reused the same helper during Workbench service bootstrap so startup and runtime configuration mapping share one path.
+- Added focused coverage for the service configuration payloads derived from Workbench configuration.
+
+Quality gate:
+
+- `npx vitest run packages/workbench/src/workbenchConfigurationSync.test.ts`: passed, 1 test
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 495 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Dev server smoke check: passed at `http://127.0.0.1:5173`; status 200 and root element present
+
+Review:
+
+- Configuration persistence and validation remain owned by `IConfigurationService`; the helper only applies already-validated values to service boundaries.
+- Runtime configuration changes and startup initialization now share the same mapping for attachment, index, and keybinding services.
+- No new dependency, configuration key, storage path, visual token, extra documentation file, or hard-coded platform assumption was introduced.
+
+Known limitations:
+
+- Service-specific validation still belongs to the platform services; this helper intentionally does not duplicate bounds or sanitization logic from configuration.

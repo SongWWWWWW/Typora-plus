@@ -57,6 +57,7 @@ import {
 } from "@typora-plus/platform";
 import { createWorkbenchExtensionHost } from "./workbenchExtensionActivation";
 import { defaultWorkbenchExtensionManifest } from "./workbenchContributions";
+import { applyWorkbenchConfigurationToServices } from "./workbenchConfigurationSync";
 import {
   applyWorkbenchContextValues,
   createWorkbenchCapabilityContextValues
@@ -163,7 +164,11 @@ export function createWorkbenchServices(): WorkbenchServices {
   serviceCollection.set(IExtensionService, extensionService);
   exportService.registerProvider(markdownHtmlExportProvider);
   extensionService.registerExtension(defaultWorkbenchExtensionManifest);
-  keybindingService.setUserKeybindings(configurationService.getValue().keybindings.overrides);
+  applyWorkbenchConfigurationToServices({
+    attachmentService,
+    indexService,
+    keybindingService
+  }, configurationService.getValue());
 
   return {
     serviceCollection,
