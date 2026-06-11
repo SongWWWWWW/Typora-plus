@@ -5005,3 +5005,31 @@ Review:
 Known limitations:
 
 - Workbench command handlers that toggle configuration still rely on their caller running command execution through the Workbench command action boundary.
+
+## 2026-06-11 - P2 Workbench Initial State Snapshot
+
+Completed:
+
+- Added a focused Workbench initial-state helper that captures startup configuration, active model, workspace, recents, themes, and index status through public service boundaries.
+- Replaced scattered `Application.tsx` initial service reads with one cached startup snapshot while preserving first-render initialization semantics.
+- Kept later service updates on the existing Workbench state subscription helper.
+- Covered startup snapshot contents and single-read behavior for each source service.
+
+Quality gate:
+
+- `npx vitest run packages/workbench/src/workbenchInitialState.test.ts packages/workbench/src/workbenchStateSubscriptions.test.ts`: passed, 4 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 540 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Dev server smoke check: passed at `http://127.0.0.1:5173`; status 200 and root element present
+
+Review:
+
+- Workbench startup state and later state subscriptions now have separate focused lifecycle boundaries instead of mixing initial service reads into the React shell.
+- `Application.tsx` still owns React state, while `workbenchInitialState` owns which service snapshots define the initial shell state.
+- No new dependency, configuration key, storage path, visual token, extra documentation file, or hard-coded platform assumption was introduced.
+
+Known limitations:
+
+- Command metadata and keybinding label reads are still passed directly to Command Palette and Settings surfaces.

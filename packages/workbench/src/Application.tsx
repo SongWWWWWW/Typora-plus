@@ -63,6 +63,10 @@ import {
   type WorkbenchFileTreeRow
 } from "./workbenchFileTreeModel";
 import {
+  createWorkbenchInitialState,
+  type WorkbenchInitialState
+} from "./workbenchInitialState";
+import {
   overwriteWorkbenchSaveConflictAction,
   reloadWorkbenchSaveConflictAction
 } from "./workbenchSaveConflictResolution";
@@ -125,13 +129,20 @@ type TreeStyle = CSSProperties & {
 };
 
 export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
+  const initialStateRef = useRef<WorkbenchInitialState | null>(null);
+
+  if (!initialStateRef.current) {
+    initialStateRef.current = createWorkbenchInitialState(services);
+  }
+
+  const initialState = initialStateRef.current;
   const [configuration, setConfiguration] = useState<TyporaPlusConfiguration>(
-    services.configurationService.getValue()
+    initialState.configuration
   );
-  const [model, setModel] = useState<TextFileModel>(() => services.textFileService.openDefault());
-  const [workspace, setWorkspace] = useState<WorkspaceState>(() => services.workspaceService.getWorkspace());
-  const [recents, setRecents] = useState<readonly RecentResource[]>(() => services.recentService.getRecents());
-  const [themes, setThemes] = useState(() => services.themeService.getThemes());
+  const [model, setModel] = useState<TextFileModel>(initialState.model);
+  const [workspace, setWorkspace] = useState<WorkspaceState>(initialState.workspace);
+  const [recents, setRecents] = useState<readonly RecentResource[]>(initialState.recents);
+  const [themes, setThemes] = useState(initialState.themes);
   const [sideView, setSideView] = useState<WorkbenchSideView | null>(defaultWorkbenchSideView);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [quickOpen, setQuickOpen] = useState(false);
@@ -140,7 +151,7 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
   const [selectedTag, setSelectedTag] = useState<string | undefined>();
   const [operationError, setOperationError] = useState<string | undefined>();
   const [saveConflict, setSaveConflict] = useState<FileSaveConflict | undefined>();
-  const [indexStatus, setIndexStatus] = useState<WorkspaceIndexStatus>(() => services.indexService.getStatus());
+  const [indexStatus, setIndexStatus] = useState<WorkspaceIndexStatus>(initialState.indexStatus);
   const [markdownRendererRevision, setMarkdownRendererRevision] = useState(0);
   const editorRef = useRef<MarkdownEditorHandle | null>(null);
   const titlebarMenuItems = useMenuItems(services, "titlebar.primary");
