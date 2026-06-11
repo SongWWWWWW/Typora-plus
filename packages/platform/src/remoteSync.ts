@@ -1,6 +1,6 @@
 import { toDisposable, type IDisposable, type URI as URIType } from "@typora-plus/base";
 import { createServiceIdentifier } from "./instantiation";
-import type { FileKind } from "./files";
+import type { FileKind, FileTreeEntry, WorkspaceFileTree } from "./files";
 
 export type RemoteSyncProviderId = string;
 export type RemoteSyncDirection = "push" | "pull" | "bidirectional";
@@ -60,6 +60,10 @@ export interface RemoteSyncProvider {
   executePlan(plan: RemoteSyncPlan, request: RemoteSyncPlanRequest): RemoteSyncResult | Promise<RemoteSyncResult>;
 }
 
+export interface RemoteSyncWorkspaceResourceOptions {
+  readonly includeDirectories?: boolean;
+}
+
 export interface RegisteredRemoteSyncProvider {
   readonly id: RemoteSyncProviderId;
   readonly title: string;
@@ -77,6 +81,17 @@ export interface IRemoteSyncService {
 }
 
 export const IRemoteSyncService = createServiceIdentifier<IRemoteSyncService>("remoteSync");
+
+export function createRemoteSyncResourcesFromWorkspace(
+  workspace: WorkspaceFileTree,
+  options: RemoteSyncWorkspaceResourceOptions = {}
+): readonly RemoteSyncResource[] {
+  const entries = options.includeDirectories
+    ? flattenWorkspaceSyncEntries(workspace.root.children ?? [])
+    : workspace.files;
+
+  return normalizeRemoteSyncResources(entries.map(remoteSyncResourceFromFileEntry));
+}
 
 export class RemoteSyncService implements IRemoteSyncService {
   private readonly providers = new Map<RemoteSyncProviderId, RemoteSyncProvider>();
@@ -129,6 +144,31 @@ export class RemoteSyncService implements IRemoteSyncService {
 
     return provider;
   }
+}
+
+function remoteSyncResourceFromFileEntry(entry: FileTreeEntry): RemoteSyncResource {
+  return {
+    uri: entry.uri,
+    relativePath: entry.relativePath,
+    kind: entry.kind,
+    name: entry.name,
+    ...(entry.size === undefined ? {} : { size: entry.size }),
+    ...(entry.mtime === undefined ? {} : { mtime: entry.mtime })
+  };
+}
+
+function flattenWorkspaceSyncEntries(entries: readonly FileTreeEntry[]): readonly FileTreeEntry[] {
+  const flattened: FileTreeEntry[] = [];
+
+  for (const entry of entries) {
+    flattened.push(entry);
+
+    if (entry.children) {
+      flattened.push(...flattenWorkspaceSyncEntries(entry.children));
+    }
+  }
+
+  return flattened;
 }
 
 function normalizeRemoteSyncProvider(provider: RemoteSyncProvider): RemoteSyncProvider {

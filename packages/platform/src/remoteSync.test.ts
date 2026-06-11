@@ -1,6 +1,8 @@
 import { URI } from "@typora-plus/base";
 import { describe, expect, it } from "vitest";
+import type { FileTreeEntry, WorkspaceFileTree } from "./files";
 import {
+  createRemoteSyncResourcesFromWorkspace,
   RemoteSyncService,
   type RemoteSyncPlan,
   type RemoteSyncPlanRequest,
@@ -207,6 +209,74 @@ describe("remote sync service", () => {
     await expect(service.executePlan("bad.result", plan(), request())).rejects
       .toThrow("Remote sync summary creates must be a non-negative integer");
   });
+
+  it("creates normalized sync resources from workspace files", () => {
+    const workspace = workspaceTree([
+      file("daily\\today.md", { size: 128, mtime: 20 }),
+      file("archive/yesterday.md")
+    ]);
+
+    expect(createRemoteSyncResourcesFromWorkspace(workspace)).toEqual([
+      {
+        uri: URI.file("C:/Notes/daily/today.md"),
+        relativePath: "daily/today.md",
+        kind: "file",
+        name: "today.md",
+        size: 128,
+        mtime: 20
+      },
+      {
+        uri: URI.file("C:/Notes/archive/yesterday.md"),
+        relativePath: "archive/yesterday.md",
+        kind: "file",
+        name: "yesterday.md"
+      }
+    ]);
+  });
+
+  it("can include directory resources from the workspace tree without including the root", () => {
+    const today = file("daily/today.md");
+    const folder = directory("daily", [today]);
+    const workspace: WorkspaceFileTree = {
+      root: {
+        uri: URI.file("C:/Notes"),
+        relativePath: "",
+        kind: "directory",
+        name: "Notes",
+        children: [folder]
+      },
+      files: [today]
+    };
+
+    expect(createRemoteSyncResourcesFromWorkspace(workspace, { includeDirectories: true })).toEqual([
+      {
+        uri: URI.file("C:/Notes/daily"),
+        relativePath: "daily",
+        kind: "directory",
+        name: "daily"
+      },
+      {
+        uri: URI.file("C:/Notes/daily/today.md"),
+        relativePath: "daily/today.md",
+        kind: "file",
+        name: "today.md"
+      }
+    ]);
+  });
+
+  it("rejects unsafe workspace resource paths before providers see them", () => {
+    const workspace = workspaceTree([
+      {
+        uri: URI.file("C:/Notes/escape.md"),
+        relativePath: "../escape.md",
+        kind: "file",
+        name: "escape.md"
+      }
+    ]);
+
+    expect(() => createRemoteSyncResourcesFromWorkspace(workspace))
+      .toThrow("Remote sync resource 0 relative path must not contain parent traversal");
+  });
 });
 
 function provider(id: string, title: string): RemoteSyncProvider {
@@ -232,6 +302,44 @@ function request(overrides: Partial<RemoteSyncPlanRequest> = {}): RemoteSyncPlan
       kind: "file"
     }],
     ...overrides
+  };
+}
+
+function workspaceTree(files: readonly FileTreeEntry[]): WorkspaceFileTree {
+  return {
+    root: {
+      uri: URI.file("C:/Notes"),
+      relativePath: "",
+      kind: "directory",
+      name: "Notes",
+      children: files
+    },
+    files
+  };
+}
+
+function file(relativePath: string, metadata: { readonly size?: number; readonly mtime?: number } = {}): FileTreeEntry {
+  const normalizedPath = relativePath.replaceAll("\\", "/");
+  const name = normalizedPath.split("/").at(-1) ?? normalizedPath;
+
+  return {
+    uri: URI.file(`C:/Notes/${normalizedPath}`),
+    relativePath,
+    kind: "file",
+    name,
+    ...metadata
+  };
+}
+
+function directory(relativePath: string, children: readonly FileTreeEntry[]): FileTreeEntry {
+  const name = relativePath.split("/").at(-1) ?? relativePath;
+
+  return {
+    uri: URI.file(`C:/Notes/${relativePath}`),
+    relativePath,
+    kind: "directory",
+    name,
+    children
   };
 }
 

@@ -58,7 +58,7 @@ P2 main progress is implemented:
 - workspace search and attachment settings are applied to platform services when preferences change
 - Settings preferences dialog with setting search and section navigation for appearance, custom theme selection, editor, auto-save delay, renderer preview cache size, workspace, and searchable keybinding options by command or shortcut label, including modified-only filtering, reset-all cleanup, and numeric controls derived from platform configuration bounds, opened from the activity bar, command palette, or `Ctrl+,`
 - HTML export resolves workspace-relative images through the platform resource service, writes sibling asset files when the native save bridge is available, and keeps data URL or safe-path fallback behavior for browser export and unresolved resources
-- platform-level remote sync service boundary for provider-backed workspace mirroring, planning, execution, and conflict reporting so future Feishu Drive or other cloud integrations stay out of UI code
+- platform-level remote sync service boundary for provider-backed workspace mirroring, workspace resource normalization, planning, execution, and conflict reporting so future Feishu Drive or other cloud integrations stay out of UI code
 
 ## Commands
 

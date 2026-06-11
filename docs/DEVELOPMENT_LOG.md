@@ -6069,3 +6069,32 @@ Known limitations:
 
 - No built-in Feishu provider, OAuth flow, Electron network bridge, remote state cache, or sync UI is wired yet.
 - Conflict resolution is represented in plans/results but not yet connected to Workbench dialogs or local file writes.
+
+## 2026-06-11 - P2 Remote Sync Workspace Resource Model
+
+Completed:
+
+- Added a platform helper that converts trusted `WorkspaceFileTree` values into normalized remote sync resources.
+- Kept the workspace root out of sync resources while allowing future providers to opt into directory resources.
+- Reused remote sync path normalization so files, folders, and future Workbench surfaces share one workspace-relative path policy.
+- Covered file-only resources, optional directory inclusion, root exclusion, metadata mapping, path normalization, and unsafe path rejection with focused tests.
+
+Quality gate:
+
+- `npx vitest run packages/platform/src/remoteSync.test.ts`: passed, 7 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 61 files / 608 tests, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Dev server smoke check: passed at `http://127.0.0.1:5173`; status 200 and root element present
+
+Review:
+
+- Workspace-to-sync resource mapping now lives with the remote sync model instead of being left for future UI or Feishu provider code to duplicate.
+- The helper preserves local file metadata available from the trusted workspace tree without reading file contents or inventing content hashes.
+- No new dependency, configuration key, storage path, visual token, extra documentation file, or hard-coded platform assumption was introduced.
+
+Known limitations:
+
+- Remote providers still need their own remote state cache and diff logic before they can create useful sync plans.
+- File content hashing remains a future provider or indexing concern because this helper intentionally only maps existing workspace tree metadata.
