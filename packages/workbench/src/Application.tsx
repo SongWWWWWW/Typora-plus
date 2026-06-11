@@ -53,10 +53,7 @@ import { executeWorkbenchCommand } from "./workbenchActionRunner";
 import { scheduleWorkbenchAutoSave } from "./workbenchAutoSave";
 import { registerWorkbenchCommands } from "./workbenchCommandRegistration";
 import { createWorkbenchCommandSurface } from "./workbenchCommandSurface";
-import {
-  applyWorkbenchContextValues,
-  createWorkbenchStateContextValues
-} from "./workbenchContextModel";
+import { applyWorkbenchStateContext } from "./workbenchContextModel";
 import { updateWorkbenchConfigurationAction } from "./workbenchConfigurationUpdates";
 import { createWorkbenchEditorAdapter } from "./workbenchEditorAdapter";
 import {
@@ -198,10 +195,7 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
   }, [services]);
 
   useEffect(() => {
-    applyWorkbenchContextValues(
-      services.contextKeyService,
-      createWorkbenchStateContextValues(configuration, model, sideView, workspace)
-    );
+    applyWorkbenchStateContext(services, configuration, model, sideView, workspace);
   }, [
     configuration.editor.focusMode,
     configuration.editor.typewriterMode,

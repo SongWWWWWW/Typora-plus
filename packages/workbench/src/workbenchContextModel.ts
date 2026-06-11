@@ -36,6 +36,10 @@ export interface WorkbenchStateContextConfiguration {
   readonly editor: Pick<TyporaPlusConfiguration["editor"], "focusMode" | "typewriterMode">;
 }
 
+export interface WorkbenchStateContextServices {
+  readonly contextKeyService: Pick<IContextKeyService, "setValue">;
+}
+
 export function createWorkbenchCapabilityContextValues(
   context: WorkbenchCapabilityContext
 ): readonly WorkbenchContextEntry[] {
@@ -92,4 +96,17 @@ export function applyWorkbenchContextValues(
   for (const entry of entries) {
     contextKeyService.setValue(entry.key, entry.value);
   }
+}
+
+export function applyWorkbenchStateContext(
+  services: WorkbenchStateContextServices,
+  configuration: WorkbenchStateContextConfiguration,
+  model: Pick<TextFileModel, "uri">,
+  sideView: WorkbenchSideView | null,
+  workspace: Pick<WorkspaceState, "files">
+): void {
+  applyWorkbenchContextValues(
+    services.contextKeyService,
+    createWorkbenchStateContextValues(configuration, model, sideView, workspace)
+  );
 }

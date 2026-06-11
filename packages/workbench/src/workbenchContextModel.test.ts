@@ -3,6 +3,7 @@ import type { ContextKeyValue, FileTreeEntry, WorkspaceState } from "@typora-plu
 import { describe, expect, it, vi } from "vitest";
 import {
   applyWorkbenchContextValues,
+  applyWorkbenchStateContext,
   createWorkbenchCapabilityContextValues,
   createWorkbenchStateContextValues,
   workbenchContextKeys
@@ -94,6 +95,31 @@ describe("workbench context model", () => {
       [workbenchContextKeys.fileSystemAvailable, true],
       [workbenchContextKeys.attachmentAvailable, true],
       [workbenchContextKeys.resourceAvailable, false]
+    ]);
+  });
+
+  it("applies Workbench state context through the service boundary", () => {
+    const setValue = vi.fn<(key: string, value: ContextKeyValue | undefined) => void>();
+
+    applyWorkbenchStateContext({
+      contextKeyService: {
+        setValue
+      }
+    }, {
+      editor: {
+        focusMode: true,
+        typewriterMode: true
+      }
+    }, {
+      uri: URI.file("/workspace/note.md")
+    }, "search", workspace(true));
+
+    expect(setValue.mock.calls).toEqual([
+      [workbenchContextKeys.activeResourceScheme, "file"],
+      [workbenchContextKeys.editorFocusMode, true],
+      [workbenchContextKeys.editorTypewriterMode, true],
+      [workbenchContextKeys.sideView, "search"],
+      [workbenchContextKeys.workspaceOpen, true]
     ]);
   });
 });

@@ -5061,3 +5061,31 @@ Review:
 Known limitations:
 
 - Editor content updates still call the text-file service directly from the editor surface.
+
+## 2026-06-11 - P2 Workbench State Context Application
+
+Completed:
+
+- Added a focused Workbench state-context application helper that maps current shell state into context keys through the context service boundary.
+- Replaced direct `Application.tsx` context-key service application with the helper call.
+- Preserved active resource scheme, focus mode, typewriter mode, side view, and workspace-open context values.
+- Covered state-context application through the service boundary.
+
+Quality gate:
+
+- `npx vitest run packages/workbench/src/workbenchContextModel.test.ts`: passed, 5 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 543 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Dev server smoke check: passed at `http://127.0.0.1:5173`; status 200 and root element present
+
+Review:
+
+- Context key names, state value derivation, and state application now live together in the Workbench context model instead of splitting service writes across the React shell.
+- `Application.tsx` still owns when state changes should be applied, while the context model owns how those values cross into `IContextKeyService`.
+- No new dependency, configuration key, storage path, visual token, extra documentation file, or hard-coded platform assumption was introduced.
+
+Known limitations:
+
+- Native capability context is still applied during service bootstrap because those capabilities are established before the React shell mounts.
