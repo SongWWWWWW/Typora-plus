@@ -124,7 +124,10 @@ import {
   nextWorkbenchSelectedTag
 } from "./workbenchTagsModel";
 import { registerWorkbenchStateSubscriptions } from "./workbenchStateSubscriptions";
-import { registerWorkbenchThemeSynchronization } from "./workbenchThemeSynchronization";
+import {
+  createWorkbenchThemeSynchronizationEnvironment,
+  registerWorkbenchThemeSynchronization
+} from "./workbenchThemeSynchronization";
 
 export interface WorkbenchApplicationProps {
   readonly services: WorkbenchServices;
@@ -250,14 +253,15 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
   ]);
 
   useEffect(() => {
-    if (typeof window === "undefined") {
+    if (typeof window === "undefined" || typeof document === "undefined") {
       return;
     }
 
-    const disposable = registerWorkbenchThemeSynchronization({
-      matchMedia: (query) => window.matchMedia(query),
-      target: document.documentElement
-    }, configuration, services);
+    const disposable = registerWorkbenchThemeSynchronization(
+      createWorkbenchThemeSynchronizationEnvironment(window, document),
+      configuration,
+      services
+    );
 
     return () => disposable.dispose();
   }, [configuration.appearance.colorScheme, configuration.appearance.themeId, services, themes]);

@@ -18,6 +18,24 @@ export interface WorkbenchThemeSynchronizationEnvironment {
   matchMedia(query: string): WorkbenchThemeMediaQueryList;
 }
 
+export interface WorkbenchThemeSynchronizationBrowser {
+  matchMedia(query: string): WorkbenchThemeMediaQueryList;
+}
+
+export interface WorkbenchThemeSynchronizationDocument {
+  readonly documentElement: HTMLElement;
+}
+
+export function createWorkbenchThemeSynchronizationEnvironment(
+  browser: WorkbenchThemeSynchronizationBrowser,
+  themeDocument: WorkbenchThemeSynchronizationDocument
+): WorkbenchThemeSynchronizationEnvironment {
+  return {
+    target: themeDocument.documentElement,
+    matchMedia: (query) => browser.matchMedia(query)
+  };
+}
+
 export function registerWorkbenchThemeSynchronization(
   environment: WorkbenchThemeSynchronizationEnvironment,
   configuration: Pick<TyporaPlusConfiguration, "appearance">,

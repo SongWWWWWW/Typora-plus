@@ -5229,3 +5229,31 @@ Review:
 Known limitations:
 
 - Theme synchronization still adapts `window.matchMedia` and `document.documentElement` from the React shell.
+
+## 2026-06-11 - P2 Workbench Theme Environment
+
+Completed:
+
+- Added a focused theme synchronization environment factory that adapts browser `matchMedia` and document root boundaries.
+- Routed `Application.tsx` theme synchronization through the factory instead of assembling `matchMedia` and `document.documentElement` inline.
+- Added a document availability guard alongside the existing browser availability guard for non-DOM render environments.
+- Covered browser media-query forwarding and document-root target selection while preserving existing theme synchronization behavior.
+
+Quality gate:
+
+- `npx vitest run packages/workbench/src/workbenchThemeSynchronization.test.ts`: passed, 3 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 553 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Dev server smoke check: passed at `http://127.0.0.1:5173`; status 200 and root element present
+
+Review:
+
+- Theme synchronization now owns environment creation, media-query listener lifecycle, and document-root application as one Workbench-local boundary.
+- `Application.tsx` still supplies concrete browser globals at effect registration time, while `workbenchThemeSynchronization` owns how those globals become a theme environment.
+- No new dependency, configuration key, storage path, visual token, extra documentation file, or hard-coded platform assumption was introduced.
+
+Known limitations:
+
+- `Application.tsx` still coordinates effect timing for browser-backed helpers such as keybinding dispatch, auto-save, line navigation, overlay focus, and theme synchronization.

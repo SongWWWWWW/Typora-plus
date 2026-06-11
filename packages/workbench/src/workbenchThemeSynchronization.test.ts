@@ -2,6 +2,7 @@ import type { IThemeService, RegisteredTheme, TyporaPlusConfiguration } from "@t
 import { themeAttribute } from "@typora-plus/theme";
 import { describe, expect, it, vi } from "vitest";
 import {
+  createWorkbenchThemeSynchronizationEnvironment,
   registerWorkbenchThemeSynchronization,
   workbenchDarkThemeMediaQuery,
   type WorkbenchThemeMediaQueryList,
@@ -10,6 +11,23 @@ import {
 import type { WorkbenchThemeApplicationServices } from "./workbenchThemeApplication";
 
 describe("workbench theme synchronization", () => {
+  it("creates a theme environment from browser and document boundaries", () => {
+    const target = createThemeTarget();
+    const media = createMediaQueryList(false);
+    const browser = {
+      matchMedia: vi.fn(() => media)
+    };
+
+    const environment = createWorkbenchThemeSynchronizationEnvironment(browser, {
+      documentElement: target.element
+    });
+    const result = environment.matchMedia(workbenchDarkThemeMediaQuery);
+
+    expect(environment.target).toBe(target.element);
+    expect(result).toBe(media);
+    expect(browser.matchMedia).toHaveBeenCalledWith(workbenchDarkThemeMediaQuery);
+  });
+
   it("applies the current media theme and listens for system changes", () => {
     const target = createThemeTarget();
     const media = createMediaQueryList(true);
