@@ -9,6 +9,7 @@ import {
 } from "@typora-plus/platform";
 import { describe, expect, it, vi } from "vitest";
 import {
+  createWorkbenchAutoSaveScheduler,
   runWorkbenchAutoSave,
   scheduleWorkbenchAutoSave,
   shouldScheduleWorkbenchAutoSave,
@@ -58,6 +59,22 @@ describe("workbench auto save", () => {
     cleanup?.();
 
     expect(scheduler.clearTimeout).toHaveBeenCalledWith("timer-handle");
+  });
+
+  it("creates an auto-save scheduler from a typed timer boundary", () => {
+    const callback = vi.fn();
+    const timer = {
+      setTimeout: vi.fn(() => 42),
+      clearTimeout: vi.fn()
+    };
+    const scheduler = createWorkbenchAutoSaveScheduler(timer);
+
+    const handle = scheduler.setTimeout(callback, 750);
+    scheduler.clearTimeout(handle);
+
+    expect(handle).toBe(42);
+    expect(timer.setTimeout).toHaveBeenCalledWith(callback, 750);
+    expect(timer.clearTimeout).toHaveBeenCalledWith(42);
   });
 
   it("does not schedule timer work when auto-save is gated off", () => {

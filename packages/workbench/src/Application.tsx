@@ -50,7 +50,10 @@ import {
 import { SettingsDialog } from "./SettingsDialog";
 import type { WorkbenchServices } from "./services";
 import { executeWorkbenchCommand } from "./workbenchActionRunner";
-import { scheduleWorkbenchAutoSave } from "./workbenchAutoSave";
+import {
+  createWorkbenchAutoSaveScheduler,
+  scheduleWorkbenchAutoSave
+} from "./workbenchAutoSave";
 import { registerWorkbenchCommands } from "./workbenchCommandRegistration";
 import { createWorkbenchCommandSurface } from "./workbenchCommandSurface";
 import {
@@ -232,10 +235,7 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
       workspace.files,
       { configuration, model, saveConflict },
       { setOperationError, setSaveConflict },
-      {
-        setTimeout: (callback, delayMs) => window.setTimeout(callback, delayMs),
-        clearTimeout: (handle) => window.clearTimeout(handle as number)
-      }
+      createWorkbenchAutoSaveScheduler(window)
     );
   }, [
     configuration.editor.autoSave,

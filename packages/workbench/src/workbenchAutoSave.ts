@@ -14,9 +14,14 @@ import {
   type WorkbenchFileSavingServices
 } from "./workbenchFileSaving";
 
-export interface WorkbenchAutoSaveScheduler {
-  setTimeout(callback: () => void, delayMs: number): unknown;
-  clearTimeout(handle: unknown): void;
+export interface WorkbenchAutoSaveScheduler<Handle = unknown> {
+  setTimeout(callback: () => void, delayMs: number): Handle;
+  clearTimeout(handle: Handle): void;
+}
+
+export interface WorkbenchAutoSaveTimer<Handle = unknown> {
+  setTimeout(callback: () => void, delayMs: number): Handle;
+  clearTimeout(handle: Handle): void;
 }
 
 export interface WorkbenchAutoSaveState {
@@ -37,12 +42,25 @@ export function shouldScheduleWorkbenchAutoSave(state: WorkbenchAutoSaveState): 
     state.saveConflict === undefined;
 }
 
-export function scheduleWorkbenchAutoSave(
+export function createWorkbenchAutoSaveScheduler<Handle>(
+  timer: WorkbenchAutoSaveTimer<Handle>
+): WorkbenchAutoSaveScheduler<Handle> {
+  return {
+    setTimeout(callback, delayMs) {
+      return timer.setTimeout(callback, delayMs);
+    },
+    clearTimeout(handle) {
+      timer.clearTimeout(handle);
+    }
+  };
+}
+
+export function scheduleWorkbenchAutoSave<Handle>(
   services: WorkbenchFileSavingServices,
   workspaceFiles: WorkspaceState["files"],
   state: WorkbenchAutoSaveState,
   callbacks: WorkbenchAutoSaveCallbacks,
-  scheduler: WorkbenchAutoSaveScheduler
+  scheduler: WorkbenchAutoSaveScheduler<Handle>
 ): (() => void) | undefined {
   if (!shouldScheduleWorkbenchAutoSave(state)) {
     return undefined;

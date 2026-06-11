@@ -5173,3 +5173,31 @@ Review:
 Known limitations:
 
 - Window timers for auto-save and overlay focus are still provided directly by the React shell.
+
+## 2026-06-11 - P2 Workbench Auto-Save Scheduler Environment
+
+Completed:
+
+- Added a focused auto-save scheduler factory that adapts typed timer handles into the existing auto-save scheduling boundary.
+- Routed `Application.tsx` auto-save scheduling through the factory instead of constructing `window.setTimeout` and `window.clearTimeout` callbacks inline.
+- Preserved auto-save gating, configured delay handling, cleanup behavior, and recent-file suppression.
+- Covered timer-handle forwarding alongside the existing auto-save scheduling and save execution tests.
+
+Quality gate:
+
+- `npx vitest run packages/workbench/src/workbenchAutoSave.test.ts`: passed, 5 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 549 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Dev server smoke check: passed at `http://127.0.0.1:5173`; status 200 and root element present
+
+Review:
+
+- Auto-save now owns both the save workflow and the shell timer adaptation needed to schedule and cancel delayed saves.
+- `Application.tsx` still supplies the concrete browser timer, while the Workbench auto-save model owns how that timer becomes a scheduler.
+- No new dependency, configuration key, storage path, visual token, extra documentation file, or hard-coded platform assumption was introduced.
+
+Known limitations:
+
+- Overlay focus timers in Command Palette and Quick Open are still provided directly by the React shell.
