@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   defaultWorkbenchKeybindings,
-  defaultWorkbenchMenuItems,
-  editorTaskCommandMetadata
+  defaultWorkbenchMenuItems
 } from "./workbenchContributions";
+import { getWorkbenchCommandMetadata } from "./workbenchCommandMetadata";
 import {
   getWorkbenchCommandIds,
   workbenchCommandIds
@@ -57,7 +57,7 @@ describe("workbench command ids", () => {
     expect(defaultWorkbenchKeybindings.flatMap((item) =>
       knownIds.has(item.command) ? [] : [item.command]
     )).toEqual([]);
-    expect(Object.values(editorTaskCommandMetadata).flatMap((command) =>
+    expect(getWorkbenchCommandMetadata().flatMap((command) =>
       knownIds.has(command.id) ? [] : [command.id]
     )).toEqual([]);
   });

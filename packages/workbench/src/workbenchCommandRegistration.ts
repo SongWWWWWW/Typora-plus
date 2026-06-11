@@ -11,8 +11,10 @@ import {
   type WorkbenchOperationErrorSetter,
   type WorkbenchSaveConflictSetter
 } from "./workbenchActionRunner";
-import { workbenchCommandIds } from "./workbenchCommandIds";
-import { editorTaskCommandMetadata } from "./workbenchContributions";
+import {
+  editorTaskCommandMetadata,
+  workbenchCommandMetadata
+} from "./workbenchCommandMetadata";
 import {
   saveWorkbenchFile,
   saveWorkbenchFileAs
@@ -56,18 +58,14 @@ export function registerWorkbenchCommands(
   const disposables = new DisposableStore();
 
   disposables.add(services.commandService.registerCommand({
-    id: workbenchCommandIds.file.newUntitled,
-    title: "New Note",
-    category: "File",
+    ...workbenchCommandMetadata.file.newUntitled,
     run: () => {
       callbacks.setSaveConflict(undefined);
       return services.textFileService.newUntitled();
     }
   }));
   disposables.add(services.commandService.registerCommand({
-    id: workbenchCommandIds.file.openWorkspace,
-    title: "Open Workspace",
-    category: "File",
+    ...workbenchCommandMetadata.file.openWorkspace,
     run: () => runWorkbenchAction(async () => {
       await openWorkbenchWorkspace(services, {
         didOpenWorkspace: () => callbacks.setSideView(workbenchFilesSideView),
@@ -76,9 +74,7 @@ export function registerWorkbenchCommands(
     }, callbacks.setOperationError, callbacks.setSaveConflict)
   }));
   disposables.add(services.commandService.registerCommand({
-    id: workbenchCommandIds.file.refreshWorkspace,
-    title: "Refresh Workspace",
-    category: "File",
+    ...workbenchCommandMetadata.file.refreshWorkspace,
     run: () => runWorkbenchAction(
       () => refreshWorkbenchWorkspace(services),
       callbacks.setOperationError,
@@ -86,57 +82,39 @@ export function registerWorkbenchCommands(
     )
   }));
   disposables.add(services.commandService.registerCommand({
-    id: workbenchCommandIds.workbench.quickOpen,
-    title: "Quick Open",
-    category: "Workbench",
+    ...workbenchCommandMetadata.workbench.quickOpen,
     run: () => callbacks.setQuickOpen(true)
   }));
   disposables.add(services.commandService.registerCommand({
-    id: workbenchCommandIds.workbench.commandPaletteOpen,
-    title: "Command Palette",
-    category: "Workbench",
+    ...workbenchCommandMetadata.workbench.commandPaletteOpen,
     run: () => callbacks.setPaletteOpen(true)
   }));
   disposables.add(services.commandService.registerCommand({
-    id: workbenchCommandIds.workbench.settingsOpen,
-    title: "Settings",
-    category: "Workbench",
+    ...workbenchCommandMetadata.workbench.settingsOpen,
     run: () => callbacks.setSettingsOpen(true)
   }));
   disposables.add(services.commandService.registerCommand({
-    id: workbenchCommandIds.workbench.sidebarFiles,
-    title: "Show Files",
-    category: "Workbench",
+    ...workbenchCommandMetadata.workbench.sidebarFiles,
     run: () => callbacks.setSideView((activeView) => toggleWorkbenchSideView(workbenchFilesSideView, activeView))
   }));
   disposables.add(services.commandService.registerCommand({
-    id: workbenchCommandIds.workbench.sidebarSearch,
-    title: "Show Search",
-    category: "Workbench",
+    ...workbenchCommandMetadata.workbench.sidebarSearch,
     run: () => callbacks.setSideView((activeView) => toggleWorkbenchSideView(workbenchSideViews.search, activeView))
   }));
   disposables.add(services.commandService.registerCommand({
-    id: workbenchCommandIds.workbench.sidebarOutline,
-    title: "Show Outline",
-    category: "Workbench",
+    ...workbenchCommandMetadata.workbench.sidebarOutline,
     run: () => callbacks.setSideView((activeView) => toggleWorkbenchSideView(workbenchSideViews.outline, activeView))
   }));
   disposables.add(services.commandService.registerCommand({
-    id: workbenchCommandIds.workbench.sidebarBacklinks,
-    title: "Show Backlinks",
-    category: "Workbench",
+    ...workbenchCommandMetadata.workbench.sidebarBacklinks,
     run: () => callbacks.setSideView((activeView) => toggleWorkbenchSideView(workbenchSideViews.backlinks, activeView))
   }));
   disposables.add(services.commandService.registerCommand({
-    id: workbenchCommandIds.workbench.sidebarTags,
-    title: "Show Tags",
-    category: "Workbench",
+    ...workbenchCommandMetadata.workbench.sidebarTags,
     run: () => callbacks.setSideView((activeView) => toggleWorkbenchSideView(workbenchSideViews.tags, activeView))
   }));
   disposables.add(services.commandService.registerCommand({
-    id: workbenchCommandIds.file.save,
-    title: "Save",
-    category: "File",
+    ...workbenchCommandMetadata.file.save,
     run: () => runWorkbenchAction(
       () => saveWorkbenchFile(services, state.workspaceFiles),
       callbacks.setOperationError,
@@ -144,9 +122,7 @@ export function registerWorkbenchCommands(
     )
   }));
   disposables.add(services.commandService.registerCommand({
-    id: workbenchCommandIds.file.saveAs,
-    title: "Save As",
-    category: "File",
+    ...workbenchCommandMetadata.file.saveAs,
     run: () => runWorkbenchAction(
       () => saveWorkbenchFileAs(services, state.workspaceFiles),
       callbacks.setOperationError,
@@ -154,9 +130,7 @@ export function registerWorkbenchCommands(
     )
   }));
   disposables.add(services.commandService.registerCommand({
-    id: workbenchCommandIds.file.exportHtml,
-    title: "Export HTML",
-    category: "File",
+    ...workbenchCommandMetadata.file.exportHtml,
     run: () => runWorkbenchAction(async () => {
       const activeModel = services.textFileService.getActiveModel();
 
@@ -168,9 +142,7 @@ export function registerWorkbenchCommands(
     }, callbacks.setOperationError, callbacks.setSaveConflict)
   }));
   disposables.add(services.commandService.registerCommand({
-    id: workbenchCommandIds.editor.focusModeToggle,
-    title: "Toggle Focus Mode",
-    category: "Editor",
+    ...workbenchCommandMetadata.editor.focusModeToggle,
     run: () => services.configurationService.updateValue({
       editor: {
         focusMode: !state.configuration.editor.focusMode
@@ -178,9 +150,7 @@ export function registerWorkbenchCommands(
     })
   }));
   disposables.add(services.commandService.registerCommand({
-    id: workbenchCommandIds.editor.typewriterModeToggle,
-    title: "Toggle Typewriter Mode",
-    category: "Editor",
+    ...workbenchCommandMetadata.editor.typewriterModeToggle,
     run: () => services.configurationService.updateValue({
       editor: {
         typewriterMode: !state.configuration.editor.typewriterMode
@@ -196,9 +166,7 @@ export function registerWorkbenchCommands(
     run: () => callbacks.getEditorHandle()?.removeTaskListMarkers() ?? false
   }));
   disposables.add(services.commandService.registerCommand({
-    id: workbenchCommandIds.theme.toggle,
-    title: "Toggle Theme",
-    category: "Workbench",
+    ...workbenchCommandMetadata.theme.toggle,
     run: () => services.configurationService.updateValue({
       appearance: {
         colorScheme: state.configuration.appearance.colorScheme === "dark" ? "light" : "dark"

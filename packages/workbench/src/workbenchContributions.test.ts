@@ -3,8 +3,7 @@ import { ContextKeyService, MenuService } from "@typora-plus/platform";
 import {
   defaultWorkbenchExtensionManifest,
   defaultWorkbenchKeybindings,
-  defaultWorkbenchMenuItems,
-  editorTaskCommandMetadata
+  defaultWorkbenchMenuItems
 } from "./workbenchContributions";
 import { workbenchCommandIds } from "./workbenchCommandIds";
 import { workbenchContextKeys } from "./workbenchContextModel";
@@ -77,21 +76,6 @@ describe("workbench contributions", () => {
     const pairs = defaultWorkbenchKeybindings.map((rule) => `${rule.command}:${JSON.stringify(rule.keybinding)}`);
 
     expect(new Set(pairs).size).toBe(pairs.length);
-  });
-
-  it("defines editor task command metadata for command surfaces", () => {
-    expect(Object.values(editorTaskCommandMetadata)).toEqual([
-      {
-        category: "Editor",
-        id: workbenchCommandIds.editor.taskRemoveMarkers,
-        title: "Remove Task Markers"
-      },
-      {
-        category: "Editor",
-        id: workbenchCommandIds.editor.taskToggleLines,
-        title: "Toggle Task Lines"
-      }
-    ]);
   });
 
   it("contributes built-in themes through Typora Plus tokens", () => {

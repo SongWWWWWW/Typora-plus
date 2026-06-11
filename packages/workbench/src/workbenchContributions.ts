@@ -1,6 +1,5 @@
 import {
   parseContextKeyExpression,
-  type CommandMetadata,
   type ExtensionManifest,
   type ExtensionMenuContribution,
   type KeybindingRule,
@@ -19,19 +18,6 @@ import { workbenchContextKeys } from "./workbenchContextModel";
 import { workbenchMenuIconIds } from "./workbenchMenuIconModel";
 import { workbenchMenuIds } from "./workbenchMenuModel";
 import { workbenchSideViews } from "./workbenchSideViewModel";
-
-export const editorTaskCommandMetadata = {
-  removeTaskMarkers: {
-    id: workbenchCommandIds.editor.taskRemoveMarkers,
-    title: "Remove Task Markers",
-    category: "Editor"
-  },
-  toggleTaskLines: {
-    id: workbenchCommandIds.editor.taskToggleLines,
-    title: "Toggle Task Lines",
-    category: "Editor"
-  }
-} satisfies Record<string, CommandMetadata>;
 
 export const defaultWorkbenchExtensionManifest = {
   id: "typora-plus.workbench",

@@ -5761,3 +5761,31 @@ Review:
 Known limitations:
 
 - Sidebar panel composition remains in `Application.tsx` because it is React layout branching, not platform or contribution policy.
+
+## 2026-06-11 - P2 Workbench Command Metadata Model
+
+Completed:
+
+- Added a focused Workbench command metadata model for built-in command titles, categories, task command metadata, and metadata coverage checks.
+- Routed Workbench command registration through the shared metadata model so executable handlers no longer repeat command titles and categories inline.
+- Moved editor task command metadata out of the default extension contributions module because it is command-surface metadata, not manifest contribution data.
+- Covered stable categories, representative command metadata, task command metadata, full command-id coverage, command registration wiring, and contribution command references with focused tests.
+
+Quality gate:
+
+- `npx vitest run packages/workbench/src/workbenchCommandMetadata.test.ts packages/workbench/src/workbenchCommandIds.test.ts packages/workbench/src/workbenchCommandRegistration.test.ts packages/workbench/src/workbenchContributions.test.ts`: passed, 20 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 59 files / 583 tests, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Dev server smoke check: passed at `http://127.0.0.1:5173`; status 200 and root element present
+
+Review:
+
+- Built-in Workbench command ids, command metadata, executable handlers, menus, and keybindings now have distinct Workbench-local sources of truth.
+- `workbenchContributions.ts` is narrower: it owns the built-in extension manifest, while command-surface metadata lives beside the command id model.
+- No new dependency, configuration key, storage path, visual token, extra documentation file, or hard-coded platform assumption was introduced.
+
+Known limitations:
+
+- Menu item titles remain in the manifest because those are surface-specific labels and may intentionally differ from command palette titles.
