@@ -1099,7 +1099,7 @@ button {
 
 .tp-settings-ai-card-actions {
   display: grid;
-  grid-template-columns: repeat(2, minmax(76px, auto));
+  grid-template-columns: repeat(3, minmax(76px, auto));
   gap: 6px;
   min-width: 0;
 }
@@ -1119,6 +1119,23 @@ button {
   font-size: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.tp-settings-diagnostic-row {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--tp-color-text-soft);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tp-settings-diagnostic-row-passed {
+  color: var(--tp-color-accent-strong);
+}
+
+.tp-settings-diagnostic-row-failed {
+  color: var(--tp-color-danger);
 }
 
 .tp-settings-keybinding-list {

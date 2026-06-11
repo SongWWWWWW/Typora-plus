@@ -1,13 +1,14 @@
 import { keybindingFromEvent } from "@typora-plus/platform";
 import type {
   AiProviderConfiguration,
+  AiTextResponse,
   CommandMetadata,
   Keybinding,
   PartialConfiguration,
   RegisteredTheme,
   TyporaPlusConfiguration
 } from "@typora-plus/platform";
-import { KeyRound, Plus, Save, Search, Settings as SettingsIcon, Trash2, X } from "lucide-react";
+import { KeyRound, Plus, RefreshCw, Save, Search, Settings as SettingsIcon, Trash2, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import {
@@ -47,6 +48,7 @@ import {
   type SettingsSectionId,
   type NumberSettingConstraint
 } from "./settingsModel";
+import type { WorkbenchAiProviderDiagnosticActions } from "./workbenchAiProviderDiagnostics";
 import type { WorkbenchAiSecretBridge } from "./workbenchAiSecrets";
 
 export function SettingsDialog({
@@ -54,6 +56,7 @@ export function SettingsDialog({
   configuration,
   commands,
   themes,
+  aiDiagnosticActions,
   aiSecretActions,
   getCommandForKeybinding,
   getKeybindingLabel,
@@ -65,6 +68,7 @@ export function SettingsDialog({
   readonly configuration: TyporaPlusConfiguration;
   readonly commands: readonly CommandMetadata[];
   readonly themes: readonly RegisteredTheme[];
+  readonly aiDiagnosticActions?: WorkbenchAiProviderDiagnosticActions;
   readonly aiSecretActions?: {
     readonly isAvailable: boolean;
     readonly setSecret: WorkbenchAiSecretBridge["setSecret"];
@@ -85,11 +89,14 @@ export function SettingsDialog({
   const [aiProviderDrafts, setAiProviderDrafts] = useState<readonly AiProviderDraftState[]>(
     () => createAiProviderDraftStates(configuration.ai.providers)
   );
+  const [aiDiagnosticStates, setAiDiagnosticStates] = useState<Record<string, AiDiagnosticState>>({});
+  const [aiDiagnosticMessages, setAiDiagnosticMessages] = useState<Record<string, string>>({});
   const [aiSecretDrafts, setAiSecretDrafts] = useState<Record<string, string>>({});
   const [aiSecretStates, setAiSecretStates] = useState<Record<string, AiSecretState>>({});
   const [activeSettingsSection, setActiveSettingsSection] = useState<SettingsSectionId>(defaultSettingsSectionId);
   const settingsContentRef = useRef<HTMLDivElement | null>(null);
   const nextAiProviderDraftIdRef = useRef(0);
+  const aiDiagnosticRequestIdsRef = useRef<Record<string, number>>({});
   const hasKeybindingOverrides = configuration.keybindings.overrides.length > 0;
   const hasUnsavedAiProviderDraft = aiProviderDrafts.some((draft) => !draft.originalId);
   const selectedThemeId = resolveSelectedSettingsThemeId(configuration.appearance.themeId, themes);
@@ -118,6 +125,8 @@ export function SettingsDialog({
       setModifiedKeybindingsOnly(false);
       setPendingKeybinding(undefined);
       setAiProviderDrafts(createAiProviderDraftStates(configuration.ai.providers));
+      setAiDiagnosticStates({});
+      setAiDiagnosticMessages({});
       setAiSecretDrafts({});
       setAiSecretStates({});
       setActiveSettingsSection(defaultSettingsSectionId);
@@ -240,6 +249,7 @@ export function SettingsDialog({
     setAiProviderDrafts((drafts) => drafts.map((draft) =>
       draft.key === key ? { ...draft, ...value } : draft
     ));
+    resetAiProviderDiagnostic(key);
   };
 
   const saveAiProviderDraft = (draft: AiProviderDraftState) => {
@@ -281,11 +291,13 @@ export function SettingsDialog({
     }
 
     setAiProviderDrafts((drafts) => drafts.filter((candidate) => candidate.key !== draft.key));
+    resetAiProviderDiagnostic(draft.key);
   };
 
   const updateAiSecretDraft = (key: string, value: string) => {
     setAiSecretDrafts((drafts) => ({ ...drafts, [key]: value }));
     setAiSecretStates((states) => ({ ...states, [key]: "idle" }));
+    resetAiProviderDiagnostic(key);
   };
 
   const saveAiSecret = (draft: AiProviderDraftState) => {
@@ -295,6 +307,7 @@ export function SettingsDialog({
       setAiSecretStates((states) => ({ ...states, [draft.key]: saved ? "saved" : "failed" }));
       if (saved) {
         setAiSecretDrafts((drafts) => ({ ...drafts, [draft.key]: "" }));
+        resetAiProviderDiagnostic(draft.key);
       }
     });
   };
@@ -302,7 +315,47 @@ export function SettingsDialog({
   const deleteAiSecret = (draft: AiProviderDraftState) => {
     void aiSecretActions?.deleteSecret(draft.secretRef).then((deleted) => {
       setAiSecretStates((states) => ({ ...states, [draft.key]: deleted ? "deleted" : "failed" }));
+      if (deleted) {
+        resetAiProviderDiagnostic(draft.key);
+      }
     });
+  };
+
+  const resetAiProviderDiagnostic = (key: string) => {
+    markAiDiagnosticRequest(key);
+    setAiDiagnosticStates((states) => ({ ...states, [key]: "idle" }));
+    setAiDiagnosticMessages((messages) => ({ ...messages, [key]: "" }));
+  };
+
+  const testAiProvider = (draft: AiProviderDraftState) => {
+    if (!draft.originalId || !aiDiagnosticActions) {
+      return;
+    }
+
+    const requestId = markAiDiagnosticRequest(draft.key);
+    setAiDiagnosticStates((states) => ({ ...states, [draft.key]: "testing" }));
+    setAiDiagnosticMessages((messages) => ({ ...messages, [draft.key]: "" }));
+
+    void aiDiagnosticActions.testProvider(draft.originalId).then((response) => {
+      if (aiDiagnosticRequestIdsRef.current[draft.key] !== requestId) {
+        return;
+      }
+
+      setAiDiagnosticStates((states) => ({ ...states, [draft.key]: response ? "passed" : "failed" }));
+      setAiDiagnosticMessages((messages) => ({
+        ...messages,
+        [draft.key]: response ? formatAiDiagnosticResponseMessage(response) : ""
+      }));
+    });
+  };
+
+  const markAiDiagnosticRequest = (key: string): number => {
+    const nextRequestId = (aiDiagnosticRequestIdsRef.current[key] ?? 0) + 1;
+    aiDiagnosticRequestIdsRef.current = {
+      ...aiDiagnosticRequestIdsRef.current,
+      [key]: nextRequestId
+    };
+    return nextRequestId;
   };
 
   const syncActiveSettingsSection = () => {
@@ -534,6 +587,11 @@ export function SettingsDialog({
                         );
                         const secretValue = aiSecretDrafts[draft.key] ?? "";
                         const secretState = aiSecretStates[draft.key] ?? "idle";
+                        const diagnosticState = aiDiagnosticStates[draft.key] ?? "idle";
+                        const diagnosticMessage = aiDiagnosticMessages[draft.key] ?? "";
+                        const canTestProvider = !!aiDiagnosticActions &&
+                          diagnosticState !== "testing" &&
+                          isSavedAiProviderDraft(draft, validation.provider, configuration.ai.providers);
                         const canSaveSecret = !!aiSecretActions?.isAvailable &&
                           validation.canSave &&
                           secretValue.trim().length > 0;
@@ -544,6 +602,15 @@ export function SettingsDialog({
                             <div className="tp-settings-ai-card-header">
                               <span>{draft.title || draft.id || "AI Provider"}</span>
                               <div className="tp-settings-ai-card-actions">
+                                <button
+                                  className="tp-settings-small-button"
+                                  type="button"
+                                  disabled={!canTestProvider}
+                                  onClick={() => testAiProvider(draft)}
+                                >
+                                  <RefreshCw size={13} />
+                                  <span>{formatAiDiagnosticButtonLabel(diagnosticState)}</span>
+                                </button>
                                 <button
                                   className="tp-settings-small-button"
                                   type="button"
@@ -647,6 +714,11 @@ export function SettingsDialog({
                             </SettingsField>
                             {validation.issues.length > 0 ? (
                               <div className="tp-settings-validation-row">{validation.issues[0]}</div>
+                            ) : null}
+                            {diagnosticState !== "idle" ? (
+                              <div className={`tp-settings-diagnostic-row tp-settings-diagnostic-row-${diagnosticState}`}>
+                                {formatAiDiagnosticStatusMessage(diagnosticState, diagnosticMessage)}
+                              </div>
                             ) : null}
                           </section>
                         );
@@ -843,6 +915,7 @@ interface PendingKeybindingOverride {
 }
 
 type AiSecretState = "idle" | "saved" | "deleted" | "failed";
+type AiDiagnosticState = "idle" | "testing" | "passed" | "failed";
 
 interface AiProviderDraftState extends SettingsAiProviderDraft {
   readonly key: string;
@@ -881,6 +954,71 @@ function formatAiSecretDeleteLabel(state: AiSecretState): string {
     case "idle":
       return "Delete";
   }
+}
+
+function formatAiDiagnosticButtonLabel(state: AiDiagnosticState): string {
+  return state === "testing" ? "Testing" : "Test";
+}
+
+function formatAiDiagnosticStatusMessage(state: AiDiagnosticState, message: string): string {
+  switch (state) {
+    case "testing":
+      return "Testing provider";
+    case "passed":
+      return message ? `Connection OK: ${message}` : "Connection OK";
+    case "failed":
+      return "Connection failed";
+    case "idle":
+      return "";
+  }
+}
+
+function formatAiDiagnosticResponseMessage(response: AiTextResponse): string {
+  return [
+    response.model,
+    formatAiDiagnosticTokenUsage(response.usage)
+  ].filter((part): part is string => !!part).join(", ");
+}
+
+function formatAiDiagnosticTokenUsage(usage: AiTextResponse["usage"]): string | undefined {
+  if (!usage) {
+    return undefined;
+  }
+
+  const tokens = [
+    usage.inputTokens !== undefined ? `${usage.inputTokens} in` : undefined,
+    usage.outputTokens !== undefined ? `${usage.outputTokens} out` : undefined,
+    usage.totalTokens !== undefined ? `${usage.totalTokens} total` : undefined
+  ].filter((part): part is string => !!part);
+
+  return tokens.length > 0 ? tokens.join(" / ") : undefined;
+}
+
+function isSavedAiProviderDraft(
+  draft: AiProviderDraftState,
+  provider: AiProviderConfiguration | undefined,
+  providers: readonly AiProviderConfiguration[]
+): boolean {
+  if (!draft.originalId || !provider) {
+    return false;
+  }
+
+  const savedProvider = providers.find((candidate) => candidate.id === draft.originalId);
+
+  return !!savedProvider && areAiProviderConfigurationsEqual(savedProvider, provider);
+}
+
+function areAiProviderConfigurationsEqual(
+  first: AiProviderConfiguration,
+  second: AiProviderConfiguration
+): boolean {
+  return first.id === second.id &&
+    first.title === second.title &&
+    first.kind === second.kind &&
+    first.endpointUrl === second.endpointUrl &&
+    first.model === second.model &&
+    first.secretRef === second.secretRef &&
+    (first.store ?? false) === (second.store ?? false);
 }
 
 function applyKeybindingOverride(

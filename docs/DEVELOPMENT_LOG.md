@@ -6761,3 +6761,41 @@ Known limitations:
 - There is still no provider connection test button or live model discovery.
 - Request cancellation does not yet cross the Electron IPC boundary.
 - Streaming, tool calls, and workspace-grounded retrieval remain future work.
+
+## 2026-06-11 - P2 AI Provider Diagnostics and Integration Feasibility
+
+Completed:
+
+- Added a Workbench AI provider diagnostic helper that sends a provider-neutral connectivity request through `IAiService.requestText()`.
+- Added a Settings `Test` action for saved and unchanged AI provider drafts, with testing/passed/failed state, response metadata display, and stale-result request id protection.
+- Kept the diagnostic action non-mutating: it does not append, replace, or otherwise edit note content.
+- Updated maintained docs to record saved-provider diagnostics and the current AI/Feishu feasibility split.
+- Re-checked official integration direction: OpenAI text-generation features fit the existing Responses-backed `IAiService` provider path; Codex is feasible for coding-agent/repository automation workflows rather than default Markdown writing assistance; Feishu raw Markdown/assets mirroring is feasible through Drive file/folder APIs, while Feishu Docs import/export should remain a later document-conversion path.
+
+Quality gate:
+
+- `npx vitest run packages/workbench/src/workbenchAiProviderDiagnostics.test.ts packages/workbench/src/workbenchAiActions.test.ts packages/workbench/src/workbenchAiSecrets.test.ts`: passed, 3 files / 12 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 73 files / 679 tests, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Browser smoke check at `http://127.0.0.1:5173/`: Workbench loaded, Settings opened, AI section rendered, Add Provider was visible, no horizontal overflow, and no console/runtime errors
+
+Research notes:
+
+- OpenAI Responses API is the correct default API surface for text-generation style note assistance because it supports direct model requests, text output, instructions, structured output, tools, and stateful interactions.
+- Codex is documented as OpenAI's software-development agent, with SDK support for CI/CD, internal tools, and application integration; use it for repository automation, not as the baseline note-writing provider.
+- Feishu Drive supports listing folder contents, creating folders, uploading files, deleting files/folders, and file import tasks. The raw mirror path maps cleanly to the existing `IRemoteSyncService` resource/diff/execute contract.
+- Feishu Docs supports importing Markdown into online documents and retrieving newer document content as Markdown. That makes one-way publish/import viable, but full bidirectional Docs sync remains higher risk because it must reconcile block conversion, asset mapping, permissions, remote edits, and unsupported Markdown syntax.
+
+Review:
+
+- No provider ids, endpoints, models, OAuth scopes, tokens, storage paths, or credentials were hardcoded.
+- React does not call the Electron/native AI bridge for diagnostics; Settings delegates to a focused Workbench helper, which delegates to `IAiService`.
+- The new diagnostic path follows the existing VS Code-like split between configuration, services, commands/actions, and UI state.
+
+Known limitations:
+
+- No live model discovery yet.
+- Request cancellation does not yet cross the Electron IPC boundary.
+- Streaming, tool calls, workspace-grounded retrieval, Feishu OAuth, and a built-in Feishu provider remain future work.
