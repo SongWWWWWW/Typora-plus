@@ -17,6 +17,15 @@ export interface WorkbenchWorkspaceIndexingCallbacks {
   readonly setSaveConflict?: (conflict: FileSaveConflict | undefined) => void;
 }
 
+export function createWorkbenchWorkspaceIndexingHandler(
+  services: WorkbenchWorkspaceIndexingServices,
+  callbacks: WorkbenchWorkspaceIndexingCallbacks
+): (workspaceFiles: WorkspaceState["files"]) => void {
+  return (workspaceFiles) => {
+    void indexWorkbenchWorkspaceAction(services, workspaceFiles, callbacks);
+  };
+}
+
 export async function indexWorkbenchWorkspace(
   services: WorkbenchWorkspaceIndexingServices,
   workspaceFiles: WorkspaceState["files"]

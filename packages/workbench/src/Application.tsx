@@ -115,10 +115,10 @@ import {
   createWorkbenchFileResourceOpenHandler,
   createWorkbenchQuickOpenFileOpenHandler,
   createWorkbenchRecentWorkspaceResourceOpenHandler,
-  createWorkbenchResourceOpeningCallbacks,
+  createWorkbenchResourceOpeningCallbacks
 } from "./workbenchResourceOpening";
 import { scheduleWorkbenchOverlayFocus } from "./workbenchOverlayFocus";
-import { indexWorkbenchWorkspaceAction } from "./workbenchWorkspaceIndexing";
+import { createWorkbenchWorkspaceIndexingHandler } from "./workbenchWorkspaceIndexing";
 import {
   defaultWorkbenchSideView,
   workbenchSideViewTitle,
@@ -234,10 +234,12 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
   }, [selectedTag, tags]);
 
   useEffect(() => {
-    void indexWorkbenchWorkspaceAction(services, workspace.files, {
+    const workspaceIndexingHandler = createWorkbenchWorkspaceIndexingHandler(services, {
       setOperationError,
       setSaveConflict
     });
+
+    workspaceIndexingHandler(workspace.files);
   }, [configuration.workspace.searchMaxFileSizeBytes, services, workspace.files]);
 
   useEffect(() => {

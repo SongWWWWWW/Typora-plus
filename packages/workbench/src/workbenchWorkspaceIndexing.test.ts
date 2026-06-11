@@ -5,6 +5,7 @@ import type {
 } from "@typora-plus/platform";
 import { describe, expect, it, vi } from "vitest";
 import {
+  createWorkbenchWorkspaceIndexingHandler,
   indexWorkbenchWorkspace,
   indexWorkbenchWorkspaceAction,
   type WorkbenchWorkspaceIndexingServices
@@ -72,6 +73,28 @@ describe("workbench workspace indexing", () => {
     expect(setOperationError).toHaveBeenCalledWith(undefined);
     expect(setOperationError).toHaveBeenCalledWith("index failed");
   });
+
+  it("creates a workspace indexing handler with the shared action boundary", async () => {
+    const workspaceFiles = createWorkspaceFileTree([createFileEntry("notes/a.md")]);
+    const operationErrors: Array<string | undefined> = [];
+    const services = createServices({
+      indexWorkspace: async () => {
+        throw new Error("index failed");
+      }
+    });
+    const indexWorkspace = createWorkbenchWorkspaceIndexingHandler(services, {
+      setOperationError: (value) => operationErrors.push(value)
+    });
+
+    indexWorkspace(undefined);
+    await waitForWorkspaceIndexingHandler();
+    indexWorkspace(workspaceFiles);
+    await waitForWorkspaceIndexingHandler();
+
+    expect(services.indexService.indexWorkspace).toHaveBeenCalledWith(workspaceFiles);
+    expect(services.indexService.indexWorkspace).toHaveBeenCalledTimes(1);
+    expect(operationErrors).toEqual([undefined, "index failed"]);
+  });
 });
 
 function createServices(overrides: {
@@ -82,6 +105,12 @@ function createServices(overrides: {
       indexWorkspace: vi.fn(overrides.indexWorkspace ?? (async () => undefined))
     }
   };
+}
+
+function waitForWorkspaceIndexingHandler(): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, 0);
+  });
 }
 
 function createWorkspaceFileTree(files: readonly FileTreeEntry[]): WorkspaceFileTree {

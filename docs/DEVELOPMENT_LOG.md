@@ -5593,3 +5593,31 @@ Review:
 Known limitations:
 
 - Sidebar close, selected tag, and search query remain direct shell state because they are local view interaction state.
+
+## 2026-06-11 - P2 Workspace Indexing Handler
+
+Completed:
+
+- Added a focused workspace indexing handler factory that adapts workspace file snapshots into the shared indexing action boundary.
+- Routed `Application.tsx` workspace reindex effect through the handler instead of dispatching the indexing action inline.
+- Preserved no-workspace no-op behavior, stale operation-error clearing only for real indexing work, workspace scan dispatch, and failure mapping.
+- Covered handler delegation alongside the existing workspace indexing action tests.
+
+Quality gate:
+
+- `npx vitest run packages/workbench/src/workbenchWorkspaceIndexing.test.ts`: passed, 6 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 56 files / 568 tests, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Dev server smoke check: passed at `http://127.0.0.1:5173`; status 200 and root element present
+
+Review:
+
+- Workspace reindexing now reaches `IIndexService` through a Workbench-local handler and the shared action runner instead of a shell-local inline action call.
+- `Application.tsx` still decides when configuration/workspace changes require reindexing, while `workbenchWorkspaceIndexing` owns no-workspace behavior, dispatch, and operation-error/save-conflict mapping.
+- No new dependency, configuration key, storage path, visual token, extra documentation file, or hard-coded platform assumption was introduced.
+
+Known limitations:
+
+- The effect trigger still lives in `Application.tsx` because it depends on React's configuration and workspace lifecycle.
