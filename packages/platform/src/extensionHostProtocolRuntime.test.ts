@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { ExtensionActivationRequest, ExtensionContext } from "./extensions";
 import {
   createExtensionHostActivationRequestMessage,
+  createExtensionHostAiTextCancelMessage,
   createExtensionHostAiTextRequestMessage,
   createExtensionHostAiTextResultMessage,
   createExtensionHostApiErrorMessage,
@@ -328,6 +329,70 @@ describe("extension host protocol runtime", () => {
         }
       }
     ]);
+  });
+
+  it("cancels main-thread AI callbacks through provider abort signals", async () => {
+    const transport = createMemoryTransport();
+    let aiSignal: AbortSignal | undefined;
+    let resolveAi: (value: { readonly value: string }) => void = () => undefined;
+
+    new ExtensionHostProtocolRuntime(transport, {
+      activate(request) {
+        request.context.ai.registerProvider({
+          id: "notes.remote.ai",
+          title: "Remote AI",
+          requestText: (input) => {
+            aiSignal = input.signal;
+            return new Promise((resolve) => {
+              resolveAi = resolve;
+            });
+          }
+        });
+      }
+    });
+
+    transport.receive(createActivationMessage("activate-ai-cancel"));
+    await flushPromises();
+    transport.sent.length = 0;
+
+    transport.receive(createExtensionHostAiTextRequestMessage(
+      "main-ai-cancel-1",
+      "notes.remote",
+      "notes.remote.ai",
+      {
+        instruction: "Summarize",
+        input: "# A"
+      }
+    ));
+    await flushPromises();
+
+    expect(aiSignal).toBeDefined();
+    expect(aiSignal?.aborted).toBe(false);
+    expect(transport.sent).toEqual([]);
+
+    transport.receive(createExtensionHostAiTextCancelMessage(
+      "main-ai-cancel-1",
+      "notes.remote",
+      "notes.remote.ai"
+    ));
+    await flushPromises();
+
+    expect(aiSignal?.aborted).toBe(true);
+    expect(transport.sent).toHaveLength(1);
+    expect(transport.sent[0]).toMatchObject({
+      type: extensionHostProtocolMessageTypes.apiError,
+      requestId: "main-ai-cancel-1",
+      extensionId: "notes.remote",
+      error: {
+        message: "Extension host AI text request cancelled",
+        name: "Error"
+      }
+    });
+
+    resolveAi({ value: "Late result" });
+    await flushPromises();
+
+    expect(transport.sent).toHaveLength(1);
   });
 
   it("handles main-thread remote sync callbacks", async () => {

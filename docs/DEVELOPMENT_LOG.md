@@ -6831,3 +6831,35 @@ Known limitations:
 - No live model discovery yet.
 - Extension-host AI provider cancellation is still local to the service call and is not represented as a protocol message.
 - Streaming, tool calls, workspace-grounded retrieval, Feishu OAuth, and a built-in Feishu provider remain future work.
+
+## 2026-06-11 - P2 Extension Host AI Cancellation Protocol
+
+Completed:
+
+- Added an `extensionHost/ai/textCancel` protocol message for provider-scoped AI request cancellation.
+- Updated the runtime broker so service-side `AbortSignal` cancellation sends a fire-and-forget cancel notification for pending remote AI provider calls.
+- Updated the protocol session to support normalized notifications without registering a pending response.
+- Updated the protocol runtime to track active AI provider callbacks, pass an `AbortSignal` into the runtime provider, send one cancellation error response, and suppress late provider results after cancellation.
+- Preserved wire safety: cancel messages carry only request id, extension id, and provider id, with the same provider id validation as AI text requests.
+- Updated maintained docs to record extension-host AI cancellation as part of the provider boundary instead of a future limitation.
+
+Quality gate:
+
+- `npx vitest run packages/platform/src/extensionHostProtocol.test.ts packages/platform/src/extensionHostRuntimeBroker.test.ts packages/platform/src/extensionHostProtocolRuntime.test.ts packages/platform/src/extensionHostProtocolSession.test.ts`: passed, 4 files / 50 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 73 files / 684 tests, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Dev server smoke check at `http://127.0.0.1:5173/`: status 200 and root element present
+
+Review:
+
+- No provider ids, endpoints, model ids, tokens, OAuth scopes, storage paths, or credentials were hardcoded.
+- The cancellation path follows the VS Code-like split: Workbench and React remain unaware of protocol messages, platform services expose `AbortSignal`, and protocol runtime/broker translate that signal across the host boundary.
+- The runtime sends a cancellation error immediately and ignores late results, avoiding hung pending requests and double responses.
+
+Known limitations:
+
+- No live model discovery yet.
+- Remote sync protocol cancellation still does not cross the extension-host boundary.
+- Streaming, tool calls, workspace-grounded retrieval, Feishu OAuth, and a built-in Feishu provider remain future work.

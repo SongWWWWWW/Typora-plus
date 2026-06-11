@@ -10,8 +10,10 @@ import {
   createExtensionHostActivationErrorMessage,
   createExtensionHostActivationResultMessage,
   createExtensionHostAiProviderRegisterRequestMessage,
+  createExtensionHostAiTextCancelMessage,
   createExtensionHostAiTextRequestMessage,
   createExtensionHostAiTextResultMessage,
+  createExtensionHostApiErrorMessage,
   createExtensionHostApiResultMessage,
   createExtensionHostCommandExecuteRequestMessage,
   createExtensionHostCommandRegisterRequestMessage,
@@ -386,6 +388,55 @@ describe("extension host protocol session", () => {
         conflicts: 0
       }
     });
+  });
+
+  it("sends AI text cancellation notifications through the session transport", async () => {
+    const transport = createMemoryTransport();
+    const { context, controls } = createSessionTestContext();
+    new ExtensionHostProtocolSession(transport, context, {
+      createRequestId: createSequentialRequestId()
+    });
+
+    transport.receive(createExtensionHostAiProviderRegisterRequestMessage("remote-ai-1", "notes.remote", {
+      id: "notes.remote.ai",
+      title: "Remote AI"
+    }));
+    await flushPromises();
+
+    const controller = new AbortController();
+    const aiExecution = controls.aiProviders[0]!.requestText({
+      instruction: "Summarize",
+      input: "# A",
+      signal: controller.signal
+    });
+    await flushPromises();
+
+    expect(transport.sent[1]).toEqual(createExtensionHostAiTextRequestMessage(
+      "aiTextRequest-1",
+      "notes.remote",
+      "notes.remote.ai",
+      {
+        instruction: "Summarize",
+        input: "# A"
+      }
+    ));
+
+    controller.abort();
+    await flushPromises();
+
+    expect(transport.sent[2]).toEqual(createExtensionHostAiTextCancelMessage(
+      "aiTextRequest-1",
+      "notes.remote",
+      "notes.remote.ai"
+    ));
+
+    transport.receive(createExtensionHostApiErrorMessage(
+      "aiTextRequest-1",
+      "notes.remote",
+      new Error("Extension host AI text request cancelled")
+    ));
+
+    await expect(aiExecution).rejects.toThrow("Extension host AI text request cancelled");
   });
 
   it("rejects proxy callback requests that miss the configured timeout", async () => {

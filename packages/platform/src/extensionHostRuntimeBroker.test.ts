@@ -15,6 +15,7 @@ import {
   createExtensionHostApiResultMessage,
   createExtensionHostAiProviderRegisterRequestMessage,
   createExtensionHostAiProviderUnregisterRequestMessage,
+  createExtensionHostAiTextCancelMessage,
   createExtensionHostAiTextRequestMessage,
   createExtensionHostAiTextResultMessage,
   createExtensionHostCommandExecuteRequestMessage,
@@ -218,6 +219,65 @@ describe("extension host runtime broker", () => {
       "notes.remote.ai"
     ))).resolves.toEqual(createExtensionHostApiResultMessage("request-ai-2", "notes.remote"));
     expect(controls.aiProviders).toEqual([]);
+  });
+
+  it("sends AI text cancellation notifications for aborted remote provider requests", async () => {
+    const { context, controls } = createBrokerTestContext();
+    const notifications: ExtensionHostProtocolMessage[] = [];
+    let resolveRequest: (message: ExtensionHostProtocolMessage) => void = () => undefined;
+    const broker = new ExtensionHostRuntimeBroker(context, {
+      createRequestId: createSequentialRequestId(),
+      notify: (message) => {
+        notifications.push(readExtensionHostProtocolMessage(message));
+      },
+      request: (message) => {
+        const request = readExtensionHostProtocolMessage(message);
+
+        if (request.type !== extensionHostProtocolMessageTypes.aiTextRequest) {
+          throw new Error(`Unexpected request: ${request.type}`);
+        }
+
+        return new Promise<ExtensionHostProtocolMessage>((resolve) => {
+          resolveRequest = resolve;
+        });
+      }
+    });
+
+    await broker.handleMessage(createExtensionHostAiProviderRegisterRequestMessage(
+      "request-ai-1",
+      "notes.remote",
+      {
+        id: "notes.remote.ai",
+        title: "Remote AI"
+      }
+    ));
+
+    const controller = new AbortController();
+    const pending = controls.aiProviders[0]!.requestText({
+      instruction: "Summarize",
+      input: "# A",
+      signal: controller.signal
+    });
+
+    await Promise.resolve();
+
+    controller.abort();
+
+    expect(notifications).toEqual([
+      createExtensionHostAiTextCancelMessage(
+        "aiTextRequest-1",
+        "notes.remote",
+        "notes.remote.ai"
+      )
+    ]);
+
+    resolveRequest(createExtensionHostApiErrorMessage(
+      "aiTextRequest-1",
+      "notes.remote",
+      new Error("Extension host AI text request cancelled")
+    ));
+
+    await expect(pending).rejects.toThrow("Extension host AI text request cancelled");
   });
 
   it("registers remote sync provider proxies that call the remote host", async () => {

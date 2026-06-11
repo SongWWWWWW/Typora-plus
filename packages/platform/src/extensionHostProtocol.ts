@@ -33,6 +33,7 @@ export const extensionHostProtocolMessageTypes = {
   activationResult: "extensionHost/activationResult",
   aiProviderRegister: "extensionHost/ai/providerRegister",
   aiProviderUnregister: "extensionHost/ai/providerUnregister",
+  aiTextCancel: "extensionHost/ai/textCancel",
   aiTextRequest: "extensionHost/ai/textRequest",
   aiTextResult: "extensionHost/ai/textResult",
   apiError: "extensionHost/api/error",
@@ -151,6 +152,7 @@ export type ExtensionHostProtocolMessage =
   | ExtensionHostActivationResultMessage
   | ExtensionHostAiProviderRegisterRequestMessage
   | ExtensionHostAiProviderUnregisterRequestMessage
+  | ExtensionHostAiTextCancelMessage
   | ExtensionHostAiTextRequestMessage
   | ExtensionHostAiTextResultMessage
   | ExtensionHostApiErrorMessage
@@ -226,6 +228,13 @@ export interface ExtensionHostAiTextRequestMessage {
   readonly extensionId: string;
   readonly providerId: string;
   readonly request: ExtensionHostProtocolAiTextRequest;
+}
+
+export interface ExtensionHostAiTextCancelMessage {
+  readonly type: typeof extensionHostProtocolMessageTypes.aiTextCancel;
+  readonly requestId: string;
+  readonly extensionId: string;
+  readonly providerId: string;
 }
 
 export interface ExtensionHostAiTextResultMessage {
@@ -753,6 +762,19 @@ export function createExtensionHostAiTextRequestMessage(
   };
 }
 
+export function createExtensionHostAiTextCancelMessage(
+  requestId: string,
+  extensionId: string,
+  providerId: string
+): ExtensionHostAiTextCancelMessage {
+  return {
+    type: extensionHostProtocolMessageTypes.aiTextCancel,
+    requestId: normalizeRequestId(requestId, "Extension host AI text cancel request id"),
+    extensionId: normalizeExtensionId(extensionId, "Extension host AI text cancel extension id"),
+    providerId: normalizeAiProviderId(providerId, "Extension host AI text cancel provider id")
+  };
+}
+
 export function createExtensionHostAiTextResultMessage(
   requestId: string,
   extensionId: string,
@@ -1011,6 +1033,8 @@ export function readExtensionHostProtocolMessage(value: unknown): ExtensionHostP
       return readAiProviderUnregisterRequestMessage(record);
     case extensionHostProtocolMessageTypes.aiTextRequest:
       return readAiTextRequestMessage(record);
+    case extensionHostProtocolMessageTypes.aiTextCancel:
+      return readAiTextCancelMessage(record);
     case extensionHostProtocolMessageTypes.aiTextResult:
       return readAiTextResultMessage(record);
     case extensionHostProtocolMessageTypes.exportProviderRegister:
@@ -1237,6 +1261,15 @@ function readAiTextRequestMessage(record: UnknownRecord): ExtensionHostAiTextReq
     extensionId: normalizeExtensionId(record.extensionId, "Extension host AI text request extension id"),
     providerId: normalizeAiProviderId(record.providerId, "Extension host AI text request provider id"),
     request: normalizeProtocolAiTextRequest(record.request)
+  };
+}
+
+function readAiTextCancelMessage(record: UnknownRecord): ExtensionHostAiTextCancelMessage {
+  return {
+    type: extensionHostProtocolMessageTypes.aiTextCancel,
+    requestId: normalizeRequestId(record.requestId, "Extension host AI text cancel request id"),
+    extensionId: normalizeExtensionId(record.extensionId, "Extension host AI text cancel extension id"),
+    providerId: normalizeAiProviderId(record.providerId, "Extension host AI text cancel provider id")
   };
 }
 

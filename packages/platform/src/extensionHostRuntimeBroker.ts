@@ -3,6 +3,7 @@ import type { AiTextRequest } from "./ai";
 import type { ExtensionContext } from "./extensions";
 import type { RemoteSyncPlan, RemoteSyncPlanRequest, RemoteSyncResult } from "./remoteSync";
 import {
+  createExtensionHostAiTextCancelMessage,
   createExtensionHostAiTextRequestMessage,
   createExtensionHostApiErrorMessage,
   createExtensionHostApiResultMessage,
@@ -44,6 +45,7 @@ export type ExtensionHostRuntimeBrokerResponse =
 
 export interface ExtensionHostRuntimeBrokerOptions {
   readonly request: ExtensionHostRuntimeBrokerRequestHandler;
+  readonly notify?: ExtensionHostRuntimeBrokerRequestHandler;
   readonly createRequestId?: (kind: ExtensionHostRuntimeBrokerRequestKind) => string;
 }
 
@@ -143,22 +145,34 @@ export class ExtensionHostRuntimeBroker extends Disposable {
       title,
       requestText: async (request) => {
         const requestId = this.nextRequestId("aiTextRequest");
-        const response = readExtensionHostProtocolMessage(await this.options.request(
-          createExtensionHostAiTextRequestMessage(
-            requestId,
-            this.context.extension.id,
-            providerId,
-            toProtocolAiTextRequest(request)
-          )
-        ));
+        const abortListener = this.createAiTextAbortListener(request, requestId, providerId);
 
-        assertResponseIdentity(response, requestId, this.context.extension.id);
-
-        if (response.type !== extensionHostProtocolMessageTypes.aiTextResult) {
-          throw new Error(`Expected extension host AI text result but received: ${response.type}`);
+        if (request.signal?.aborted) {
+          throw new Error("Extension host AI text request was aborted");
         }
 
-        return (response as ExtensionHostAiTextResultMessage).result;
+        if (abortListener) {
+          request.signal?.addEventListener("abort", abortListener, { once: true });
+        }
+
+        try {
+          const response = await this.sendAiTextRequest(requestId, providerId, request);
+          assertResponseIdentity(response, requestId, this.context.extension.id);
+
+          if (response.type === extensionHostProtocolMessageTypes.apiError) {
+            throw toError(response.error);
+          }
+
+          if (response.type !== extensionHostProtocolMessageTypes.aiTextResult) {
+            throw new Error(`Expected extension host AI text result but received: ${response.type}`);
+          }
+
+          return (response as ExtensionHostAiTextResultMessage).result;
+        } finally {
+          if (abortListener) {
+            request.signal?.removeEventListener("abort", abortListener);
+          }
+        }
       }
     });
     this.aiProviderDisposables.set(providerId, disposable);
@@ -308,6 +322,43 @@ export class ExtensionHostRuntimeBroker extends Disposable {
 
   private addRuntimeDisposable(disposable: IDisposable): void {
     this.store.add(disposable);
+  }
+
+  private createAiTextAbortListener(
+    request: AiTextRequest,
+    requestId: string,
+    providerId: string
+  ): (() => void) | undefined {
+    if (!request.signal || !this.options.notify) {
+      return undefined;
+    }
+
+    return () => {
+      try {
+        void this.options.notify?.(createExtensionHostAiTextCancelMessage(
+          requestId,
+          this.context.extension.id,
+          providerId
+        ));
+      } catch {
+        // Cancellation is best-effort; the pending request response remains authoritative.
+      }
+    };
+  }
+
+  private async sendAiTextRequest(
+    requestId: string,
+    providerId: string,
+    request: AiTextRequest
+  ): Promise<ExtensionHostProtocolMessage> {
+    return readExtensionHostProtocolMessage(await this.options.request(
+      createExtensionHostAiTextRequestMessage(
+        requestId,
+        this.context.extension.id,
+        providerId,
+        toProtocolAiTextRequest(request)
+      )
+    ));
   }
 
   private unregisterProxy(disposables: Map<string, IDisposable>, key: string, label: string): void {

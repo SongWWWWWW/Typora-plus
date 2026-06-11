@@ -71,6 +71,7 @@ export class ExtensionHostProtocolSession extends Disposable {
     );
     this.broker = this.store.add(new ExtensionHostRuntimeBroker(context, {
       createRequestId: (kind) => this.nextRequestId(kind),
+      notify: (message) => this.sendNotification(message),
       request: (message) => this.sendRequest(message)
     }));
     this.store.add(transport.onMessage((message) => {
@@ -205,6 +206,14 @@ export class ExtensionHostProtocolSession extends Disposable {
         reject(toErrorLike(error));
       }
     });
+  }
+
+  private async sendNotification(message: ExtensionHostProtocolMessage): Promise<void> {
+    if (this.disposed) {
+      return;
+    }
+
+    await this.transport.send(readExtensionHostProtocolMessage(message));
   }
 
   private async performHandshake(): Promise<ExtensionHostHandshakeResultMessage> {

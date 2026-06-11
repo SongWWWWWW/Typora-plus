@@ -45,6 +45,7 @@ import {
   extensionHostProtocolMessageTypes,
   readExtensionHostProtocolMessage,
   type ExtensionHostActivationRequestMessage,
+  type ExtensionHostAiTextCancelMessage,
   type ExtensionHostAiTextRequestMessage,
   type ExtensionHostApiErrorMessage,
   type ExtensionHostApiResultMessage,
@@ -95,6 +96,13 @@ interface PendingRuntimeRequest {
   reject(error: Error): void;
 }
 
+interface ActiveRuntimeAiTextRequest {
+  readonly providerId: string;
+  readonly controller: AbortController;
+  cancelled: boolean;
+  cancellationResponseSent: boolean;
+}
+
 interface RuntimeExtensionRecord {
   readonly extension: RegisteredExtension;
   readonly context: ExtensionContext;
@@ -118,6 +126,7 @@ interface RuntimeMarkdownRendererRegistration {
 }
 
 export class ExtensionHostProtocolRuntime extends Disposable {
+  private readonly activeAiTextRequests = new Map<string, ActiveRuntimeAiTextRequest>();
   private readonly pendingRequests = new Map<string, PendingRuntimeRequest>();
   private readonly extensions = new Map<string, RuntimeExtensionRecord>();
   private readonly requestTimer: ExtensionHostProtocolRequestTimer;
@@ -155,6 +164,12 @@ export class ExtensionHostProtocolRuntime extends Disposable {
 
     this.disposed = true;
 
+    for (const activeRequest of this.activeAiTextRequests.values()) {
+      activeRequest.controller.abort();
+    }
+
+    this.activeAiTextRequests.clear();
+
     for (const record of this.extensions.values()) {
       record.disposables.dispose();
     }
@@ -174,6 +189,11 @@ export class ExtensionHostProtocolRuntime extends Disposable {
     }
 
     const pending = this.pendingRequests.get(message.requestId);
+
+    if (message.type === extensionHostProtocolMessageTypes.aiTextCancel) {
+      await this.cancelRegisteredAiText(message);
+      return;
+    }
 
     if (pending) {
       this.resolvePendingRequest(message, pending);
@@ -253,7 +273,21 @@ export class ExtensionHostProtocolRuntime extends Disposable {
   }
 
   private async requestRegisteredAiText(message: ExtensionHostAiTextRequestMessage): Promise<void> {
+    const requestKey = createRuntimeAiTextRequestKey(message.extensionId, message.requestId);
+    const activeRequest: ActiveRuntimeAiTextRequest = {
+      providerId: message.providerId,
+      controller: new AbortController(),
+      cancelled: false,
+      cancellationResponseSent: false
+    };
+
     try {
+      if (this.activeAiTextRequests.has(requestKey)) {
+        throw new Error(`Extension host runtime AI text request is already active: ${message.requestId}`);
+      }
+
+      this.activeAiTextRequests.set(requestKey, activeRequest);
+
       const record = this.requireExtensionRecord(message.extensionId);
       const provider = record.aiProviders.get(message.providerId);
 
@@ -261,15 +295,52 @@ export class ExtensionHostProtocolRuntime extends Disposable {
         throw new Error(`No extension host runtime AI provider registered: ${message.providerId}`);
       }
 
+      const result = await provider.requestText(toRuntimeAiTextRequest(message.request, activeRequest.controller.signal));
+
+      if (activeRequest.cancelled) {
+        return;
+      }
+
+      this.activeAiTextRequests.delete(requestKey);
+
       await this.transport.send(createExtensionHostAiTextResultMessage(
         message.requestId,
         message.extensionId,
         message.providerId,
-        await provider.requestText(toRuntimeAiTextRequest(message.request))
+        result
       ));
     } catch (error) {
+      if (activeRequest.cancelled && activeRequest.cancellationResponseSent) {
+        return;
+      }
+
       await this.sendRuntimeApiError(message.requestId, message.extensionId, error);
+    } finally {
+      if (this.activeAiTextRequests.get(requestKey) === activeRequest) {
+        this.activeAiTextRequests.delete(requestKey);
+      }
     }
+  }
+
+  private async cancelRegisteredAiText(message: ExtensionHostAiTextCancelMessage): Promise<void> {
+    const activeRequest = this.activeAiTextRequests.get(createRuntimeAiTextRequestKey(
+      message.extensionId,
+      message.requestId
+    ));
+
+    if (!activeRequest || activeRequest.providerId !== message.providerId || activeRequest.cancelled) {
+      return;
+    }
+
+    activeRequest.cancelled = true;
+    activeRequest.controller.abort();
+    activeRequest.cancellationResponseSent = true;
+
+    await this.sendRuntimeApiError(
+      message.requestId,
+      message.extensionId,
+      new Error("Extension host AI text request cancelled")
+    );
   }
 
   private async executeRegisteredCommand(
@@ -852,7 +923,7 @@ function getRegisteredMarkdownRenderers(
 
 function toRuntimeAiTextRequest(request: Omit<AiTextRequest, "signal" | "context"> & {
   readonly context?: readonly { readonly kind: string; readonly value: string; readonly title?: string; readonly uri?: string }[];
-}): AiTextRequest {
+}, signal?: AbortSignal): AiTextRequest {
   return {
     instruction: request.instruction,
     input: request.input,
@@ -864,8 +935,13 @@ function toRuntimeAiTextRequest(request: Omit<AiTextRequest, "signal" | "context
         ...(item.uri ? { uri: URI.parse(item.uri) } : {})
       }))
     } : {}),
-    ...(request.metadata ? { metadata: request.metadata } : {})
+    ...(request.metadata ? { metadata: request.metadata } : {}),
+    ...(signal ? { signal } : {})
   };
+}
+
+function createRuntimeAiTextRequestKey(extensionId: string, requestId: string): string {
+  return `${extensionId}:${requestId}`;
 }
 
 function toRuntimeRemoteSyncPlanRequest(

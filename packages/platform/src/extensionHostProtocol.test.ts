@@ -7,6 +7,7 @@ import {
   createExtensionHostActivationResultMessage,
   createExtensionHostAiProviderRegisterRequestMessage,
   createExtensionHostAiProviderUnregisterRequestMessage,
+  createExtensionHostAiTextCancelMessage,
   createExtensionHostAiTextRequestMessage,
   createExtensionHostAiTextResultMessage,
   createExtensionHostApiErrorMessage,
@@ -295,6 +296,11 @@ describe("extension host protocol", () => {
       "notes.main",
       "notes.main.ai"
     );
+    const cancel = createExtensionHostAiTextCancelMessage(
+      "request-ai-2",
+      "notes.main",
+      "notes.main.ai"
+    );
 
     expect(register).toEqual({
       type: extensionHostProtocolMessageTypes.aiProviderRegister,
@@ -347,10 +353,17 @@ describe("extension host protocol", () => {
       extensionId: "notes.main",
       providerId: "notes.main.ai"
     });
+    expect(cancel).toEqual({
+      type: extensionHostProtocolMessageTypes.aiTextCancel,
+      requestId: "request-ai-2",
+      extensionId: "notes.main",
+      providerId: "notes.main.ai"
+    });
     expect(deserializeExtensionHostProtocolMessage(serializeExtensionHostProtocolMessage(register))).toEqual(register);
     expect(deserializeExtensionHostProtocolMessage(serializeExtensionHostProtocolMessage(request))).toEqual(request);
     expect(deserializeExtensionHostProtocolMessage(serializeExtensionHostProtocolMessage(result))).toEqual(result);
     expect(deserializeExtensionHostProtocolMessage(serializeExtensionHostProtocolMessage(unregister))).toEqual(unregister);
+    expect(deserializeExtensionHostProtocolMessage(serializeExtensionHostProtocolMessage(cancel))).toEqual(cancel);
     expect(() => createExtensionHostAiProviderRegisterRequestMessage("request-ai-5", "notes.main", {
       id: "bad provider",
       title: "Bad Provider"
@@ -369,6 +382,8 @@ describe("extension host protocol", () => {
         totalTokens: -1
       }
     })).toThrow("between");
+    expect(() => createExtensionHostAiTextCancelMessage("request-ai-8", "notes.main", "bad provider"))
+      .toThrow("AI text cancel provider id is invalid");
   });
 
   it("serializes remote sync provider broker messages", () => {
