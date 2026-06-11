@@ -99,7 +99,10 @@ export function createRemoteSyncRawMirrorProvider(options: RemoteSyncRawMirrorPr
         remoteResources,
         direction: request.direction
       });
-      const executionOperations = execution.operations ?? operations;
+      const executionOperations = validateRawMirrorExecutionOperations(
+        operations,
+        execution.operations ?? operations
+      );
 
       writeRawMirrorManifestResources(options, request, createRemoteSyncManifestResourcesFromExecution({
         manifestResources: readRawMirrorManifestResources(options, request),
@@ -176,6 +179,48 @@ function summarizeRawMirrorOperations(operations: readonly RemoteSyncOperation[]
     skips: operations.filter((operation) => operation.kind === "skip").length,
     conflicts: operations.filter((operation) => operation.kind === "conflict").length
   };
+}
+
+function validateRawMirrorExecutionOperations(
+  planned: readonly RemoteSyncOperation[],
+  returned: readonly RemoteSyncOperation[]
+): readonly RemoteSyncOperation[] {
+  const plannedKeys = new Set(planned.map(createRawMirrorExecutableOperationKey));
+  const returnedKeys = new Set<string>();
+
+  if (returned.length !== planned.length) {
+    throw new Error("Remote sync raw mirror execution must return every planned operation exactly once");
+  }
+
+  for (const operation of returned) {
+    if (!isRawMirrorExecutableOperation(operation)) {
+      throw new Error("Remote sync raw mirror execution returned a non-executable operation");
+    }
+
+    const key = createRawMirrorExecutableOperationKey(operation);
+
+    if (!plannedKeys.has(key)) {
+      throw new Error(`Remote sync raw mirror execution returned an unplanned operation: ${operation.relativePath}`);
+    }
+
+    if (returnedKeys.has(key)) {
+      throw new Error(`Remote sync raw mirror execution returned a duplicate operation: ${operation.relativePath}`);
+    }
+
+    returnedKeys.add(key);
+  }
+
+  return returned;
+}
+
+function isRawMirrorExecutableOperation(operation: RemoteSyncOperation): boolean {
+  return operation.kind === "create" ||
+    operation.kind === "update" ||
+    operation.kind === "delete";
+}
+
+function createRawMirrorExecutableOperationKey(operation: RemoteSyncOperation): string {
+  return `${operation.kind}\n${operation.target}\n${operation.relativePath}`;
 }
 
 function throwIfRawMirrorAborted(signal: AbortSignal | undefined): void {

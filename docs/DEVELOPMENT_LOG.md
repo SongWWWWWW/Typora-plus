@@ -7626,4 +7626,34 @@ Review:
 Known limitations:
 
 - No concrete Feishu/raw-mirror adapter is implemented yet.
-- Adapter-returned execution operations are still trusted to represent the executed subset; a later stage can add stricter operation-set validation before manifest refresh.
+- Adapter-returned execution operation-set validation was tightened in the following stage.
+
+## 2026-06-12 - P2 Remote Sync Raw Mirror Execution Result Validation
+
+Completed:
+
+- Validated raw mirror adapter execution results before manifest refresh.
+- Required adapter-returned operations to match every planned executable operation exactly once by kind, target, and relative path.
+- Rejected missing, extra, duplicate, non-executable, or target-mutated execution operations before writing manifest state.
+- Kept adapter result enrichment flexible for execution details such as `remoteId` and `message` while preventing adapters from changing the operation set.
+- Added focused tests for missing, extra, duplicate, non-executable, and target-mutated adapter results.
+
+Quality gate:
+
+- `npx vitest run packages/platform/src/remoteSyncRawMirrorProvider.test.ts packages/platform/src/remoteSync.test.ts`: passed, 2 files / 36 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 82 files / 776 tests, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Raw mirror execution result validation hardcode scan for endpoint/OAuth/token/secret/model/provider literals: passed
+
+Review:
+
+- Manifest refresh now has a stronger trust boundary: adapters can enrich planned operations with remote execution details, but cannot silently execute or report work outside the approved plan.
+- The validation sits in the raw mirror helper, so future Feishu/raw mirror adapters inherit the same guard without duplicating operation-set checks.
+- The change keeps cloud-specific behavior injected and does not introduce provider ids, endpoints, OAuth scopes, token names, folder ids, or retry policy defaults.
+
+Known limitations:
+
+- No concrete Feishu/raw-mirror adapter is implemented yet.
+- The guard validates operation identity, not remote content transfer success; adapters must still return comparable post-execution snapshots for manifest refresh to succeed.

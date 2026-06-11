@@ -237,6 +237,99 @@ describe("remote sync raw mirror provider", () => {
     expect(adapter.executeOperations).not.toHaveBeenCalled();
   });
 
+  it.each([
+    {
+      name: "missing planned operation",
+      operations: [],
+      error: "must return every planned operation exactly once"
+    },
+    {
+      name: "extra planned operation",
+      operations: [
+        executableOperation("daily/today.md"),
+        executableOperation("daily/tomorrow.md")
+      ],
+      error: "must return every planned operation exactly once"
+    },
+    {
+      name: "non-executable operation",
+      operations: [{
+        kind: "skip" as const,
+        target: "none" as const,
+        relativePath: "daily/today.md"
+      }],
+      error: "returned a non-executable operation"
+    },
+    {
+      name: "changed target",
+      operations: [{
+        ...executableOperation("daily/today.md"),
+        target: "local" as const
+      }],
+      error: "returned an unplanned operation: daily/today.md"
+    }
+  ])("rejects adapter execution results with $name", async ({ operations, error }) => {
+    const storage = createMemoryStorage();
+    const provider = createRemoteSyncRawMirrorProvider({
+      id: "raw.mirror",
+      title: "Raw Mirror",
+      manifestStore: new RemoteSyncManifestStore({ storage }),
+      adapter: {
+        listResources: vi.fn(() => []),
+        executeOperations: vi.fn(() => ({
+          operations,
+          remoteResources: []
+        }))
+      }
+    });
+
+    await expect(provider.executePlan({
+      operations: [executableOperation("daily/today.md")],
+      summary: {
+        creates: 1,
+        updates: 0,
+        deletes: 0,
+        skips: 0,
+        conflicts: 0
+      }
+    }, planRequest())).rejects.toThrow(error);
+    expect(storage.write).not.toHaveBeenCalled();
+  });
+
+  it("rejects duplicate adapter execution results", async () => {
+    const storage = createMemoryStorage();
+    const provider = createRemoteSyncRawMirrorProvider({
+      id: "raw.mirror",
+      title: "Raw Mirror",
+      manifestStore: new RemoteSyncManifestStore({ storage }),
+      adapter: {
+        listResources: vi.fn(() => []),
+        executeOperations: vi.fn(() => ({
+          operations: [
+            executableOperation("daily/today.md"),
+            executableOperation("daily/today.md")
+          ],
+          remoteResources: []
+        }))
+      }
+    });
+
+    await expect(provider.executePlan({
+      operations: [
+        executableOperation("daily/today.md"),
+        executableOperation("daily/tomorrow.md")
+      ],
+      summary: {
+        creates: 2,
+        updates: 0,
+        deletes: 0,
+        skips: 0,
+        conflicts: 0
+      }
+    }, planRequest())).rejects.toThrow("returned a duplicate operation: daily/today.md");
+    expect(storage.write).not.toHaveBeenCalled();
+  });
+
   it("aborts planning and execution before adapter calls", async () => {
     const controller = new AbortController();
     const adapter = {
@@ -293,6 +386,14 @@ function planRequest(overrides: Partial<RemoteSyncPlanRequest> = {}): RemoteSync
       surface: "test"
     },
     ...overrides
+  };
+}
+
+function executableOperation(relativePath: string): RemoteSyncOperation {
+  return {
+    kind: "create",
+    target: "remote",
+    relativePath
   };
 }
 
