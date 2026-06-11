@@ -7839,3 +7839,33 @@ Known limitations:
 
 - No concrete Feishu/raw-mirror adapter consumes the staged upload contents yet.
 - Pull/download-side local write staging is still pending.
+
+## 2026-06-12 - P2 Remote Sync Raw Mirror Local Apply Staging
+
+Completed:
+
+- Added provider-neutral local apply staging for raw mirror create/update/delete operations targeting the local side.
+- Routed downloaded file writes and local deletes through `IRemoteSyncWorkspaceResourceService` instead of direct filesystem APIs.
+- Used `expectedMtime` plus overwrite intent for stale-write-aware updates and deletes, while create operations reject existing local resources.
+- Validated downloaded file content paths, base64 encoding, duplicate operations, duplicate file contents, missing local resources, missing file contents, and cancellation before native writes.
+- Returned updated local resource metadata from native write results so future adapter execution results can refresh manifests with post-write local state.
+
+Quality gate:
+
+- `npx vitest run packages/platform/src/remoteSyncRawMirrorWorkspaceResources.test.ts`: passed, 1 file / 8 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 86 files / 812 tests, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Raw mirror local apply staging implementation hardcode scan for Feishu endpoints, OAuth scopes, token/secret names, model ids, provider ids, and credential literals: passed
+
+Review:
+
+- The stage closes the pull/download-side local write staging gap left by the previous upload staging pass.
+- The implementation still does not add provider ids, endpoints, OAuth scopes, token names, folder ids, model ids, storage paths, or credential literals.
+- Remote download requests, remote folder semantics, provider-specific retry policy, and response parsing remain adapter responsibilities.
+
+Known limitations:
+
+- No concrete Feishu/raw-mirror adapter consumes upload or local apply staging yet.
+- Directory create/delete semantics are still adapter/provider-specific and are not handled by file-content staging.

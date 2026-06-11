@@ -1,7 +1,10 @@
 import { URI } from "@typora-plus/base";
 import { describe, expect, it, vi } from "vitest";
 import type { RemoteSyncOperation, RemoteSyncResource } from "./remoteSync";
-import { readRemoteSyncRawMirrorUploadFileContents } from "./remoteSyncRawMirrorWorkspaceResources";
+import {
+  applyRemoteSyncRawMirrorLocalResourceChanges,
+  readRemoteSyncRawMirrorUploadFileContents
+} from "./remoteSyncRawMirrorWorkspaceResources";
 
 describe("remote sync raw mirror workspace resources", () => {
   it("reads local file content for remote create and update operations", async () => {
@@ -137,6 +140,218 @@ describe("remote sync raw mirror workspace resources", () => {
       resourceService: { readResource }
     })).rejects.toThrow("Remote sync raw mirror upload read returned a different resource path");
   });
+
+  it("writes downloaded local files and deletes local resources through the resource service", async () => {
+    const progress = vi.fn();
+    const writeResource = vi.fn(async ({ relativePath }: { readonly relativePath: string }) => ({
+      workspaceUri: URI.file("C:/Notes"),
+      relativePath,
+      size: relativePath === "A.md" ? 3 : 4,
+      mtime: relativePath === "A.md" ? 10 : 20
+    }));
+    const deleteResource = vi.fn(async () => true);
+    const operations = [
+      operation("create", "local", "A.md"),
+      operation("update", "local", "B.md"),
+      operation("delete", "local", "Old.md"),
+      operation("create", "remote", "Upload.md")
+    ];
+
+    const results = await applyRemoteSyncRawMirrorLocalResourceChanges({
+      workspaceUri: URI.file("C:/Notes"),
+      operations,
+      localResources: [
+        resource("B.md", "file", 8),
+        resource("Old.md", "file", 9)
+      ],
+      fileContents: [
+        fileContent("A.md", "IyBB", "sha256:a"),
+        fileContent("B.md", "IyBC", "sha256:b")
+      ],
+      resourceService: { writeResource, deleteResource },
+      onProgress: progress
+    });
+
+    expect(writeResource).toHaveBeenCalledTimes(2);
+    expect(writeResource).toHaveBeenNthCalledWith(1, {
+      workspaceUri: URI.file("C:/Notes"),
+      relativePath: "A.md",
+      value: "IyBB",
+      encoding: "base64",
+      overwrite: false
+    });
+    expect(writeResource).toHaveBeenNthCalledWith(2, {
+      workspaceUri: URI.file("C:/Notes"),
+      relativePath: "B.md",
+      value: "IyBC",
+      encoding: "base64",
+      expectedMtime: 8,
+      overwrite: true
+    });
+    expect(deleteResource).toHaveBeenCalledWith({
+      workspaceUri: URI.file("C:/Notes"),
+      relativePath: "Old.md",
+      expectedMtime: 9,
+      overwrite: true
+    });
+    expect(results).toEqual([
+      {
+        operation: operation("create", "local", "A.md"),
+        resource: {
+          uri: URI.file("C:/Notes/A.md"),
+          relativePath: "A.md",
+          kind: "file",
+          name: "A.md",
+          size: 3,
+          mtime: 10,
+          contentHash: "sha256:a"
+        }
+      },
+      {
+        operation: operation("update", "local", "B.md"),
+        resource: {
+          uri: URI.file("C:/Notes/B.md"),
+          relativePath: "B.md",
+          kind: "file",
+          name: "B.md",
+          size: 4,
+          mtime: 20,
+          contentHash: "sha256:b"
+        }
+      },
+      {
+        operation: operation("delete", "local", "Old.md"),
+        deleted: true
+      }
+    ]);
+    expect(progress).toHaveBeenLastCalledWith({
+      message: "Applied local remote sync resource change",
+      completed: 3,
+      total: 3,
+      operation: operation("delete", "local", "Old.md")
+    });
+  });
+
+  it("rejects invalid local apply inputs before workspace writes", async () => {
+    const writeResource = vi.fn();
+    const deleteResource = vi.fn();
+
+    await expect(applyRemoteSyncRawMirrorLocalResourceChanges({
+      workspaceUri: URI.file("C:/Notes"),
+      operations: [operation("create", "local", "Missing.md")],
+      localResources: [],
+      fileContents: [],
+      resourceService: { writeResource, deleteResource }
+    })).rejects.toThrow("Remote sync raw mirror local write Missing.md requires file content");
+
+    await expect(applyRemoteSyncRawMirrorLocalResourceChanges({
+      workspaceUri: URI.file("C:/Notes"),
+      operations: [operation("update", "local", "Missing.md")],
+      localResources: [],
+      fileContents: [fileContent("Missing.md", "IyBB")],
+      resourceService: { writeResource, deleteResource }
+    })).rejects.toThrow("Remote sync raw mirror local update Missing.md requires a local resource");
+
+    await expect(applyRemoteSyncRawMirrorLocalResourceChanges({
+      workspaceUri: URI.file("C:/Notes"),
+      operations: [operation("delete", "local", "Missing.md")],
+      localResources: [],
+      fileContents: [],
+      resourceService: { writeResource, deleteResource }
+    })).rejects.toThrow("Remote sync raw mirror local delete Missing.md requires a local resource");
+
+    await expect(applyRemoteSyncRawMirrorLocalResourceChanges({
+      workspaceUri: URI.file("C:/Notes"),
+      operations: [
+        operation("create", "local", "A.md"),
+        operation("update", "local", "A.md")
+      ],
+      localResources: [resource("A.md")],
+      fileContents: [fileContent("A.md", "IyBB")],
+      resourceService: { writeResource, deleteResource }
+    })).rejects.toThrow("Remote sync raw mirror local operation is duplicated: A.md");
+    expect(writeResource).not.toHaveBeenCalled();
+    expect(deleteResource).not.toHaveBeenCalled();
+  });
+
+  it("rejects local deletes that are not applied", async () => {
+    const writeResource = vi.fn();
+    const deleteResource = vi.fn(async () => false);
+
+    await expect(applyRemoteSyncRawMirrorLocalResourceChanges({
+      workspaceUri: URI.file("C:/Notes"),
+      operations: [operation("delete", "local", "Old.md")],
+      localResources: [resource("Old.md", "file", 9)],
+      fileContents: [],
+      resourceService: { writeResource, deleteResource }
+    })).rejects.toThrow("Remote sync raw mirror local delete Old.md was not applied");
+    expect(writeResource).not.toHaveBeenCalled();
+  });
+
+  it("rejects duplicate, invalid, and aborted local file content", async () => {
+    const controller = new AbortController();
+    const writeResource = vi.fn();
+    const deleteResource = vi.fn();
+
+    await expect(applyRemoteSyncRawMirrorLocalResourceChanges({
+      workspaceUri: URI.file("C:/Notes"),
+      operations: [operation("create", "local", "A.md")],
+      localResources: [],
+      fileContents: [
+        fileContent("A.md", "IyBB"),
+        fileContent("A.md", "IyBC")
+      ],
+      resourceService: { writeResource, deleteResource }
+    })).rejects.toThrow("Remote sync raw mirror local file content is duplicated: A.md");
+
+    await expect(applyRemoteSyncRawMirrorLocalResourceChanges({
+      workspaceUri: URI.file("C:/Notes"),
+      operations: [operation("create", "local", "A.md")],
+      localResources: [],
+      fileContents: [{
+        relativePath: "../A.md",
+        value: "IyBB",
+        encoding: "base64"
+      }],
+      resourceService: { writeResource, deleteResource }
+    })).rejects.toThrow("Remote sync raw mirror local file content path is invalid");
+
+    await expect(applyRemoteSyncRawMirrorLocalResourceChanges({
+      workspaceUri: URI.file("C:/Notes"),
+      operations: [operation("create", "local", "A.md")],
+      localResources: [],
+      fileContents: [{
+        relativePath: "A.md",
+        value: "IyBB",
+        encoding: "utf8" as "base64"
+      }],
+      resourceService: { writeResource, deleteResource }
+    })).rejects.toThrow("Remote sync raw mirror local file content must be base64");
+
+    await expect(applyRemoteSyncRawMirrorLocalResourceChanges({
+      workspaceUri: URI.file("C:/Notes"),
+      operations: [operation("create", "local", "A.md")],
+      localResources: [],
+      fileContents: [{
+        relativePath: "A.md",
+        value: "not base64",
+        encoding: "base64"
+      }],
+      resourceService: { writeResource, deleteResource }
+    })).rejects.toThrow("Remote sync raw mirror local file content value must be base64");
+
+    controller.abort();
+    await expect(applyRemoteSyncRawMirrorLocalResourceChanges({
+      workspaceUri: URI.file("C:/Notes"),
+      operations: [operation("create", "local", "A.md")],
+      localResources: [],
+      fileContents: [fileContent("A.md", "IyBB")],
+      resourceService: { writeResource, deleteResource },
+      signal: controller.signal
+    })).rejects.toThrow("Remote sync raw mirror local apply was aborted");
+    expect(writeResource).not.toHaveBeenCalled();
+    expect(deleteResource).not.toHaveBeenCalled();
+  });
 });
 
 function operation(
@@ -152,11 +367,25 @@ function operation(
   };
 }
 
-function resource(relativePath: string, kind: RemoteSyncResource["kind"] = "file"): RemoteSyncResource {
+function resource(
+  relativePath: string,
+  kind: RemoteSyncResource["kind"] = "file",
+  mtime?: number
+): RemoteSyncResource {
   return {
     uri: URI.file(`C:/Notes/${relativePath}`),
     relativePath,
     kind,
-    name: relativePath.split("/").at(-1) ?? relativePath
+    name: relativePath.split("/").at(-1) ?? relativePath,
+    ...(mtime !== undefined ? { mtime } : {})
+  };
+}
+
+function fileContent(relativePath: string, value: string, contentHash?: string) {
+  return {
+    relativePath,
+    value,
+    encoding: "base64" as const,
+    ...(contentHash !== undefined ? { contentHash } : {})
   };
 }

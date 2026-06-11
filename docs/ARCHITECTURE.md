@@ -168,6 +168,8 @@ Configured remote sync provider factories may receive three bounded inputs: the 
 
 Raw mirror upload staging is provider-neutral. `readRemoteSyncRawMirrorUploadFileContents()` reads only local file resources for executable create/update operations targeting the remote side, refreshes size/mtime/content hash metadata from `IRemoteSyncWorkspaceResourceService`, reports per-resource progress, and rejects missing, duplicate, aborted, or mismatched reads before provider-specific upload code runs. Directory creation, remote upload endpoints, remote folder ids, retry policy, and provider-specific response parsing remain adapter responsibilities.
 
+Raw mirror local application is also provider-neutral. `applyRemoteSyncRawMirrorLocalResourceChanges()` writes downloaded base64 file content for executable create/update operations targeting the local side, deletes local resources for delete operations, carries expected mtime into trusted workspace writes/deletes, avoids create-over-existing and update/delete-without-local-resource cases, and validates downloaded file paths plus base64 payloads before native writes. Provider adapters still own remote download requests, remote folder semantics, and translating remote API responses into workspace-relative downloaded file contents.
+
 ## Stage Review Rules
 
 At the end of every stage:
