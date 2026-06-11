@@ -2,10 +2,17 @@ import {
   clampConfigurationNumber,
   configurationBytesPerMegabyte,
   configurationNumberConstraints,
-  type ConfigurationNumberConstraint
+  type ColorSchemePreference,
+  type ConfigurationNumberConstraint,
+  type TyporaPlusConfiguration
 } from "@typora-plus/platform";
 
 export type NumberSettingConstraint = ConfigurationNumberConstraint;
+
+export interface SettingsOption<TValue extends string> {
+  readonly value: TValue;
+  readonly label: string;
+}
 
 export const settingsSectionIds = {
   appearance: "appearance",
@@ -75,6 +82,17 @@ export const settingsSections = [
   { id: settingsSectionIds.workspace, title: "Workspace" },
   { id: settingsSectionIds.keybindings, title: "Keybindings" }
 ] as const satisfies readonly SettingsSectionDefinition[];
+
+export const settingsColorSchemeOptions = [
+  { value: "system", label: "System" },
+  { value: "light", label: "Light" },
+  { value: "dark", label: "Dark" }
+] as const satisfies readonly SettingsOption<ColorSchemePreference>[];
+
+export const settingsDensityOptions = [
+  { value: "comfortable", label: "Comfortable" },
+  { value: "compact", label: "Compact" }
+] as const satisfies readonly SettingsOption<TyporaPlusConfiguration["appearance"]["density"]>[];
 
 export const settingsEntries = [
   { id: settingsEntryIds.appearance.theme, sectionId: settingsSectionIds.appearance, label: "Theme", keywords: ["color scheme", "system", "light", "dark"] },

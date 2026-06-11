@@ -24,6 +24,8 @@ import {
   megabytesToBytes,
   normalizeAssetFolderInput,
   settingSectionAnchorId,
+  settingsColorSchemeOptions,
+  settingsDensityOptions,
   settingsEntryIds,
   settingsNumberConstraints,
   settingsSectionIds,
@@ -300,11 +302,7 @@ export function SettingsDialog({
                     <SegmentedControl
                       ariaLabel={getSettingsEntryLabel(settingsEntryIds.appearance.theme)}
                       value={configuration.appearance.colorScheme}
-                      options={[
-                        { value: "system", label: "System" },
-                        { value: "light", label: "Light" },
-                        { value: "dark", label: "Dark" }
-                      ]}
+                      options={settingsColorSchemeOptions}
                       onChange={(colorScheme) => onUpdate({ appearance: { colorScheme } })}
                     />
                   </SettingsField>
@@ -335,10 +333,7 @@ export function SettingsDialog({
                     <SegmentedControl
                       ariaLabel={getSettingsEntryLabel(settingsEntryIds.appearance.density)}
                       value={configuration.appearance.density}
-                      options={[
-                        { value: "comfortable", label: "Comfortable" },
-                        { value: "compact", label: "Compact" }
-                      ]}
+                      options={settingsDensityOptions}
                       onChange={(density) => onUpdate({ appearance: { density } })}
                     />
                   </SettingsField>

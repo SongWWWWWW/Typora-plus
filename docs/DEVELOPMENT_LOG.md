@@ -5844,3 +5844,31 @@ Review:
 Known limitations:
 
 - Theme, density, keybinding toolbar, and select option labels remain local UI copy because they describe control choices or actions rather than Settings entry metadata.
+
+## 2026-06-11 - P2 Settings Option Metadata
+
+Completed:
+
+- Added typed Settings option metadata for appearance color scheme and density controls.
+- Routed Settings dialog segmented controls through the shared option arrays instead of inline option literals.
+- Kept option values constrained by platform configuration types so Settings cannot advertise unsupported appearance values.
+- Covered stable option order, labels, and values with focused Settings model tests.
+
+Quality gate:
+
+- `npx vitest run packages/workbench/src/settingsModel.test.ts packages/workbench/src/workbenchConfigurationUpdates.test.ts packages/workbench/src/keybindingSettings.test.ts`: passed, 24 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 59 files / 588 tests, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Dev server smoke check: passed at `http://127.0.0.1:5173`; status 200 and root element present
+
+Review:
+
+- Settings field ids, labels, and appearance segmented-control options now share the focused Settings model boundary.
+- `SettingsDialog` still owns control layout and runtime theme-option rendering, but it no longer owns the static appearance option tables.
+- No new dependency, configuration key, storage path, visual token, extra documentation file, or hard-coded platform assumption was introduced.
+
+Known limitations:
+
+- Custom theme choices still come from registered theme metadata at render time, so they remain a runtime list rather than static Settings option metadata.

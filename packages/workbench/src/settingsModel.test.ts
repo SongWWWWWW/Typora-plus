@@ -9,6 +9,8 @@ import {
   megabytesToBytes,
   normalizeAssetFolderInput,
   settingSectionAnchorId,
+  settingsColorSchemeOptions,
+  settingsDensityOptions,
   settingsEntries,
   settingsEntryIds,
   settingsSectionIds,
@@ -80,6 +82,18 @@ describe("settings model", () => {
       expect(getSettingsEntryDefinition(entry.id)).toBe(entry);
       expect(getSettingsEntryLabel(entry.id)).toBe(entry.label);
     }
+  });
+
+  it("defines stable settings option metadata", () => {
+    expect(settingsColorSchemeOptions).toEqual([
+      { value: "system", label: "System" },
+      { value: "light", label: "Light" },
+      { value: "dark", label: "Dark" }
+    ]);
+    expect(settingsDensityOptions).toEqual([
+      { value: "comfortable", label: "Comfortable" },
+      { value: "compact", label: "Compact" }
+    ]);
   });
 
   it("generates unique settings section anchors", () => {
