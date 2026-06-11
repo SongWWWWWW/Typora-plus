@@ -7928,3 +7928,33 @@ Known limitations:
 
 - Streaming response UI, structured output controls, and tool configuration are still future AI-provider enhancements.
 - No built-in AI provider is registered by default; users still need a configured provider and saved secret.
+
+## 2026-06-12 - P2 Configured Native Raw Mirror Provider
+
+Completed:
+
+- Added a metadata-gated configured raw mirror provider factory for native-request remote sync profiles.
+- Wired Workbench configured remote sync synchronization to create raw mirror providers when native request, manifest storage, and workspace resource bridges are available.
+- Kept the gateway contract provider-neutral: configured relative list/upload/download/delete paths, JSON resource lists, JSON base64 file download payloads, and JSON upload payloads.
+- Reused the existing native secret bridge by referencing profile secret bindings from non-sensitive metadata keys.
+- Covered push upload, pull download/write, unsupported-profile skipping, and configuration metadata sanitization.
+
+Quality gate:
+
+- `npx vitest run packages/platform/src/platform.test.ts packages/platform/src/remoteSyncConfiguredRawMirrorProvider.test.ts packages/platform/src/remoteSyncConfiguredProviders.test.ts packages/workbench/src/workbenchConfiguredRemoteSyncProviders.test.ts packages/workbench/src/services.test.ts`: passed, 5 files / 116 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 87 files / 818 tests, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Raw mirror configured-provider hardcode scan for OpenAI endpoints, model ids, API keys, Feishu endpoints, OAuth/token/secret literals, and provider credentials: passed
+
+Review:
+
+- The factory is opt-in via `rawMirror.adapter=raw-mirror`; ordinary native-request profiles are not registered as raw mirror providers.
+- Metadata stores route and header-binding names only; secret values remain in the native secret bridge and profile `secrets` references.
+- Workbench no longer leaves configured remote sync providers unwired by default, but it still does not hard-code Feishu hostnames, OAuth scopes, tenant tokens, folder ids, provider ids, or storage paths.
+
+Known limitations:
+
+- The configured raw mirror factory targets HTTP gateway adapters; direct Feishu Drive API translation remains a future provider/adapter concern.
+- Directory create/delete semantics, provider-specific retries, remote folder mapping, and large multipart uploads are still adapter-specific.

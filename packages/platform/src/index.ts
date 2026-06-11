@@ -23,6 +23,7 @@ export * from "./markdownRenderers";
 export * from "./menus";
 export * from "./remoteSync";
 export * from "./remoteSyncConfiguredProviders";
+export * from "./remoteSyncConfiguredRawMirrorProvider";
 export * from "./remoteSyncNativeRequest";
 export * from "./remoteSyncProfileRequest";
 export * from "./remoteSyncRawMirrorProvider";

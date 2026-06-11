@@ -42,7 +42,10 @@ import {
   WorkspaceIndexService,
   WorkspaceTextFileService,
   WorkspaceService,
+  createDefaultRemoteSyncManifestStorage,
   createNativeResponsesAiProviderFactoryOptions,
+  createNativeRemoteSyncConfiguredProviderFactoryOptions,
+  createRemoteSyncConfiguredRawMirrorProviderFactory,
   createDefaultWorkspaceIndexSnapshotStorage,
   type IAttachmentService as AttachmentServiceContract,
   type IAiService as AiServiceContract,
@@ -115,6 +118,14 @@ export function createWorkbenchServices(): WorkbenchServices {
   const themeService = new ThemeService();
   const remoteSyncService = new RemoteSyncService();
   const remoteSyncWorkspaceResourceService = new NativeRemoteSyncWorkspaceResourceService();
+  const remoteSyncManifestStorage = createDefaultRemoteSyncManifestStorage();
+  const configuredRemoteSyncProviderOptions = createNativeRemoteSyncConfiguredProviderFactoryOptions(
+    createRemoteSyncConfiguredRawMirrorProviderFactory(remoteSyncManifestStorage
+      ? { manifestStorage: remoteSyncManifestStorage }
+      : {}),
+    undefined,
+    remoteSyncWorkspaceResourceService
+  );
   const extensionHostService = new ExtensionHostService();
   const markdownRendererService = new MarkdownRendererService({
     activationHandler: async (rendererId) => {
@@ -148,7 +159,7 @@ export function createWorkbenchServices(): WorkbenchServices {
   const configuredRemoteSyncProviders = synchronizeWorkbenchConfiguredRemoteSyncProviders({
     configurationService,
     remoteSyncService
-  }, undefined);
+  }, configuredRemoteSyncProviderOptions);
 
   serviceCollection.set(IAttachmentService, attachmentService);
   serviceCollection.set(IAiService, aiService);

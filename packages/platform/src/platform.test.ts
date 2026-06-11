@@ -28,6 +28,8 @@ import {
   keybindingFromEvent,
   mergeConfiguration,
   normalizeRemoteSyncProviderConfiguration,
+  remoteSyncConfiguredRawMirrorAdapterName,
+  remoteSyncConfiguredRawMirrorMetadataKeys,
   configurationNumberConstraints,
   ServiceCollection,
   ThemeService,
@@ -286,6 +288,14 @@ describe("configuration", () => {
             ],
             metadata: {
               mode: " raw ",
+              [remoteSyncConfiguredRawMirrorMetadataKeys.adapter]: remoteSyncConfiguredRawMirrorAdapterName,
+              [remoteSyncConfiguredRawMirrorMetadataKeys.listPath]: " mirror/list ",
+              [remoteSyncConfiguredRawMirrorMetadataKeys.uploadPath]: "mirror/upload",
+              [remoteSyncConfiguredRawMirrorMetadataKeys.downloadPath]: "mirror/download",
+              [remoteSyncConfiguredRawMirrorMetadataKeys.deletePath]: "mirror/delete",
+              [remoteSyncConfiguredRawMirrorMetadataKeys.headerBinding]: "access",
+              [remoteSyncConfiguredRawMirrorMetadataKeys.headerName]: "Authorization",
+              [remoteSyncConfiguredRawMirrorMetadataKeys.headerScheme]: "Bearer",
               empty: "   ",
               accessToken: "not-for-metadata",
               ignored: 42
@@ -328,7 +338,15 @@ describe("configuration", () => {
           }
         ],
         metadata: {
-          mode: "raw"
+          mode: "raw",
+          [remoteSyncConfiguredRawMirrorMetadataKeys.adapter]: remoteSyncConfiguredRawMirrorAdapterName,
+          [remoteSyncConfiguredRawMirrorMetadataKeys.listPath]: "mirror/list",
+          [remoteSyncConfiguredRawMirrorMetadataKeys.uploadPath]: "mirror/upload",
+          [remoteSyncConfiguredRawMirrorMetadataKeys.downloadPath]: "mirror/download",
+          [remoteSyncConfiguredRawMirrorMetadataKeys.deletePath]: "mirror/delete",
+          [remoteSyncConfiguredRawMirrorMetadataKeys.headerBinding]: "access",
+          [remoteSyncConfiguredRawMirrorMetadataKeys.headerName]: "Authorization",
+          [remoteSyncConfiguredRawMirrorMetadataKeys.headerScheme]: "Bearer"
         }
       }
     ]);
