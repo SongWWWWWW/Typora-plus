@@ -12,6 +12,7 @@ import { applyWorkbenchConfigurationToServices } from "./workbenchConfigurationS
 import { workspaceStateFromFiles } from "./workbenchWorkspaceOpening";
 
 export interface WorkbenchStateSubscriptionCallbacks {
+  readonly bumpAiProviderRevision: () => void;
   readonly setConfiguration: (configuration: TyporaPlusConfiguration) => void;
   readonly setIndexStatus: (status: WorkspaceIndexStatus) => void;
   readonly setModel: (model: TextFileModel) => void;
@@ -19,6 +20,7 @@ export interface WorkbenchStateSubscriptionCallbacks {
   readonly setThemes: (themes: readonly RegisteredTheme[]) => void;
   readonly setWorkspace: (workspace: WorkspaceState) => void;
   readonly bumpMarkdownRendererRevision: () => void;
+  readonly bumpRemoteSyncProviderRevision: () => void;
 }
 
 export function registerWorkbenchStateSubscriptions(
@@ -47,6 +49,10 @@ export function registerWorkbenchStateSubscriptions(
   disposables.add(services.indexService.onDidChangeStatus(callbacks.setIndexStatus));
   disposables.add(services.markdownRendererService.onDidChangeMarkdownRenderers(
     callbacks.bumpMarkdownRendererRevision
+  ));
+  disposables.add(services.aiService.onDidChangeAiProviders(callbacks.bumpAiProviderRevision));
+  disposables.add(services.remoteSyncService.onDidChangeRemoteSyncProviders(
+    callbacks.bumpRemoteSyncProviderRevision
   ));
 
   return disposables;

@@ -6216,3 +6216,33 @@ Known limitations:
 
 - Workbench surfaces do not yet subscribe to these events.
 - Extension/runtime APIs still do not expose AI or remote sync provider registration surfaces.
+
+## 2026-06-11 - P2 Workbench Provider Lifecycle Subscriptions
+
+Completed:
+
+- Routed `IAiService.onDidChangeAiProviders` through the centralized Workbench state subscription helper.
+- Routed `IRemoteSyncService.onDidChangeRemoteSyncProviders` through the same Workbench state subscription helper.
+- Added Workbench-level provider revision state so future AI and sync surfaces can re-render from service state after provider availability changes.
+- Covered provider lifecycle callback forwarding and disposal with focused Workbench state subscription tests.
+- Updated the maintained architecture notes to distinguish service bootstrap from Workbench provider lifecycle observation.
+
+Quality gate:
+
+- `npx vitest run packages/workbench/src/workbenchStateSubscriptions.test.ts`: passed, 3 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 62 files / 616 tests, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Dev server smoke check: passed at `http://127.0.0.1:5173`; status 200 and root element present
+
+Review:
+
+- Provider availability is now observable from platform service registration through Workbench state subscriptions.
+- The implementation follows the existing Markdown renderer revision pattern instead of adding UI-owned polling or provider-specific state.
+- No OpenAI, Codex, Feishu, endpoint, model, token, storage, credential, or provider id was hard-coded.
+
+Known limitations:
+
+- No visible AI or sync UI consumes these revisions yet.
+- Extension/runtime APIs still do not expose AI or remote sync provider registration surfaces.

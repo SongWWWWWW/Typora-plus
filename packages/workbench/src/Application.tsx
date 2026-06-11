@@ -161,6 +161,8 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
   const [saveConflict, setSaveConflict] = useState<FileSaveConflict | undefined>();
   const [indexStatus, setIndexStatus] = useState<WorkspaceIndexStatus>(initialState.indexStatus);
   const [markdownRendererRevision, setMarkdownRendererRevision] = useState(0);
+  const [, setAiProviderRevision] = useState(0);
+  const [, setRemoteSyncProviderRevision] = useState(0);
   const editorRef = useRef<MarkdownEditorHandle | null>(null);
   const titlebarMenuItems = useMenuItems(services, workbenchMenuIds.titlebarPrimary);
   const activitybarPrimaryMenuItems = useMenuItems(services, workbenchMenuIds.activitybarPrimary);
@@ -195,7 +197,9 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
 
   useEffect(() => {
     const disposable = registerWorkbenchStateSubscriptions(services, {
+      bumpAiProviderRevision: () => setAiProviderRevision((revision) => revision + 1),
       bumpMarkdownRendererRevision: () => setMarkdownRendererRevision((revision) => revision + 1),
+      bumpRemoteSyncProviderRevision: () => setRemoteSyncProviderRevision((revision) => revision + 1),
       setConfiguration,
       setIndexStatus,
       setModel,

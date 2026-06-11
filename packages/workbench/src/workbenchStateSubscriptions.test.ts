@@ -65,6 +65,8 @@ describe("workbench state subscriptions", () => {
     harness.emitters.themes.fire();
     harness.emitters.indexStatus.fire(status);
     harness.emitters.markdownRenderers.fire();
+    harness.emitters.aiProviders.fire();
+    harness.emitters.remoteSyncProviders.fire();
 
     expect(callbacks.setConfiguration).toHaveBeenCalledWith(nextConfiguration);
     expect(harness.services.attachmentService.configure).toHaveBeenCalledWith({
@@ -82,6 +84,8 @@ describe("workbench state subscriptions", () => {
     expect(callbacks.setThemes).toHaveBeenCalledWith(themes);
     expect(callbacks.setIndexStatus).toHaveBeenCalledWith(status);
     expect(callbacks.bumpMarkdownRendererRevision).toHaveBeenCalledOnce();
+    expect(callbacks.bumpAiProviderRevision).toHaveBeenCalledOnce();
+    expect(callbacks.bumpRemoteSyncProviderRevision).toHaveBeenCalledOnce();
   });
 
   it("maps native workspace file tree changes through the workspace service", () => {
@@ -123,6 +127,8 @@ describe("workbench state subscriptions", () => {
       updatedAt: 1
     });
     harness.emitters.markdownRenderers.fire();
+    harness.emitters.aiProviders.fire();
+    harness.emitters.remoteSyncProviders.fire();
 
     expect(callbacks.setConfiguration).not.toHaveBeenCalled();
     expect(harness.services.attachmentService.configure).not.toHaveBeenCalled();
@@ -133,11 +139,14 @@ describe("workbench state subscriptions", () => {
     expect(callbacks.setThemes).not.toHaveBeenCalled();
     expect(callbacks.setIndexStatus).not.toHaveBeenCalled();
     expect(callbacks.bumpMarkdownRendererRevision).not.toHaveBeenCalled();
+    expect(callbacks.bumpAiProviderRevision).not.toHaveBeenCalled();
+    expect(callbacks.bumpRemoteSyncProviderRevision).not.toHaveBeenCalled();
   });
 });
 
 function createHarness(): {
   readonly emitters: {
+    readonly aiProviders: Emitter<void>;
     readonly configuration: Emitter<TyporaPlusConfiguration>;
     readonly indexStatus: Emitter<WorkspaceIndexStatus>;
     readonly markdownRenderers: Emitter<void>;
@@ -146,10 +155,12 @@ function createHarness(): {
     readonly themes: Emitter<void>;
     readonly workspace: Emitter<WorkspaceState>;
     readonly workspaceFiles: Emitter<WorkspaceFileTree | undefined>;
+    readonly remoteSyncProviders: Emitter<void>;
   };
   readonly services: WorkbenchServices;
 } {
   const emitters = {
+    aiProviders: new Emitter<void>(),
     configuration: new Emitter<TyporaPlusConfiguration>(),
     indexStatus: new Emitter<WorkspaceIndexStatus>(),
     markdownRenderers: new Emitter<void>(),
@@ -157,9 +168,13 @@ function createHarness(): {
     recents: new Emitter<readonly RecentResource[]>(),
     themes: new Emitter<void>(),
     workspace: new Emitter<WorkspaceState>(),
-    workspaceFiles: new Emitter<WorkspaceFileTree | undefined>()
+    workspaceFiles: new Emitter<WorkspaceFileTree | undefined>(),
+    remoteSyncProviders: new Emitter<void>()
   };
   const services = {
+    aiService: {
+      onDidChangeAiProviders: emitters.aiProviders.event
+    },
     attachmentService: {
       configure: vi.fn()
     },
@@ -182,6 +197,9 @@ function createHarness(): {
     recentService: {
       onDidChangeRecents: emitters.recents.event
     },
+    remoteSyncService: {
+      onDidChangeRemoteSyncProviders: emitters.remoteSyncProviders.event
+    },
     textFileService: {
       onDidChangeModel: emitters.model.event
     },
@@ -203,7 +221,9 @@ function createHarness(): {
 
 function createCallbacks(): WorkbenchStateSubscriptionCallbacks {
   return {
+    bumpAiProviderRevision: vi.fn(),
     bumpMarkdownRendererRevision: vi.fn(),
+    bumpRemoteSyncProviderRevision: vi.fn(),
     setConfiguration: vi.fn(),
     setIndexStatus: vi.fn(),
     setModel: vi.fn(),
