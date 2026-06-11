@@ -17,7 +17,6 @@ import {
 } from "./keybindingSettings";
 import {
   bytesToMegabytes,
-  clampSettingNumber,
   createSettingsSearchResult,
   createSettingsThemeOptions,
   createSettingsVisibilityState,
@@ -30,6 +29,7 @@ import {
   resolveNearestSettingsSection,
   resolveSelectedSettingsThemeId,
   resolveSettingsAssetFolderCommit,
+  resolveSettingsNumberInput,
   resolveVisibleSettingsSection,
   settingSectionAnchorId,
   settingsColorSchemeOptions,
@@ -700,13 +700,13 @@ function NumberSetting({
   readonly onChange: (value: number) => void;
 }) {
   const updateValue = (rawValue: string) => {
-    const parsedValue = Number(rawValue);
+    const nextValue = resolveSettingsNumberInput(rawValue, constraint);
 
-    if (!Number.isFinite(parsedValue)) {
+    if (nextValue === undefined) {
       return;
     }
 
-    onChange(clampSettingNumber(parsedValue, constraint));
+    onChange(nextValue);
   };
 
   return (

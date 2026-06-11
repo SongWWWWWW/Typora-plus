@@ -19,6 +19,7 @@ import {
   resolveNearestSettingsSection,
   resolveSelectedSettingsThemeId,
   resolveSettingsAssetFolderCommit,
+  resolveSettingsNumberInput,
   resolveVisibleSettingsSection,
   settingSectionAnchorId,
   settingsColorSchemeOptions,
@@ -246,6 +247,12 @@ describe("settings model", () => {
     expect(clampSettingNumber(500, settingsNumberConstraints.editorRendererPreviewCacheEntries)).toBe(200);
     expect(clampSettingNumber(5, settingsNumberConstraints.workspaceQuickOpenMaxResults)).toBe(20);
     expect(clampSettingNumber(500, settingsNumberConstraints.workspaceQuickOpenMaxResults)).toBe(300);
+  });
+
+  it("resolves raw numeric setting input through configured bounds", () => {
+    expect(resolveSettingsNumberInput("18", settingsNumberConstraints.editorFontSize)).toBe(18);
+    expect(resolveSettingsNumberInput("999", settingsNumberConstraints.editorFontSize)).toBe(24);
+    expect(resolveSettingsNumberInput("not-a-number", settingsNumberConstraints.editorFontSize)).toBeUndefined();
   });
 
   it("converts search file size between bytes and megabytes", () => {

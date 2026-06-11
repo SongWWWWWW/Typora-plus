@@ -162,6 +162,17 @@ export function clampSettingNumber(value: number, constraint: NumberSettingConst
   return clampConfigurationNumber(value, constraint);
 }
 
+export function resolveSettingsNumberInput(
+  rawValue: string,
+  constraint: NumberSettingConstraint
+): number | undefined {
+  const parsedValue = Number(rawValue);
+
+  return Number.isFinite(parsedValue)
+    ? clampSettingNumber(parsedValue, constraint)
+    : undefined;
+}
+
 export function megabytesToBytes(value: number): number {
   return Math.round(
     clampSettingNumber(value, settingsNumberConstraints.workspaceSearchMaxFileSizeMegabytes) * configurationBytesPerMegabyte

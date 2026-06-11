@@ -5984,3 +5984,30 @@ Review:
 Known limitations:
 
 - Asset Folder updates are still dispatched by `SettingsDialog`; broader Settings field action extraction remains deferred until multiple field types need shared commit orchestration.
+
+## 2026-06-11 - P2 Settings Numeric Input Model
+
+Completed:
+
+- Added a Settings model helper for resolving raw numeric input through platform-owned constraints.
+- Routed Settings dialog number fields through the shared numeric input resolver instead of parsing and clamping inside React.
+- Preserved invalid-input no-op behavior while keeping bounded values aligned with configuration validation.
+- Covered valid, out-of-range, and invalid numeric input with focused Settings model tests.
+
+Quality gate:
+
+- `npx vitest run packages/workbench/src/settingsModel.test.ts packages/workbench/src/workbenchConfigurationUpdates.test.ts packages/workbench/src/keybindingSettings.test.ts`: passed, 32 tests
+- `npm run verify`: passed, 59 files / 596 tests, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Dev server smoke check: passed at `http://127.0.0.1:5173`; status 200 and root element present
+
+Review:
+
+- Numeric Settings input policy now lives beside Settings metadata and conversion helpers.
+- `SettingsDialog` still owns control rendering and update dispatch, but it no longer owns numeric parsing or clamp policy.
+- No new dependency, configuration key, storage path, visual token, extra documentation file, or hard-coded platform assumption was introduced.
+
+Known limitations:
+
+- Number field updates are still dispatched directly by `SettingsDialog`; a broader typed field action model remains deferred until more Settings inputs share complex commit behavior.
