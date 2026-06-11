@@ -1,6 +1,9 @@
 import type {
   ContextKeyValue,
+  IAttachmentService,
   IContextKeyService,
+  IFileService,
+  IResourceService,
   TextFileModel,
   TyporaPlusConfiguration,
   WorkspaceState
@@ -32,6 +35,16 @@ export interface WorkbenchCapabilityContext {
   readonly resourceAvailable: boolean;
 }
 
+export interface WorkbenchCapabilityContextServices {
+  readonly attachmentService: Pick<IAttachmentService, "isAvailable">;
+  readonly fileService: Pick<IFileService, "isAvailable">;
+  readonly resourceService: Pick<IResourceService, "isAvailable">;
+}
+
+export interface WorkbenchCapabilityContextApplicationServices extends WorkbenchCapabilityContextServices {
+  readonly contextKeyService: Pick<IContextKeyService, "setValue">;
+}
+
 export interface WorkbenchStateContextConfiguration {
   readonly editor: Pick<TyporaPlusConfiguration["editor"], "focusMode" | "typewriterMode">;
 }
@@ -57,6 +70,25 @@ export function createWorkbenchCapabilityContextValues(
       value: context.resourceAvailable
     }
   ];
+}
+
+export function createWorkbenchCapabilityContext(
+  services: WorkbenchCapabilityContextServices
+): WorkbenchCapabilityContext {
+  return {
+    attachmentAvailable: services.attachmentService.isAvailable(),
+    fileSystemAvailable: services.fileService.isAvailable(),
+    resourceAvailable: services.resourceService.isAvailable()
+  };
+}
+
+export function applyWorkbenchCapabilityContext(
+  services: WorkbenchCapabilityContextApplicationServices
+): void {
+  applyWorkbenchContextValues(
+    services.contextKeyService,
+    createWorkbenchCapabilityContextValues(createWorkbenchCapabilityContext(services))
+  );
 }
 
 export function createWorkbenchStateContextValues(

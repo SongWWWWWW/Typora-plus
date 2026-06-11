@@ -5117,3 +5117,31 @@ Review:
 Known limitations:
 
 - Window timers for auto-save, deferred line navigation, and overlay focus are still provided directly by the React shell.
+
+## 2026-06-11 - P2 Workbench Capability Context
+
+Completed:
+
+- Added focused Workbench capability helpers that capture native file, attachment, and resource availability through service boundaries.
+- Routed service bootstrap capability context application through the helper instead of assembling context values inline.
+- Routed Sidebar file-system availability through the same capability snapshot instead of reading the file service directly in `Application.tsx`.
+- Covered capability snapshot reads and capability context application through the context service boundary.
+
+Quality gate:
+
+- `npx vitest run packages/workbench/src/workbenchContextModel.test.ts`: passed, 7 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 546 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Dev server smoke check: passed at `http://127.0.0.1:5173`; status 200 and root element present
+
+Review:
+
+- Capability snapshot creation, capability context values, and context service application now live together in the Workbench context model.
+- `Application.tsx` still decides how Sidebar capabilities affect UI affordances, while the context model owns how those capabilities are read and published.
+- No new dependency, configuration key, storage path, visual token, extra documentation file, or hard-coded platform assumption was introduced.
+
+Known limitations:
+
+- Window timers for auto-save, deferred line navigation, and overlay focus are still provided directly by the React shell.

@@ -3,7 +3,9 @@ import type { ContextKeyValue, FileTreeEntry, WorkspaceState } from "@typora-plu
 import { describe, expect, it, vi } from "vitest";
 import {
   applyWorkbenchContextValues,
+  applyWorkbenchCapabilityContext,
   applyWorkbenchStateContext,
+  createWorkbenchCapabilityContext,
   createWorkbenchCapabilityContextValues,
   createWorkbenchStateContextValues,
   workbenchContextKeys
@@ -29,6 +31,23 @@ describe("workbench context model", () => {
         value: true
       }
     ]);
+  });
+
+  it("captures capability context through service availability boundaries", () => {
+    const services = createCapabilityServices({
+      attachmentAvailable: false,
+      fileSystemAvailable: true,
+      resourceAvailable: true
+    });
+
+    expect(createWorkbenchCapabilityContext(services)).toEqual({
+      attachmentAvailable: false,
+      fileSystemAvailable: true,
+      resourceAvailable: true
+    });
+    expect(services.attachmentService.isAvailable).toHaveBeenCalledOnce();
+    expect(services.fileService.isAvailable).toHaveBeenCalledOnce();
+    expect(services.resourceService.isAvailable).toHaveBeenCalledOnce();
   });
 
   it("creates Workbench state context values", () => {
@@ -98,6 +117,27 @@ describe("workbench context model", () => {
     ]);
   });
 
+  it("applies capability context through the service boundary", () => {
+    const services = {
+      ...createCapabilityServices({
+        attachmentAvailable: true,
+        fileSystemAvailable: false,
+        resourceAvailable: true
+      }),
+      contextKeyService: {
+        setValue: vi.fn<(key: string, value: ContextKeyValue | undefined) => void>()
+      }
+    };
+
+    applyWorkbenchCapabilityContext(services);
+
+    expect(services.contextKeyService.setValue.mock.calls).toEqual([
+      [workbenchContextKeys.fileSystemAvailable, false],
+      [workbenchContextKeys.attachmentAvailable, true],
+      [workbenchContextKeys.resourceAvailable, true]
+    ]);
+  });
+
   it("applies Workbench state context through the service boundary", () => {
     const setValue = vi.fn<(key: string, value: ContextKeyValue | undefined) => void>();
 
@@ -141,6 +181,24 @@ function workspace(open: boolean): Pick<WorkspaceState, "files"> {
     files: {
       root,
       files: []
+    }
+  };
+}
+
+function createCapabilityServices(options: {
+  readonly attachmentAvailable: boolean;
+  readonly fileSystemAvailable: boolean;
+  readonly resourceAvailable: boolean;
+}) {
+  return {
+    attachmentService: {
+      isAvailable: vi.fn(() => options.attachmentAvailable)
+    },
+    fileService: {
+      isAvailable: vi.fn(() => options.fileSystemAvailable)
+    },
+    resourceService: {
+      isAvailable: vi.fn(() => options.resourceAvailable)
     }
   };
 }

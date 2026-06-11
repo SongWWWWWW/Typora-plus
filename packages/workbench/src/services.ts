@@ -59,8 +59,7 @@ import { createWorkbenchExtensionHost } from "./workbenchExtensionActivation";
 import { defaultWorkbenchExtensionManifest } from "./workbenchContributions";
 import { applyWorkbenchConfigurationToServices } from "./workbenchConfigurationSync";
 import {
-  applyWorkbenchContextValues,
-  createWorkbenchCapabilityContextValues
+  applyWorkbenchCapabilityContext
 } from "./workbenchContextModel";
 
 export interface WorkbenchServices {
@@ -139,11 +138,12 @@ export function createWorkbenchServices(): WorkbenchServices {
   serviceCollection.set(IThemeService, themeService);
   serviceCollection.set(IWorkspaceService, workspaceService);
   serviceCollection.set(ITextFileService, textFileService);
-  applyWorkbenchContextValues(contextKeyService, createWorkbenchCapabilityContextValues({
-    fileSystemAvailable: fileService.isAvailable(),
-    attachmentAvailable: attachmentService.isAvailable(),
-    resourceAvailable: resourceService.isAvailable()
-  }));
+  applyWorkbenchCapabilityContext({
+    attachmentService,
+    contextKeyService,
+    fileService,
+    resourceService
+  });
 
   const commandService = new CommandService(serviceCollection, {
     activationHandler: async (command) => {

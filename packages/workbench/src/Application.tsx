@@ -53,7 +53,10 @@ import { executeWorkbenchCommand } from "./workbenchActionRunner";
 import { scheduleWorkbenchAutoSave } from "./workbenchAutoSave";
 import { registerWorkbenchCommands } from "./workbenchCommandRegistration";
 import { createWorkbenchCommandSurface } from "./workbenchCommandSurface";
-import { applyWorkbenchStateContext } from "./workbenchContextModel";
+import {
+  applyWorkbenchStateContext,
+  createWorkbenchCapabilityContext
+} from "./workbenchContextModel";
 import { updateWorkbenchConfigurationAction } from "./workbenchConfigurationUpdates";
 import { createWorkbenchEditorAdapter } from "./workbenchEditorAdapter";
 import {
@@ -154,6 +157,7 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
   const titlebarMenuItems = useMenuItems(services, "titlebar.primary");
   const activitybarPrimaryMenuItems = useMenuItems(services, "activitybar.primary");
   const activitybarSecondaryMenuItems = useMenuItems(services, "activitybar.secondary");
+  const capabilityContext = createWorkbenchCapabilityContext(services);
   const commandSurface = createWorkbenchCommandSurface(services);
   const executeCommand = (id: string) => {
     executeWorkbenchCommand(services, id, setOperationError, setSaveConflict);
@@ -341,7 +345,7 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
             model={model}
             workspace={workspace}
             recents={recents}
-            fileServiceAvailable={services.fileService.isAvailable()}
+            fileServiceAvailable={capabilityContext.fileSystemAvailable}
             outline={outline}
             searchQuery={searchQuery}
             searchResults={searchResults}
