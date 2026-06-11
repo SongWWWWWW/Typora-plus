@@ -15,7 +15,6 @@ import type {
   WorkspaceIndexStatus,
   WorkspaceState
 } from "@typora-plus/platform";
-import { applyTheme, applyThemeTokens, resolveThemeName } from "@typora-plus/theme";
 import {
   AlertTriangle,
   Command as CommandIcon,
@@ -115,6 +114,7 @@ import {
   createWorkbenchTagRows,
   nextWorkbenchSelectedTag
 } from "./workbenchTagsModel";
+import { applyWorkbenchTheme } from "./workbenchThemeApplication";
 
 export interface WorkbenchApplicationProps {
   readonly services: WorkbenchServices;
@@ -272,15 +272,7 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
 
     const media = window.matchMedia("(prefers-color-scheme: dark)");
     const syncTheme = () => {
-      const selectedTheme = configuration.appearance.themeId
-        ? services.themeService.getTheme(configuration.appearance.themeId)
-        : undefined;
-
-      applyTheme(
-        document.documentElement,
-        selectedTheme?.colorScheme ?? resolveThemeName(configuration.appearance.colorScheme, media.matches)
-      );
-      applyThemeTokens(document.documentElement, selectedTheme?.tokens);
+      applyWorkbenchTheme(document.documentElement, configuration, services, media.matches);
     };
 
     syncTheme();

@@ -4496,3 +4496,32 @@ Review:
 Known limitations:
 
 - Query results are still read synchronously from the current in-memory/index service boundary; a future async or remote index provider may need loading/cancellation state in this helper.
+
+## 2026-06-11 - P2 Workbench Theme Application Model
+
+Completed:
+
+- Added a focused Workbench theme application helper for selected-theme lookup, system color-scheme fallback, CSS theme attribute application, and custom token overlay application.
+- Replaced inline theme resolution in `Application.tsx` with the helper while keeping `matchMedia` subscription ownership in the shell.
+- Preserved behavior for selected themes, selected themes without an explicit color scheme, missing theme ids, and token cleanup when overlays are cleared.
+- Added focused tests for base scheme resolution, selected theme application, fallback color schemes, and stale token cleanup.
+
+Quality gate:
+
+- `npx vitest run packages/workbench/src/workbenchThemeApplication.test.ts`: passed, 4 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 490 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Dev server smoke check: passed at `http://127.0.0.1:5173`; status 200 and root element present
+
+Review:
+
+- Theme application remains Workbench-local and consumes platform configuration plus `IThemeService`; token mutation still delegates to the theme package.
+- The shell now reacts to browser media and service changes without owning selected-theme fallback rules.
+- Missing or removed theme ids intentionally fall back to the configured base color scheme and clear previous token overlays.
+- No new dependency, configuration key, storage path, visual token, extra documentation file, or hard-coded platform assumption was introduced.
+
+Known limitations:
+
+- The browser `matchMedia` subscription still lives in `Application.tsx`; extracting that would require a small DOM-facing hook rather than a pure model.
