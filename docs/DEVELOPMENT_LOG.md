@@ -6276,3 +6276,33 @@ Known limitations:
 
 - No visible AI or sync commands consume these context keys yet.
 - Extension/runtime APIs still do not expose AI or remote sync provider registration surfaces.
+
+## 2026-06-11 - P2 Default Provider Selection Model
+
+Completed:
+
+- Added a Workbench provider selection model for future AI and remote sync command handlers.
+- Selected default providers from registered provider metadata using stable title/id ordering.
+- Kept provider selection generic and provider-id agnostic, with no OpenAI, Codex, Feishu, local model, or endpoint special cases.
+- Covered sorting, empty provider lists, source-list immutability, and service-boundary reads with focused tests.
+- Updated maintained architecture notes to record the default provider selection policy beside provider lifecycle and context-key behavior.
+
+Quality gate:
+
+- `npx vitest run packages/workbench/src/workbenchProviderSelection.test.ts`: passed, 3 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 63 files / 620 tests, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Dev server smoke check: passed at `http://127.0.0.1:5173`; status 200 and root element present
+
+Review:
+
+- Future command handlers can pick a deterministic provider without each surface duplicating sorting or fallback policy.
+- The selection model intentionally works on metadata only; it does not expose provider implementation functions to Workbench UI.
+- Visible AI and sync menu entries remain deferred until handlers exist, avoiding no-handler command paths.
+
+Known limitations:
+
+- No command handler consumes this selection model yet.
+- User-configured preferred providers are not modeled yet.
