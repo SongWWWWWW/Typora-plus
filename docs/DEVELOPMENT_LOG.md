@@ -6098,3 +6098,33 @@ Known limitations:
 
 - Remote providers still need their own remote state cache and diff logic before they can create useful sync plans.
 - File content hashing remains a future provider or indexing concern because this helper intentionally only maps existing workspace tree metadata.
+
+## 2026-06-11 - P2 Remote Sync Diff Planning Model
+
+Completed:
+
+- Added a platform diff helper that compares local sync resources with provider-supplied remote resource snapshots.
+- Generated stable path-sorted create, update, delete, skip, and conflict operations with summary counts.
+- Kept destructive delete operations opt-in through `deleteMissing`; missing resources skip by default.
+- Kept bidirectional planning conservative by converting changed or uncomparable existing resources into conflicts instead of automatic overwrites.
+- Covered push, pull, bidirectional, same-resource, missing-resource, kind-conflict, unknown-state, duplicate-resource, and unsafe-path cases with focused tests.
+
+Quality gate:
+
+- `npx vitest run packages/platform/src/remoteSync.test.ts`: passed, 12 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 61 files / 613 tests, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Dev server smoke check: passed at `http://127.0.0.1:5173`; status 200 and root element present
+
+Review:
+
+- Remote sync providers can now reuse shared diff policy instead of each provider implementing its own path sorting, summary counts, default deletion behavior, and conflict classification.
+- The planner still does not know about Feishu, OAuth, HTTP APIs, or credential storage; providers supply remote snapshots and execute the resulting plan.
+- No new dependency, configuration key, storage path, visual token, extra documentation file, or hard-coded platform assumption was introduced.
+
+Known limitations:
+
+- Remote providers still need durable remote state discovery/cache and execution adapters before the diff planner can drive real sync.
+- The planner uses `contentHash` when available, otherwise `size + mtime`; richer conflict detection remains a provider or future index/hash concern.

@@ -64,6 +64,22 @@ export interface RemoteSyncWorkspaceResourceOptions {
   readonly includeDirectories?: boolean;
 }
 
+export interface RemoteSyncRemoteResource {
+  readonly relativePath: string;
+  readonly kind: FileKind;
+  readonly remoteId?: string;
+  readonly size?: number;
+  readonly mtime?: number;
+  readonly contentHash?: string;
+}
+
+export interface RemoteSyncDiffPlanInput {
+  readonly localResources: readonly RemoteSyncResource[];
+  readonly remoteResources: readonly RemoteSyncRemoteResource[];
+  readonly direction: RemoteSyncDirection;
+  readonly deleteMissing?: boolean;
+}
+
 export interface RegisteredRemoteSyncProvider {
   readonly id: RemoteSyncProviderId;
   readonly title: string;
@@ -91,6 +107,29 @@ export function createRemoteSyncResourcesFromWorkspace(
     : workspace.files;
 
   return normalizeRemoteSyncResources(entries.map(remoteSyncResourceFromFileEntry));
+}
+
+export function createRemoteSyncPlanFromDiff(input: RemoteSyncDiffPlanInput): RemoteSyncPlan {
+  const record = expectRecord(input, "Remote sync diff input");
+  const direction = normalizeRemoteSyncDirection(record.direction);
+  const deleteMissing = record.deleteMissing === true;
+  const localResources = normalizeRemoteSyncResources(record.localResources);
+  const remoteResources = normalizeRemoteSyncRemoteResources(record.remoteResources);
+  const localByPath = mapRemoteSyncResources(localResources, "local");
+  const remoteByPath = mapRemoteSyncResources(remoteResources, "remote");
+  const operations: RemoteSyncOperation[] = [];
+
+  for (const relativePath of sortRemoteSyncPaths(localByPath, remoteByPath)) {
+    const local = localByPath.get(relativePath);
+    const remote = remoteByPath.get(relativePath);
+
+    operations.push(createRemoteSyncDiffOperation(relativePath, direction, deleteMissing, local, remote));
+  }
+
+  return normalizeRemoteSyncPlan({
+    operations,
+    summary: summarizeRemoteSyncOperations(operations)
+  });
 }
 
 export class RemoteSyncService implements IRemoteSyncService {
@@ -144,6 +183,148 @@ export class RemoteSyncService implements IRemoteSyncService {
 
     return provider;
   }
+}
+
+function createRemoteSyncDiffOperation(
+  relativePath: string,
+  direction: RemoteSyncDirection,
+  deleteMissing: boolean,
+  local: RemoteSyncResource | undefined,
+  remote: RemoteSyncRemoteResource | undefined
+): RemoteSyncOperation {
+  if (local && !remote) {
+    if (direction === "pull") {
+      return deleteMissing
+        ? createRemoteSyncOperation("delete", relativePath, {
+          localUri: local.uri,
+          message: "Remote resource is missing"
+        })
+        : createRemoteSyncOperation("skip", relativePath, {
+          localUri: local.uri,
+          message: "Remote resource is missing"
+        });
+    }
+
+    return createRemoteSyncOperation("create", relativePath, { localUri: local.uri });
+  }
+
+  if (!local && remote) {
+    if (direction === "push") {
+      return deleteMissing
+        ? createRemoteSyncOperation("delete", relativePath, {
+          remoteId: remote.remoteId,
+          message: "Local resource is missing"
+        })
+        : createRemoteSyncOperation("skip", relativePath, {
+          remoteId: remote.remoteId,
+          message: "Local resource is missing"
+        });
+    }
+
+    return createRemoteSyncOperation("create", relativePath, { remoteId: remote.remoteId });
+  }
+
+  if (!local || !remote) {
+    return createRemoteSyncOperation("skip", relativePath);
+  }
+
+  if (local.kind !== remote.kind) {
+    return createRemoteSyncOperation("conflict", relativePath, {
+      localUri: local.uri,
+      remoteId: remote.remoteId,
+      message: "Resource kind differs"
+    });
+  }
+
+  const comparison = compareRemoteSyncResources(local, remote);
+
+  if (comparison === "same") {
+    return createRemoteSyncOperation("skip", relativePath, {
+      localUri: local.uri,
+      remoteId: remote.remoteId
+    });
+  }
+
+  if (direction === "bidirectional") {
+    return createRemoteSyncOperation("conflict", relativePath, {
+      localUri: local.uri,
+      remoteId: remote.remoteId,
+      message: comparison === "unknown" ? "Resource state cannot be compared" : "Resource differs on both sides"
+    });
+  }
+
+  return createRemoteSyncOperation("update", relativePath, {
+    localUri: local.uri,
+    remoteId: remote.remoteId
+  });
+}
+
+function createRemoteSyncOperation(
+  kind: RemoteSyncOperationKind,
+  relativePath: string,
+  details: {
+    readonly localUri?: URIType | undefined;
+    readonly remoteId?: string | undefined;
+    readonly message?: string | undefined;
+  } = {}
+): RemoteSyncOperation {
+  return {
+    kind,
+    relativePath,
+    ...(details.localUri ? { localUri: details.localUri } : {}),
+    ...(details.remoteId ? { remoteId: details.remoteId } : {}),
+    ...(details.message ? { message: details.message } : {})
+  };
+}
+
+function compareRemoteSyncResources(
+  local: RemoteSyncResource,
+  remote: RemoteSyncRemoteResource
+): "same" | "changed" | "unknown" {
+  if (local.contentHash && remote.contentHash) {
+    return local.contentHash === remote.contentHash ? "same" : "changed";
+  }
+
+  if (local.size !== undefined && remote.size !== undefined && local.mtime !== undefined && remote.mtime !== undefined) {
+    return local.size === remote.size && local.mtime === remote.mtime ? "same" : "changed";
+  }
+
+  return "unknown";
+}
+
+function summarizeRemoteSyncOperations(operations: readonly RemoteSyncOperation[]): RemoteSyncSummary {
+  return {
+    creates: operations.filter((operation) => operation.kind === "create").length,
+    updates: operations.filter((operation) => operation.kind === "update").length,
+    deletes: operations.filter((operation) => operation.kind === "delete").length,
+    skips: operations.filter((operation) => operation.kind === "skip").length,
+    conflicts: operations.filter((operation) => operation.kind === "conflict").length
+  };
+}
+
+function mapRemoteSyncResources<Resource extends { readonly relativePath: string }>(
+  resources: readonly Resource[],
+  label: string
+): ReadonlyMap<string, Resource> {
+  const mapped = new Map<string, Resource>();
+
+  for (const resource of resources) {
+    if (mapped.has(resource.relativePath)) {
+      throw new Error(`Duplicate ${label} remote sync resource: ${resource.relativePath}`);
+    }
+
+    mapped.set(resource.relativePath, resource);
+  }
+
+  return mapped;
+}
+
+function sortRemoteSyncPaths(
+  localByPath: ReadonlyMap<string, RemoteSyncResource>,
+  remoteByPath: ReadonlyMap<string, RemoteSyncRemoteResource>
+): readonly string[] {
+  return [...new Set([...localByPath.keys(), ...remoteByPath.keys()])]
+    .sort((first, second) => first.localeCompare(second));
 }
 
 function remoteSyncResourceFromFileEntry(entry: FileTreeEntry): RemoteSyncResource {
@@ -228,6 +409,27 @@ function normalizeRemoteSyncResources(value: unknown): readonly RemoteSyncResour
       ...(name ? { name } : {}),
       ...readOptionalNonNegativeNumber("size", record.size, `Remote sync resource ${index} size`),
       ...readOptionalNonNegativeNumber("mtime", record.mtime, `Remote sync resource ${index} mtime`),
+      ...(contentHash ? { contentHash } : {})
+    };
+  });
+}
+
+function normalizeRemoteSyncRemoteResources(value: unknown): readonly RemoteSyncRemoteResource[] {
+  if (!Array.isArray(value)) {
+    throw new Error("Remote sync remote resources must be an array");
+  }
+
+  return value.map((resource, index) => {
+    const record = expectRecord(resource, `Remote sync remote resource ${index}`);
+    const remoteId = readOptionalString(record.remoteId, `Remote sync remote resource ${index} remote id`);
+    const contentHash = readOptionalString(record.contentHash, `Remote sync remote resource ${index} content hash`);
+
+    return {
+      relativePath: normalizeRelativePath(record.relativePath, `Remote sync remote resource ${index} relative path`),
+      kind: normalizeFileKind(record.kind, `Remote sync remote resource ${index} kind`),
+      ...(remoteId ? { remoteId } : {}),
+      ...readOptionalNonNegativeNumber("size", record.size, `Remote sync remote resource ${index} size`),
+      ...readOptionalNonNegativeNumber("mtime", record.mtime, `Remote sync remote resource ${index} mtime`),
       ...(contentHash ? { contentHash } : {})
     };
   });

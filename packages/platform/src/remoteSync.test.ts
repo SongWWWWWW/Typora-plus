@@ -2,11 +2,14 @@ import { URI } from "@typora-plus/base";
 import { describe, expect, it } from "vitest";
 import type { FileTreeEntry, WorkspaceFileTree } from "./files";
 import {
+  createRemoteSyncPlanFromDiff,
   createRemoteSyncResourcesFromWorkspace,
   RemoteSyncService,
   type RemoteSyncPlan,
   type RemoteSyncPlanRequest,
-  type RemoteSyncProvider
+  type RemoteSyncProvider,
+  type RemoteSyncRemoteResource,
+  type RemoteSyncResource
 } from "./remoteSync";
 
 describe("remote sync service", () => {
@@ -277,6 +280,221 @@ describe("remote sync service", () => {
     expect(() => createRemoteSyncResourcesFromWorkspace(workspace))
       .toThrow("Remote sync resource 0 relative path must not contain parent traversal");
   });
+
+  it("creates stable push diff plans without deleting missing remote resources by default", () => {
+    const plan = createRemoteSyncPlanFromDiff({
+      direction: "push",
+      localResources: [
+        localResource("same.md", { contentHash: "same" }),
+        localResource("changed.md", { contentHash: "local" }),
+        localResource("local-only.md", { contentHash: "local" })
+      ],
+      remoteResources: [
+        remoteResource("remote-only.md", { remoteId: "remote-only", contentHash: "remote" }),
+        remoteResource("same.md", { remoteId: "same", contentHash: "same" }),
+        remoteResource("changed.md", { remoteId: "changed", contentHash: "remote" })
+      ]
+    });
+
+    expect(plan).toEqual({
+      operations: [
+        {
+          kind: "update",
+          relativePath: "changed.md",
+          localUri: URI.file("C:/Notes/changed.md"),
+          remoteId: "changed"
+        },
+        {
+          kind: "create",
+          relativePath: "local-only.md",
+          localUri: URI.file("C:/Notes/local-only.md")
+        },
+        {
+          kind: "skip",
+          relativePath: "remote-only.md",
+          remoteId: "remote-only",
+          message: "Local resource is missing"
+        },
+        {
+          kind: "skip",
+          relativePath: "same.md",
+          localUri: URI.file("C:/Notes/same.md"),
+          remoteId: "same"
+        }
+      ],
+      summary: {
+        creates: 1,
+        updates: 1,
+        deletes: 0,
+        skips: 2,
+        conflicts: 0
+      }
+    });
+  });
+
+  it("creates delete operations only when missing resources are explicitly deleted", () => {
+    expect(createRemoteSyncPlanFromDiff({
+      direction: "push",
+      deleteMissing: true,
+      localResources: [],
+      remoteResources: [
+        remoteResource("remote-only.md", { remoteId: "remote-only" })
+      ]
+    })).toEqual({
+      operations: [{
+        kind: "delete",
+        relativePath: "remote-only.md",
+        remoteId: "remote-only",
+        message: "Local resource is missing"
+      }],
+      summary: {
+        creates: 0,
+        updates: 0,
+        deletes: 1,
+        skips: 0,
+        conflicts: 0
+      }
+    });
+  });
+
+  it("creates pull diff plans from remote snapshots", () => {
+    const plan = createRemoteSyncPlanFromDiff({
+      direction: "pull",
+      deleteMissing: true,
+      localResources: [
+        localResource("changed.md", { size: 20, mtime: 2 }),
+        localResource("local-only.md")
+      ],
+      remoteResources: [
+        remoteResource("changed.md", { remoteId: "changed", size: 22, mtime: 3 }),
+        remoteResource("remote-only.md", { remoteId: "remote-only", size: 10, mtime: 1 })
+      ]
+    });
+
+    expect(plan).toEqual({
+      operations: [
+        {
+          kind: "update",
+          relativePath: "changed.md",
+          localUri: URI.file("C:/Notes/changed.md"),
+          remoteId: "changed"
+        },
+        {
+          kind: "delete",
+          relativePath: "local-only.md",
+          localUri: URI.file("C:/Notes/local-only.md"),
+          message: "Remote resource is missing"
+        },
+        {
+          kind: "create",
+          relativePath: "remote-only.md",
+          remoteId: "remote-only"
+        }
+      ],
+      summary: {
+        creates: 1,
+        updates: 1,
+        deletes: 1,
+        skips: 0,
+        conflicts: 0
+      }
+    });
+  });
+
+  it("keeps bidirectional diff plans conservative for changed or unknown resources", () => {
+    const plan = createRemoteSyncPlanFromDiff({
+      direction: "bidirectional",
+      localResources: [
+        localResource("changed.md", { contentHash: "local" }),
+        localResource("kind.md", { kind: "file", contentHash: "same" }),
+        localResource("local-only.md"),
+        localResource("same.md", { size: 10, mtime: 1 }),
+        localResource("unknown.md")
+      ],
+      remoteResources: [
+        remoteResource("changed.md", { remoteId: "changed", contentHash: "remote" }),
+        remoteResource("kind.md", { kind: "directory", remoteId: "kind", contentHash: "same" }),
+        remoteResource("remote-only.md", { remoteId: "remote-only" }),
+        remoteResource("same.md", { remoteId: "same", size: 10, mtime: 1 }),
+        remoteResource("unknown.md", { remoteId: "unknown" })
+      ]
+    });
+
+    expect(plan).toEqual({
+      operations: [
+        {
+          kind: "conflict",
+          relativePath: "changed.md",
+          localUri: URI.file("C:/Notes/changed.md"),
+          remoteId: "changed",
+          message: "Resource differs on both sides"
+        },
+        {
+          kind: "conflict",
+          relativePath: "kind.md",
+          localUri: URI.file("C:/Notes/kind.md"),
+          remoteId: "kind",
+          message: "Resource kind differs"
+        },
+        {
+          kind: "create",
+          relativePath: "local-only.md",
+          localUri: URI.file("C:/Notes/local-only.md")
+        },
+        {
+          kind: "create",
+          relativePath: "remote-only.md",
+          remoteId: "remote-only"
+        },
+        {
+          kind: "skip",
+          relativePath: "same.md",
+          localUri: URI.file("C:/Notes/same.md"),
+          remoteId: "same"
+        },
+        {
+          kind: "conflict",
+          relativePath: "unknown.md",
+          localUri: URI.file("C:/Notes/unknown.md"),
+          remoteId: "unknown",
+          message: "Resource state cannot be compared"
+        }
+      ],
+      summary: {
+        creates: 2,
+        updates: 0,
+        deletes: 0,
+        skips: 1,
+        conflicts: 3
+      }
+    });
+  });
+
+  it("rejects ambiguous diff inputs", () => {
+    expect(() => createRemoteSyncPlanFromDiff({
+      direction: "push",
+      localResources: [
+        localResource("same.md"),
+        localResource("same.md")
+      ],
+      remoteResources: []
+    })).toThrow("Duplicate local remote sync resource: same.md");
+    expect(() => createRemoteSyncPlanFromDiff({
+      direction: "push",
+      localResources: [],
+      remoteResources: [
+        remoteResource("same.md"),
+        remoteResource("same.md")
+      ]
+    })).toThrow("Duplicate remote remote sync resource: same.md");
+    expect(() => createRemoteSyncPlanFromDiff({
+      direction: "push",
+      localResources: [],
+      remoteResources: [
+        remoteResource("../escape.md")
+      ]
+    })).toThrow("Remote sync remote resource 0 relative path must not contain parent traversal");
+  });
 });
 
 function provider(id: string, title: string): RemoteSyncProvider {
@@ -340,6 +558,34 @@ function directory(relativePath: string, children: readonly FileTreeEntry[]): Fi
     kind: "directory",
     name,
     children
+  };
+}
+
+function localResource(
+  relativePath: string,
+  metadata: Partial<Pick<RemoteSyncResource, "kind" | "size" | "mtime" | "contentHash">> = {}
+): RemoteSyncResource {
+  return {
+    uri: URI.file(`C:/Notes/${relativePath}`),
+    relativePath,
+    kind: metadata.kind ?? "file",
+    ...(metadata.size === undefined ? {} : { size: metadata.size }),
+    ...(metadata.mtime === undefined ? {} : { mtime: metadata.mtime }),
+    ...(metadata.contentHash === undefined ? {} : { contentHash: metadata.contentHash })
+  };
+}
+
+function remoteResource(
+  relativePath: string,
+  metadata: Partial<RemoteSyncRemoteResource> = {}
+): RemoteSyncRemoteResource {
+  return {
+    relativePath,
+    kind: metadata.kind ?? "file",
+    ...(metadata.remoteId === undefined ? {} : { remoteId: metadata.remoteId }),
+    ...(metadata.size === undefined ? {} : { size: metadata.size }),
+    ...(metadata.mtime === undefined ? {} : { mtime: metadata.mtime }),
+    ...(metadata.contentHash === undefined ? {} : { contentHash: metadata.contentHash })
   };
 }
 
