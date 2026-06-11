@@ -2,9 +2,12 @@ import { URI } from "@typora-plus/base";
 import type { TextFileModel } from "@typora-plus/platform";
 import { describe, expect, it, vi } from "vitest";
 import {
+  createWorkbenchLineNavigationCallbacks,
+  createWorkbenchLineNavigationEnvironment,
   openWorkbenchLineResource,
   openWorkbenchLineTargetAction,
   scrollWorkbenchLine,
+  workbenchDeferredLineScrollDelayMs,
   type WorkbenchLineNavigationCallbacks
 } from "./workbenchLineNavigation";
 
@@ -15,6 +18,50 @@ describe("workbench line navigation", () => {
     scrollWorkbenchLine({ scrollToLine }, { line: 7 });
 
     expect(scrollToLine).toHaveBeenCalledWith(7);
+  });
+
+  it("creates shell callbacks from a timer and editor handle source", () => {
+    const scheduled: Array<() => void> = [];
+    const timer = {
+      setTimeout: vi.fn((callback: () => void, delayMs: number) => {
+        scheduled.push(callback);
+        return delayMs;
+      })
+    };
+    const editor = {
+      scrollToLine: vi.fn()
+    };
+    const clearSaveConflict = vi.fn();
+    const setOperationError = vi.fn();
+    const setSaveConflict = vi.fn();
+    const callbacks = createWorkbenchLineNavigationCallbacks(
+      createWorkbenchLineNavigationEnvironment(timer),
+      { getEditorHandle: () => editor },
+      { clearSaveConflict, setOperationError, setSaveConflict }
+    );
+    const deferred = vi.fn();
+
+    callbacks.defer(deferred);
+    callbacks.scrollToLine(14);
+
+    expect(timer.setTimeout).toHaveBeenCalledWith(deferred, workbenchDeferredLineScrollDelayMs);
+    expect(scheduled).toEqual([deferred]);
+    expect(editor.scrollToLine).toHaveBeenCalledWith(14);
+    expect(callbacks.clearSaveConflict).toBe(clearSaveConflict);
+    expect(callbacks.setOperationError).toBe(setOperationError);
+    expect(callbacks.setSaveConflict).toBe(setSaveConflict);
+  });
+
+  it("ignores line scrolls when no editor handle is mounted", () => {
+    const callbacks = createWorkbenchLineNavigationCallbacks(
+      createWorkbenchLineNavigationEnvironment({
+        setTimeout: vi.fn()
+      }),
+      { getEditorHandle: () => undefined },
+      { setOperationError: vi.fn() }
+    );
+
+    expect(() => callbacks.scrollToLine(2)).not.toThrow();
   });
 
   it("opens resource targets before scheduling line scrolling", async () => {

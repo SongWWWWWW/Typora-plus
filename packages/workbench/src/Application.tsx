@@ -72,6 +72,8 @@ import {
   reloadWorkbenchSaveConflictAction
 } from "./workbenchSaveConflictResolution";
 import {
+  createWorkbenchLineNavigationCallbacks,
+  createWorkbenchLineNavigationEnvironment,
   openWorkbenchLineTargetAction,
   scrollWorkbenchLine
 } from "./workbenchLineNavigation";
@@ -307,15 +309,15 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
     setOperationError,
     setSaveConflict
   };
-  const lineNavigationCallbacks = {
-    clearSaveConflict: resourceOpeningCallbacks.clearSaveConflict,
-    defer: (callback: () => void) => {
-      window.setTimeout(callback, 0);
-    },
-    scrollToLine: (line: number) => editorRef.current?.scrollToLine(line),
-    setOperationError,
-    setSaveConflict
-  };
+  const lineNavigationCallbacks = createWorkbenchLineNavigationCallbacks(
+    createWorkbenchLineNavigationEnvironment(window),
+    { getEditorHandle: () => editorRef.current },
+    {
+      clearSaveConflict: resourceOpeningCallbacks.clearSaveConflict,
+      setOperationError,
+      setSaveConflict
+    }
+  );
 
   return (
     <main className={[

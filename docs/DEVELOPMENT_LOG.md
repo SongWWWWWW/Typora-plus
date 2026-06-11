@@ -5145,3 +5145,31 @@ Review:
 Known limitations:
 
 - Window timers for auto-save, deferred line navigation, and overlay focus are still provided directly by the React shell.
+
+## 2026-06-11 - P2 Workbench Line Navigation Environment
+
+Completed:
+
+- Added a focused line-navigation environment and callback factory that adapts deferred scrolling and mounted editor handles outside the React shell.
+- Routed `Application.tsx` search, backlink, tag, and outline line navigation through the shared factory instead of inline deferred-scroll callbacks.
+- Named the deferred line-scroll delay in the Workbench line-navigation model so the behavior is explicit and centralized.
+- Covered timer scheduling, editor-handle delegation, missing-editor tolerance, and existing resource line-navigation behavior.
+
+Quality gate:
+
+- `npx vitest run packages/workbench/src/workbenchLineNavigation.test.ts`: passed, 7 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 548 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Dev server smoke check: passed at `http://127.0.0.1:5173`; status 200 and root element present
+
+Review:
+
+- Line navigation now owns both the resource-opening workflow and the shell callback adaptation needed to scroll after a newly opened model mounts.
+- `Application.tsx` still supplies the concrete browser timer and editor handle source, while the Workbench line-navigation model owns how those values become navigation callbacks.
+- No new dependency, configuration key, storage path, visual token, extra documentation file, or hard-coded platform assumption was introduced.
+
+Known limitations:
+
+- Window timers for auto-save and overlay focus are still provided directly by the React shell.

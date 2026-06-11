@@ -9,6 +9,8 @@ import {
   type WorkbenchSaveConflictSetter
 } from "./workbenchActionRunner";
 
+export const workbenchDeferredLineScrollDelayMs = 0;
+
 export interface WorkbenchLineTarget {
   readonly line: number;
 }
@@ -28,6 +30,51 @@ export interface WorkbenchLineNavigationCallbacks {
 export interface WorkbenchLineNavigationActionCallbacks extends WorkbenchLineNavigationCallbacks {
   readonly setOperationError: WorkbenchOperationErrorSetter;
   readonly setSaveConflict?: WorkbenchSaveConflictSetter;
+}
+
+export interface WorkbenchLineNavigationTimer {
+  setTimeout(callback: () => void, delayMs: number): unknown;
+}
+
+export interface WorkbenchLineNavigationEnvironment {
+  defer(callback: () => void): void;
+}
+
+export interface WorkbenchLineNavigationEditor {
+  scrollToLine(line: number): void;
+}
+
+export interface WorkbenchLineNavigationEditorSource {
+  getEditorHandle(): WorkbenchLineNavigationEditor | null | undefined;
+}
+
+export type WorkbenchLineNavigationShellCallbacks = Pick<
+  WorkbenchLineNavigationActionCallbacks,
+  "clearSaveConflict" | "setOperationError" | "setSaveConflict"
+>;
+
+export function createWorkbenchLineNavigationEnvironment(
+  timer: WorkbenchLineNavigationTimer
+): WorkbenchLineNavigationEnvironment {
+  return {
+    defer(callback) {
+      timer.setTimeout(callback, workbenchDeferredLineScrollDelayMs);
+    }
+  };
+}
+
+export function createWorkbenchLineNavigationCallbacks(
+  environment: WorkbenchLineNavigationEnvironment,
+  editorSource: WorkbenchLineNavigationEditorSource,
+  callbacks: WorkbenchLineNavigationShellCallbacks
+): WorkbenchLineNavigationActionCallbacks {
+  return {
+    ...(callbacks.clearSaveConflict ? { clearSaveConflict: callbacks.clearSaveConflict } : {}),
+    defer: (callback) => environment.defer(callback),
+    scrollToLine: (line) => editorSource.getEditorHandle()?.scrollToLine(line),
+    setOperationError: callbacks.setOperationError,
+    ...(callbacks.setSaveConflict ? { setSaveConflict: callbacks.setSaveConflict } : {})
+  };
 }
 
 export function scrollWorkbenchLine(
