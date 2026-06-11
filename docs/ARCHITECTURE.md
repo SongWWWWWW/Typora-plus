@@ -170,6 +170,8 @@ Raw mirror upload staging is provider-neutral. `readRemoteSyncRawMirrorUploadFil
 
 Raw mirror local application is also provider-neutral. `applyRemoteSyncRawMirrorLocalResourceChanges()` writes downloaded base64 file content for executable create/update operations targeting the local side, deletes local resources for delete operations, carries expected mtime into trusted workspace writes/deletes, avoids create-over-existing and update/delete-without-local-resource cases, and validates downloaded file paths plus base64 payloads before native writes. Provider adapters still own remote download requests, remote folder semantics, and translating remote API responses into workspace-relative downloaded file contents.
 
+Manifest refresh uses post-execution snapshots when an adapter can provide them. `createRemoteSyncRawMirrorExecutedLocalResources()` merges refreshed upload reads, local apply results, and existing local resources into a sorted local resource snapshot, and `createRemoteSyncRawMirrorProvider()` prefers adapter-returned local resources over the pre-execution request resources when writing the last-sync manifest. This lets future pull/download adapters record the local state that actually landed on disk without moving provider-specific remote I/O into the platform layer.
+
 ## Stage Review Rules
 
 At the end of every stage:

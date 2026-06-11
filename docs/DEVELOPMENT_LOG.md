@@ -7869,3 +7869,32 @@ Known limitations:
 
 - No concrete Feishu/raw-mirror adapter consumes upload or local apply staging yet.
 - Directory create/delete semantics are still adapter/provider-specific and are not handled by file-content staging.
+
+## 2026-06-12 - P2 Remote Sync Raw Mirror Post-Execution Snapshots
+
+Completed:
+
+- Extended raw mirror execution results with optional post-execution local resource snapshots.
+- Updated raw mirror manifest refresh to prefer adapter-returned local snapshots over pre-execution request resources.
+- Added a provider-neutral helper that merges refreshed upload staging resources, local apply results, and existing local resources into a sorted post-execution local snapshot.
+- Covered pull/download manifest refresh so future adapters can record the local metadata actually written to disk.
+
+Quality gate:
+
+- `npx vitest run packages/platform/src/remoteSyncRawMirrorWorkspaceResources.test.ts packages/platform/src/remoteSyncRawMirrorProvider.test.ts`: passed, 2 files / 25 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 86 files / 814 tests, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Raw mirror post-execution snapshot implementation hardcode scan for Feishu endpoints, OAuth scopes, token/secret names, model ids, provider ids, and credential literals: passed
+
+Review:
+
+- This stage closes the manifest-refresh gap left after local apply staging: adapters can now return trusted post-write local resources for manifest reconciliation.
+- The implementation remains provider-neutral and adds no Feishu endpoints, OAuth scopes, token names, folder ids, model ids, provider ids, storage paths, or credential literals.
+- Remote I/O, route mapping, folder semantics, and retry policy remain adapter responsibilities.
+
+Known limitations:
+
+- No concrete Feishu/raw-mirror adapter consumes the snapshot helpers yet.
+- Directory resource post-execution snapshots remain provider-specific.

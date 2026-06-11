@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { RemoteSyncOperation, RemoteSyncResource } from "./remoteSync";
 import {
   applyRemoteSyncRawMirrorLocalResourceChanges,
+  createRemoteSyncRawMirrorExecutedLocalResources,
   readRemoteSyncRawMirrorUploadFileContents
 } from "./remoteSyncRawMirrorWorkspaceResources";
 
@@ -351,6 +352,59 @@ describe("remote sync raw mirror workspace resources", () => {
     })).rejects.toThrow("Remote sync raw mirror local apply was aborted");
     expect(writeResource).not.toHaveBeenCalled();
     expect(deleteResource).not.toHaveBeenCalled();
+  });
+
+  it("creates post-execution local snapshots from upload and local apply results", () => {
+    const updatedUpload = {
+      operation: operation("update", "remote", "Uploaded.md"),
+      resource: {
+        ...resource("Uploaded.md", "file", 2),
+        size: 20,
+        contentHash: "sha256:upload"
+      },
+      content: {
+        workspaceUri: URI.file("C:/Notes"),
+        relativePath: "Uploaded.md",
+        value: "IyBVcGxvYWQ=",
+        encoding: "base64" as const,
+        size: 20,
+        mtime: 2,
+        contentHash: "sha256:upload"
+      }
+    };
+    const writtenLocal = {
+      operation: operation("update", "local", "Downloaded.md"),
+      resource: {
+        ...resource("Downloaded.md", "file", 5),
+        size: 30,
+        contentHash: "sha256:download"
+      }
+    };
+    const deletedLocal = {
+      operation: operation("delete", "local", "Deleted.md"),
+      deleted: true
+    };
+
+    expect(createRemoteSyncRawMirrorExecutedLocalResources({
+      localResources: [
+        resource("Deleted.md"),
+        resource("Downloaded.md"),
+        resource("Uploaded.md")
+      ],
+      uploadFileContents: [updatedUpload],
+      localApplyResults: [writtenLocal, deletedLocal]
+    })).toEqual([
+      {
+        ...resource("Downloaded.md", "file", 5),
+        size: 30,
+        contentHash: "sha256:download"
+      },
+      {
+        ...resource("Uploaded.md", "file", 2),
+        size: 20,
+        contentHash: "sha256:upload"
+      }
+    ]);
   });
 });
 

@@ -50,6 +50,12 @@ export interface RemoteSyncRawMirrorLocalApplyInput {
   readonly signal?: AbortSignal;
 }
 
+export interface RemoteSyncRawMirrorExecutedLocalResourceInput {
+  readonly localResources: readonly RemoteSyncResource[];
+  readonly localApplyResults?: readonly RemoteSyncRawMirrorLocalApplyResult[];
+  readonly uploadFileContents?: readonly RemoteSyncRawMirrorUploadFileContent[];
+}
+
 interface RemoteSyncRawMirrorUploadFileOperation {
   readonly operation: RemoteSyncOperation;
   readonly resource: RemoteSyncResource;
@@ -123,6 +129,32 @@ export async function applyRemoteSyncRawMirrorLocalResourceChanges(
   }
 
   return results;
+}
+
+export function createRemoteSyncRawMirrorExecutedLocalResources(
+  input: RemoteSyncRawMirrorExecutedLocalResourceInput
+): readonly RemoteSyncResource[] {
+  const resourcesByPath = new Map(input.localResources.map((resource) => [resource.relativePath, resource]));
+
+  for (const uploadContent of input.uploadFileContents ?? []) {
+    if (uploadContent.resource.kind === "file") {
+      resourcesByPath.set(uploadContent.resource.relativePath, uploadContent.resource);
+    }
+  }
+
+  for (const result of input.localApplyResults ?? []) {
+    if (result.deleted === true) {
+      resourcesByPath.delete(result.operation.relativePath);
+      continue;
+    }
+
+    if (result.resource) {
+      resourcesByPath.set(result.resource.relativePath, result.resource);
+    }
+  }
+
+  return [...resourcesByPath.values()]
+    .sort((first, second) => first.relativePath.localeCompare(second.relativePath));
 }
 
 function collectRemoteSyncRawMirrorUploadFileOperations(

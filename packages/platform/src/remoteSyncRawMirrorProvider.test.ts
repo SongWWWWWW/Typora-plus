@@ -130,6 +130,71 @@ describe("remote sync raw mirror provider", () => {
     expect([...storage.values.values()][0]).toContain("\"remoteId\":\"remote-1\"");
   });
 
+  it("uses adapter-returned local resources when refreshing the manifest", async () => {
+    const storage = createMemoryStorage();
+    const remoteResources: RemoteSyncRemoteResource[] = [{
+      relativePath: "daily/today.md",
+      kind: "file",
+      remoteId: "remote-1",
+      size: 20,
+      contentHash: "hash-remote"
+    }];
+    const provider = createRemoteSyncRawMirrorProvider({
+      id: "raw.mirror",
+      title: "Raw Mirror",
+      manifestStore: new RemoteSyncManifestStore({ storage }),
+      adapter: {
+        listResources: vi.fn(() => remoteResources),
+        executeOperations: vi.fn((request) => ({
+          operations: request.operations,
+          localResources: [{
+            ...localResource("daily/today.md"),
+            size: 20,
+            contentHash: "hash-remote"
+          }],
+          remoteResources
+        }))
+      }
+    });
+    const request = planRequest({
+      resources: [{
+        ...localResource("daily/today.md"),
+        size: 12,
+        contentHash: "hash-local-old"
+      }],
+      direction: "pull"
+    });
+    const plan = {
+      operations: [{
+        kind: "update",
+        target: "local",
+        relativePath: "daily/today.md",
+        localUri: request.resources[0]!.uri,
+        remoteId: "remote-1"
+      }],
+      summary: {
+        creates: 0,
+        updates: 1,
+        deletes: 0,
+        skips: 0,
+        conflicts: 0
+      }
+    } as const;
+
+    await expect(provider.executePlan(plan, request)).resolves.toEqual({
+      operations: plan.operations,
+      summary: {
+        creates: 0,
+        updates: 1,
+        deletes: 0,
+        skips: 0,
+        conflicts: 0
+      }
+    });
+    expect([...storage.values.values()][0]).toContain("\"contentHash\":\"hash-remote\"");
+    expect([...storage.values.values()][0]).not.toContain("hash-local-old");
+  });
+
   it("does not call the execution adapter when a plan has no executable operations", async () => {
     const executeOperations = vi.fn();
     const provider = createRemoteSyncRawMirrorProvider({

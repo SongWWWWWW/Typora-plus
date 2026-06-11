@@ -38,6 +38,7 @@ export interface RemoteSyncRawMirrorExecuteRequest extends RemoteSyncRawMirrorRe
 }
 
 export interface RemoteSyncRawMirrorExecutionResult {
+  readonly localResources?: readonly RemoteSyncResource[];
   readonly remoteResources: readonly RemoteSyncRemoteResource[];
   readonly operations?: readonly RemoteSyncOperation[];
   readonly completedAt?: number;
@@ -107,7 +108,7 @@ export function createRemoteSyncRawMirrorProvider(options: RemoteSyncRawMirrorPr
 
       writeRawMirrorManifestResources(options, request, createRemoteSyncManifestResourcesFromExecution({
         manifestResources: readRawMirrorManifestResources(options, request),
-        localResources: request.resources,
+        localResources: execution.localResources ?? request.resources,
         remoteResources: execution.remoteResources,
         operations: executionOperations
       }));
