@@ -6861,5 +6861,42 @@ Review:
 Known limitations:
 
 - No live model discovery yet.
-- Remote sync protocol cancellation still does not cross the extension-host boundary.
 - Streaming, tool calls, workspace-grounded retrieval, Feishu OAuth, and a built-in Feishu provider remain future work.
+
+## 2026-06-11 - P2 Extension Host Remote Sync Cancellation Protocol
+
+Completed:
+
+- Added provider-scoped remote sync create-plan and execute-plan cancellation protocol messages.
+- Updated the runtime broker so service-side `AbortSignal` cancellation sends fire-and-forget remote sync cancel notifications for pending remote provider requests.
+- Updated the protocol runtime to track active remote sync provider callbacks, pass an `AbortSignal` into runtime providers, send one cancellation error response, and suppress late provider results after cancellation.
+- Preserved wire safety: cancellation messages carry only request id, extension id, and provider id.
+- Updated maintained docs to record that remote sync cancellation now crosses the extension-host boundary through provider-scoped protocol messages.
+
+Quality gate:
+
+- `npx vitest run packages/platform/src/extensionHostProtocol.test.ts packages/platform/src/extensionHostRuntimeBroker.test.ts packages/platform/src/extensionHostProtocolRuntime.test.ts packages/platform/src/extensionHostProtocolSession.test.ts`: passed, 4 files / 52 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 73 files / 686 tests, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Dev server smoke check at `http://127.0.0.1:5173/`: status 200 and root element present
+
+Research notes:
+
+- OpenAI Responses remains the right first product API surface for in-editor writing assistance because it covers text generation, state, hosted/custom tools, and later agentic growth behind the existing `IAiService` provider boundary.
+- OpenAI Codex is documented as a software-development agent with SDK support for CI/CD, internal tools, and app integration; it is feasible for repository automation or future developer workflows, not the default Markdown writing assistant.
+- Feishu raw Markdown/assets mirroring remains feasible through the remote sync provider boundary: OAuth and Drive file/folder APIs can supply remote snapshots and upload/download execution, while the platform owns diff planning and conflict metadata.
+- Feishu Docs import/publish can be a later one-way adapter. Full bidirectional Feishu Docs sync remains higher risk because it must reconcile Markdown-to-block conversion, asset mapping, permissions, remote edits, and unsupported Markdown syntax.
+
+Review:
+
+- No OpenAI endpoint, Codex surface, Feishu endpoint, OAuth scope, token, provider id, model id, storage path, or credential behavior was hardcoded.
+- Workbench and React remain unaware of protocol messages; cancellation still enters through provider-neutral `AbortSignal` contracts.
+- The runtime sends cancellation errors immediately and ignores late results, avoiding hung pending requests and duplicate responses.
+
+Known limitations:
+
+- No live model discovery yet.
+- Streaming, tool calls, workspace-grounded retrieval, Feishu OAuth, and a built-in Feishu provider remain future work.
+- Remote sync progress streaming and richer conflict-resolution UI are still not implemented.

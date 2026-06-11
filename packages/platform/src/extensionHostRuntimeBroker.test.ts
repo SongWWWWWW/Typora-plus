@@ -30,8 +30,10 @@ import {
   createExtensionHostMarkdownRendererRegisterRequestMessage,
   createExtensionHostMarkdownRendererRenderResultMessage,
   createExtensionHostMarkdownRendererUnregisterRequestMessage,
+  createExtensionHostRemoteSyncCreatePlanCancelMessage,
   createExtensionHostRemoteSyncCreatePlanRequestMessage,
   createExtensionHostRemoteSyncCreatePlanResultMessage,
+  createExtensionHostRemoteSyncExecutePlanCancelMessage,
   createExtensionHostRemoteSyncExecutePlanRequestMessage,
   createExtensionHostRemoteSyncExecutePlanResultMessage,
   createExtensionHostRemoteSyncProviderRegisterRequestMessage,
@@ -425,6 +427,106 @@ describe("extension host runtime broker", () => {
       "notes.remote.sync"
     ))).resolves.toEqual(createExtensionHostApiResultMessage("request-sync-2", "notes.remote"));
     expect(controls.remoteSyncProviders).toEqual([]);
+  });
+
+  it("sends remote sync cancellation notifications for aborted remote provider requests", async () => {
+    const { context, controls } = createBrokerTestContext();
+    const notifications: ExtensionHostProtocolMessage[] = [];
+    const pendingResolvers = new Map<string, (message: ExtensionHostProtocolMessage) => void>();
+    const broker = new ExtensionHostRuntimeBroker(context, {
+      createRequestId: createSequentialRequestId(),
+      notify: (message) => {
+        notifications.push(readExtensionHostProtocolMessage(message));
+      },
+      request: (message) => {
+        const request = readExtensionHostProtocolMessage(message);
+
+        if (
+          request.type !== extensionHostProtocolMessageTypes.remoteSyncCreatePlan &&
+          request.type !== extensionHostProtocolMessageTypes.remoteSyncExecutePlan
+        ) {
+          throw new Error(`Unexpected request: ${request.type}`);
+        }
+
+        return new Promise<ExtensionHostProtocolMessage>((resolve) => {
+          pendingResolvers.set(request.requestId, resolve);
+        });
+      }
+    });
+
+    await broker.handleMessage(createExtensionHostRemoteSyncProviderRegisterRequestMessage(
+      "request-sync-1",
+      "notes.remote",
+      {
+        id: "notes.remote.sync",
+        title: "Remote Sync"
+      }
+    ));
+
+    const createController = new AbortController();
+    const createPlan = controls.remoteSyncProviders[0]!.createPlan({
+      workspaceUri: URI.file("C:/Notes"),
+      resources: [{
+        uri: URI.file("C:/Notes/A.md"),
+        relativePath: "A.md",
+        kind: "file"
+      }],
+      direction: "push",
+      signal: createController.signal
+    });
+
+    await Promise.resolve();
+
+    createController.abort();
+
+    expect(notifications[0]).toEqual(createExtensionHostRemoteSyncCreatePlanCancelMessage(
+      "remoteSyncCreatePlan-1",
+      "notes.remote",
+      "notes.remote.sync"
+    ));
+
+    pendingResolvers.get("remoteSyncCreatePlan-1")?.(createExtensionHostApiErrorMessage(
+      "remoteSyncCreatePlan-1",
+      "notes.remote",
+      new Error("Extension host remote sync create plan request cancelled")
+    ));
+
+    await expect(createPlan).rejects.toThrow("Extension host remote sync create plan request cancelled");
+
+    const executeController = new AbortController();
+    const executePlan = controls.remoteSyncProviders[0]!.executePlan({
+      operations: [],
+      summary: {
+        creates: 0,
+        updates: 0,
+        deletes: 0,
+        skips: 0,
+        conflicts: 0
+      }
+    }, {
+      workspaceUri: URI.file("C:/Notes"),
+      resources: [],
+      direction: "push",
+      signal: executeController.signal
+    });
+
+    await Promise.resolve();
+
+    executeController.abort();
+
+    expect(notifications[1]).toEqual(createExtensionHostRemoteSyncExecutePlanCancelMessage(
+      "remoteSyncExecutePlan-2",
+      "notes.remote",
+      "notes.remote.sync"
+    ));
+
+    pendingResolvers.get("remoteSyncExecutePlan-2")?.(createExtensionHostApiErrorMessage(
+      "remoteSyncExecutePlan-2",
+      "notes.remote",
+      new Error("Extension host remote sync execute plan request cancelled")
+    ));
+
+    await expect(executePlan).rejects.toThrow("Extension host remote sync execute plan request cancelled");
   });
 
   it("registers export and Markdown renderer proxies that call the remote host", async () => {

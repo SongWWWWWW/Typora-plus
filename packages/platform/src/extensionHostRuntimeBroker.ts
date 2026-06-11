@@ -11,6 +11,8 @@ import {
   createExtensionHostExportDocumentRequestMessage,
   createExtensionHostMarkdownRendererRenderRequestMessage,
   createExtensionHostRemoteSyncCreatePlanRequestMessage,
+  createExtensionHostRemoteSyncCreatePlanCancelMessage,
+  createExtensionHostRemoteSyncExecutePlanCancelMessage,
   createExtensionHostRemoteSyncExecutePlanRequestMessage,
   extensionHostProtocolMessageTypes,
   readExtensionHostProtocolMessage,
@@ -278,42 +280,65 @@ export class ExtensionHostRuntimeBroker extends Disposable {
       title,
       createPlan: async (request) => {
         const requestId = this.nextRequestId("remoteSyncCreatePlan");
-        const response = readExtensionHostProtocolMessage(await this.options.request(
-          createExtensionHostRemoteSyncCreatePlanRequestMessage(
-            requestId,
-            this.context.extension.id,
-            providerId,
-            toProtocolRemoteSyncPlanRequest(request)
-          )
-        ));
+        const abortListener = this.createRemoteSyncAbortListener(request, requestId, providerId, "createPlan");
 
-        assertResponseIdentity(response, requestId, this.context.extension.id);
-
-        if (response.type !== extensionHostProtocolMessageTypes.remoteSyncCreatePlanResult) {
-          throw new Error(`Expected extension host remote sync create plan result but received: ${response.type}`);
+        if (request.signal?.aborted) {
+          throw new Error("Extension host remote sync create plan request was aborted");
         }
 
-        return toRuntimeRemoteSyncPlan((response as ExtensionHostRemoteSyncCreatePlanResultMessage).plan);
+        if (abortListener) {
+          request.signal?.addEventListener("abort", abortListener, { once: true });
+        }
+
+        try {
+          const response = await this.sendRemoteSyncCreatePlanRequest(requestId, providerId, request);
+          assertResponseIdentity(response, requestId, this.context.extension.id);
+
+          if (response.type === extensionHostProtocolMessageTypes.apiError) {
+            throw toError(response.error);
+          }
+
+          if (response.type !== extensionHostProtocolMessageTypes.remoteSyncCreatePlanResult) {
+            throw new Error(`Expected extension host remote sync create plan result but received: ${response.type}`);
+          }
+
+          return toRuntimeRemoteSyncPlan((response as ExtensionHostRemoteSyncCreatePlanResultMessage).plan);
+        } finally {
+          if (abortListener) {
+            request.signal?.removeEventListener("abort", abortListener);
+          }
+        }
       },
       executePlan: async (plan, request) => {
         const requestId = this.nextRequestId("remoteSyncExecutePlan");
-        const response = readExtensionHostProtocolMessage(await this.options.request(
-          createExtensionHostRemoteSyncExecutePlanRequestMessage(
-            requestId,
-            this.context.extension.id,
-            providerId,
-            toProtocolRemoteSyncPlan(plan),
-            toProtocolRemoteSyncPlanRequest(request)
-          )
-        ));
+        const abortListener = this.createRemoteSyncAbortListener(request, requestId, providerId, "executePlan");
 
-        assertResponseIdentity(response, requestId, this.context.extension.id);
-
-        if (response.type !== extensionHostProtocolMessageTypes.remoteSyncExecutePlanResult) {
-          throw new Error(`Expected extension host remote sync execute plan result but received: ${response.type}`);
+        if (request.signal?.aborted) {
+          throw new Error("Extension host remote sync execute plan request was aborted");
         }
 
-        return toRuntimeRemoteSyncResult((response as ExtensionHostRemoteSyncExecutePlanResultMessage).result);
+        if (abortListener) {
+          request.signal?.addEventListener("abort", abortListener, { once: true });
+        }
+
+        try {
+          const response = await this.sendRemoteSyncExecutePlanRequest(requestId, providerId, plan, request);
+          assertResponseIdentity(response, requestId, this.context.extension.id);
+
+          if (response.type === extensionHostProtocolMessageTypes.apiError) {
+            throw toError(response.error);
+          }
+
+          if (response.type !== extensionHostProtocolMessageTypes.remoteSyncExecutePlanResult) {
+            throw new Error(`Expected extension host remote sync execute plan result but received: ${response.type}`);
+          }
+
+          return toRuntimeRemoteSyncResult((response as ExtensionHostRemoteSyncExecutePlanResultMessage).result);
+        } finally {
+          if (abortListener) {
+            request.signal?.removeEventListener("abort", abortListener);
+          }
+        }
       }
     });
     this.remoteSyncProviderDisposables.set(providerId, disposable);
@@ -357,6 +382,67 @@ export class ExtensionHostRuntimeBroker extends Disposable {
         this.context.extension.id,
         providerId,
         toProtocolAiTextRequest(request)
+      )
+    ));
+  }
+
+  private createRemoteSyncAbortListener(
+    request: RemoteSyncPlanRequest,
+    requestId: string,
+    providerId: string,
+    kind: "createPlan" | "executePlan"
+  ): (() => void) | undefined {
+    if (!request.signal || !this.options.notify) {
+      return undefined;
+    }
+
+    return () => {
+      try {
+        void this.options.notify?.(kind === "createPlan"
+          ? createExtensionHostRemoteSyncCreatePlanCancelMessage(
+              requestId,
+              this.context.extension.id,
+              providerId
+            )
+          : createExtensionHostRemoteSyncExecutePlanCancelMessage(
+              requestId,
+              this.context.extension.id,
+              providerId
+            ));
+      } catch {
+        // Cancellation is best-effort; the pending request response remains authoritative.
+      }
+    };
+  }
+
+  private async sendRemoteSyncCreatePlanRequest(
+    requestId: string,
+    providerId: string,
+    request: RemoteSyncPlanRequest
+  ): Promise<ExtensionHostProtocolMessage> {
+    return readExtensionHostProtocolMessage(await this.options.request(
+      createExtensionHostRemoteSyncCreatePlanRequestMessage(
+        requestId,
+        this.context.extension.id,
+        providerId,
+        toProtocolRemoteSyncPlanRequest(request)
+      )
+    ));
+  }
+
+  private async sendRemoteSyncExecutePlanRequest(
+    requestId: string,
+    providerId: string,
+    plan: RemoteSyncPlan,
+    request: RemoteSyncPlanRequest
+  ): Promise<ExtensionHostProtocolMessage> {
+    return readExtensionHostProtocolMessage(await this.options.request(
+      createExtensionHostRemoteSyncExecutePlanRequestMessage(
+        requestId,
+        this.context.extension.id,
+        providerId,
+        toProtocolRemoteSyncPlan(plan),
+        toProtocolRemoteSyncPlanRequest(request)
       )
     ));
   }

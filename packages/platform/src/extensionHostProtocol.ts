@@ -55,8 +55,10 @@ export const extensionHostProtocolMessageTypes = {
   markdownRendererRenderResult: "extensionHost/markdownRenderer/renderResult",
   markdownRendererUnregister: "extensionHost/markdownRenderer/unregister",
   remoteSyncCreatePlan: "extensionHost/remoteSync/createPlan",
+  remoteSyncCreatePlanCancel: "extensionHost/remoteSync/createPlanCancel",
   remoteSyncCreatePlanResult: "extensionHost/remoteSync/createPlanResult",
   remoteSyncExecutePlan: "extensionHost/remoteSync/executePlan",
+  remoteSyncExecutePlanCancel: "extensionHost/remoteSync/executePlanCancel",
   remoteSyncExecutePlanResult: "extensionHost/remoteSync/executePlanResult",
   remoteSyncProviderRegister: "extensionHost/remoteSync/providerRegister",
   remoteSyncProviderUnregister: "extensionHost/remoteSync/providerUnregister"
@@ -173,8 +175,10 @@ export type ExtensionHostProtocolMessage =
   | ExtensionHostMarkdownRendererRenderRequestMessage
   | ExtensionHostMarkdownRendererRenderResultMessage
   | ExtensionHostMarkdownRendererUnregisterRequestMessage
+  | ExtensionHostRemoteSyncCreatePlanCancelMessage
   | ExtensionHostRemoteSyncCreatePlanRequestMessage
   | ExtensionHostRemoteSyncCreatePlanResultMessage
+  | ExtensionHostRemoteSyncExecutePlanCancelMessage
   | ExtensionHostRemoteSyncExecutePlanRequestMessage
   | ExtensionHostRemoteSyncExecutePlanResultMessage
   | ExtensionHostRemoteSyncProviderRegisterRequestMessage
@@ -400,6 +404,13 @@ export interface ExtensionHostRemoteSyncCreatePlanRequestMessage {
   readonly request: ExtensionHostProtocolRemoteSyncPlanRequest;
 }
 
+export interface ExtensionHostRemoteSyncCreatePlanCancelMessage {
+  readonly type: typeof extensionHostProtocolMessageTypes.remoteSyncCreatePlanCancel;
+  readonly requestId: string;
+  readonly extensionId: string;
+  readonly providerId: string;
+}
+
 export interface ExtensionHostRemoteSyncCreatePlanResultMessage {
   readonly type: typeof extensionHostProtocolMessageTypes.remoteSyncCreatePlanResult;
   readonly requestId: string;
@@ -415,6 +426,13 @@ export interface ExtensionHostRemoteSyncExecutePlanRequestMessage {
   readonly providerId: string;
   readonly plan: ExtensionHostProtocolRemoteSyncPlan;
   readonly request: ExtensionHostProtocolRemoteSyncPlanRequest;
+}
+
+export interface ExtensionHostRemoteSyncExecutePlanCancelMessage {
+  readonly type: typeof extensionHostProtocolMessageTypes.remoteSyncExecutePlanCancel;
+  readonly requestId: string;
+  readonly extensionId: string;
+  readonly providerId: string;
 }
 
 export interface ExtensionHostRemoteSyncExecutePlanResultMessage {
@@ -941,6 +959,19 @@ export function createExtensionHostRemoteSyncCreatePlanRequestMessage(
   };
 }
 
+export function createExtensionHostRemoteSyncCreatePlanCancelMessage(
+  requestId: string,
+  extensionId: string,
+  providerId: string
+): ExtensionHostRemoteSyncCreatePlanCancelMessage {
+  return {
+    type: extensionHostProtocolMessageTypes.remoteSyncCreatePlanCancel,
+    requestId: normalizeRequestId(requestId, "Extension host remote sync create plan cancel request id"),
+    extensionId: normalizeExtensionId(extensionId, "Extension host remote sync create plan cancel extension id"),
+    providerId: normalizeRemoteSyncProviderId(providerId, "Extension host remote sync create plan cancel provider id")
+  };
+}
+
 export function createExtensionHostRemoteSyncCreatePlanResultMessage(
   requestId: string,
   extensionId: string,
@@ -970,6 +1001,19 @@ export function createExtensionHostRemoteSyncExecutePlanRequestMessage(
     providerId: normalizeRemoteSyncProviderId(providerId, "Extension host remote sync execute plan provider id"),
     plan: normalizeProtocolRemoteSyncPlan(plan),
     request: normalizeProtocolRemoteSyncPlanRequest(request)
+  };
+}
+
+export function createExtensionHostRemoteSyncExecutePlanCancelMessage(
+  requestId: string,
+  extensionId: string,
+  providerId: string
+): ExtensionHostRemoteSyncExecutePlanCancelMessage {
+  return {
+    type: extensionHostProtocolMessageTypes.remoteSyncExecutePlanCancel,
+    requestId: normalizeRequestId(requestId, "Extension host remote sync execute plan cancel request id"),
+    extensionId: normalizeExtensionId(extensionId, "Extension host remote sync execute plan cancel extension id"),
+    providerId: normalizeRemoteSyncProviderId(providerId, "Extension host remote sync execute plan cancel provider id")
   };
 }
 
@@ -1059,10 +1103,14 @@ export function readExtensionHostProtocolMessage(value: unknown): ExtensionHostP
       return readRemoteSyncProviderUnregisterRequestMessage(record);
     case extensionHostProtocolMessageTypes.remoteSyncCreatePlan:
       return readRemoteSyncCreatePlanRequestMessage(record);
+    case extensionHostProtocolMessageTypes.remoteSyncCreatePlanCancel:
+      return readRemoteSyncCreatePlanCancelMessage(record);
     case extensionHostProtocolMessageTypes.remoteSyncCreatePlanResult:
       return readRemoteSyncCreatePlanResultMessage(record);
     case extensionHostProtocolMessageTypes.remoteSyncExecutePlan:
       return readRemoteSyncExecutePlanRequestMessage(record);
+    case extensionHostProtocolMessageTypes.remoteSyncExecutePlanCancel:
+      return readRemoteSyncExecutePlanCancelMessage(record);
     case extensionHostProtocolMessageTypes.remoteSyncExecutePlanResult:
       return readRemoteSyncExecutePlanResultMessage(record);
     default:
@@ -1402,6 +1450,17 @@ function readRemoteSyncCreatePlanRequestMessage(
   };
 }
 
+function readRemoteSyncCreatePlanCancelMessage(
+  record: UnknownRecord
+): ExtensionHostRemoteSyncCreatePlanCancelMessage {
+  return {
+    type: extensionHostProtocolMessageTypes.remoteSyncCreatePlanCancel,
+    requestId: normalizeRequestId(record.requestId, "Extension host remote sync create plan cancel request id"),
+    extensionId: normalizeExtensionId(record.extensionId, "Extension host remote sync create plan cancel extension id"),
+    providerId: normalizeRemoteSyncProviderId(record.providerId, "Extension host remote sync create plan cancel provider id")
+  };
+}
+
 function readRemoteSyncCreatePlanResultMessage(
   record: UnknownRecord
 ): ExtensionHostRemoteSyncCreatePlanResultMessage {
@@ -1424,6 +1483,17 @@ function readRemoteSyncExecutePlanRequestMessage(
     providerId: normalizeRemoteSyncProviderId(record.providerId, "Extension host remote sync execute plan provider id"),
     plan: normalizeProtocolRemoteSyncPlan(record.plan),
     request: normalizeProtocolRemoteSyncPlanRequest(record.request)
+  };
+}
+
+function readRemoteSyncExecutePlanCancelMessage(
+  record: UnknownRecord
+): ExtensionHostRemoteSyncExecutePlanCancelMessage {
+  return {
+    type: extensionHostProtocolMessageTypes.remoteSyncExecutePlanCancel,
+    requestId: normalizeRequestId(record.requestId, "Extension host remote sync execute plan cancel request id"),
+    extensionId: normalizeExtensionId(record.extensionId, "Extension host remote sync execute plan cancel extension id"),
+    providerId: normalizeRemoteSyncProviderId(record.providerId, "Extension host remote sync execute plan cancel provider id")
   };
 }
 

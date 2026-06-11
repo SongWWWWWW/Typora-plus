@@ -55,7 +55,9 @@ import {
   type ExtensionHostProtocolRemoteSyncPlan,
   type ExtensionHostProtocolRemoteSyncPlanRequest,
   type ExtensionHostProtocolRemoteSyncResult,
+  type ExtensionHostRemoteSyncCreatePlanCancelMessage,
   type ExtensionHostRemoteSyncCreatePlanRequestMessage,
+  type ExtensionHostRemoteSyncExecutePlanCancelMessage,
   type ExtensionHostRemoteSyncExecutePlanRequestMessage,
   type ExtensionHostProtocolError,
   type ExtensionHostProtocolMessage
@@ -103,6 +105,14 @@ interface ActiveRuntimeAiTextRequest {
   cancellationResponseSent: boolean;
 }
 
+interface ActiveRuntimeRemoteSyncRequest {
+  readonly providerId: string;
+  readonly kind: "createPlan" | "executePlan";
+  readonly controller: AbortController;
+  cancelled: boolean;
+  cancellationResponseSent: boolean;
+}
+
 interface RuntimeExtensionRecord {
   readonly extension: RegisteredExtension;
   readonly context: ExtensionContext;
@@ -127,6 +137,7 @@ interface RuntimeMarkdownRendererRegistration {
 
 export class ExtensionHostProtocolRuntime extends Disposable {
   private readonly activeAiTextRequests = new Map<string, ActiveRuntimeAiTextRequest>();
+  private readonly activeRemoteSyncRequests = new Map<string, ActiveRuntimeRemoteSyncRequest>();
   private readonly pendingRequests = new Map<string, PendingRuntimeRequest>();
   private readonly extensions = new Map<string, RuntimeExtensionRecord>();
   private readonly requestTimer: ExtensionHostProtocolRequestTimer;
@@ -170,6 +181,12 @@ export class ExtensionHostProtocolRuntime extends Disposable {
 
     this.activeAiTextRequests.clear();
 
+    for (const activeRequest of this.activeRemoteSyncRequests.values()) {
+      activeRequest.controller.abort();
+    }
+
+    this.activeRemoteSyncRequests.clear();
+
     for (const record of this.extensions.values()) {
       record.disposables.dispose();
     }
@@ -192,6 +209,16 @@ export class ExtensionHostProtocolRuntime extends Disposable {
 
     if (message.type === extensionHostProtocolMessageTypes.aiTextCancel) {
       await this.cancelRegisteredAiText(message);
+      return;
+    }
+
+    if (message.type === extensionHostProtocolMessageTypes.remoteSyncCreatePlanCancel) {
+      await this.cancelRegisteredRemoteSync(message, "createPlan");
+      return;
+    }
+
+    if (message.type === extensionHostProtocolMessageTypes.remoteSyncExecutePlanCancel) {
+      await this.cancelRegisteredRemoteSync(message, "executePlan");
       return;
     }
 
@@ -416,7 +443,22 @@ export class ExtensionHostProtocolRuntime extends Disposable {
   }
 
   private async createRegisteredRemoteSyncPlan(message: ExtensionHostRemoteSyncCreatePlanRequestMessage): Promise<void> {
+    const requestKey = createRuntimeProviderRequestKey(message.extensionId, message.requestId);
+    const activeRequest: ActiveRuntimeRemoteSyncRequest = {
+      providerId: message.providerId,
+      kind: "createPlan",
+      controller: new AbortController(),
+      cancelled: false,
+      cancellationResponseSent: false
+    };
+
     try {
+      if (this.activeRemoteSyncRequests.has(requestKey)) {
+        throw new Error(`Extension host runtime remote sync request is already active: ${message.requestId}`);
+      }
+
+      this.activeRemoteSyncRequests.set(requestKey, activeRequest);
+
       const record = this.requireExtensionRecord(message.extensionId);
       const provider = record.remoteSyncProviders.get(message.providerId);
 
@@ -424,21 +466,55 @@ export class ExtensionHostProtocolRuntime extends Disposable {
         throw new Error(`No extension host runtime remote sync provider registered: ${message.providerId}`);
       }
 
+      const plan = await provider.createPlan(toRuntimeRemoteSyncPlanRequest(
+        message.request,
+        activeRequest.controller.signal
+      ));
+
+      if (activeRequest.cancelled) {
+        return;
+      }
+
+      this.activeRemoteSyncRequests.delete(requestKey);
+
       await this.transport.send(createExtensionHostRemoteSyncCreatePlanResultMessage(
         message.requestId,
         message.extensionId,
         message.providerId,
-        toProtocolRemoteSyncPlan(await provider.createPlan(toRuntimeRemoteSyncPlanRequest(message.request)))
+        toProtocolRemoteSyncPlan(plan)
       ));
     } catch (error) {
+      if (activeRequest.cancelled && activeRequest.cancellationResponseSent) {
+        return;
+      }
+
       await this.sendRuntimeApiError(message.requestId, message.extensionId, error);
+    } finally {
+      if (this.activeRemoteSyncRequests.get(requestKey) === activeRequest) {
+        this.activeRemoteSyncRequests.delete(requestKey);
+      }
     }
   }
 
   private async executeRegisteredRemoteSyncPlan(
     message: ExtensionHostRemoteSyncExecutePlanRequestMessage
   ): Promise<void> {
+    const requestKey = createRuntimeProviderRequestKey(message.extensionId, message.requestId);
+    const activeRequest: ActiveRuntimeRemoteSyncRequest = {
+      providerId: message.providerId,
+      kind: "executePlan",
+      controller: new AbortController(),
+      cancelled: false,
+      cancellationResponseSent: false
+    };
+
     try {
+      if (this.activeRemoteSyncRequests.has(requestKey)) {
+        throw new Error(`Extension host runtime remote sync request is already active: ${message.requestId}`);
+      }
+
+      this.activeRemoteSyncRequests.set(requestKey, activeRequest);
+
       const record = this.requireExtensionRecord(message.extensionId);
       const provider = record.remoteSyncProviders.get(message.providerId);
 
@@ -446,18 +522,65 @@ export class ExtensionHostProtocolRuntime extends Disposable {
         throw new Error(`No extension host runtime remote sync provider registered: ${message.providerId}`);
       }
 
+      const result = await provider.executePlan(
+        toRuntimeRemoteSyncPlan(message.plan),
+        toRuntimeRemoteSyncPlanRequest(message.request, activeRequest.controller.signal)
+      );
+
+      if (activeRequest.cancelled) {
+        return;
+      }
+
+      this.activeRemoteSyncRequests.delete(requestKey);
+
       await this.transport.send(createExtensionHostRemoteSyncExecutePlanResultMessage(
         message.requestId,
         message.extensionId,
         message.providerId,
-        toProtocolRemoteSyncResult(await provider.executePlan(
-          toRuntimeRemoteSyncPlan(message.plan),
-          toRuntimeRemoteSyncPlanRequest(message.request)
-        ))
+        toProtocolRemoteSyncResult(result)
       ));
     } catch (error) {
+      if (activeRequest.cancelled && activeRequest.cancellationResponseSent) {
+        return;
+      }
+
       await this.sendRuntimeApiError(message.requestId, message.extensionId, error);
+    } finally {
+      if (this.activeRemoteSyncRequests.get(requestKey) === activeRequest) {
+        this.activeRemoteSyncRequests.delete(requestKey);
+      }
     }
+  }
+
+  private async cancelRegisteredRemoteSync(
+    message: ExtensionHostRemoteSyncCreatePlanCancelMessage | ExtensionHostRemoteSyncExecutePlanCancelMessage,
+    kind: "createPlan" | "executePlan"
+  ): Promise<void> {
+    const activeRequest = this.activeRemoteSyncRequests.get(createRuntimeProviderRequestKey(
+      message.extensionId,
+      message.requestId
+    ));
+
+    if (
+      !activeRequest ||
+      activeRequest.providerId !== message.providerId ||
+      activeRequest.kind !== kind ||
+      activeRequest.cancelled
+    ) {
+      return;
+    }
+
+    activeRequest.cancelled = true;
+    activeRequest.controller.abort();
+    activeRequest.cancellationResponseSent = true;
+
+    await this.sendRuntimeApiError(
+      message.requestId,
+      message.extensionId,
+      kind === "createPlan"
+        ? new Error("Extension host remote sync create plan request cancelled")
+        : new Error("Extension host remote sync execute plan request cancelled")
+    );
   }
 
   private createContext(record: Omit<RuntimeExtensionRecord, "context">): ExtensionContext {
@@ -941,11 +1064,16 @@ function toRuntimeAiTextRequest(request: Omit<AiTextRequest, "signal" | "context
 }
 
 function createRuntimeAiTextRequestKey(extensionId: string, requestId: string): string {
+  return createRuntimeProviderRequestKey(extensionId, requestId);
+}
+
+function createRuntimeProviderRequestKey(extensionId: string, requestId: string): string {
   return `${extensionId}:${requestId}`;
 }
 
 function toRuntimeRemoteSyncPlanRequest(
-  request: ExtensionHostProtocolRemoteSyncPlanRequest
+  request: ExtensionHostProtocolRemoteSyncPlanRequest,
+  signal?: AbortSignal
 ): RemoteSyncPlanRequest {
   return {
     workspaceUri: URI.parse(request.workspaceUri),
@@ -961,7 +1089,8 @@ function toRuntimeRemoteSyncPlanRequest(
     direction: request.direction,
     ...(request.remoteScopeId ? { remoteScopeId: request.remoteScopeId } : {}),
     ...(request.dryRun !== undefined ? { dryRun: request.dryRun } : {}),
-    ...(request.metadata ? { metadata: request.metadata } : {})
+    ...(request.metadata ? { metadata: request.metadata } : {}),
+    ...(signal ? { signal } : {})
   };
 }
 

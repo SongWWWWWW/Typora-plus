@@ -28,8 +28,10 @@ import {
   createExtensionHostMarkdownRendererRenderRequestMessage,
   createExtensionHostMarkdownRendererRenderResultMessage,
   createExtensionHostMarkdownRendererUnregisterRequestMessage,
+  createExtensionHostRemoteSyncCreatePlanCancelMessage,
   createExtensionHostRemoteSyncCreatePlanRequestMessage,
   createExtensionHostRemoteSyncCreatePlanResultMessage,
+  createExtensionHostRemoteSyncExecutePlanCancelMessage,
   createExtensionHostRemoteSyncExecutePlanRequestMessage,
   createExtensionHostRemoteSyncExecutePlanResultMessage,
   createExtensionHostRemoteSyncProviderRegisterRequestMessage,
@@ -439,12 +441,22 @@ describe("extension host protocol", () => {
       "notes.main.sync",
       plan
     );
+    const createCancel = createExtensionHostRemoteSyncCreatePlanCancelMessage(
+      "request-sync-2",
+      "notes.main",
+      "notes.main.sync"
+    );
     const execute = createExtensionHostRemoteSyncExecutePlanRequestMessage(
       "request-sync-4",
       "notes.main",
       "notes.main.sync",
       plan,
       request.request
+    );
+    const executeCancel = createExtensionHostRemoteSyncExecutePlanCancelMessage(
+      "request-sync-4",
+      "notes.main",
+      "notes.main.sync"
     );
     const executeResult = createExtensionHostRemoteSyncExecutePlanResultMessage(
       "request-sync-5",
@@ -503,6 +515,12 @@ describe("extension host protocol", () => {
       providerId: "notes.main.sync",
       plan
     });
+    expect(createCancel).toEqual({
+      type: extensionHostProtocolMessageTypes.remoteSyncCreatePlanCancel,
+      requestId: "request-sync-2",
+      extensionId: "notes.main",
+      providerId: "notes.main.sync"
+    });
     expect(execute).toEqual({
       type: extensionHostProtocolMessageTypes.remoteSyncExecutePlan,
       requestId: "request-sync-4",
@@ -510,6 +528,12 @@ describe("extension host protocol", () => {
       providerId: "notes.main.sync",
       plan,
       request: request.request
+    });
+    expect(executeCancel).toEqual({
+      type: extensionHostProtocolMessageTypes.remoteSyncExecutePlanCancel,
+      requestId: "request-sync-4",
+      extensionId: "notes.main",
+      providerId: "notes.main.sync"
     });
     expect(executeResult).toEqual({
       type: extensionHostProtocolMessageTypes.remoteSyncExecutePlanResult,
@@ -530,8 +554,10 @@ describe("extension host protocol", () => {
     expect("signal" in request.request).toBe(false);
     expect(deserializeExtensionHostProtocolMessage(serializeExtensionHostProtocolMessage(register))).toEqual(register);
     expect(deserializeExtensionHostProtocolMessage(serializeExtensionHostProtocolMessage(request))).toEqual(request);
+    expect(deserializeExtensionHostProtocolMessage(serializeExtensionHostProtocolMessage(createCancel))).toEqual(createCancel);
     expect(deserializeExtensionHostProtocolMessage(serializeExtensionHostProtocolMessage(createResult))).toEqual(createResult);
     expect(deserializeExtensionHostProtocolMessage(serializeExtensionHostProtocolMessage(execute))).toEqual(execute);
+    expect(deserializeExtensionHostProtocolMessage(serializeExtensionHostProtocolMessage(executeCancel))).toEqual(executeCancel);
     expect(deserializeExtensionHostProtocolMessage(serializeExtensionHostProtocolMessage(executeResult))).toEqual(executeResult);
     expect(deserializeExtensionHostProtocolMessage(serializeExtensionHostProtocolMessage(unregister))).toEqual(unregister);
     expect(() => createExtensionHostRemoteSyncProviderRegisterRequestMessage("request-sync-7", "notes.main", {
@@ -571,6 +597,11 @@ describe("extension host protocol", () => {
         }
       }
     )).toThrow("parent traversal");
+    expect(() => createExtensionHostRemoteSyncCreatePlanCancelMessage(
+      "request-sync-10",
+      "notes.main",
+      "bad provider"
+    )).toThrow("remote sync create plan cancel provider id is invalid");
   });
 
   it("serializes runtime API result and error broker messages", () => {

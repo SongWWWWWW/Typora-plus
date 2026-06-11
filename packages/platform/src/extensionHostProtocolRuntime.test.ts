@@ -13,8 +13,10 @@ import {
   createExtensionHostAiProviderRegisterRequestMessage,
   createExtensionHostHandshakeRequestMessage,
   createExtensionHostMarkdownRendererRenderRequestMessage,
+  createExtensionHostRemoteSyncCreatePlanCancelMessage,
   createExtensionHostRemoteSyncCreatePlanRequestMessage,
   createExtensionHostRemoteSyncCreatePlanResultMessage,
+  createExtensionHostRemoteSyncExecutePlanCancelMessage,
   createExtensionHostRemoteSyncExecutePlanRequestMessage,
   createExtensionHostRemoteSyncExecutePlanResultMessage,
   extensionHostProtocolMessageTypes,
@@ -27,6 +29,7 @@ import {
 } from "./extensionHostProtocolRuntime";
 import type { ExtensionHostProtocolTransport } from "./extensionHostProtocolSession";
 import type { ExtensionHostProtocolRequestTimer } from "./extensionHostProtocolRequestTimer";
+import type { RemoteSyncPlan, RemoteSyncResult } from "./remoteSync";
 
 describe("extension host protocol runtime", () => {
   it("responds to protocol handshake requests", async () => {
@@ -404,7 +407,8 @@ describe("extension host protocol runtime", () => {
           title: "Remote Sync",
           createPlan: (input) => {
             expect(input.workspaceUri.toString()).toBe("file://C:/Notes");
-            expect("signal" in input).toBe(false);
+            expect(input.signal).toBeDefined();
+            expect(input.signal?.aborted).toBe(false);
             const resource = input.resources[0];
 
             if (!resource) {
@@ -429,6 +433,8 @@ describe("extension host protocol runtime", () => {
           },
           executePlan: (plan, input) => {
             expect(input.direction).toBe("push");
+            expect(input.signal).toBeDefined();
+            expect(input.signal?.aborted).toBe(false);
 
             return {
               operations: plan.operations,
@@ -513,6 +519,150 @@ describe("extension host protocol runtime", () => {
     ]);
 
     expect(URI.parse(plan.operations[0]!.localUri).toString()).toBe("file://C:/Notes/A.md");
+  });
+
+  it("cancels main-thread remote sync callbacks through provider abort signals", async () => {
+    const transport = createMemoryTransport();
+    let createSignal: AbortSignal | undefined;
+    let executeSignal: AbortSignal | undefined;
+    let resolveCreatePlan: (value: RemoteSyncPlan) => void = () => undefined;
+    let resolveExecutePlan: (value: RemoteSyncResult) => void = () => undefined;
+
+    new ExtensionHostProtocolRuntime(transport, {
+      activate(request) {
+        request.context.remoteSync.registerProvider({
+          id: "notes.remote.sync",
+          title: "Remote Sync",
+          createPlan: (input) => {
+            createSignal = input.signal;
+            return new Promise((resolve) => {
+              resolveCreatePlan = resolve;
+            });
+          },
+          executePlan: (_plan, input) => {
+            executeSignal = input.signal;
+            return new Promise((resolve) => {
+              resolveExecutePlan = resolve;
+            });
+          }
+        });
+      }
+    });
+
+    transport.receive(createActivationMessage("activate-sync-cancel"));
+    await flushPromises();
+    transport.sent.length = 0;
+
+    const syncRequest = {
+      workspaceUri: "file://C:/Notes",
+      resources: [{
+        uri: "file://C:/Notes/A.md",
+        relativePath: "A.md",
+        kind: "file" as const
+      }],
+      direction: "push" as const
+    };
+    const plan = {
+      operations: [{
+        kind: "create" as const,
+        target: "remote" as const,
+        relativePath: "A.md" as const,
+        localUri: "file://C:/Notes/A.md"
+      }],
+      summary: {
+        creates: 1 as const,
+        updates: 0 as const,
+        deletes: 0 as const,
+        skips: 0 as const,
+        conflicts: 0 as const
+      }
+    };
+    const runtimePlan = {
+      operations: [{
+        kind: "create" as const,
+        target: "remote" as const,
+        relativePath: "A.md" as const,
+        localUri: URI.parse("file://C:/Notes/A.md")
+      }],
+      summary: plan.summary
+    };
+
+    transport.receive(createExtensionHostRemoteSyncCreatePlanRequestMessage(
+      "main-sync-cancel-1",
+      "notes.remote",
+      "notes.remote.sync",
+      syncRequest
+    ));
+    await flushPromises();
+
+    expect(createSignal).toBeDefined();
+    expect(createSignal?.aborted).toBe(false);
+    expect(transport.sent).toEqual([]);
+
+    transport.receive(createExtensionHostRemoteSyncCreatePlanCancelMessage(
+      "main-sync-cancel-1",
+      "notes.remote",
+      "notes.remote.sync"
+    ));
+    await flushPromises();
+
+    expect(createSignal?.aborted).toBe(true);
+    expect(transport.sent).toHaveLength(1);
+    expect(transport.sent[0]).toMatchObject({
+      type: extensionHostProtocolMessageTypes.apiError,
+      requestId: "main-sync-cancel-1",
+      extensionId: "notes.remote",
+      error: {
+        message: "Extension host remote sync create plan request cancelled",
+        name: "Error"
+      }
+    });
+
+    resolveCreatePlan(runtimePlan);
+    await flushPromises();
+
+    expect(transport.sent).toHaveLength(1);
+    transport.sent.length = 0;
+
+    transport.receive(createExtensionHostRemoteSyncExecutePlanRequestMessage(
+      "main-sync-cancel-2",
+      "notes.remote",
+      "notes.remote.sync",
+      plan,
+      syncRequest
+    ));
+    await flushPromises();
+
+    expect(executeSignal).toBeDefined();
+    expect(executeSignal?.aborted).toBe(false);
+    expect(transport.sent).toEqual([]);
+
+    transport.receive(createExtensionHostRemoteSyncExecutePlanCancelMessage(
+      "main-sync-cancel-2",
+      "notes.remote",
+      "notes.remote.sync"
+    ));
+    await flushPromises();
+
+    expect(executeSignal?.aborted).toBe(true);
+    expect(transport.sent).toHaveLength(1);
+    expect(transport.sent[0]).toMatchObject({
+      type: extensionHostProtocolMessageTypes.apiError,
+      requestId: "main-sync-cancel-2",
+      extensionId: "notes.remote",
+      error: {
+        message: "Extension host remote sync execute plan request cancelled",
+        name: "Error"
+      }
+    });
+
+    resolveExecutePlan({
+      ...runtimePlan,
+      completedAt: 123
+    });
+    await flushPromises();
+
+    expect(transport.sent).toHaveLength(1);
   });
 
   it("executes main-thread commands from the proxy context", async () => {
