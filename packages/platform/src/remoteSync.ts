@@ -387,8 +387,21 @@ export function createRemoteSyncManifestResourcesFromExecution(
           manifestByPath.delete(operation.relativePath);
         }
         break;
-      case "conflict":
       case "skip":
+        if (operation.target === "none") {
+          const local = localByPath.get(operation.relativePath);
+          const remote = remoteByPath.get(operation.relativePath);
+
+          if (local && remote) {
+            manifestByPath.set(operation.relativePath, createRemoteSyncManifestResourceFromExecutedSkip(
+              operation,
+              local,
+              remote
+            ));
+          }
+        }
+        break;
+      case "conflict":
         break;
     }
   }
@@ -708,6 +721,32 @@ function createRemoteSyncManifestResourceFromExecutedOperation(
     throw new Error(`Remote sync manifest update ${operation.relativePath} requires local and remote resources`);
   }
 
+  if (local.kind !== remote.kind) {
+    throw new Error(`Remote sync manifest update ${operation.relativePath} resource kind differs`);
+  }
+
+  const comparison = compareRemoteSyncResources(local, remote);
+
+  if (comparison !== "same") {
+    throw new Error(
+      comparison === "unknown"
+        ? `Remote sync manifest update ${operation.relativePath} resource state cannot be compared`
+        : `Remote sync manifest update ${operation.relativePath} resources are not synchronized`
+    );
+  }
+
+  return createRemoteSyncManifestResourceFromSyncedResources(
+    local,
+    remote,
+    operation.remoteId ?? remote.remoteId
+  );
+}
+
+function createRemoteSyncManifestResourceFromExecutedSkip(
+  operation: RemoteSyncOperation,
+  local: RemoteSyncResource,
+  remote: RemoteSyncRemoteResource
+): RemoteSyncManifestResource {
   if (local.kind !== remote.kind) {
     throw new Error(`Remote sync manifest update ${operation.relativePath} resource kind differs`);
   }

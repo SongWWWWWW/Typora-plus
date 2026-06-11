@@ -85,6 +85,8 @@ export function createRemoteSyncRawMirrorProvider(options: RemoteSyncRawMirrorPr
       const operations = getExecutableRawMirrorOperations(plan);
 
       if (operations.length === 0) {
+        await refreshRawMirrorManifestFromNoOpPlan(options, request, plan);
+
         return {
           operations: plan.operations,
           summary: summarizeRawMirrorOperations(plan.operations)
@@ -120,6 +122,48 @@ export function createRemoteSyncRawMirrorProvider(options: RemoteSyncRawMirrorPr
       };
     }
   };
+}
+
+async function refreshRawMirrorManifestFromNoOpPlan(
+  options: RemoteSyncRawMirrorProviderOptions,
+  request: RemoteSyncPlanRequest,
+  plan: RemoteSyncPlan
+): Promise<void> {
+  if (!canRefreshRawMirrorManifestFromNoOpPlan(plan, request)) {
+    return;
+  }
+
+  const manifestResources = readRawMirrorManifestResources(options, request);
+  const refreshedResources = createRemoteSyncManifestResourcesFromExecution({
+    manifestResources,
+    localResources: request.resources,
+    remoteResources: await options.adapter.listResources(createRawMirrorListRequest(request)),
+    operations: plan.operations
+  });
+
+  if (!areRawMirrorManifestResourcesEqual(manifestResources, refreshedResources)) {
+    writeRawMirrorManifestResources(options, request, refreshedResources);
+  }
+}
+
+function canRefreshRawMirrorManifestFromNoOpPlan(
+  plan: RemoteSyncPlan,
+  request: RemoteSyncPlanRequest
+): boolean {
+  const localPaths = new Set(request.resources.map((resource) => resource.relativePath));
+
+  return plan.operations.some((operation) =>
+    operation.kind === "skip" &&
+    operation.target === "none" &&
+    localPaths.has(operation.relativePath)
+  );
+}
+
+function areRawMirrorManifestResourcesEqual(
+  left: readonly RemoteSyncManifestResource[],
+  right: readonly RemoteSyncManifestResource[]
+): boolean {
+  return JSON.stringify(left) === JSON.stringify(right);
 }
 
 function createRawMirrorListRequest(request: RemoteSyncPlanRequest): RemoteSyncRawMirrorListRequest {

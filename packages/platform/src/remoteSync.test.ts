@@ -948,6 +948,55 @@ describe("remote sync service", () => {
     ]);
   });
 
+  it("refreshes manifests from verified skip operations", () => {
+    const resources = createRemoteSyncManifestResourcesFromExecution({
+      manifestResources: [
+        manifestResource("missing-snapshot.md", { remoteId: "missing-snapshot", contentHash: "old" }),
+        manifestResource("remote-id-drift.md", { remoteId: "old-remote-id", contentHash: "same" })
+      ],
+      localResources: [
+        localResource("new-baseline.md", { contentHash: "same", size: 10, mtime: 1 }),
+        localResource("remote-id-drift.md", { contentHash: "same" })
+      ],
+      remoteResources: [
+        remoteResource("new-baseline.md", { remoteId: "new-baseline", contentHash: "same", size: 10, mtime: 1 }),
+        remoteResource("remote-id-drift.md", { remoteId: "new-remote-id", contentHash: "same" })
+      ],
+      operations: [
+        {
+          kind: "skip",
+          target: "none",
+          relativePath: "missing-snapshot.md"
+        },
+        {
+          kind: "skip",
+          target: "none",
+          relativePath: "new-baseline.md",
+          localUri: URI.file("C:/Notes/new-baseline.md"),
+          remoteId: "new-baseline"
+        },
+        {
+          kind: "skip",
+          target: "none",
+          relativePath: "remote-id-drift.md",
+          localUri: URI.file("C:/Notes/remote-id-drift.md"),
+          remoteId: "new-remote-id"
+        }
+      ]
+    });
+
+    expect(resources).toEqual([
+      manifestResource("missing-snapshot.md", { remoteId: "missing-snapshot", contentHash: "old" }),
+      manifestResource("new-baseline.md", {
+        remoteId: "new-baseline",
+        contentHash: "same",
+        size: 10,
+        mtime: 1
+      }),
+      manifestResource("remote-id-drift.md", { remoteId: "new-remote-id", contentHash: "same" })
+    ]);
+  });
+
   it("removes manifest baselines for executed delete operations", () => {
     expect(createRemoteSyncManifestResourcesFromExecution({
       manifestResources: [

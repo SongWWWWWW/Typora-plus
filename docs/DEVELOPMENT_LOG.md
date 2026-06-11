@@ -8137,3 +8137,31 @@ Review:
 Known limitations:
 
 - The diagnostics still validate the generic raw mirror gateway contract; direct Feishu Drive token lifecycle, remote folder mapping, pagination, and upload-session behavior remain adapter work.
+
+## 2026-06-12 - P2 Verified No-Op Manifest Refresh
+
+Completed:
+
+- Allowed provider-neutral manifest refresh to update baselines from `skip` operations only when local and remote snapshots are both present and provably synchronized.
+- Kept conflict operations, missing-side skips, and unverified skip states preserving the previous manifest.
+- Updated raw mirror skip-only execution to refresh last-sync baselines when safe without calling the execution adapter.
+- Covered no-op baseline bootstrap and remote id drift refresh with focused platform tests.
+
+Quality gate:
+
+- `npx vitest run packages/platform/src/remoteSync.test.ts packages/platform/src/remoteSyncRawMirrorProvider.test.ts`: passed, 2 files / 44 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 87 files / 830 tests, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Verified no-op manifest refresh hardcode scan for OpenAI endpoints, model ids, API keys, Feishu endpoints, OAuth/token/secret literals, and provider credentials: passed
+
+Review:
+
+- Already-synchronized local/remote files can now establish or refresh last-sync state, which matters for future cloud adapters that need durable remote object ids.
+- The no-op path still does not mutate local or remote content; it only records a baseline after the platform proves both sides match.
+- No Feishu endpoint, OAuth scope, token name, folder id, model id, provider id, storage path, or credential literal was added.
+
+Known limitations:
+
+- Direct Feishu Drive token lifecycle, folder traversal, pagination, upload-session handling, and Docs import remain future adapter work.

@@ -235,6 +235,53 @@ describe("remote sync raw mirror provider", () => {
     expect(executeOperations).not.toHaveBeenCalled();
   });
 
+  it("refreshes the manifest for verified no-op skip plans", async () => {
+    const storage = createMemoryStorage();
+    const executeOperations = vi.fn();
+    const listResources = vi.fn(() => [remoteResource("daily/today.md")]);
+    const provider = createRemoteSyncRawMirrorProvider({
+      id: "raw.mirror",
+      title: "Raw Mirror",
+      manifestStore: new RemoteSyncManifestStore({ storage }),
+      adapter: {
+        listResources,
+        executeOperations
+      }
+    });
+    const request = planRequest();
+    const plan = {
+      operations: [{
+        kind: "skip",
+        target: "none",
+        relativePath: "daily/today.md",
+        localUri: request.resources[0]!.uri,
+        remoteId: "remote:daily/today.md"
+      }],
+      summary: {
+        creates: 0,
+        updates: 0,
+        deletes: 0,
+        skips: 1,
+        conflicts: 0
+      }
+    } as const;
+
+    await expect(provider.executePlan(plan, request)).resolves.toEqual({
+      operations: plan.operations,
+      summary: {
+        creates: 0,
+        updates: 0,
+        deletes: 0,
+        skips: 1,
+        conflicts: 0
+      }
+    });
+
+    expect(executeOperations).not.toHaveBeenCalled();
+    expect(listResources).toHaveBeenCalledTimes(1);
+    expect([...storage.values.values()][0]).toContain("\"remoteId\":\"remote:daily/today.md\"");
+  });
+
   it("rejects dry-run execution requests before adapter calls", async () => {
     const adapter = {
       listResources: vi.fn(() => []),
