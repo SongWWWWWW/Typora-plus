@@ -59,10 +59,14 @@ import {
   type WorkbenchRemoteSyncPlanResult
 } from "./workbenchRemoteSyncActions";
 import {
+  appendWorkbenchRemoteSyncProgressHistory,
+  createWorkbenchRemoteSyncDialogProgressPreview,
   createWorkbenchRemoteSyncDialogOperationPreview,
   createWorkbenchRemoteSyncDialogExecutionState,
   formatWorkbenchRemoteSyncOperationDetail,
-  formatWorkbenchRemoteSyncSummary
+  formatWorkbenchRemoteSyncProgress,
+  formatWorkbenchRemoteSyncSummary,
+  getWorkbenchRemoteSyncLatestProgress
 } from "./workbenchRemoteSyncDialogModel";
 import {
   applyWorkbenchStateContext,
@@ -148,6 +152,10 @@ import {
   registerWorkbenchThemeSynchronization
 } from "./workbenchThemeSynchronization";
 
+const remoteSyncOperationPreviewLimit = 6;
+const remoteSyncProgressHistoryLimit = 20;
+const remoteSyncProgressPreviewLimit = 6;
+
 export interface WorkbenchApplicationProps {
   readonly services: WorkbenchServices;
 }
@@ -182,7 +190,7 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
   const [remoteSyncPlan, setRemoteSyncPlan] = useState<WorkbenchRemoteSyncPlanResult | undefined>();
   const [remoteSyncExecution, setRemoteSyncExecution] = useState<WorkbenchRemoteSyncExecutionResult | undefined>();
   const [remoteSyncExecuting, setRemoteSyncExecuting] = useState(false);
-  const [remoteSyncProgress, setRemoteSyncProgress] = useState<RemoteSyncProgress | undefined>();
+  const [remoteSyncProgressHistory, setRemoteSyncProgressHistory] = useState<readonly RemoteSyncProgress[]>([]);
   const [saveConflict, setSaveConflict] = useState<FileSaveConflict | undefined>();
   const [indexStatus, setIndexStatus] = useState<WorkspaceIndexStatus>(initialState.indexStatus);
   const [commandRevision, setCommandRevision] = useState(0);
@@ -317,7 +325,7 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
         setRemoteSyncExecuting(false);
         setRemoteSyncPlan(result);
         setRemoteSyncExecution(undefined);
-        setRemoteSyncProgress(undefined);
+        setRemoteSyncProgressHistory([]);
       },
       setSaveConflict,
       setSettingsOpen,
@@ -510,14 +518,14 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
           result={remoteSyncPlan}
           execution={remoteSyncExecution}
           executing={remoteSyncExecuting}
-          progress={remoteSyncProgress}
+          progressEvents={remoteSyncProgressHistory}
           onClose={() => {
             remoteSyncExecutionAbortRef.current?.abort();
             remoteSyncExecutionAbortRef.current = null;
             setRemoteSyncExecuting(false);
             setRemoteSyncPlan(undefined);
             setRemoteSyncExecution(undefined);
-            setRemoteSyncProgress(undefined);
+            setRemoteSyncProgressHistory([]);
           }}
           onCancel={() => remoteSyncExecutionAbortRef.current?.abort()}
           onExecute={() => {
@@ -529,7 +537,7 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
             remoteSyncExecutionAbortRef.current = controller;
             setRemoteSyncExecuting(true);
             setRemoteSyncExecution(undefined);
-            setRemoteSyncProgress(undefined);
+            setRemoteSyncProgressHistory([]);
 
             return runWorkbenchAction(
               async () => {
@@ -539,7 +547,11 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
                   },
                   onProgress: (progress) => {
                     if (remoteSyncExecutionAbortRef.current === controller && !controller.signal.aborted) {
-                      setRemoteSyncProgress(progress);
+                      setRemoteSyncProgressHistory((progressEvents) =>
+                        appendWorkbenchRemoteSyncProgressHistory(progressEvents, progress, {
+                          maxEvents: remoteSyncProgressHistoryLimit
+                        })
+                      );
                     }
                   },
                   signal: controller.signal
@@ -547,7 +559,6 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
 
                 if (remoteSyncExecutionAbortRef.current === controller && !controller.signal.aborted) {
                   setRemoteSyncExecution(execution);
-                  setRemoteSyncProgress(undefined);
                 }
 
                 return execution;
@@ -1304,7 +1315,7 @@ function RemoteSyncPlanDialog({
   executing,
   onCancel,
   onExecute,
-  progress,
+  progressEvents,
   result,
   onClose
 }: {
@@ -1312,24 +1323,30 @@ function RemoteSyncPlanDialog({
   readonly executing: boolean;
   readonly onCancel: () => void;
   readonly onExecute: () => Promise<boolean>;
-  readonly progress: RemoteSyncProgress | undefined;
+  readonly progressEvents: readonly RemoteSyncProgress[];
   readonly result: WorkbenchRemoteSyncPlanResult;
   readonly onClose: () => void;
 }) {
   const planOperationPreview = createWorkbenchRemoteSyncDialogOperationPreview(result.plan.operations, {
     emptyMessage: "No operations planned",
-    maxOperations: 6
+    maxOperations: remoteSyncOperationPreviewLimit
   });
   const executionOperationPreview = execution
     ? createWorkbenchRemoteSyncDialogOperationPreview(execution.result.operations, {
       emptyMessage: "No operations executed",
-      maxOperations: 6
+      maxOperations: remoteSyncOperationPreviewLimit
+    })
+    : undefined;
+  const progressPreview = progressEvents.length > 0
+    ? createWorkbenchRemoteSyncDialogProgressPreview(progressEvents, {
+      emptyMessage: "No progress reported",
+      maxEvents: remoteSyncProgressPreviewLimit
     })
     : undefined;
   const executionState = createWorkbenchRemoteSyncDialogExecutionState(result.plan, {
     executing,
     execution,
-    progress
+    progress: getWorkbenchRemoteSyncLatestProgress(progressEvents)
   });
 
   return (
@@ -1366,6 +1383,9 @@ function RemoteSyncPlanDialog({
             ) : (
               <div className="tp-empty-row">{executionState.statusMessage}</div>
             )
+          ) : null}
+          {progressPreview ? (
+            <RemoteSyncProgressPreviewList preview={progressPreview} />
           ) : null}
           {executionOperationPreview ? (
             <RemoteSyncOperationPreviewList preview={executionOperationPreview} />
@@ -1424,6 +1444,36 @@ function RemoteSyncOperationPreviewList({
       ))}
       {preview.hiddenOperationCount > 0 ? (
         <div className="tp-empty-row">{preview.hiddenOperationCount} more operations</div>
+      ) : null}
+    </div>
+  );
+}
+
+function RemoteSyncProgressPreviewList({
+  preview
+}: {
+  readonly preview: {
+    readonly emptyMessage: string;
+    readonly hiddenProgressCount: number;
+    readonly progressEvents: readonly RemoteSyncProgress[];
+  };
+}) {
+  if (preview.progressEvents.length === 0) {
+    return <div className="tp-empty-row">{preview.emptyMessage}</div>;
+  }
+
+  return (
+    <div className="tp-result-list">
+      {preview.progressEvents.map((progress, index) => (
+        <div className="tp-result-row" key={`${progress.message}:${index}`}>
+          <span className="tp-result-line">progress</span>
+          <span className="tp-result-body">
+            <span className="tp-result-preview">{formatWorkbenchRemoteSyncProgress(progress)}</span>
+          </span>
+        </div>
+      ))}
+      {preview.hiddenProgressCount > 0 ? (
+        <div className="tp-empty-row">{preview.hiddenProgressCount} earlier progress events</div>
       ) : null}
     </div>
   );

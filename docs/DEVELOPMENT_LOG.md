@@ -7110,3 +7110,36 @@ Known limitations:
 - Richer remote sync conflict-resolution UI is still not implemented.
 - Progress events are latest-state feedback, not a retained execution timeline.
 - Workspace AI context is keyword/snippet based, not semantic or vector retrieval.
+
+## 2026-06-12 - P2 Remote Sync Progress History
+
+Completed:
+
+- Added focused Workbench model helpers for bounded remote sync progress history, latest-progress lookup, and progress preview slicing.
+- Changed the remote sync dialog state from a single progress event to a bounded per-execution progress history.
+- Rendered the latest progress in execution status while also showing the most recent progress events in the dialog.
+- Kept progress history provider-neutral and cleared it on new plan, new execution, or dialog close.
+- Updated maintained docs without adding Feishu-specific provider ids, endpoints, OAuth scopes, tokens, storage paths, or credentials.
+
+Quality gate:
+
+- `npx vitest run packages/workbench/src/workbenchRemoteSyncDialogModel.test.ts packages/workbench/src/workbenchRemoteSyncActions.test.ts`: passed, 2 files / 16 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 75 files / 705 tests, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Workbench implementation hardcode scan for endpoint/secret/token/model patterns: passed
+- Dev server smoke check at `http://127.0.0.1:5173/`: status 200 and root element present
+
+Review:
+
+- Progress history policy lives in `workbenchRemoteSyncDialogModel` rather than JSX.
+- The UI keeps both in-memory history and visible preview bounded so long-running providers cannot grow the dialog unbounded.
+- The platform provider contract remains unchanged; this stage only improves Workbench presentation of normalized progress events.
+
+Known limitations:
+
+- Feishu OAuth and a built-in Feishu provider remain future work.
+- Richer remote sync conflict-resolution UI is still not implemented.
+- Progress history is dialog-scoped and is not persisted across dialog close or application restart.
+- Workspace AI context is keyword/snippet based, not semantic or vector retrieval.

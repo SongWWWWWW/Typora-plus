@@ -12,6 +12,12 @@ export interface WorkbenchRemoteSyncDialogOperationPreview {
   readonly operations: readonly RemoteSyncOperation[];
 }
 
+export interface WorkbenchRemoteSyncDialogProgressPreview {
+  readonly emptyMessage: string;
+  readonly hiddenProgressCount: number;
+  readonly progressEvents: readonly RemoteSyncProgress[];
+}
+
 export interface WorkbenchRemoteSyncDialogExecutionState {
   readonly canCancel: boolean;
   readonly canExecute: boolean;
@@ -89,6 +95,42 @@ export function createWorkbenchRemoteSyncDialogOperationPreview(
     emptyMessage: options.emptyMessage,
     hiddenOperationCount: Math.max(operations.length - visibleOperations.length, 0),
     operations: visibleOperations
+  };
+}
+
+export function appendWorkbenchRemoteSyncProgressHistory(
+  progressEvents: readonly RemoteSyncProgress[],
+  progress: RemoteSyncProgress,
+  options: {
+    readonly maxEvents: number;
+  }
+): readonly RemoteSyncProgress[] {
+  const maxEvents = Math.max(0, Math.floor(options.maxEvents));
+  const nextProgressEvents = [...progressEvents, progress];
+
+  return nextProgressEvents.slice(Math.max(nextProgressEvents.length - maxEvents, 0));
+}
+
+export function getWorkbenchRemoteSyncLatestProgress(
+  progressEvents: readonly RemoteSyncProgress[]
+): RemoteSyncProgress | undefined {
+  return progressEvents[progressEvents.length - 1];
+}
+
+export function createWorkbenchRemoteSyncDialogProgressPreview(
+  progressEvents: readonly RemoteSyncProgress[],
+  options: {
+    readonly emptyMessage: string;
+    readonly maxEvents: number;
+  }
+): WorkbenchRemoteSyncDialogProgressPreview {
+  const maxEvents = Math.max(0, Math.floor(options.maxEvents));
+  const visibleProgressEvents = progressEvents.slice(Math.max(progressEvents.length - maxEvents, 0));
+
+  return {
+    emptyMessage: options.emptyMessage,
+    hiddenProgressCount: Math.max(progressEvents.length - visibleProgressEvents.length, 0),
+    progressEvents: visibleProgressEvents
   };
 }
 

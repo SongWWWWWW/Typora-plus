@@ -2,11 +2,14 @@ import { describe, expect, it } from "vitest";
 import { URI } from "@typora-plus/base";
 import type { RemoteSyncPlan, RemoteSyncResult } from "@typora-plus/platform";
 import {
+  appendWorkbenchRemoteSyncProgressHistory,
+  createWorkbenchRemoteSyncDialogProgressPreview,
   createWorkbenchRemoteSyncDialogOperationPreview,
   createWorkbenchRemoteSyncDialogExecutionState,
   formatWorkbenchRemoteSyncOperationDetail,
   formatWorkbenchRemoteSyncProgress,
-  formatWorkbenchRemoteSyncSummary
+  formatWorkbenchRemoteSyncSummary,
+  getWorkbenchRemoteSyncLatestProgress
 } from "./workbenchRemoteSyncDialogModel";
 
 describe("workbench remote sync dialog model", () => {
@@ -121,6 +124,41 @@ describe("workbench remote sync dialog model", () => {
     });
   });
 
+  it("keeps bounded progress history with the newest events retained", () => {
+    const first = progress("Scanning");
+    const second = progress("Uploading");
+    const third = progress("Finalizing");
+    const history = [first, second, third].reduce<readonly ReturnType<typeof progress>[]>(
+      (events, event) => appendWorkbenchRemoteSyncProgressHistory(events, event, { maxEvents: 2 }),
+      []
+    );
+
+    expect(history).toEqual([second, third]);
+    expect(getWorkbenchRemoteSyncLatestProgress(history)).toBe(third);
+    expect(appendWorkbenchRemoteSyncProgressHistory(history, progress("Ignored"), { maxEvents: -1 }))
+      .toEqual([]);
+  });
+
+  it("creates bounded progress previews from the latest events", () => {
+    const preview = createWorkbenchRemoteSyncDialogProgressPreview([
+      progress("Scanning"),
+      progress("Uploading"),
+      progress("Finalizing")
+    ], {
+      emptyMessage: "No progress reported",
+      maxEvents: 2
+    });
+
+    expect(preview).toEqual({
+      emptyMessage: "No progress reported",
+      hiddenProgressCount: 1,
+      progressEvents: [
+        progress("Uploading"),
+        progress("Finalizing")
+      ]
+    });
+  });
+
   it("formats operation details with provider messages when present", () => {
     expect(formatWorkbenchRemoteSyncOperationDetail(operation("update", "A.md", "uploaded")))
       .toBe("remote: uploaded");
@@ -168,6 +206,12 @@ function operation(
     target,
     relativePath,
     ...(message ? { message } : {})
+  };
+}
+
+function progress(message: string) {
+  return {
+    message
   };
 }
 
