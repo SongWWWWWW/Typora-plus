@@ -6799,3 +6799,35 @@ Known limitations:
 - No live model discovery yet.
 - Request cancellation does not yet cross the Electron IPC boundary.
 - Streaming, tool calls, workspace-grounded retrieval, Feishu OAuth, and a built-in Feishu provider remain future work.
+
+## 2026-06-11 - P2 Native AI Request Cancellation
+
+Completed:
+
+- Added generated native Responses request ids at the platform bridge boundary so renderer-side requests can be correlated without exposing provider credentials or policy to Workbench.
+- Added a native AI cancel IPC channel from preload to Electron main.
+- Tracked active main-process Responses fetches by webContents id plus request id and aborts only the matching request, keeping cancellation scoped to the renderer that started it.
+- Wired `AbortSignal` from `IAiService.requestText()` through the native bridge helper to the cancel IPC channel.
+- Kept the direct injected `readSecret + transport` provider path unchanged for tests and non-Electron adapters; it already receives the signal directly.
+- Updated maintained docs to reflect that native Responses cancellation now crosses the Electron IPC boundary, while extension-host protocol cancellation is still future work.
+
+Quality gate:
+
+- `npx vitest run packages/platform/src/responsesAiProvider.test.ts packages/platform/src/ai.test.ts packages/workbench/src/workbenchAiProviderDiagnostics.test.ts`: passed, 3 files / 19 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 73 files / 681 tests, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Dev server smoke check at `http://127.0.0.1:5173/`: status 200 and root element present
+
+Review:
+
+- No provider ids, endpoints, model ids, tokens, OAuth scopes, storage paths, or credentials were hardcoded.
+- Workbench and React still do not know about Electron IPC; cancellation enters through the existing `AbortSignal` on `AiTextRequest`.
+- Main-process cancellation does not infer provider behavior. It aborts the bounded fetch owned by the native bridge and leaves provider request shaping in the platform Responses adapter.
+
+Known limitations:
+
+- No live model discovery yet.
+- Extension-host AI provider cancellation is still local to the service call and is not represented as a protocol message.
+- Streaming, tool calls, workspace-grounded retrieval, Feishu OAuth, and a built-in Feishu provider remain future work.

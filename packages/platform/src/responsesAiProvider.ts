@@ -7,6 +7,8 @@ import type {
 } from "./ai";
 import type { AiProviderConfiguration } from "./configuration";
 
+let nextNativeResponsesRequestId = 0;
+
 export interface ResponsesAiProviderTransportRequest {
   readonly url: string;
   readonly method: "POST";
@@ -41,10 +43,12 @@ export interface NativeResponsesAiBridge {
   readonly isAvailable: boolean;
   setSecret(secretRef: string, value: string): Promise<boolean>;
   deleteSecret(secretRef: string): Promise<boolean>;
+  cancelResponses?(requestId: string): void;
   requestResponses(request: NativeResponsesAiRequest): Promise<unknown>;
 }
 
 export interface NativeResponsesAiRequest {
+  readonly requestId: string;
   readonly endpointUrl: string;
   readonly secretRef: string;
   readonly body: string;
@@ -83,12 +87,45 @@ export function createNativeResponsesAiProviderFactoryOptions(
   }
 
   return {
-    request: (request) => bridge.requestResponses({
+    request: (request) => requestNativeResponsesWithBridge(bridge, request)
+  };
+}
+
+async function requestNativeResponsesWithBridge(
+  bridge: NativeResponsesAiBridge,
+  request: ResponsesAiProviderRequest
+): Promise<unknown> {
+  if (request.signal?.aborted) {
+    throw new Error("AI Responses request was aborted");
+  }
+
+  const requestId = createNativeResponsesRequestId();
+  const abortListener = request.signal && bridge.cancelResponses
+    ? () => {
+        try {
+          bridge.cancelResponses?.(requestId);
+        } catch {
+          // Cancellation is best-effort; the request promise remains the source of truth.
+        }
+      }
+    : undefined;
+
+  if (abortListener) {
+    request.signal?.addEventListener("abort", abortListener, { once: true });
+  }
+
+  try {
+    return await bridge.requestResponses({
+      requestId,
       endpointUrl: request.endpointUrl,
       secretRef: request.secretRef,
       body: request.body
-    })
-  };
+    });
+  } finally {
+    if (abortListener) {
+      request.signal?.removeEventListener("abort", abortListener);
+    }
+  }
 }
 
 function requestResponses(
@@ -111,6 +148,11 @@ function requestResponses(
   }
 
   return requestResponsesWithSecret(configuration, options.readSecret, options.transport, body, signal);
+}
+
+function createNativeResponsesRequestId(): string {
+  nextNativeResponsesRequestId += 1;
+  return `responses:${nextNativeResponsesRequestId}`;
 }
 
 async function requestResponsesWithSecret(

@@ -3,6 +3,7 @@ import path from "node:path";
 import { app, ipcMain, safeStorage } from "electron";
 
 export const nativeAiIpcChannels = {
+  cancelResponses: "typora-plus:ai:responses:cancel",
   deleteSecret: "typora-plus:ai:secret:delete",
   requestResponses: "typora-plus:ai:responses:request",
   setSecret: "typora-plus:ai:secret:set"
@@ -17,6 +18,7 @@ export interface NativeAiConfig {
 }
 
 interface SerializedNativeResponsesRequest {
+  readonly requestId: string;
   readonly endpointUrl: string;
   readonly secretRef: string;
   readonly body: string;
@@ -26,6 +28,8 @@ interface SerializedAiSecretStore {
   readonly version?: number;
   readonly values?: unknown;
 }
+
+const activeResponsesRequests = new Map<string, AbortController>();
 
 export function registerNativeAiIpc(config: NativeAiConfig): void {
   ipcMain.handle(nativeAiIpcChannels.setSecret, async (_event, secretRef: string, value: string) => {
@@ -38,9 +42,13 @@ export function registerNativeAiIpc(config: NativeAiConfig): void {
     return true;
   });
 
-  ipcMain.handle(nativeAiIpcChannels.requestResponses, async (_event, request: SerializedNativeResponsesRequest) =>
-    requestNativeResponses(config, request)
+  ipcMain.handle(nativeAiIpcChannels.requestResponses, async (event, request: SerializedNativeResponsesRequest) =>
+    requestNativeResponses(config, event.sender.id, request)
   );
+
+  ipcMain.on(nativeAiIpcChannels.cancelResponses, (event, requestId: unknown) => {
+    cancelNativeResponsesRequest(event.sender.id, requestId);
+  });
 }
 
 function setNativeAiSecret(config: NativeAiConfig, secretRef: unknown, value: unknown): void {
@@ -70,6 +78,7 @@ function deleteNativeAiSecret(config: NativeAiConfig, secretRef: unknown): void 
 
 async function requestNativeResponses(
   config: NativeAiConfig,
+  webContentsId: number,
   request: unknown
 ): Promise<unknown> {
   const normalizedRequest = normalizeResponsesRequest(config, request);
@@ -80,6 +89,13 @@ async function requestNativeResponses(
   }
 
   const controller = new AbortController();
+  const requestKey = createResponsesRequestKey(webContentsId, normalizedRequest.requestId);
+
+  if (activeResponsesRequests.has(requestKey)) {
+    throw new Error("AI Responses request id is already active");
+  }
+
+  activeResponsesRequests.set(requestKey, controller);
   const timeout = config.requestTimeoutMs > 0
     ? setTimeout(() => controller.abort(), config.requestTimeoutMs)
     : undefined;
@@ -116,7 +132,18 @@ async function requestNativeResponses(
     if (timeout) {
       clearTimeout(timeout);
     }
+    activeResponsesRequests.delete(requestKey);
   }
+}
+
+function cancelNativeResponsesRequest(webContentsId: number, requestId: unknown): void {
+  const normalizedRequestId = readOptionalRequestId(requestId);
+
+  if (!normalizedRequestId) {
+    return;
+  }
+
+  activeResponsesRequests.get(createResponsesRequestKey(webContentsId, normalizedRequestId))?.abort();
 }
 
 function readNativeAiSecret(config: NativeAiConfig, secretRef: string): string | undefined {
@@ -163,10 +190,15 @@ function normalizeResponsesRequest(
   const body = normalizeRequestBody(config, value.body);
 
   return {
+    requestId: readRequiredRequestId(value.requestId),
     endpointUrl,
     secretRef: normalizeSecretRef(value.secretRef),
     body
   };
+}
+
+function createResponsesRequestKey(webContentsId: number, requestId: string): string {
+  return `${webContentsId}:${requestId}`;
 }
 
 function normalizeEndpointUrl(value: unknown): string {
@@ -218,6 +250,24 @@ function normalizeSecretValue(value: unknown, config: NativeAiConfig): string {
   }
 
   return value;
+}
+
+function readRequiredRequestId(value: unknown): string {
+  const normalized = readOptionalRequestId(value);
+
+  if (!normalized) {
+    throw new Error("AI Responses request id is invalid");
+  }
+
+  return normalized;
+}
+
+function readOptionalRequestId(value: unknown): string | undefined {
+  if (typeof value !== "string" || value.length > 128) {
+    return undefined;
+  }
+
+  return /^[A-Za-z0-9_.:-]+$/.test(value) ? value : undefined;
 }
 
 function encryptSecret(value: string): string {

@@ -13,8 +13,14 @@ contextBridge.exposeInMainWorld("typoraPlus", {
       ipcRenderer.invoke(nativeAiIpcChannels.setSecret, secretRef, value),
     deleteSecret: (secretRef: string) =>
       ipcRenderer.invoke(nativeAiIpcChannels.deleteSecret, secretRef),
-    requestResponses: (request: { readonly endpointUrl: string; readonly secretRef: string; readonly body: string }) =>
-      ipcRenderer.invoke(nativeAiIpcChannels.requestResponses, request)
+    cancelResponses: (requestId: string) =>
+      ipcRenderer.send(nativeAiIpcChannels.cancelResponses, requestId),
+    requestResponses: (request: {
+      readonly requestId: string;
+      readonly endpointUrl: string;
+      readonly secretRef: string;
+      readonly body: string;
+    }) => ipcRenderer.invoke(nativeAiIpcChannels.requestResponses, request)
   },
   configuration: {
     isAvailable: true,

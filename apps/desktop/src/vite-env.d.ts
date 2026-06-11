@@ -12,7 +12,9 @@ interface Window {
       readonly isAvailable: boolean;
       setSecret(secretRef: string, value: string): Promise<boolean>;
       deleteSecret(secretRef: string): Promise<boolean>;
+      cancelResponses(requestId: string): void;
       requestResponses(request: {
+        readonly requestId: string;
         readonly endpointUrl: string;
         readonly secretRef: string;
         readonly body: string;

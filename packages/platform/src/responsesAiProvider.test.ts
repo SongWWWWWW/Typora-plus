@@ -4,6 +4,7 @@ import {
   createConfiguredAiProviders,
   createNativeResponsesAiProviderFactoryOptions,
   createResponsesAiProvider,
+  type NativeResponsesAiRequest,
   type ResponsesAiProviderTransportRequest
 } from "./responsesAiProvider";
 import type { AiProviderConfiguration } from "./configuration";
@@ -198,6 +199,7 @@ describe("Responses AI provider", () => {
     });
 
     expect(bridge.requestResponses).toHaveBeenCalledWith({
+      requestId: expect.stringMatching(/^responses:\d+$/),
       endpointUrl: "https://api.example.test/v1/responses",
       secretRef: "typora-plus.ai.notes",
       body: JSON.stringify({
@@ -207,6 +209,66 @@ describe("Responses AI provider", () => {
         store: false
       })
     });
+  });
+
+  it("forwards native bridge cancellation when the request signal aborts", async () => {
+    const controller = new AbortController();
+    let resolveRequest: (value: unknown) => void = () => undefined;
+    const bridge = {
+      isAvailable: true,
+      setSecret: vi.fn(),
+      deleteSecret: vi.fn(),
+      cancelResponses: vi.fn(),
+      requestResponses: vi.fn((_request: NativeResponsesAiRequest) => new Promise<unknown>((resolve) => {
+        resolveRequest = resolve;
+      }))
+    };
+    const options = createNativeResponsesAiProviderFactoryOptions(bridge);
+    const provider = createResponsesAiProvider(configuration(), options!);
+    const pending = provider.requestText({
+      instruction: "Summarize.",
+      input: "# Note",
+      signal: controller.signal
+    });
+
+    await Promise.resolve();
+
+    const requestId = bridge.requestResponses.mock.calls[0]?.[0].requestId;
+    expect(requestId).toEqual(expect.stringMatching(/^responses:\d+$/));
+
+    controller.abort();
+
+    expect(bridge.cancelResponses).toHaveBeenCalledWith(requestId);
+
+    resolveRequest({ output_text: "Summary" });
+
+    await expect(pending).resolves.toEqual({
+      value: "Summary",
+      model: "notes-model"
+    });
+  });
+
+  it("does not start native bridge requests when the signal is already aborted", async () => {
+    const controller = new AbortController();
+    const bridge = {
+      isAvailable: true,
+      setSecret: vi.fn(),
+      deleteSecret: vi.fn(),
+      cancelResponses: vi.fn(),
+      requestResponses: vi.fn()
+    };
+    const options = createNativeResponsesAiProviderFactoryOptions(bridge);
+    const provider = createResponsesAiProvider(configuration(), options!);
+
+    controller.abort();
+
+    await expect(provider.requestText({
+      instruction: "Summarize.",
+      input: "# Note",
+      signal: controller.signal
+    })).rejects.toThrow("AI Responses request was aborted");
+    expect(bridge.requestResponses).not.toHaveBeenCalled();
+    expect(bridge.cancelResponses).not.toHaveBeenCalled();
   });
 
   it("does not create factory options when the native bridge is unavailable", () => {
