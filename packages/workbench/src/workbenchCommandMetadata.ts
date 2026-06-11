@@ -5,7 +5,8 @@ export const workbenchCommandCategories = {
   file: "File",
   workbench: "Workbench",
   editor: "Editor",
-  ai: "AI"
+  ai: "AI",
+  remoteSync: "Remote Sync"
 } as const satisfies Record<string, string>;
 
 export const workbenchCommandMetadata = {
@@ -110,6 +111,13 @@ export const workbenchCommandMetadata = {
       id: workbenchCommandIds.ai.summarizeActiveNote,
       title: "Summarize Active Note",
       category: workbenchCommandCategories.ai
+    }
+  },
+  remoteSync: {
+    planWorkspace: {
+      id: workbenchCommandIds.remoteSync.planWorkspace,
+      title: "Plan Workspace Sync",
+      category: workbenchCommandCategories.remoteSync
     }
   },
   theme: {

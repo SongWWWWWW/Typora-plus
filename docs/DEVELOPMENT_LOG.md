@@ -6519,3 +6519,34 @@ Known limitations:
 
 - No built-in Feishu provider, OAuth flow, secret storage, Electron network bridge, sync command UI, sync preview UI, or external extension loader exists yet.
 - Remote sync protocol cancellation and streaming progress messages are not modeled yet.
+
+## 2026-06-11 - P2 Workspace Remote Sync Plan Command
+
+Completed:
+
+- Added a Workbench remote sync request model that builds provider-neutral dry-run workspace plan requests from the current `WorkspaceState`.
+- Added a Workbench remote sync action runner that selects the default remote sync provider and calls `IRemoteSyncService.createPlan()`.
+- Added the dynamic `remoteSync.planWorkspace` command and command metadata, registered only when both a workspace and remote sync provider are available.
+- Added a bounded remote sync plan dialog that shows provider id, direction, dry-run state, operation summary, and a small operation preview without executing the plan.
+- Preserved provider neutrality: no Feishu endpoint, OAuth scope, token, storage path, OpenAI, Codex, model id, credential behavior, or provider id was hard-coded.
+- Updated maintained docs to record the safe plan-first sync flow.
+
+Quality gate:
+
+- `npx vitest run packages/workbench/src/workbenchRemoteSyncRequestModel.test.ts packages/workbench/src/workbenchRemoteSyncActions.test.ts packages/workbench/src/workbenchCommandIds.test.ts packages/workbench/src/workbenchCommandMetadata.test.ts packages/workbench/src/workbenchCommandRegistration.test.ts`: passed, 5 files / 18 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 67 files / 643 tests, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Dev server smoke check: passed at `http://127.0.0.1:5173`; status 200 and root element present
+
+Review:
+
+- The sync UX now has a non-destructive entry point: users can request a provider-supplied plan and inspect the result before any future write operation is considered.
+- Workbench owns request construction and result presentation through focused helpers; provider implementation still lives behind `IRemoteSyncService` or extension/runtime registration.
+- The command follows the existing AI command pattern: no provider means no visible command, and provider selection stays metadata-based and stable.
+
+Known limitations:
+
+- The plan dialog does not approve or execute sync operations yet.
+- No built-in Feishu provider, OAuth flow, secret storage, Electron network bridge, progress reporting, or conflict-resolution UI exists yet.

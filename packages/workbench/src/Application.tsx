@@ -48,6 +48,7 @@ import {
 } from "./workbenchAutoSave";
 import { registerWorkbenchCommands } from "./workbenchCommandRegistration";
 import { createWorkbenchCommandSurface } from "./workbenchCommandSurface";
+import type { WorkbenchRemoteSyncPlanResult } from "./workbenchRemoteSyncActions";
 import {
   applyWorkbenchStateContext,
   createWorkbenchCapabilityContext
@@ -160,6 +161,7 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
   const [selectedTag, setSelectedTag] = useState<string | undefined>();
   const [operationError, setOperationError] = useState<string | undefined>();
   const [aiResponse, setAiResponse] = useState<AiTextResponse | undefined>();
+  const [remoteSyncPlan, setRemoteSyncPlan] = useState<WorkbenchRemoteSyncPlanResult | undefined>();
   const [saveConflict, setSaveConflict] = useState<FileSaveConflict | undefined>();
   const [indexStatus, setIndexStatus] = useState<WorkspaceIndexStatus>(initialState.indexStatus);
   const [commandRevision, setCommandRevision] = useState(0);
@@ -287,13 +289,14 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
       setOperationError,
       setPaletteOpen,
       setQuickOpen,
+      setRemoteSyncPlan,
       setSaveConflict,
       setSettingsOpen,
       setSideView
     });
 
     return () => disposable.dispose();
-  }, [aiProviderRevision, configuration, services, workspace.files]);
+  }, [aiProviderRevision, configuration, remoteSyncProviderRevision, services, workspace.files]);
 
   useEffect(() => {
     const disposable = registerWorkbenchKeybindingDispatch(
@@ -458,6 +461,12 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
         <AiResponseDialog
           response={aiResponse}
           onClose={() => setAiResponse(undefined)}
+        />
+      ) : null}
+      {remoteSyncPlan ? (
+        <RemoteSyncPlanDialog
+          result={remoteSyncPlan}
+          onClose={() => setRemoteSyncPlan(undefined)}
         />
       ) : null}
       <CommandPalette
@@ -1127,6 +1136,82 @@ function AiResponseDialog({
       </section>
     </div>
   );
+}
+
+function RemoteSyncPlanDialog({
+  result,
+  onClose
+}: {
+  readonly result: WorkbenchRemoteSyncPlanResult;
+  readonly onClose: () => void;
+}) {
+  const visibleOperations = result.plan.operations.slice(0, 6);
+  const hiddenOperationCount = Math.max(result.plan.operations.length - visibleOperations.length, 0);
+
+  return (
+    <div className="tp-dialog-overlay" role="presentation" onMouseDown={onClose}>
+      <section
+        className="tp-dialog tp-ai-dialog"
+        role="dialog"
+        aria-label="Remote sync plan"
+        aria-modal="true"
+        onMouseDown={(event) => event.stopPropagation()}
+      >
+        <div className="tp-dialog-header">
+          <div className="tp-dialog-title tp-ai-dialog-title">
+            <RefreshCw size={18} />
+            <span>Remote Sync Plan</span>
+          </div>
+          <IconButton title="Close" onClick={onClose}>
+            <X size={16} />
+          </IconButton>
+        </div>
+        <div className="tp-ai-dialog-body">
+          <div className="tp-ai-dialog-meta">
+            <span>{result.providerId}</span>
+            <span>{result.request.direction}</span>
+            {result.request.dryRun ? <span>dry run</span> : null}
+          </div>
+          <p className="tp-ai-response">
+            {formatRemoteSyncPlanSummary(result.plan.summary)}
+          </p>
+          {visibleOperations.length > 0 ? (
+            <div className="tp-result-list">
+              {visibleOperations.map((operation, index) => (
+                <div className="tp-result-row" key={`${operation.relativePath}:${operation.kind}:${index}`}>
+                  <span className="tp-result-line">{operation.kind}</span>
+                  <span className="tp-result-body">
+                    <small>{operation.target}</small>
+                    <span className="tp-result-preview">{operation.relativePath}</span>
+                  </span>
+                </div>
+              ))}
+              {hiddenOperationCount > 0 ? (
+                <div className="tp-empty-row">{hiddenOperationCount} more operations</div>
+              ) : null}
+            </div>
+          ) : (
+            <div className="tp-empty-row">No operations planned</div>
+          )}
+        </div>
+        <div className="tp-dialog-actions">
+          <button className="tp-dialog-button tp-dialog-button-primary" type="button" onClick={onClose}>
+            <span>Close</span>
+          </button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function formatRemoteSyncPlanSummary(summary: WorkbenchRemoteSyncPlanResult["plan"]["summary"]): string {
+  return [
+    `${summary.creates} create`,
+    `${summary.updates} update`,
+    `${summary.deletes} delete`,
+    `${summary.skips} skip`,
+    `${summary.conflicts} conflict`
+  ].join(", ");
 }
 
 function CommandPalette({

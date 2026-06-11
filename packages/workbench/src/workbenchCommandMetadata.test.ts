@@ -16,7 +16,8 @@ describe("workbench command metadata", () => {
       file: "File",
       workbench: "Workbench",
       editor: "Editor",
-      ai: "AI"
+      ai: "AI",
+      remoteSync: "Remote Sync"
     });
   });
 
@@ -45,6 +46,11 @@ describe("workbench command metadata", () => {
       category: workbenchCommandCategories.ai,
       id: workbenchCommandIds.ai.summarizeActiveNote,
       title: "Summarize Active Note"
+    });
+    expect(workbenchCommandMetadata.remoteSync.planWorkspace).toEqual({
+      category: workbenchCommandCategories.remoteSync,
+      id: workbenchCommandIds.remoteSync.planWorkspace,
+      title: "Plan Workspace Sync"
     });
   });
 

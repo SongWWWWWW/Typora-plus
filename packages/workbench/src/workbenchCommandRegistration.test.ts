@@ -3,7 +3,9 @@ import {
   defaultConfiguration,
   type AiTextRequest,
   type Command,
-  type TextFileModel
+  type RemoteSyncPlanRequest,
+  type TextFileModel,
+  type WorkspaceFileTree
 } from "@typora-plus/platform";
 import { describe, expect, it, vi } from "vitest";
 import {
@@ -106,6 +108,75 @@ describe("workbench command registration", () => {
     expect(noProviderCommands.has(workbenchCommandIds.ai.summarizeActiveNote)).toBe(false);
   });
 
+  it("registers the remote sync plan command only when a provider and workspace are available", async () => {
+    const workspaceFiles = createWorkspaceFileTree();
+    const registered = new Map<string, Command>();
+    const testCallbacks = callbacks();
+    const services = createServices(registered, [], {
+      remoteSyncProviders: [{ id: "feishu.raw", title: "Feishu Raw Mirror" }],
+      workspaceFiles
+    });
+
+    registerWorkbenchCommands(services, state({ workspaceFiles }), testCallbacks);
+
+    expect(registered.has(workbenchCommandIds.remoteSync.planWorkspace)).toBe(true);
+
+    await registered.get(workbenchCommandIds.remoteSync.planWorkspace)?.run({} as never);
+
+    const request = vi.mocked(services.remoteSyncService.createPlan).mock.calls[0]?.[1] as RemoteSyncPlanRequest;
+
+    expect(services.remoteSyncService.createPlan).toHaveBeenCalledWith("feishu.raw", {
+      workspaceUri: URI.file("C:/Notes"),
+      resources: [{
+        uri: URI.file("C:/Notes/A.md"),
+        relativePath: "A.md",
+        kind: "file",
+        name: "A.md"
+      }],
+      direction: "push",
+      dryRun: true,
+      metadata: {
+        surface: "command",
+        action: "planWorkspace",
+        source: "workspace",
+        workspaceName: "Notes",
+        workspaceScheme: "file"
+      }
+    });
+    expect(testCallbacks.setRemoteSyncPlan).toHaveBeenCalledWith({
+      providerId: "feishu.raw",
+      request,
+      plan: {
+        operations: [{
+          kind: "create",
+          target: "remote",
+          relativePath: "A.md",
+          localUri: URI.file("C:/Notes/A.md")
+        }],
+        summary: {
+          creates: 1,
+          updates: 0,
+          deletes: 0,
+          skips: 0,
+          conflicts: 0
+        }
+      }
+    });
+
+    const noProviderCommands = new Map<string, Command>();
+    registerWorkbenchCommands(createServices(noProviderCommands, [], {
+      workspaceFiles
+    }), state({ workspaceFiles }), callbacks());
+    expect(noProviderCommands.has(workbenchCommandIds.remoteSync.planWorkspace)).toBe(false);
+
+    const noWorkspaceCommands = new Map<string, Command>();
+    registerWorkbenchCommands(createServices(noWorkspaceCommands, [], {
+      remoteSyncProviders: [{ id: "feishu.raw", title: "Feishu Raw Mirror" }],
+      workspaceFiles
+    }), state(), callbacks());
+    expect(noWorkspaceCommands.has(workbenchCommandIds.remoteSync.planWorkspace)).toBe(false);
+  });
+
   it("exports the active model through the export service", async () => {
     const registered = new Map<string, Command>();
     const services = createServices(registered);
@@ -175,9 +246,12 @@ function createServices(
   disposeCalls: string[] = [],
   options: {
     readonly aiProviders?: readonly { readonly id: string; readonly title: string }[];
+    readonly remoteSyncProviders?: readonly { readonly id: string; readonly title: string }[];
+    readonly workspaceFiles?: WorkspaceFileTree;
   } = {}
 ): WorkbenchServices {
   const activeModel = model("C:/Notes/a.md", "# A");
+  const workspaceFiles = options.workspaceFiles;
 
   return {
     aiService: {
@@ -236,6 +310,27 @@ function createServices(
       addRecentFile: vi.fn(),
       addRecentWorkspace: vi.fn()
     },
+    remoteSyncService: {
+      onDidChangeRemoteSyncProviders: vi.fn(),
+      registerProvider: vi.fn(),
+      getProviders: vi.fn(() => options.remoteSyncProviders ?? []),
+      createPlan: vi.fn(async () => ({
+        operations: [{
+          kind: "create",
+          target: "remote",
+          relativePath: "A.md",
+          localUri: URI.file("C:/Notes/A.md")
+        }],
+        summary: {
+          creates: 1,
+          updates: 0,
+          deletes: 0,
+          skips: 0,
+          conflicts: 0
+        }
+      })),
+      executePlan: vi.fn()
+    },
     indexService: {
       onDidChangeStatus: vi.fn(),
       configure: vi.fn(),
@@ -251,7 +346,10 @@ function createServices(
     },
     workspaceService: {
       onDidChangeWorkspace: vi.fn(),
-      getWorkspace: vi.fn(),
+      getWorkspace: vi.fn(() => ({
+        name: workspaceFiles?.root.name ?? "Typora Plus",
+        ...(workspaceFiles ? { rootUri: workspaceFiles.root.uri, files: workspaceFiles } : {})
+      })),
       setWorkspace: vi.fn()
     },
     attachmentService: {
@@ -322,6 +420,7 @@ function callbacks(
     setOperationError: vi.fn(),
     setPaletteOpen: vi.fn(),
     setQuickOpen: vi.fn(),
+    setRemoteSyncPlan: vi.fn(),
     setSaveConflict: vi.fn(),
     setSettingsOpen: vi.fn(),
     setSideView: vi.fn(),
@@ -334,6 +433,7 @@ function state(overrides: {
     readonly appearance?: Partial<typeof defaultConfiguration.appearance>;
     readonly editor?: Partial<typeof defaultConfiguration.editor>;
   };
+  readonly workspaceFiles?: WorkspaceFileTree;
 } = {}) {
   return {
     configuration: {
@@ -347,7 +447,7 @@ function state(overrides: {
         ...overrides.configuration?.editor
       }
     },
-    workspaceFiles: undefined
+    workspaceFiles: overrides.workspaceFiles
   };
 }
 
@@ -359,5 +459,28 @@ function model(path: string, value: string): TextFileModel {
     value,
     dirty: false,
     version: 1
+  };
+}
+
+function createWorkspaceFileTree(): WorkspaceFileTree {
+  return {
+    root: {
+      uri: URI.file("C:/Notes"),
+      name: "Notes",
+      relativePath: ".",
+      kind: "directory",
+      children: [{
+        uri: URI.file("C:/Notes/A.md"),
+        name: "A.md",
+        relativePath: "A.md",
+        kind: "file"
+      }]
+    },
+    files: [{
+      uri: URI.file("C:/Notes/A.md"),
+      name: "A.md",
+      relativePath: "A.md",
+      kind: "file"
+    }]
   };
 }

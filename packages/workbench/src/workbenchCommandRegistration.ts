@@ -18,10 +18,17 @@ import {
 } from "./workbenchCommandMetadata";
 import { runWorkbenchSummarizeActiveNoteAiAction } from "./workbenchAiActions";
 import {
+  runWorkbenchPlanWorkspaceRemoteSyncAction,
+  type WorkbenchRemoteSyncPlanResult
+} from "./workbenchRemoteSyncActions";
+import {
   saveWorkbenchFile,
   saveWorkbenchFileAs
 } from "./workbenchFileSaving";
-import { selectWorkbenchDefaultAiProviderId } from "./workbenchProviderSelection";
+import {
+  selectWorkbenchDefaultAiProviderId,
+  selectWorkbenchDefaultRemoteSyncProviderId
+} from "./workbenchProviderSelection";
 import {
   openWorkbenchWorkspace,
   refreshWorkbenchWorkspace
@@ -47,6 +54,7 @@ export interface WorkbenchCommandRegistrationCallbacks {
   readonly setOperationError: WorkbenchOperationErrorSetter;
   readonly setPaletteOpen: (open: boolean) => void;
   readonly setQuickOpen: (open: boolean) => void;
+  readonly setRemoteSyncPlan: (result: WorkbenchRemoteSyncPlanResult | undefined) => void;
   readonly setSaveConflict: WorkbenchSaveConflictSetter;
   readonly setSettingsOpen: (open: boolean) => void;
   readonly setSideView: (
@@ -95,6 +103,19 @@ export function registerWorkbenchCommands(
           }
         });
         callbacks.setAiResponse(response);
+      }, callbacks.setOperationError, callbacks.setSaveConflict)
+    }));
+  }
+  if (state.workspaceFiles && selectWorkbenchDefaultRemoteSyncProviderId(services)) {
+    disposables.add(services.commandService.registerCommand({
+      ...workbenchCommandMetadata.remoteSync.planWorkspace,
+      run: () => runWorkbenchAction(async () => {
+        const result = await runWorkbenchPlanWorkspaceRemoteSyncAction(services, {
+          metadata: {
+            surface: "command"
+          }
+        });
+        callbacks.setRemoteSyncPlan(result);
       }, callbacks.setOperationError, callbacks.setSaveConflict)
     }));
   }

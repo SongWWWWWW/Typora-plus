@@ -39,6 +39,9 @@ describe("workbench command ids", () => {
       ai: {
         summarizeActiveNote: "ai.summarizeActiveNote"
       },
+      remoteSync: {
+        planWorkspace: "remoteSync.planWorkspace"
+      },
       theme: {
         toggle: "theme.toggle"
       }
