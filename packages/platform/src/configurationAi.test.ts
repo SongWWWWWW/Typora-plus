@@ -22,9 +22,12 @@ describe("AI provider configuration", () => {
             title: " Notes Assistant ",
             kind: "responses",
             endpointUrl: "https://api.example.test/v1/responses",
+            maxOutputTokens: 4096,
             model: "notes-model",
+            reasoningEffort: "high",
             secretRef: "typora-plus.ai.notes",
-            store: false
+            store: false,
+            textVerbosity: "low"
           }
         ]
       }
@@ -41,9 +44,12 @@ describe("AI provider configuration", () => {
         title: "Notes Assistant",
         kind: "responses",
         endpointUrl: "https://api.example.test/v1/responses",
+        maxOutputTokens: 4096,
         model: "notes-model",
+        reasoningEffort: "high",
         secretRef: "typora-plus.ai.notes",
-        store: false
+        store: false,
+        textVerbosity: "low"
       }
     ]);
     expect(restored.getValue().ai.workspaceContextMaxResults).toBe(defaultConfiguration.ai.workspaceContextMaxResults);
@@ -190,17 +196,23 @@ describe("AI provider configuration", () => {
       title: " Notes ",
       kind: "responses",
       endpointUrl: "https://api.example.test/v1/responses",
+      maxOutputTokens: 64_000,
       model: " notes-model ",
+      reasoningEffort: " Minimal ",
       secretRef: " typora-plus.ai.notes ",
-      store: true
+      store: true,
+      textVerbosity: " High "
     })).toEqual({
       id: "notes.responses",
       title: "Notes",
       kind: "responses",
       endpointUrl: "https://api.example.test/v1/responses",
+      maxOutputTokens: 32_000,
       model: "notes-model",
+      reasoningEffort: "minimal",
       secretRef: "typora-plus.ai.notes",
-      store: true
+      store: true,
+      textVerbosity: "high"
     });
 
     expect(normalizeAiProviderConfiguration({
@@ -211,6 +223,25 @@ describe("AI provider configuration", () => {
       model: "notes-model",
       secretRef: "typora-plus.ai.public"
     })).toBeUndefined();
+
+    expect(normalizeAiProviderConfiguration({
+      id: "notes.minimal",
+      title: "Notes Minimal",
+      kind: "responses",
+      endpointUrl: "https://api.example.test/v1/responses",
+      maxOutputTokens: 0,
+      model: "notes-model",
+      reasoningEffort: "unsupported",
+      secretRef: "typora-plus.ai.minimal",
+      textVerbosity: "verbose"
+    })).toEqual({
+      id: "notes.minimal",
+      title: "Notes Minimal",
+      kind: "responses",
+      endpointUrl: "https://api.example.test/v1/responses",
+      model: "notes-model",
+      secretRef: "typora-plus.ai.minimal"
+    });
   });
 
   it("keeps AI configuration isolated during partial merges", () => {

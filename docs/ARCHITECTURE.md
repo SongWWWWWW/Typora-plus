@@ -162,6 +162,10 @@ Registered block and inline Markdown renderer providers are connected to preview
 
 Extensions must not receive direct DOM or unrestricted Node access.
 
+## AI Adapter Notes
+
+Configured Responses AI providers can carry optional request controls for reasoning effort, text verbosity, and maximum output tokens. These values are sanitized by the platform configuration boundary, edited in Settings as non-secret provider metadata, and serialized into the Responses request body only when the user configured them. Workbench still calls `IAiService.requestText()` and never owns model SDKs, credentials, or request-tuning defaults.
+
 ## Remote Sync Adapter Notes
 
 Configured remote sync provider factories may receive three bounded inputs: the normalized provider profile, a profile-scoped native request transport, and an optional trusted workspace resource bridge. Future cloud adapters should use those inputs instead of reading global state, constructing absolute filesystem paths, or storing decrypted credentials in renderer code.

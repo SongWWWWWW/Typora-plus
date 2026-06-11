@@ -106,6 +106,42 @@ describe("Responses AI provider", () => {
     });
   });
 
+  it("adds configured Responses request controls without changing provider identity", async () => {
+    const transport = vi.fn(async (_request: ResponsesAiProviderTransportRequest) => ({
+      output_text: "Rewritten"
+    }));
+    const provider = createResponsesAiProvider(configuration({
+      maxOutputTokens: 64_000,
+      reasoningEffort: "minimal",
+      textVerbosity: "high"
+    }), {
+      readSecret: () => "test-api-key",
+      transport
+    });
+
+    await expect(provider.requestText({
+      instruction: "Rewrite.",
+      input: "Draft"
+    })).resolves.toEqual({
+      value: "Rewritten",
+      model: "notes-model"
+    });
+
+    expect(JSON.parse(transport.mock.calls[0]?.[0].body ?? "{}")).toEqual({
+      model: "notes-model",
+      instructions: "Rewrite.",
+      input: "Draft",
+      max_output_tokens: 32_000,
+      reasoning: {
+        effort: "minimal"
+      },
+      store: false,
+      text: {
+        verbosity: "high"
+      }
+    });
+  });
+
   it("can delegate request execution to a native bridge without exposing secrets", async () => {
     const provider = createResponsesAiProvider(configuration(), {
       request: async (request) => {

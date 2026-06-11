@@ -41,6 +41,8 @@ import {
   resolveSettingsAssetFolderCommit,
   resolveSettingsNumberInput,
   resolveVisibleSettingsSection,
+  settingsAiReasoningEffortOptions,
+  settingsAiTextVerbosityOptions,
   settingSectionAnchorId,
   settingsColorSchemeOptions,
   settingsDensityOptions,
@@ -771,6 +773,36 @@ export function SettingsDialog({
                                 onChange={(event) => updateAiProviderDraft(draft.key, { model: event.target.value })}
                               />
                             </SettingsField>
+                            <SettingsField label="Reasoning">
+                              <SegmentedControl
+                                ariaLabel="AI Provider Reasoning"
+                                value={draft.reasoningEffort}
+                                options={settingsAiReasoningEffortOptions}
+                                onChange={(reasoningEffort) => updateAiProviderDraft(draft.key, { reasoningEffort })}
+                              />
+                            </SettingsField>
+                            <SettingsField label="Verbosity">
+                              <SegmentedControl
+                                ariaLabel="AI Provider Verbosity"
+                                value={draft.textVerbosity}
+                                options={settingsAiTextVerbosityOptions}
+                                onChange={(textVerbosity) => updateAiProviderDraft(draft.key, { textVerbosity })}
+                              />
+                            </SettingsField>
+                            <SettingsField label="Max Output">
+                              <input
+                                className="tp-settings-text-input"
+                                type="number"
+                                min={settingsNumberConstraints.aiProviderMaxOutputTokens.min}
+                                max={settingsNumberConstraints.aiProviderMaxOutputTokens.max}
+                                step={settingsNumberConstraints.aiProviderMaxOutputTokens.step}
+                                value={draft.maxOutputTokens}
+                                aria-label="AI Provider Max Output Tokens"
+                                onChange={(event) => updateAiProviderDraft(draft.key, {
+                                  maxOutputTokens: event.target.value
+                                })}
+                              />
+                            </SettingsField>
                             <SettingsField label="Secret Ref">
                               <input
                                 className="tp-settings-text-input"
@@ -1324,9 +1356,12 @@ function areAiProviderConfigurationsEqual(
     first.title === second.title &&
     first.kind === second.kind &&
     first.endpointUrl === second.endpointUrl &&
+    first.maxOutputTokens === second.maxOutputTokens &&
     first.model === second.model &&
+    first.reasoningEffort === second.reasoningEffort &&
     first.secretRef === second.secretRef &&
-    (first.store ?? false) === (second.store ?? false);
+    (first.store ?? false) === (second.store ?? false) &&
+    first.textVerbosity === second.textVerbosity;
 }
 
 function applyKeybindingOverride(

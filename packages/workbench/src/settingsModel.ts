@@ -7,6 +7,8 @@ import {
   normalizeAiProviderConfiguration,
   normalizeRemoteSyncProviderConfiguration,
   type AiProviderConfiguration,
+  type AiProviderReasoningEffort,
+  type AiProviderTextVerbosity,
   type ColorSchemePreference,
   type ConfigurationNumberConstraint,
   type RegisteredTheme,
@@ -114,9 +116,12 @@ export interface SettingsAiProviderDraft {
   readonly id: string;
   readonly title: string;
   readonly endpointUrl: string;
+  readonly maxOutputTokens: string;
   readonly model: string;
+  readonly reasoningEffort: "" | AiProviderReasoningEffort;
   readonly secretRef: string;
   readonly store: boolean;
+  readonly textVerbosity: "" | AiProviderTextVerbosity;
 }
 
 export interface SettingsAiProviderDraftValidation {
@@ -164,6 +169,23 @@ export const settingsDensityOptions = [
   { value: "compact", label: "Compact" }
 ] as const satisfies readonly SettingsOption<TyporaPlusConfiguration["appearance"]["density"]>[];
 
+export const settingsAiReasoningEffortOptions = [
+  { value: "", label: "Default" },
+  { value: "none", label: "None" },
+  { value: "minimal", label: "Minimal" },
+  { value: "low", label: "Low" },
+  { value: "medium", label: "Medium" },
+  { value: "high", label: "High" },
+  { value: "xhigh", label: "XHigh" }
+] as const satisfies readonly SettingsOption<"" | AiProviderReasoningEffort>[];
+
+export const settingsAiTextVerbosityOptions = [
+  { value: "", label: "Default" },
+  { value: "low", label: "Low" },
+  { value: "medium", label: "Medium" },
+  { value: "high", label: "High" }
+] as const satisfies readonly SettingsOption<"" | AiProviderTextVerbosity>[];
+
 export const defaultSettingsThemeOption = {
   value: "",
   label: "Default"
@@ -181,7 +203,7 @@ export const settingsEntries = [
   { id: settingsEntryIds.editor.lineHeight, sectionId: settingsSectionIds.editor, label: "Line Height", keywords: ["line", "spacing"] },
   { id: settingsEntryIds.editor.maxWidth, sectionId: settingsSectionIds.editor, label: "Editor Width", keywords: ["width", "content"] },
   { id: settingsEntryIds.editor.rendererPreviewCacheEntries, sectionId: settingsSectionIds.editor, label: "Renderer Cache", keywords: ["preview", "renderer", "cache", "mermaid"] },
-  { id: settingsEntryIds.ai.providers, sectionId: settingsSectionIds.ai, label: "Providers", keywords: ["openai", "responses", "assistant", "model", "endpoint", "secret", "api key"] },
+  { id: settingsEntryIds.ai.providers, sectionId: settingsSectionIds.ai, label: "Providers", keywords: ["openai", "responses", "assistant", "model", "endpoint", "secret", "api key", "reasoning", "verbosity", "output tokens"] },
   { id: settingsEntryIds.ai.workspaceContextMaxResults, sectionId: settingsSectionIds.ai, label: "Context Results", keywords: ["workspace", "context", "search", "retrieval", "grounded"] },
   { id: settingsEntryIds.ai.workspaceContextMaxPreviewLength, sectionId: settingsSectionIds.ai, label: "Context Preview", keywords: ["workspace", "context", "preview", "snippet", "retrieval"] },
   { id: settingsEntryIds.remoteSync.providers, sectionId: settingsSectionIds.remoteSync, label: "Providers", keywords: ["sync", "remote", "cloud", "mirror", "native request", "scope", "secret"] },
@@ -199,6 +221,7 @@ const settingsEntryById = new Map<SettingsEntryId, SettingsEntryDefinition>(
 export const settingsNumberConstraints = {
   aiWorkspaceContextMaxPreviewLength: configurationNumberConstraints.aiWorkspaceContextMaxPreviewLength,
   aiWorkspaceContextMaxResults: configurationNumberConstraints.aiWorkspaceContextMaxResults,
+  aiProviderMaxOutputTokens: configurationNumberConstraints.aiProviderMaxOutputTokens,
   editorFontSize: configurationNumberConstraints.editorFontSize,
   editorLineHeight: configurationNumberConstraints.editorLineHeight,
   editorMaxWidth: configurationNumberConstraints.editorMaxWidth,
@@ -264,9 +287,12 @@ export function createSettingsAiProviderDraft(
     id: provider?.id ?? "",
     title: provider?.title ?? "",
     endpointUrl: provider?.endpointUrl ?? "",
+    maxOutputTokens: provider?.maxOutputTokens?.toString() ?? "",
     model: provider?.model ?? "",
+    reasoningEffort: provider?.reasoningEffort ?? "",
     secretRef: provider?.secretRef ?? "",
-    store: provider?.store ?? false
+    store: provider?.store ?? false,
+    textVerbosity: provider?.textVerbosity ?? ""
   };
 }
 
@@ -279,7 +305,7 @@ export function validateSettingsAiProviderDraft(
   const issues: string[] = [];
 
   if (!provider) {
-    issues.push("Complete provider id, title, HTTPS or loopback endpoint, model, and secret reference.");
+    issues.push("Complete provider id, title, HTTPS or loopback endpoint, model, secret reference, and valid request settings.");
   } else if (providers.some((candidate) => candidate.id === provider.id && candidate.id !== originalId)) {
     issues.push("Provider id is already used.");
   }
@@ -553,14 +579,23 @@ function matchesTerms(haystack: string, terms: readonly string[]): boolean {
 }
 
 function normalizeSettingsAiProviderDraft(draft: SettingsAiProviderDraft): AiProviderConfiguration | undefined {
+  const maxOutputTokens = parseSettingsOptionalPositiveInteger(draft.maxOutputTokens);
+
+  if (!maxOutputTokens.valid) {
+    return undefined;
+  }
+
   return normalizeAiProviderConfiguration({
     id: draft.id,
     title: draft.title,
     kind: "responses",
     endpointUrl: draft.endpointUrl,
+    ...(maxOutputTokens.value !== undefined ? { maxOutputTokens: maxOutputTokens.value } : {}),
     model: draft.model,
+    ...(draft.reasoningEffort ? { reasoningEffort: draft.reasoningEffort } : {}),
     secretRef: draft.secretRef,
-    store: draft.store
+    store: draft.store,
+    ...(draft.textVerbosity ? { textVerbosity: draft.textVerbosity } : {})
   });
 }
 
@@ -626,6 +661,23 @@ function parseSettingsKeyValueLines(value: string): readonly (readonly [string, 
   }
 
   return entries;
+}
+
+function parseSettingsOptionalPositiveInteger(value: string): {
+  readonly valid: boolean;
+  readonly value?: number;
+} {
+  const normalized = value.trim();
+
+  if (!normalized) {
+    return { valid: true };
+  }
+
+  const parsed = Number(normalized);
+
+  return Number.isInteger(parsed) && parsed > 0
+    ? { valid: true, value: parsed }
+    : { valid: false };
 }
 
 function formatSettingsKeyValueLines(entries: readonly (readonly [string, string])[]): string {

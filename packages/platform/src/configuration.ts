@@ -4,6 +4,8 @@ import type { UserKeybindingRule } from "./keybindings";
 
 export type ColorSchemePreference = "light" | "dark" | "system";
 export type AiProviderConfigurationKind = "responses";
+export type AiProviderReasoningEffort = "none" | "minimal" | "low" | "medium" | "high" | "xhigh";
+export type AiProviderTextVerbosity = "low" | "medium" | "high";
 export type MarkdownStatusBadgeTone = "danger" | "info" | "neutral" | "success" | "warning";
 export type RemoteSyncProviderConfigurationKind = "native-request";
 
@@ -25,9 +27,12 @@ export interface AiProviderConfiguration {
   readonly title: string;
   readonly kind: AiProviderConfigurationKind;
   readonly endpointUrl: string;
+  readonly maxOutputTokens?: number;
   readonly model: string;
+  readonly reasoningEffort?: AiProviderReasoningEffort;
   readonly secretRef: string;
   readonly store?: boolean;
+  readonly textVerbosity?: AiProviderTextVerbosity;
 }
 
 export interface RemoteSyncProviderSecretConfiguration {
@@ -156,6 +161,7 @@ export const configurationMaxMarkdownStatusBadgeTextLength = 64;
 export const configurationNumberConstraints = {
   aiWorkspaceContextMaxPreviewLength: { min: 80, max: 320, step: 20 },
   aiWorkspaceContextMaxResults: { min: 0, max: 12, step: 1 },
+  aiProviderMaxOutputTokens: { min: 1, max: 32_000, step: 64 },
   editorFontSize: { min: 13, max: 24, step: 1 },
   editorLineHeight: { min: 1.2, max: 2.2, step: 0.01 },
   editorMaxWidth: { min: 560, max: 1120, step: 20 },
@@ -482,8 +488,11 @@ export function normalizeAiProviderConfiguration(value: unknown): AiProviderConf
   const title = normalizeConfigurationText(value.title, configurationMaxAiProviderTitleLength);
   const kind = normalizeAiProviderConfigurationKind(value.kind);
   const endpointUrl = normalizeAiProviderEndpointUrl(value.endpointUrl);
+  const maxOutputTokens = normalizeAiProviderMaxOutputTokens(value.maxOutputTokens);
   const model = normalizeConfigurationText(value.model, configurationMaxAiProviderModelLength);
+  const reasoningEffort = normalizeAiProviderReasoningEffort(value.reasoningEffort);
   const secretRef = normalizeAiProviderSecretRef(value.secretRef);
+  const textVerbosity = normalizeAiProviderTextVerbosity(value.textVerbosity);
 
   if (!id || !title || !kind || !endpointUrl || !model || !secretRef) {
     return undefined;
@@ -494,9 +503,12 @@ export function normalizeAiProviderConfiguration(value: unknown): AiProviderConf
     title,
     kind,
     endpointUrl,
+    ...(maxOutputTokens !== undefined ? { maxOutputTokens } : {}),
     model,
+    ...(reasoningEffort ? { reasoningEffort } : {}),
     secretRef,
-    ...(typeof value.store === "boolean" ? { store: value.store } : {})
+    ...(typeof value.store === "boolean" ? { store: value.store } : {}),
+    ...(textVerbosity ? { textVerbosity } : {})
   };
 }
 
@@ -750,8 +762,41 @@ function normalizeAiProviderEndpointUrl(value: unknown): string | undefined {
   return normalizeProviderHttpsOrLoopbackUrl(value, configurationMaxAiProviderEndpointUrlLength);
 }
 
+function normalizeAiProviderMaxOutputTokens(value: unknown): number | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (typeof value !== "number" || !Number.isInteger(value) || value <= 0) {
+    return undefined;
+  }
+
+  return clampConfigurationNumber(value, configurationNumberConstraints.aiProviderMaxOutputTokens);
+}
+
+function normalizeAiProviderReasoningEffort(value: unknown): AiProviderReasoningEffort | undefined {
+  const normalized = normalizeConfigurationText(value, 16)?.toLowerCase();
+
+  return normalized === "none" ||
+    normalized === "minimal" ||
+    normalized === "low" ||
+    normalized === "medium" ||
+    normalized === "high" ||
+    normalized === "xhigh"
+    ? normalized
+    : undefined;
+}
+
 function normalizeAiProviderSecretRef(value: unknown): string | undefined {
   return normalizeConfigurationSecretRef(value, configurationMaxAiProviderSecretRefLength);
+}
+
+function normalizeAiProviderTextVerbosity(value: unknown): AiProviderTextVerbosity | undefined {
+  const normalized = normalizeConfigurationText(value, 16)?.toLowerCase();
+
+  return normalized === "low" || normalized === "medium" || normalized === "high"
+    ? normalized
+    : undefined;
 }
 
 function normalizeRemoteSyncProviderConfigurationId(value: unknown): string | undefined {

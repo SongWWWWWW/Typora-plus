@@ -7898,3 +7898,33 @@ Known limitations:
 
 - No concrete Feishu/raw-mirror adapter consumes the snapshot helpers yet.
 - Directory resource post-execution snapshots remain provider-specific.
+
+## 2026-06-12 - P2 Configurable Responses AI Request Controls
+
+Completed:
+
+- Added optional provider-level Responses request controls for reasoning effort, text verbosity, and maximum output tokens.
+- Persisted and sanitized those values through the platform AI provider configuration boundary without adding built-in provider defaults.
+- Serialized configured request controls into Responses request bodies only when present, preserving existing provider behavior when unset.
+- Exposed the controls in Settings provider drafts with platform-owned validation and search metadata.
+- Kept API keys in the existing native secret bridge and kept provider request execution behind `IAiService`.
+
+Quality gate:
+
+- `npx vitest run packages/platform/src/configurationAi.test.ts packages/platform/src/responsesAiProvider.test.ts packages/workbench/src/settingsModel.test.ts packages/workbench/src/workbenchConfiguredAiProviders.test.ts`: passed, 4 files / 47 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 86 files / 815 tests, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- AI request-control hardcode scan for OpenAI endpoints, model ids, API keys, Feishu endpoints, OAuth/token/secret literals, and provider credentials: passed
+
+Review:
+
+- Request tuning remains user configuration, not a Workbench default; no model id, endpoint, API key, or provider id was added.
+- Settings owns only draft editing and validation display, while platform configuration owns sanitization and the Responses adapter owns request serialization.
+- The change improves the existing writing-assistant path without introducing Codex-style filesystem or shell side effects.
+
+Known limitations:
+
+- Streaming response UI, structured output controls, and tool configuration are still future AI-provider enhancements.
+- No built-in AI provider is registered by default; users still need a configured provider and saved secret.

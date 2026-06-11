@@ -28,6 +28,8 @@ import {
   resolveSettingsNumberInput,
   resolveVisibleSettingsSection,
   settingSectionAnchorId,
+  settingsAiReasoningEffortOptions,
+  settingsAiTextVerbosityOptions,
   settingsColorSchemeOptions,
   settingsDensityOptions,
   settingsEntries,
@@ -137,6 +139,21 @@ describe("settings model", () => {
       { value: "comfortable", label: "Comfortable" },
       { value: "compact", label: "Compact" }
     ]);
+    expect(settingsAiReasoningEffortOptions).toEqual([
+      { value: "", label: "Default" },
+      { value: "none", label: "None" },
+      { value: "minimal", label: "Minimal" },
+      { value: "low", label: "Low" },
+      { value: "medium", label: "Medium" },
+      { value: "high", label: "High" },
+      { value: "xhigh", label: "XHigh" }
+    ]);
+    expect(settingsAiTextVerbosityOptions).toEqual([
+      { value: "", label: "Default" },
+      { value: "low", label: "Low" },
+      { value: "medium", label: "Medium" },
+      { value: "high", label: "High" }
+    ]);
   });
 
   it("creates custom theme options from registered themes", () => {
@@ -224,6 +241,8 @@ describe("settings model", () => {
     expect(createSettingsSearchResult("renderer cache").visibleEntries).toEqual(["editor.rendererPreviewCacheEntries"]);
     expect(createSettingsSearchResult("api key").visibleEntries).toEqual(["ai.providers"]);
     expect(createSettingsSearchResult("responses model").visibleEntries).toEqual(["ai.providers"]);
+    expect(createSettingsSearchResult("reasoning verbosity").visibleEntries).toEqual(["ai.providers"]);
+    expect(createSettingsSearchResult("output tokens").visibleEntries).toEqual(["ai.providers"]);
     expect(createSettingsSearchResult("grounded context").visibleEntries).toEqual(["ai.workspaceContextMaxResults"]);
     expect(createSettingsSearchResult("snippet preview").visibleEntries).toEqual(["ai.workspaceContextMaxPreviewLength"]);
     expect(createSettingsSearchResult("remote cloud").visibleEntries).toEqual(["remoteSync.providers"]);
@@ -284,6 +303,8 @@ describe("settings model", () => {
     expect(clampSettingNumber(99, settingsNumberConstraints.aiWorkspaceContextMaxResults)).toBe(12);
     expect(clampSettingNumber(20, settingsNumberConstraints.aiWorkspaceContextMaxPreviewLength)).toBe(80);
     expect(clampSettingNumber(999, settingsNumberConstraints.aiWorkspaceContextMaxPreviewLength)).toBe(320);
+    expect(clampSettingNumber(0, settingsNumberConstraints.aiProviderMaxOutputTokens)).toBe(1);
+    expect(clampSettingNumber(64_000, settingsNumberConstraints.aiProviderMaxOutputTokens)).toBe(32_000);
     expect(clampSettingNumber(5, settingsNumberConstraints.workspaceQuickOpenMaxResults)).toBe(20);
     expect(clampSettingNumber(500, settingsNumberConstraints.workspaceQuickOpenMaxResults)).toBe(300);
   });
@@ -322,18 +343,24 @@ describe("settings model", () => {
       title: "Notes",
       kind: "responses" as const,
       endpointUrl: "https://api.example.test/v1/responses",
+      maxOutputTokens: 2048,
       model: "notes-model",
+      reasoningEffort: "medium" as const,
       secretRef: "typora-plus.ai.notes",
-      store: false
+      store: false,
+      textVerbosity: "low" as const
     };
 
     expect(createSettingsAiProviderDraft(provider)).toEqual({
       id: "notes.responses",
       title: "Notes",
       endpointUrl: "https://api.example.test/v1/responses",
+      maxOutputTokens: "2048",
       model: "notes-model",
+      reasoningEffort: "medium",
       secretRef: "typora-plus.ai.notes",
-      store: false
+      store: false,
+      textVerbosity: "low"
     });
     expect(validateSettingsAiProviderDraft(createSettingsAiProviderDraft(provider), [], undefined)).toMatchObject({
       provider,
@@ -345,7 +372,14 @@ describe("settings model", () => {
       endpointUrl: "http://api.example.test/v1/responses"
     }, [], undefined)).toEqual({
       canSave: false,
-      issues: ["Complete provider id, title, HTTPS or loopback endpoint, model, and secret reference."]
+      issues: ["Complete provider id, title, HTTPS or loopback endpoint, model, secret reference, and valid request settings."]
+    });
+    expect(validateSettingsAiProviderDraft({
+      ...createSettingsAiProviderDraft(provider),
+      maxOutputTokens: "many"
+    }, [], undefined)).toEqual({
+      canSave: false,
+      issues: ["Complete provider id, title, HTTPS or loopback endpoint, model, secret reference, and valid request settings."]
     });
   });
 
@@ -363,8 +397,11 @@ describe("settings model", () => {
       title: "Notes",
       kind: "responses",
       endpointUrl: "http://127.0.0.1:11434/v1/responses",
+      maxOutputTokens: 4096,
       model: "notes-model",
-      secretRef: "typora-plus.ai.notes"
+      reasoningEffort: "high",
+      secretRef: "typora-plus.ai.notes",
+      textVerbosity: "medium"
     });
 
     expect(upsertSettingsAiProvider([existing], draft)).toEqual([
@@ -374,9 +411,12 @@ describe("settings model", () => {
         title: "Notes",
         kind: "responses",
         endpointUrl: "http://127.0.0.1:11434/v1/responses",
+        maxOutputTokens: 4096,
         model: "notes-model",
+        reasoningEffort: "high",
         secretRef: "typora-plus.ai.notes",
-        store: false
+        store: false,
+        textVerbosity: "medium"
       }
     ]);
     const duplicateValidation = validateSettingsAiProviderDraft({

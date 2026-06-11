@@ -5,6 +5,7 @@ import type {
   AiTextRequest,
   AiTokenUsage
 } from "./ai";
+import { clampConfigurationNumber, configurationNumberConstraints } from "./configuration";
 import type { AiProviderConfiguration } from "./configuration";
 
 let nextNativeResponsesRequestId = 0;
@@ -190,9 +191,20 @@ function createResponsesRequestBody(
     model: configuration.model,
     instructions: request.instruction,
     input: createResponsesInput(request.input, request.context),
+    ...(configuration.maxOutputTokens !== undefined ? { max_output_tokens: configuration.maxOutputTokens } : {}),
     ...createOptionalResponsesMetadata(request.metadata),
-    ...(configuration.store !== undefined ? { store: configuration.store } : {})
+    ...(configuration.reasoningEffort !== undefined ? { reasoning: { effort: configuration.reasoningEffort } } : {}),
+    ...(configuration.store !== undefined ? { store: configuration.store } : {}),
+    ...createOptionalResponsesText(configuration)
   };
+}
+
+function createOptionalResponsesText(
+  configuration: AiProviderConfiguration
+): { readonly text?: Readonly<Record<string, unknown>> } {
+  return configuration.textVerbosity !== undefined
+    ? { text: { verbosity: configuration.textVerbosity } }
+    : {};
 }
 
 function createResponsesInput(
@@ -346,14 +358,21 @@ function normalizeResponsesAiProviderConfiguration(
     throw new Error("Responses AI provider configuration kind must be responses");
   }
 
+  const maxOutputTokens = readOptionalAiProviderMaxOutputTokens(record.maxOutputTokens);
+  const reasoningEffort = readOptionalResponsesReasoningEffort(record.reasoningEffort);
+  const textVerbosity = readOptionalResponsesTextVerbosity(record.textVerbosity);
+
   return {
     id: readRequiredString(record.id, "Responses AI provider id"),
     title: readRequiredString(record.title, "Responses AI provider title"),
     kind,
     endpointUrl: readRequiredString(record.endpointUrl, "Responses AI provider endpoint URL"),
+    ...(maxOutputTokens !== undefined ? { maxOutputTokens } : {}),
     model: readRequiredString(record.model, "Responses AI provider model"),
+    ...(reasoningEffort !== undefined ? { reasoningEffort } : {}),
     secretRef: readRequiredString(record.secretRef, "Responses AI provider secret reference"),
-    ...(typeof record.store === "boolean" ? { store: record.store } : {})
+    ...(typeof record.store === "boolean" ? { store: record.store } : {}),
+    ...(textVerbosity !== undefined ? { textVerbosity } : {})
   };
 }
 
@@ -388,6 +407,35 @@ function readRequiredString(value: unknown, label: string): string {
   }
 
   return normalized;
+}
+
+function readOptionalAiProviderMaxOutputTokens(value: unknown): number | undefined {
+  if (typeof value !== "number" || !Number.isInteger(value) || value <= 0) {
+    return undefined;
+  }
+
+  return clampConfigurationNumber(value, configurationNumberConstraints.aiProviderMaxOutputTokens);
+}
+
+function readOptionalResponsesReasoningEffort(value: unknown): AiProviderConfiguration["reasoningEffort"] {
+  const normalized = readOptionalString(value);
+
+  return normalized === "none" ||
+    normalized === "minimal" ||
+    normalized === "low" ||
+    normalized === "medium" ||
+    normalized === "high" ||
+    normalized === "xhigh"
+    ? normalized
+    : undefined;
+}
+
+function readOptionalResponsesTextVerbosity(value: unknown): AiProviderConfiguration["textVerbosity"] {
+  const normalized = readOptionalString(value);
+
+  return normalized === "low" || normalized === "medium" || normalized === "high"
+    ? normalized
+    : undefined;
 }
 
 function readOptionalString(value: unknown): string | undefined {
