@@ -6306,3 +6306,33 @@ Known limitations:
 
 - No command handler consumes this selection model yet.
 - User-configured preferred providers are not modeled yet.
+
+## 2026-06-11 - P2 Active Note AI Request Model
+
+Completed:
+
+- Added a Workbench AI request model for building provider-neutral `AiTextRequest` values from the active Markdown note.
+- Added a summarize-active-note request helper with stable instruction text and source metadata.
+- Preserved provider neutrality by avoiding OpenAI, Codex, model, endpoint, token, or provider-id assumptions in request construction.
+- Kept source metadata authoritative by deriving note name, resource scheme, and language id from `TextFileModel`.
+- Covered source metadata, supplemental context, signal propagation, metadata override protection, untitled notes, and empty note input with focused tests.
+
+Quality gate:
+
+- `npx vitest run packages/workbench/src/workbenchAiRequestModel.test.ts`: passed, 2 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 64 files / 622 tests, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Dev server smoke check: passed at `http://127.0.0.1:5173`; status 200 and root element present
+
+Review:
+
+- Future AI command handlers can now build consistent requests without composing prompts or metadata inside React components.
+- The request model stays above the platform service boundary and below UI surfaces, matching existing focused Workbench model patterns.
+- Workspace-grounded context remains additive through `AiTextContextItem[]`; selecting related documents through `IIndexService` is still a future adapter step.
+
+Known limitations:
+
+- No AI command handler calls this request model yet.
+- Only summarize-active-note request construction is modeled; rewrite, continue, translate, and task extraction remain future actions.
