@@ -6336,3 +6336,33 @@ Known limitations:
 
 - No AI command handler calls this request model yet.
 - Only summarize-active-note request construction is modeled; rewrite, continue, translate, and task extraction remain future actions.
+
+## 2026-06-11 - P2 Summarize Active Note AI Action Runner
+
+Completed:
+
+- Added a Workbench AI action runner for summarize-active-note workflows.
+- Composed default AI provider selection, active note lookup, active-note request construction, and `IAiService.requestText()` behind one focused action helper.
+- Failed before reading the active model when no AI provider is available, keeping missing-provider behavior explicit for future command error boundaries.
+- Preserved provider neutrality by avoiding OpenAI, Codex, model, endpoint, token, or provider-id assumptions in the action runner.
+- Covered success, provider selection, active model lookup, context forwarding, metadata forwarding, signal propagation, and no-provider behavior with focused tests.
+
+Quality gate:
+
+- `npx vitest run packages/workbench/src/workbenchAiActions.test.ts`: passed, 2 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 65 files / 624 tests, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Dev server smoke check: passed at `http://127.0.0.1:5173`; status 200 and root element present
+
+Review:
+
+- Future command handlers can execute a summarize-active-note request without duplicating provider selection or request construction policy.
+- The action runner returns the provider response and does not decide UI placement, editor insertion, note mutation, or persistence.
+- The implementation stays in Workbench model/action code and does not couple React surfaces to provider internals.
+
+Known limitations:
+
+- The summarize action is not yet registered as a Workbench command or surfaced in menus.
+- There is still no built-in AI provider or credential bridge.
