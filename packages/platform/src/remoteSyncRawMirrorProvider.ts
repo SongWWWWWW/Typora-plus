@@ -91,6 +91,7 @@ export function createRemoteSyncRawMirrorProvider(options: RemoteSyncRawMirrorPr
       }
 
       const remoteResources = await options.adapter.listResources(createRawMirrorListRequest(request));
+      validateRawMirrorPlannedOperations(operations, request.resources, remoteResources);
       const execution = await options.adapter.executeOperations({
         ...createRawMirrorBaseRequest(request),
         plan,
@@ -211,6 +212,93 @@ function validateRawMirrorExecutionOperations(
   }
 
   return returned;
+}
+
+function validateRawMirrorPlannedOperations(
+  operations: readonly RemoteSyncOperation[],
+  localResources: readonly RemoteSyncResource[],
+  remoteResources: readonly RemoteSyncRemoteResource[]
+): void {
+  const localByPath = new Map(localResources.map((resource) => [resource.relativePath, resource]));
+  const remoteByPath = new Map(remoteResources.map((resource) => [resource.relativePath, resource]));
+
+  for (const operation of operations) {
+    const local = localByPath.get(operation.relativePath);
+    const remote = remoteByPath.get(operation.relativePath);
+
+    validateRawMirrorOperationTarget(operation);
+
+    switch (operation.kind) {
+      case "create":
+        validateRawMirrorCreateOperation(operation, local, remote);
+        break;
+      case "update":
+        validateRawMirrorUpdateOperation(operation, local, remote);
+        break;
+      case "delete":
+        validateRawMirrorDeleteOperation(operation, local, remote);
+        break;
+      case "skip":
+      case "conflict":
+        throw new Error("Remote sync raw mirror execution included a non-executable planned operation");
+    }
+  }
+}
+
+function validateRawMirrorOperationTarget(operation: RemoteSyncOperation): void {
+  if (operation.target !== "local" && operation.target !== "remote") {
+    throw new Error(`Remote sync raw mirror operation ${operation.relativePath} must target local or remote`);
+  }
+}
+
+function validateRawMirrorCreateOperation(
+  operation: RemoteSyncOperation,
+  local: RemoteSyncResource | undefined,
+  remote: RemoteSyncRemoteResource | undefined
+): void {
+  if (operation.target === "remote") {
+    if (!local) {
+      throw new Error(`Remote sync raw mirror create ${operation.relativePath} requires a local resource`);
+    }
+
+    if (remote) {
+      throw new Error(`Remote sync raw mirror create ${operation.relativePath} found an existing remote resource`);
+    }
+
+    return;
+  }
+
+  if (!remote) {
+    throw new Error(`Remote sync raw mirror create ${operation.relativePath} requires a remote resource`);
+  }
+
+  if (local) {
+    throw new Error(`Remote sync raw mirror create ${operation.relativePath} found an existing local resource`);
+  }
+}
+
+function validateRawMirrorUpdateOperation(
+  operation: RemoteSyncOperation,
+  local: RemoteSyncResource | undefined,
+  remote: RemoteSyncRemoteResource | undefined
+): void {
+  if (!local || !remote) {
+    throw new Error(`Remote sync raw mirror update ${operation.relativePath} requires local and remote resources`);
+  }
+}
+
+function validateRawMirrorDeleteOperation(
+  operation: RemoteSyncOperation,
+  local: RemoteSyncResource | undefined,
+  remote: RemoteSyncRemoteResource | undefined
+): void {
+  if (operation.target === "local" && !local) {
+    throw new Error(`Remote sync raw mirror delete ${operation.relativePath} requires a local resource`);
+  }
+
+  if (operation.target === "remote" && !remote) {
+    throw new Error(`Remote sync raw mirror delete ${operation.relativePath} requires a remote resource`);
+  }
 }
 
 function isRawMirrorExecutableOperation(operation: RemoteSyncOperation): boolean {

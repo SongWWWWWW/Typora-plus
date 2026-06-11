@@ -326,7 +326,88 @@ describe("remote sync raw mirror provider", () => {
         skips: 0,
         conflicts: 0
       }
-    }, planRequest())).rejects.toThrow("returned a duplicate operation: daily/today.md");
+    }, planRequest({
+      resources: [
+        localResource("daily/today.md"),
+        localResource("daily/tomorrow.md")
+      ]
+    }))).rejects.toThrow("returned a duplicate operation: daily/today.md");
+    expect(storage.write).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    {
+      name: "create remote without local resource",
+      planResources: [],
+      remoteResources: [],
+      operation: executableOperation("daily/today.md"),
+      error: "create daily/today.md requires a local resource"
+    },
+    {
+      name: "create remote over existing remote resource",
+      planResources: [localResource("daily/today.md")],
+      remoteResources: [remoteResource("daily/today.md")],
+      operation: executableOperation("daily/today.md"),
+      error: "create daily/today.md found an existing remote resource"
+    },
+    {
+      name: "update remote without remote resource",
+      planResources: [localResource("daily/today.md")],
+      remoteResources: [],
+      operation: {
+        ...executableOperation("daily/today.md"),
+        kind: "update" as const
+      },
+      error: "update daily/today.md requires local and remote resources"
+    },
+    {
+      name: "delete remote without remote resource",
+      planResources: [],
+      remoteResources: [],
+      operation: {
+        ...executableOperation("daily/today.md"),
+        kind: "delete" as const
+      },
+      error: "delete daily/today.md requires a remote resource"
+    },
+    {
+      name: "unsupported executable target",
+      planResources: [localResource("daily/today.md")],
+      remoteResources: [remoteResource("daily/today.md")],
+      operation: {
+        ...executableOperation("daily/today.md"),
+        kind: "delete" as const,
+        target: "both" as const
+      },
+      error: "operation daily/today.md must target local or remote"
+    }
+  ])("rejects stale executable plans before adapter calls: $name", async ({
+    planResources,
+    remoteResources,
+    operation,
+    error
+  }) => {
+    const storage = createMemoryStorage();
+    const adapter = {
+      listResources: vi.fn(() => remoteResources),
+      executeOperations: vi.fn(() => ({
+        remoteResources: []
+      }))
+    };
+    const provider = createRemoteSyncRawMirrorProvider({
+      id: "raw.mirror",
+      title: "Raw Mirror",
+      manifestStore: new RemoteSyncManifestStore({ storage }),
+      adapter
+    });
+
+    await expect(provider.executePlan({
+      operations: [operation],
+      summary: summarizeOperations([operation])
+    }, planRequest({
+      resources: planResources
+    }))).rejects.toThrow(error);
+    expect(adapter.executeOperations).not.toHaveBeenCalled();
     expect(storage.write).not.toHaveBeenCalled();
   });
 
@@ -373,13 +454,7 @@ describe("remote sync raw mirror provider", () => {
 function planRequest(overrides: Partial<RemoteSyncPlanRequest> = {}): RemoteSyncPlanRequest {
   return {
     workspaceUri: URI.file("C:/Notes"),
-    resources: [{
-      uri: URI.file("C:/Notes/daily/today.md"),
-      relativePath: "daily/today.md",
-      kind: "file",
-      size: 12,
-      contentHash: "hash-1"
-    }],
+    resources: [localResource("daily/today.md")],
     direction: "bidirectional",
     remoteScopeId: "workspace-root",
     metadata: {
@@ -389,11 +464,41 @@ function planRequest(overrides: Partial<RemoteSyncPlanRequest> = {}): RemoteSync
   };
 }
 
+function localResource(relativePath: string): RemoteSyncPlanRequest["resources"][number] {
+  return {
+    uri: URI.file(`C:/Notes/${relativePath}`),
+    relativePath,
+    kind: "file",
+    size: 12,
+    contentHash: "hash-1"
+  };
+}
+
+function remoteResource(relativePath: string): RemoteSyncRemoteResource {
+  return {
+    relativePath,
+    kind: "file",
+    remoteId: `remote:${relativePath}`,
+    size: 12,
+    contentHash: "hash-1"
+  };
+}
+
 function executableOperation(relativePath: string): RemoteSyncOperation {
   return {
     kind: "create",
     target: "remote",
     relativePath
+  };
+}
+
+function summarizeOperations(operations: readonly RemoteSyncOperation[]) {
+  return {
+    creates: operations.filter((operation) => operation.kind === "create").length,
+    updates: operations.filter((operation) => operation.kind === "update").length,
+    deletes: operations.filter((operation) => operation.kind === "delete").length,
+    skips: operations.filter((operation) => operation.kind === "skip").length,
+    conflicts: operations.filter((operation) => operation.kind === "conflict").length
   };
 }
 

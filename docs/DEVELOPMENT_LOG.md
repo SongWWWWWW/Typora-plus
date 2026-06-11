@@ -7657,3 +7657,34 @@ Known limitations:
 
 - No concrete Feishu/raw-mirror adapter is implemented yet.
 - The guard validates operation identity, not remote content transfer success; adapters must still return comparable post-execution snapshots for manifest refresh to succeed.
+
+## 2026-06-12 - P2 Remote Sync Raw Mirror Planned Operation Validation
+
+Completed:
+
+- Validated raw mirror executable plans against the current local resource list and freshly listed remote snapshot before adapter execution.
+- Rejected stale create operations when the required source resource is missing or the destination resource already exists.
+- Rejected stale update operations unless both local and remote resources are present.
+- Rejected stale delete operations when the target-side resource is missing.
+- Rejected executable operations targeting `both` or `none` before adapter calls.
+- Added focused tests to ensure stale or malformed plans do not call adapter execution and do not write manifest state.
+
+Quality gate:
+
+- `npx vitest run packages/platform/src/remoteSyncRawMirrorProvider.test.ts packages/platform/src/remoteSync.test.ts`: passed, 2 files / 41 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 82 files / 781 tests, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Raw mirror planned-operation validation hardcode scan for endpoint/OAuth/token/secret/model/provider literals: passed
+
+Review:
+
+- The raw mirror provider now defends against stale or hand-written plans even when callers bypass Workbench's dialog flow.
+- Execution validation happens after a fresh remote list and before adapter mutation, so adapters receive only operations that still match the provider-neutral resource snapshot.
+- The change keeps transfer mechanics and cloud API behavior injected; no endpoint, OAuth scope, token, folder id, provider id, or retry policy default was added.
+
+Known limitations:
+
+- No concrete Feishu/raw-mirror adapter is implemented yet.
+- The validation checks resource presence and operation semantics, but content transfer success still depends on the future adapter returning comparable post-execution snapshots.
