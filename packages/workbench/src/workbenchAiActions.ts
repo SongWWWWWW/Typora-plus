@@ -12,6 +12,7 @@ import {
   workbenchAiRequestActions,
   type WorkbenchAiRequestAction
 } from "./workbenchAiRequestModel";
+import type { WorkbenchAiResponseApplyMode } from "./workbenchAiResponseModel";
 import {
   createWorkbenchWorkspaceAiContext,
   type WorkbenchAiWorkspaceContextOptions
@@ -81,6 +82,28 @@ export function appendWorkbenchAiResponseToActiveNote(
     : services.textFileService.updateContent(nextValue);
 }
 
+export function replaceWorkbenchActiveNoteWithAiResponse(
+  services: Pick<WorkbenchAiActionServices, "textFileService">,
+  response: Pick<AiTextResponse, "value">
+): TextFileModel {
+  const model = services.textFileService.getActiveModel();
+  const nextValue = normalizeWorkbenchMarkdownDocument(response.value);
+
+  return !nextValue || nextValue === model.value
+    ? model
+    : services.textFileService.updateContent(nextValue);
+}
+
+export function applyWorkbenchAiResponseToActiveNote(
+  services: Pick<WorkbenchAiActionServices, "textFileService">,
+  response: Pick<AiTextResponse, "value">,
+  mode: WorkbenchAiResponseApplyMode
+): TextFileModel {
+  return mode === "replace"
+    ? replaceWorkbenchActiveNoteWithAiResponse(services, response)
+    : appendWorkbenchAiResponseToActiveNote(services, response);
+}
+
 export function appendWorkbenchMarkdownBlock(value: string, block: string): string {
   const normalizedBlock = trimWorkbenchMarkdownBlockBoundary(block);
 
@@ -109,6 +132,12 @@ function trimWorkbenchMarkdownBlockBoundary(value: string): string {
   return value
     .replace(/^(?:[ \t]*\r?\n)+/, "")
     .replace(/(?:\r?\n[ \t]*)+$/, "");
+}
+
+function normalizeWorkbenchMarkdownDocument(value: string): string {
+  const normalized = trimWorkbenchMarkdownBlockBoundary(value);
+
+  return normalized ? `${normalized}\n` : "";
 }
 
 function createWorkbenchAiActionContext(

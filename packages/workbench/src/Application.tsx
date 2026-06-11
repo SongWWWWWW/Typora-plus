@@ -1,7 +1,6 @@
 import { MarkdownEditor, type MarkdownEditorHandle } from "@typora-plus/editor";
 import { calculateMarkdownStats, extractOutline, type OutlineEntry } from "@typora-plus/markdown";
 import type {
-  AiTextResponse,
   FileSaveConflict,
   FileTreeEntry,
   MenuId,
@@ -75,7 +74,12 @@ import {
 } from "./workbenchContextModel";
 import { createWorkbenchConfigurationUpdateHandler } from "./workbenchConfigurationUpdates";
 import { createWorkbenchEditorAdapter } from "./workbenchEditorAdapter";
-import { appendWorkbenchAiResponseToActiveNote } from "./workbenchAiActions";
+import { applyWorkbenchAiResponseToActiveNote } from "./workbenchAiActions";
+import {
+  formatWorkbenchAiResponseApplyLabel,
+  type WorkbenchAiResponse,
+  type WorkbenchAiResponseApplyState
+} from "./workbenchAiResponseModel";
 import { createWorkbenchAiProviderDiagnosticActions } from "./workbenchAiProviderDiagnostics";
 import { createWorkbenchAiSecretActions } from "./workbenchAiSecrets";
 import {
@@ -188,7 +192,7 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedTag, setSelectedTag] = useState<string | undefined>();
   const [operationError, setOperationError] = useState<string | undefined>();
-  const [aiResponse, setAiResponse] = useState<AiTextResponse | undefined>();
+  const [aiResponse, setAiResponse] = useState<WorkbenchAiResponse | undefined>();
   const [remoteSyncPlan, setRemoteSyncPlan] = useState<WorkbenchRemoteSyncPlanResult | undefined>();
   const [remoteSyncExecution, setRemoteSyncExecution] = useState<WorkbenchRemoteSyncExecutionResult | undefined>();
   const [remoteSyncExecuting, setRemoteSyncExecuting] = useState(false);
@@ -506,9 +510,9 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
       ) : null}
       {aiResponse ? (
         <AiResponseDialog
-          response={aiResponse}
-          onAppend={() => runWorkbenchAction(
-            () => appendWorkbenchAiResponseToActiveNote(services, aiResponse),
+          result={aiResponse}
+          onApply={() => runWorkbenchAction(
+            () => applyWorkbenchAiResponseToActiveNote(services, aiResponse.response, aiResponse.applyMode),
             setOperationError,
             setSaveConflict
           ).then(Boolean)}
@@ -1208,32 +1212,32 @@ function SaveConflictDialog({
 }
 
 function AiResponseDialog({
-  response,
-  onAppend,
+  result,
+  onApply,
   onClose
 }: {
-  readonly response: AiTextResponse;
-  readonly onAppend: () => Promise<boolean>;
+  readonly result: WorkbenchAiResponse;
+  readonly onApply: () => Promise<boolean>;
   readonly onClose: () => void;
 }) {
   const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
-  const [appendState, setAppendState] = useState<"idle" | "appended" | "failed">("idle");
-  const canCopyResponse = response.value.length > 0;
-  const canAppendResponse = canCopyResponse && appendState !== "appended";
+  const [applyState, setApplyState] = useState<WorkbenchAiResponseApplyState>("idle");
+  const canCopyResponse = result.response.value.length > 0;
+  const canApplyResponse = canCopyResponse && applyState !== "applied";
 
   useEffect(() => {
     setCopyState("idle");
-    setAppendState("idle");
-  }, [response.value]);
+    setApplyState("idle");
+  }, [result.applyMode, result.response.value]);
 
   const onCopy = () => {
-    void copyWorkbenchTextToClipboard(response.value).then((copied) => {
+    void copyWorkbenchTextToClipboard(result.response.value).then((copied) => {
       setCopyState(copied ? "copied" : "failed");
     });
   };
-  const onAppendResponse = () => {
-    void onAppend().then((appended) => {
-      setAppendState(appended ? "appended" : "failed");
+  const onApplyResponse = () => {
+    void onApply().then((applied) => {
+      setApplyState(applied ? "applied" : "failed");
     });
   };
 
@@ -1249,7 +1253,7 @@ function AiResponseDialog({
         <div className="tp-dialog-header">
           <div className="tp-dialog-title tp-ai-dialog-title">
             <FileText size={18} />
-            <span>AI Response</span>
+            <span>{result.title}</span>
           </div>
           <IconButton title="Close" onClick={onClose}>
             <X size={16} />
@@ -1257,10 +1261,10 @@ function AiResponseDialog({
         </div>
         <div className="tp-ai-dialog-body">
           <div className="tp-ai-dialog-meta">
-            <span>{response.providerId}</span>
-            {response.model ? <span>{response.model}</span> : null}
+            <span>{result.response.providerId}</span>
+            {result.response.model ? <span>{result.response.model}</span> : null}
           </div>
-          <p className="tp-ai-response">{response.value || "No response content."}</p>
+          <p className="tp-ai-response">{result.response.value || "No response content."}</p>
         </div>
         <div className="tp-dialog-actions">
           <button
@@ -1275,11 +1279,11 @@ function AiResponseDialog({
           <button
             className="tp-dialog-button"
             type="button"
-            disabled={!canAppendResponse}
-            onClick={onAppendResponse}
+            disabled={!canApplyResponse}
+            onClick={onApplyResponse}
           >
             <Plus size={15} />
-            <span>{formatAiResponseAppendLabel(appendState)}</span>
+            <span>{formatWorkbenchAiResponseApplyLabel(result.applyMode, applyState)}</span>
           </button>
           <button className="tp-dialog-button tp-dialog-button-primary" type="button" onClick={onClose}>
             <span>Close</span>
@@ -1298,17 +1302,6 @@ function formatAiResponseCopyLabel(copyState: "idle" | "copied" | "failed"): str
       return "Copy failed";
     case "idle":
       return "Copy";
-  }
-}
-
-function formatAiResponseAppendLabel(appendState: "idle" | "appended" | "failed"): string {
-  switch (appendState) {
-    case "appended":
-      return "Appended";
-    case "failed":
-      return "Append failed";
-    case "idle":
-      return "Append";
   }
 }
 

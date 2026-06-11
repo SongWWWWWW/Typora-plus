@@ -7210,3 +7210,36 @@ Known limitations:
 - Rewrite output is appendable but not an in-place replacement workflow yet.
 - Translation and free-form workspace Q&A still need target-language/question input surfaces before they should be exposed.
 - No built-in AI provider is registered by default; users still need a configured provider and saved secret.
+
+## 2026-06-12 - P2 AI Response Apply Modes
+
+Completed:
+
+- Added a focused Workbench AI response model that maps active-note AI actions to action titles and explicit apply modes.
+- Kept summarize, continue, and task-extraction responses append-only while making rewrite responses replace the active note through the text-file boundary.
+- Added a generic response apply helper so JSX does not own append-versus-replace policy.
+- Updated the AI response dialog to show the action title and mode-specific Append/Replace button state.
+- Kept all provider identity, endpoint, model, secret, token, OAuth, Codex, and Feishu behavior outside Workbench UI defaults.
+
+Quality gate:
+
+- `npx vitest run packages/workbench/src/workbenchAiResponseModel.test.ts packages/workbench/src/workbenchAiActions.test.ts packages/workbench/src/workbenchCommandRegistration.test.ts`: passed, 3 files / 17 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 76 files / 713 tests, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Workbench implementation hardcode scan for endpoint/secret/token/model literal patterns: passed
+- Dev server smoke check at `http://127.0.0.1:5173/`: status 200 and root element present
+
+Review:
+
+- Response application policy now lives in `workbenchAiResponseModel` and `workbenchAiActions` instead of `Application.tsx`.
+- Rewrite replacement is still explicit and user-triggered; provider output never mutates the active model automatically.
+- Replacement uses the same `ITextFileService.updateContent()` path as append, preserving the text-file service boundary.
+
+Known limitations:
+
+- AI responses are still final-response only; streaming output remains future work.
+- Rewrite replacement applies to the whole active note, not a selected range.
+- Translation and free-form workspace Q&A still need target-language/question input surfaces before they should be exposed.
+- No built-in AI provider is registered by default; users still need a configured provider and saved secret.

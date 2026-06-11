@@ -13,6 +13,8 @@ import {
 import {
   appendWorkbenchAiResponseToActiveNote,
   appendWorkbenchMarkdownBlock,
+  applyWorkbenchAiResponseToActiveNote,
+  replaceWorkbenchActiveNoteWithAiResponse,
   runWorkbenchActiveNoteAiAction,
   runWorkbenchSummarizeActiveNoteAiAction
 } from "./workbenchAiActions";
@@ -210,6 +212,41 @@ describe("workbench AI actions", () => {
     })).toBe(activeModel);
 
     expect(updateContent).not.toHaveBeenCalled();
+  });
+
+  it("replaces the active note through the text model for rewrite responses", () => {
+    const activeModel = model({ value: "# Draft\n" });
+    const updatedModel = model({ value: "# Final\n\nBody\n" });
+    const updateContent = vi.fn(() => updatedModel);
+    const services = {
+      textFileService: {
+        getActiveModel: vi.fn(() => activeModel),
+        updateContent
+      }
+    };
+
+    expect(replaceWorkbenchActiveNoteWithAiResponse(services, {
+      value: "\n# Final\n\nBody\n"
+    })).toBe(updatedModel);
+
+    expect(services.textFileService.getActiveModel).toHaveBeenCalledOnce();
+    expect(updateContent).toHaveBeenCalledWith("# Final\n\nBody\n");
+  });
+
+  it("applies AI responses through append or replace modes", () => {
+    const activeModel = model({ value: "# Draft" });
+    const updateContent = vi.fn((value: string) => model({ value }));
+    const services = {
+      textFileService: {
+        getActiveModel: vi.fn(() => activeModel),
+        updateContent
+      }
+    };
+
+    expect(applyWorkbenchAiResponseToActiveNote(services, { value: "Next" }, "append").value)
+      .toBe("# Draft\n\nNext\n");
+    expect(applyWorkbenchAiResponseToActiveNote(services, { value: "Replacement" }, "replace").value)
+      .toBe("Replacement\n");
   });
 
   it("formats appended Markdown blocks with stable separation", () => {

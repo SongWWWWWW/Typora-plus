@@ -102,8 +102,13 @@ describe("workbench command registration", () => {
       }
     });
     expect(testCallbacks.setAiResponse).toHaveBeenCalledWith({
-      providerId: "openai.responses",
-      value: "Summary"
+      action: "rewriteActiveNote",
+      applyMode: "replace",
+      response: {
+        providerId: "openai.responses",
+        value: "Summary"
+      },
+      title: "Rewrite Active Note"
     });
     expect(services.indexService.query).toHaveBeenCalledWith("a", {
       maxPreviewLength: defaultConfiguration.ai.workspaceContextMaxPreviewLength,

@@ -1,6 +1,5 @@
 import { DisposableStore, type IDisposable } from "@typora-plus/base";
 import type {
-  AiTextResponse,
   FileSaveConflict,
   TyporaPlusConfiguration,
   WorkspaceState
@@ -21,6 +20,10 @@ import {
   workbenchAiRequestActions,
   type WorkbenchAiRequestAction
 } from "./workbenchAiRequestModel";
+import {
+  createWorkbenchAiResponse,
+  type WorkbenchAiResponse
+} from "./workbenchAiResponseModel";
 import {
   runWorkbenchPlanWorkspaceRemoteSyncAction,
   type WorkbenchRemoteSyncPlanResult
@@ -76,7 +79,7 @@ export interface WorkbenchCommandRegistrationCallbacks {
     MarkdownEditorHandle,
     "removeTaskListMarkers" | "toggleTaskListLines"
   > | null;
-  readonly setAiResponse: (response: AiTextResponse | undefined) => void;
+  readonly setAiResponse: (response: WorkbenchAiResponse | undefined) => void;
   readonly setOperationError: WorkbenchOperationErrorSetter;
   readonly setPaletteOpen: (open: boolean) => void;
   readonly setQuickOpen: (open: boolean) => void;
@@ -133,7 +136,7 @@ export function registerWorkbenchCommands(
               maxResults: state.configuration.ai.workspaceContextMaxResults
             }
           });
-          callbacks.setAiResponse(response);
+          callbacks.setAiResponse(createWorkbenchAiResponse(command.action, response));
         }, callbacks.setOperationError, callbacks.setSaveConflict)
       }));
     }
