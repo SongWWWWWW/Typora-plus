@@ -10,6 +10,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   createWorkbenchEditorAdapter,
   createWorkbenchEditorConfiguration,
+  createWorkbenchEditorContentHandler,
   createWorkbenchImageSourceResolver,
   createWorkbenchMarkdownRendererAdapters,
   createWorkbenchPasteImageHandler,
@@ -31,6 +32,17 @@ describe("workbench editor adapter", () => {
       focusMode: true,
       typewriterMode: true
     });
+  });
+
+  it("creates content handlers through the text-file service boundary", () => {
+    const services = createServices({
+      resourceAvailable: false
+    });
+    const handler = createWorkbenchEditorContentHandler(services);
+
+    handler("# Updated");
+
+    expect(services.textFileService.updateContent).toHaveBeenCalledWith("# Updated");
   });
 
   it("creates image resolvers only for available file resources", async () => {
@@ -129,6 +141,8 @@ describe("workbench editor adapter", () => {
     }), services, model("file:///C:/Notes/a.md"));
 
     expect(adapter.configuration.focusMode).toBe(true);
+    adapter.onChange("# Updated");
+    expect(services.textFileService.updateContent).toHaveBeenCalledWith("# Updated");
     expect(adapter.onPasteImage).toBeDefined();
     expect(adapter.resolveImageSource).toBeDefined();
     expect(adapter.renderCodeFence).toBeDefined();
@@ -153,7 +167,10 @@ function createServices(options: {
     resourceService: {
       isAvailable: vi.fn(() => options.resourceAvailable),
       resolveImageSource: vi.fn((_uri, source) => Promise.resolve(`resolved:${source}`))
-    } satisfies Pick<IResourceService, "isAvailable" | "resolveImageSource">
+    } satisfies Pick<IResourceService, "isAvailable" | "resolveImageSource">,
+    textFileService: {
+      updateContent: vi.fn()
+    }
   };
 }
 

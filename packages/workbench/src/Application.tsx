@@ -378,7 +378,7 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
             ref={editorRef}
             value={model.value}
             configuration={editorAdapter.configuration}
-            onChange={(value) => services.textFileService.updateContent(value)}
+            onChange={editorAdapter.onChange}
             onPasteImage={editorAdapter.onPasteImage}
             resolveImageSource={editorAdapter.resolveImageSource}
             renderCodeFence={editorAdapter.renderCodeFence}

@@ -5089,3 +5089,31 @@ Review:
 Known limitations:
 
 - Native capability context is still applied during service bootstrap because those capabilities are established before the React shell mounts.
+
+## 2026-06-11 - P2 Workbench Editor Content Adapter
+
+Completed:
+
+- Added a Workbench editor content handler that routes editor text changes through the text-file service boundary.
+- Included the content handler in the complete Workbench editor adapter returned to `MarkdownEditor`.
+- Replaced the remaining inline `Application.tsx` editor `onChange` service call with the adapter prop.
+- Covered content handler delegation and complete adapter wiring.
+
+Quality gate:
+
+- `npx vitest run packages/workbench/src/workbenchEditorAdapter.test.ts`: passed, 6 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 544 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Dev server smoke check: passed at `http://127.0.0.1:5173`; status 200 and root element present
+
+Review:
+
+- Editor content updates now share the same focused adapter boundary as editor preferences, image resolution, pasted-image handling, and Markdown renderer adapters.
+- `Application.tsx` still renders the editor surface, while `workbenchEditorAdapter` owns how editor callbacks cross into platform services.
+- No new dependency, configuration key, storage path, visual token, extra documentation file, or hard-coded platform assumption was introduced.
+
+Known limitations:
+
+- Window timers for auto-save, deferred line navigation, and overlay focus are still provided directly by the React shell.

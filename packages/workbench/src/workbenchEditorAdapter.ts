@@ -9,6 +9,7 @@ import type {
   IAttachmentService,
   IMarkdownRendererService,
   IResourceService,
+  ITextFileService,
   TextFileModel,
   TyporaPlusConfiguration
 } from "@typora-plus/platform";
@@ -21,10 +22,12 @@ export interface WorkbenchEditorAdapterServices {
   readonly attachmentService: Pick<IAttachmentService, "isAvailable" | "saveImage">;
   readonly markdownRendererService: IMarkdownRendererService;
   readonly resourceService: Pick<IResourceService, "isAvailable" | "resolveImageSource">;
+  readonly textFileService: Pick<ITextFileService, "updateContent">;
 }
 
 export interface WorkbenchEditorAdapter {
   readonly configuration: MarkdownEditorConfiguration;
+  readonly onChange: (value: string) => void;
   readonly onPasteImage?: (image: PastedEditorImage) => Promise<string | undefined>;
   readonly renderCodeFence: MarkdownCodeFenceRenderer;
   readonly renderInline: MarkdownInlineRenderer;
@@ -38,6 +41,7 @@ export function createWorkbenchEditorAdapter(
 ): WorkbenchEditorAdapter {
   return {
     configuration: createWorkbenchEditorConfiguration(configuration),
+    onChange: createWorkbenchEditorContentHandler(services),
     ...createWorkbenchMarkdownRendererAdapters(configuration, services, model),
     ...createWorkbenchImageSourceResolverEntry(services, model),
     ...createWorkbenchPasteImageHandlerEntry(services, model)
@@ -53,6 +57,14 @@ export function createWorkbenchEditorConfiguration(
     maxWidth: configuration.editor.maxWidth,
     focusMode: configuration.editor.focusMode,
     typewriterMode: configuration.editor.typewriterMode
+  };
+}
+
+export function createWorkbenchEditorContentHandler(
+  services: Pick<WorkbenchEditorAdapterServices, "textFileService">
+): (value: string) => void {
+  return (value) => {
+    services.textFileService.updateContent(value);
   };
 }
 
