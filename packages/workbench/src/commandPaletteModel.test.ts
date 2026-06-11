@@ -2,6 +2,7 @@ import { URI } from "@typora-plus/base";
 import { FileSaveConflictError } from "@typora-plus/platform";
 import { describe, expect, it, vi } from "vitest";
 import {
+  createCommandPaletteExecutionCallbacks,
   executeCommandPaletteCommand,
   filterCommandPaletteCommands,
   type CommandPaletteExecutionServices
@@ -14,6 +15,30 @@ describe("command palette model", () => {
     { id: "file.save", title: "Save", category: "File", run: () => undefined },
     { id: "theme.toggle", title: "Toggle Theme", category: "Workbench", run: () => undefined }
   ];
+
+  it("creates execution callbacks from shell state setters", () => {
+    const setOperationError = vi.fn();
+    const setPaletteOpen = vi.fn();
+    const setSaveConflict = vi.fn();
+    const callbacks = createCommandPaletteExecutionCallbacks({
+      setOperationError,
+      setPaletteOpen,
+      setSaveConflict
+    });
+    const conflict = {
+      uri: URI.file("/workspace/note.md"),
+      expectedMtime: 1,
+      diskMtime: 2
+    };
+
+    callbacks.closePalette();
+    callbacks.setOperationError("Command failed");
+    callbacks.setSaveConflict?.(conflict);
+
+    expect(setPaletteOpen).toHaveBeenCalledWith(false);
+    expect(setOperationError).toHaveBeenCalledWith("Command failed");
+    expect(setSaveConflict).toHaveBeenCalledWith(conflict);
+  });
 
   it("returns every command for an empty query", () => {
     expect(filterCommandPaletteCommands(commands, "   ").map((command) => command.id)).toEqual([

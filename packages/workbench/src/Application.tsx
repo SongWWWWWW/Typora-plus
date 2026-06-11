@@ -39,6 +39,7 @@ import {
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import {
+  createCommandPaletteExecutionCallbacks,
   executeCommandPaletteCommand,
   filterCommandPaletteCommands
 } from "./commandPaletteModel";
@@ -336,6 +337,11 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
     setOperationError,
     setSaveConflict
   });
+  const commandPaletteExecutionCallbacks = createCommandPaletteExecutionCallbacks({
+    setOperationError,
+    setPaletteOpen,
+    setSaveConflict
+  });
 
   return (
     <main className={[
@@ -427,13 +433,9 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
         open={paletteOpen}
         commands={commandSurface.commands}
         getKeybindingLabel={commandSurface.getKeybindingLabel}
-        onClose={() => setPaletteOpen(false)}
+        onClose={commandPaletteExecutionCallbacks.closePalette}
         onExecute={(id) => {
-          executeCommandPaletteCommand(services, id, {
-            closePalette: () => setPaletteOpen(false),
-            setOperationError,
-            setSaveConflict
-          });
+          executeCommandPaletteCommand(services, id, commandPaletteExecutionCallbacks);
         }}
       />
       <QuickOpen

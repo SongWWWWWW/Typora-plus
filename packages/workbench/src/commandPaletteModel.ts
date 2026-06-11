@@ -27,6 +27,22 @@ export interface CommandPaletteExecutionCallbacks {
   readonly setSaveConflict?: (conflict: FileSaveConflict | undefined) => void;
 }
 
+export interface CommandPaletteShellCallbacks {
+  readonly setOperationError: WorkbenchOperationErrorSetter;
+  readonly setPaletteOpen: (open: boolean) => void;
+  readonly setSaveConflict?: (conflict: FileSaveConflict | undefined) => void;
+}
+
+export function createCommandPaletteExecutionCallbacks(
+  callbacks: CommandPaletteShellCallbacks
+): CommandPaletteExecutionCallbacks {
+  return {
+    closePalette: () => callbacks.setPaletteOpen(false),
+    setOperationError: callbacks.setOperationError,
+    ...(callbacks.setSaveConflict ? { setSaveConflict: callbacks.setSaveConflict } : {})
+  };
+}
+
 export function filterCommandPaletteCommands(
   commands: readonly CommandPaletteCommand[],
   query: string,

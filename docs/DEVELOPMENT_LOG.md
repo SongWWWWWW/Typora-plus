@@ -5369,3 +5369,31 @@ Review:
 Known limitations:
 
 - Command Palette execution still owns its close-after-dispatch follow-up in `commandPaletteModel`.
+
+## 2026-06-11 - P2 Command Palette Execution Callbacks
+
+Completed:
+
+- Added a focused Command Palette execution callback factory that maps shell setters to close-palette, operation-error, and save-conflict callbacks.
+- Routed `Application.tsx` Command Palette close and execute wiring through the shared callback object instead of assembling it inline.
+- Preserved command execution, close-after-dispatch behavior, command failure handling, and save-conflict forwarding.
+- Covered callback setter forwarding alongside existing command filtering, execution, failure, and save-conflict tests.
+
+Quality gate:
+
+- `npx vitest run packages/workbench/src/commandPaletteModel.test.ts`: passed, 7 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 559 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Dev server smoke check: passed at `http://127.0.0.1:5173`; status 200 and root element present
+
+Review:
+
+- Command Palette execution now owns the shell callback adaptation required to close the palette after dispatching through the shared Workbench command action boundary.
+- `Application.tsx` still renders the palette and supplies state setters, while `commandPaletteModel` owns search, execution, close, and error callback semantics.
+- No new dependency, configuration key, storage path, visual token, extra documentation file, or hard-coded platform assumption was introduced.
+
+Known limitations:
+
+- Settings update callback wiring is still assembled directly in `Application.tsx`.
