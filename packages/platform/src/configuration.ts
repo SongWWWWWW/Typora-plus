@@ -5,6 +5,7 @@ import type { UserKeybindingRule } from "./keybindings";
 export type ColorSchemePreference = "light" | "dark" | "system";
 export type AiProviderConfigurationKind = "responses";
 export type MarkdownStatusBadgeTone = "danger" | "info" | "neutral" | "success" | "warning";
+export type RemoteSyncProviderConfigurationKind = "native-request";
 
 export interface ConfigurationNumberConstraint {
   readonly min: number;
@@ -29,6 +30,21 @@ export interface AiProviderConfiguration {
   readonly store?: boolean;
 }
 
+export interface RemoteSyncProviderSecretConfiguration {
+  readonly name: string;
+  readonly secretRef: string;
+}
+
+export interface RemoteSyncProviderConfiguration {
+  readonly id: string;
+  readonly title: string;
+  readonly kind: RemoteSyncProviderConfigurationKind;
+  readonly baseUrl: string;
+  readonly remoteScopeId?: string;
+  readonly secrets: readonly RemoteSyncProviderSecretConfiguration[];
+  readonly metadata?: Readonly<Record<string, string>>;
+}
+
 export interface TyporaPlusConfiguration {
   readonly appearance: {
     readonly colorScheme: ColorSchemePreference;
@@ -39,6 +55,9 @@ export interface TyporaPlusConfiguration {
     readonly providers: readonly AiProviderConfiguration[];
     readonly workspaceContextMaxPreviewLength: number;
     readonly workspaceContextMaxResults: number;
+  };
+  readonly remoteSync: {
+    readonly providers: readonly RemoteSyncProviderConfiguration[];
   };
   readonly editor: {
     readonly fontSize: number;
@@ -98,6 +117,7 @@ export interface IConfigurationService {
 export type PartialConfiguration = {
   readonly appearance?: PartialAppearanceConfiguration;
   readonly ai?: Partial<TyporaPlusConfiguration["ai"]>;
+  readonly remoteSync?: Partial<TyporaPlusConfiguration["remoteSync"]>;
   readonly editor?: Partial<TyporaPlusConfiguration["editor"]>;
   readonly workspace?: Partial<TyporaPlusConfiguration["workspace"]>;
   readonly extensionHost?: Partial<TyporaPlusConfiguration["extensionHost"]>;
@@ -118,6 +138,17 @@ export const configurationMaxAiProviderTitleLength = 160;
 export const configurationMaxAiProviderEndpointUrlLength = 2000;
 export const configurationMaxAiProviderModelLength = 120;
 export const configurationMaxAiProviderSecretRefLength = 256;
+export const configurationMaxRemoteSyncProviders = 20;
+export const configurationMaxRemoteSyncProviderIdLength = 256;
+export const configurationMaxRemoteSyncProviderTitleLength = 160;
+export const configurationMaxRemoteSyncProviderBaseUrlLength = 2000;
+export const configurationMaxRemoteSyncProviderRemoteScopeIdLength = 256;
+export const configurationMaxRemoteSyncProviderSecrets = 16;
+export const configurationMaxRemoteSyncProviderSecretNameLength = 64;
+export const configurationMaxRemoteSyncProviderSecretRefLength = 256;
+export const configurationMaxRemoteSyncProviderMetadataEntries = 32;
+export const configurationMaxRemoteSyncProviderMetadataKeyLength = 64;
+export const configurationMaxRemoteSyncProviderMetadataValueLength = 512;
 export const configurationMaxMarkdownStatusBadges = 50;
 export const configurationMaxMarkdownStatusBadgeAliases = 30;
 export const configurationMaxMarkdownStatusBadgeTextLength = 64;
@@ -187,6 +218,9 @@ export const defaultConfiguration: TyporaPlusConfiguration = {
     providers: [],
     workspaceContextMaxPreviewLength: 160,
     workspaceContextMaxResults: 5
+  },
+  remoteSync: {
+    providers: []
   },
   editor: {
     fontSize: 17,
@@ -268,6 +302,10 @@ export function mergeConfiguration(
       ...base.ai,
       ...value.ai
     },
+    remoteSync: {
+      ...base.remoteSync,
+      ...value.remoteSync
+    },
     editor: {
       ...base.editor,
       ...value.editor
@@ -334,6 +372,7 @@ function sanitizePartialConfiguration(value: unknown): PartialConfiguration {
   return {
     ...(isRecord(value.appearance) ? { appearance: sanitizeAppearanceConfiguration(value.appearance) } : {}),
     ...(isRecord(value.ai) ? { ai: sanitizeAiConfiguration(value.ai) } : {}),
+    ...(isRecord(value.remoteSync) ? { remoteSync: sanitizeRemoteSyncConfiguration(value.remoteSync) } : {}),
     ...(isRecord(value.editor) ? { editor: sanitizeEditorConfiguration(value.editor) } : {}),
     ...(isRecord(value.workspace) ? { workspace: sanitizeWorkspaceConfiguration(value.workspace) } : {}),
     ...(isRecord(value.extensionHost) ? { extensionHost: sanitizeExtensionHostConfiguration(value.extensionHost) } : {}),
@@ -374,6 +413,16 @@ function sanitizeAiConfiguration(value: Record<string, unknown>): Partial<Typora
       value.workspaceContextMaxResults,
       configurationNumberConstraints.aiWorkspaceContextMaxResults
     )
+  };
+}
+
+function sanitizeRemoteSyncConfiguration(
+  value: Record<string, unknown>
+): Partial<TyporaPlusConfiguration["remoteSync"]> {
+  const providers = sanitizeRemoteSyncProviderConfigurations(value.providers);
+
+  return {
+    ...(providers !== undefined ? { providers } : {})
   };
 }
 
@@ -448,6 +497,68 @@ export function normalizeAiProviderConfiguration(value: unknown): AiProviderConf
     model,
     secretRef,
     ...(typeof value.store === "boolean" ? { store: value.store } : {})
+  };
+}
+
+function sanitizeRemoteSyncProviderConfigurations(
+  value: unknown
+): readonly RemoteSyncProviderConfiguration[] | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+
+  const providers: RemoteSyncProviderConfiguration[] = [];
+  const seenIds = new Set<string>();
+
+  for (const candidate of value.slice(0, configurationMaxRemoteSyncProviders)) {
+    const provider = normalizeRemoteSyncProviderConfiguration(candidate);
+
+    if (!provider || seenIds.has(provider.id)) {
+      continue;
+    }
+
+    seenIds.add(provider.id);
+    providers.push(provider);
+  }
+
+  if (providers.length === 0 && value.length > 0) {
+    return undefined;
+  }
+
+  return providers;
+}
+
+export function normalizeRemoteSyncProviderConfiguration(
+  value: unknown
+): RemoteSyncProviderConfiguration | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+
+  const id = normalizeRemoteSyncProviderConfigurationId(value.id);
+  const title = normalizeConfigurationText(value.title, configurationMaxRemoteSyncProviderTitleLength);
+  const kind = normalizeRemoteSyncProviderConfigurationKind(value.kind);
+  const baseUrl = normalizeProviderHttpsOrLoopbackUrl(value.baseUrl, configurationMaxRemoteSyncProviderBaseUrlLength);
+  const remoteScopeId = normalizeRemoteSyncProviderRemoteScopeId(value.remoteScopeId);
+  const secrets = sanitizeRemoteSyncProviderSecretConfigurations(value.secrets);
+  const metadata = sanitizeRemoteSyncProviderMetadata(value.metadata);
+
+  if (!id || !title || !kind || !baseUrl || secrets === undefined) {
+    return undefined;
+  }
+
+  return {
+    id,
+    title,
+    kind,
+    baseUrl,
+    ...(remoteScopeId ? { remoteScopeId } : {}),
+    secrets,
+    ...(metadata ? { metadata } : {})
   };
 }
 
@@ -636,7 +747,128 @@ function normalizeAiProviderConfigurationKind(value: unknown): AiProviderConfigu
 }
 
 function normalizeAiProviderEndpointUrl(value: unknown): string | undefined {
-  const normalized = normalizeConfigurationText(value, configurationMaxAiProviderEndpointUrlLength);
+  return normalizeProviderHttpsOrLoopbackUrl(value, configurationMaxAiProviderEndpointUrlLength);
+}
+
+function normalizeAiProviderSecretRef(value: unknown): string | undefined {
+  return normalizeConfigurationSecretRef(value, configurationMaxAiProviderSecretRefLength);
+}
+
+function normalizeRemoteSyncProviderConfigurationId(value: unknown): string | undefined {
+  const normalized = normalizeConfigurationText(value, configurationMaxRemoteSyncProviderIdLength);
+
+  if (!normalized || !/^[A-Za-z0-9][A-Za-z0-9_.:-]*$/.test(normalized)) {
+    return undefined;
+  }
+
+  return normalized;
+}
+
+function normalizeRemoteSyncProviderConfigurationKind(
+  value: unknown
+): RemoteSyncProviderConfigurationKind | undefined {
+  return value === "native-request" ? value : undefined;
+}
+
+function normalizeRemoteSyncProviderRemoteScopeId(value: unknown): string | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  return normalizeConfigurationText(value, configurationMaxRemoteSyncProviderRemoteScopeIdLength);
+}
+
+function sanitizeRemoteSyncProviderSecretConfigurations(
+  value: unknown
+): readonly RemoteSyncProviderSecretConfiguration[] | undefined {
+  if (value === undefined) {
+    return [];
+  }
+
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+
+  const secrets: RemoteSyncProviderSecretConfiguration[] = [];
+  const seenNames = new Set<string>();
+
+  for (const candidate of value.slice(0, configurationMaxRemoteSyncProviderSecrets)) {
+    if (!isRecord(candidate)) {
+      continue;
+    }
+
+    const name = normalizeRemoteSyncProviderSecretName(candidate.name);
+    const secretRef = normalizeConfigurationSecretRef(
+      candidate.secretRef,
+      configurationMaxRemoteSyncProviderSecretRefLength
+    );
+
+    if (!name || !secretRef || seenNames.has(name)) {
+      continue;
+    }
+
+    seenNames.add(name);
+    secrets.push({ name, secretRef });
+  }
+
+  if (secrets.length === 0 && value.length > 0) {
+    return undefined;
+  }
+
+  return secrets;
+}
+
+function normalizeRemoteSyncProviderSecretName(value: unknown): string | undefined {
+  const normalized = normalizeConfigurationText(value, configurationMaxRemoteSyncProviderSecretNameLength);
+
+  if (!normalized || !/^[A-Za-z0-9][A-Za-z0-9_.:-]*$/.test(normalized)) {
+    return undefined;
+  }
+
+  return normalized;
+}
+
+function sanitizeRemoteSyncProviderMetadata(value: unknown): Readonly<Record<string, string>> | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (!isRecord(value)) {
+    return undefined;
+  }
+
+  const metadata: Record<string, string> = {};
+
+  for (const [rawKey, rawValue] of Object.entries(value).slice(0, configurationMaxRemoteSyncProviderMetadataEntries)) {
+    const key = normalizeConfigurationText(rawKey, configurationMaxRemoteSyncProviderMetadataKeyLength);
+    const metadataValue = normalizeConfigurationText(rawValue, configurationMaxRemoteSyncProviderMetadataValueLength);
+
+    if (!key || isSensitiveRemoteSyncProviderMetadataKey(key) || !metadataValue) {
+      continue;
+    }
+
+    metadata[key] = metadataValue;
+  }
+
+  return Object.keys(metadata).length > 0 ? metadata : undefined;
+}
+
+function isSensitiveRemoteSyncProviderMetadataKey(value: string): boolean {
+  return /(?:authorization|credential|password|secret|token|api[-_]?key)/i.test(value);
+}
+
+function normalizeConfigurationSecretRef(value: unknown, maxLength: number): string | undefined {
+  const normalized = normalizeConfigurationText(value, maxLength);
+
+  if (!normalized || !/^[A-Za-z0-9][A-Za-z0-9_.:-]*$/.test(normalized)) {
+    return undefined;
+  }
+
+  return normalized;
+}
+
+function normalizeProviderHttpsOrLoopbackUrl(value: unknown, maxLength: number): string | undefined {
+  const normalized = normalizeConfigurationText(value, maxLength);
 
   if (!normalized) {
     return undefined;
@@ -650,16 +882,6 @@ function normalizeAiProviderEndpointUrl(value: unknown): string | undefined {
   } catch {
     return undefined;
   }
-}
-
-function normalizeAiProviderSecretRef(value: unknown): string | undefined {
-  const normalized = normalizeConfigurationText(value, configurationMaxAiProviderSecretRefLength);
-
-  if (!normalized || !/^[A-Za-z0-9][A-Za-z0-9_.:-]*$/.test(normalized)) {
-    return undefined;
-  }
-
-  return normalized;
 }
 
 function isLoopbackHttpUrl(url: URL): boolean {

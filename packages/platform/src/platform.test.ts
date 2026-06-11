@@ -27,6 +27,7 @@ import {
   flattenFileTree,
   keybindingFromEvent,
   mergeConfiguration,
+  normalizeRemoteSyncProviderConfiguration,
   configurationNumberConstraints,
   ServiceCollection,
   ThemeService,
@@ -122,6 +123,26 @@ describe("configuration", () => {
       workspace: {
         quickOpenMaxResults: 140
       },
+      remoteSync: {
+        providers: [
+          {
+            id: "workspace.sync",
+            title: "Workspace Sync",
+            kind: "native-request",
+            baseUrl: "https://sync.example.test/api",
+            remoteScopeId: "folder.primary",
+            secrets: [
+              {
+                name: "accessToken",
+                secretRef: "typora-plus.remote-sync.workspace.access"
+              }
+            ],
+            metadata: {
+              strategy: "raw-files"
+            }
+          }
+        ]
+      },
       extensionHost: {
         requestTimeoutMs: 20_000,
         wireMessageMaxLength: 2 * 1024 * 1024
@@ -150,6 +171,24 @@ describe("configuration", () => {
     expect(restored.getValue().editor.autoSaveDelayMs).toBe(1250);
     expect(restored.getValue().editor.rendererPreviewCacheEntries).toBe(0);
     expect(restored.getValue().workspace.quickOpenMaxResults).toBe(140);
+    expect(restored.getValue().remoteSync.providers).toEqual([
+      {
+        id: "workspace.sync",
+        title: "Workspace Sync",
+        kind: "native-request",
+        baseUrl: "https://sync.example.test/api",
+        remoteScopeId: "folder.primary",
+        secrets: [
+          {
+            name: "accessToken",
+            secretRef: "typora-plus.remote-sync.workspace.access"
+          }
+        ],
+        metadata: {
+          strategy: "raw-files"
+        }
+      }
+    ]);
     expect(restored.getValue().extensionHost.requestTimeoutMs).toBe(20_000);
     expect(restored.getValue().extensionHost.wireMessageMaxLength).toBe(2 * 1024 * 1024);
     expect(restored.getValue().markdown.statusBadges).toEqual([
@@ -224,6 +263,120 @@ describe("configuration", () => {
     expect(service.getValue().markdown.statusBadges).toEqual([]);
   });
 
+  it("sanitizes remote sync provider configuration", () => {
+    const storage = createMemoryStorage();
+    storage.write("configuration", JSON.stringify({
+      remoteSync: {
+        providers: [
+          {
+            id: " notes.sync ",
+            title: " Notes Sync ",
+            kind: "native-request",
+            baseUrl: "https://sync.example.test/root",
+            remoteScopeId: " workspace/root ",
+            secrets: [
+              {
+                name: "access",
+                secretRef: "typora-plus.remote-sync.notes.access"
+              },
+              {
+                name: "bad name",
+                secretRef: "typora-plus.remote-sync.notes.bad"
+              }
+            ],
+            metadata: {
+              mode: " raw ",
+              empty: "   ",
+              accessToken: "not-for-metadata",
+              ignored: 42
+            }
+          },
+          {
+            id: "notes.sync",
+            title: "Duplicate",
+            kind: "native-request",
+            baseUrl: "https://sync.example.test/duplicate",
+            secrets: []
+          },
+          {
+            id: "bad.sync",
+            title: "Bad",
+            kind: "native-request",
+            baseUrl: "http://sync.example.test/root",
+            secrets: []
+          }
+        ]
+      }
+    }));
+
+    const service = new ConfigurationService({
+      storageKey: "configuration",
+      storage
+    });
+
+    expect(service.getValue().remoteSync.providers).toEqual([
+      {
+        id: "notes.sync",
+        title: "Notes Sync",
+        kind: "native-request",
+        baseUrl: "https://sync.example.test/root",
+        remoteScopeId: "workspace/root",
+        secrets: [
+          {
+            name: "access",
+            secretRef: "typora-plus.remote-sync.notes.access"
+          }
+        ],
+        metadata: {
+          mode: "raw"
+        }
+      }
+    ]);
+
+    service.updateValue({
+      remoteSync: {
+        providers: []
+      }
+    });
+
+    expect(service.getValue().remoteSync.providers).toEqual([]);
+  });
+
+  it("validates remote sync provider profiles without provider-specific defaults", () => {
+    expect(normalizeRemoteSyncProviderConfiguration({
+      id: "notes.sync",
+      title: "Notes Sync",
+      kind: "native-request",
+      baseUrl: "http://127.0.0.1:5173/sync",
+      secrets: []
+    })).toEqual({
+      id: "notes.sync",
+      title: "Notes Sync",
+      kind: "native-request",
+      baseUrl: "http://127.0.0.1:5173/sync",
+      secrets: []
+    });
+    expect(normalizeRemoteSyncProviderConfiguration({
+      id: "notes.sync",
+      title: "Notes Sync",
+      kind: "native-request",
+      baseUrl: "http://sync.example.test/root",
+      secrets: []
+    })).toBeUndefined();
+    expect(normalizeRemoteSyncProviderConfiguration({
+      id: "notes.sync",
+      title: "Notes Sync",
+      kind: "native-request",
+      baseUrl: "https://sync.example.test/root",
+      secrets: [
+        {
+          name: "access token",
+          secretRef: "typora-plus.remote-sync.notes.access"
+        }
+      ]
+    })).toBeUndefined();
+  });
+
   it("clears optional appearance theme ids", () => {
     const service = new ConfigurationService({
       storageKey: "configuration",
@@ -263,6 +416,17 @@ describe("configuration", () => {
         quickOpenMaxResults: 0,
         searchMaxResults: 0
       },
+      remoteSync: {
+        providers: [
+          {
+            id: "bad sync",
+            title: "Bad",
+            kind: "native-request",
+            baseUrl: "http://sync.example.test/root",
+            secrets: []
+          }
+        ]
+      },
       extensionHost: {
         requestTimeoutMs: -1,
         wireMessageMaxLength: -1
@@ -293,6 +457,7 @@ describe("configuration", () => {
     expect(service.getValue().editor.typewriterMode).toBe(true);
     expect(service.getValue().workspace.quickOpenMaxResults).toBe(defaultConfiguration.workspace.quickOpenMaxResults);
     expect(service.getValue().workspace.searchMaxResults).toBe(120);
+    expect(service.getValue().remoteSync.providers).toEqual(defaultConfiguration.remoteSync.providers);
     expect(service.getValue().extensionHost.requestTimeoutMs).toBe(defaultConfiguration.extensionHost.requestTimeoutMs);
     expect(service.getValue().extensionHost.wireMessageMaxLength).toBe(
       defaultConfiguration.extensionHost.wireMessageMaxLength

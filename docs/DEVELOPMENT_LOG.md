@@ -7436,3 +7436,36 @@ Known limitations:
 - No Feishu Drive provider, OAuth flow, token refresh flow, upload/download adapter, or provider configuration UI is registered yet.
 - The native request bridge does not implement provider-specific retry, pagination, rate-limit backoff, or resumable uploads; those remain provider responsibilities behind the remote sync service boundary.
 - Request execution currently buffers responses for bounded JSON/text/base64 return values; streaming upload/download remains future work.
+
+## 2026-06-12 - P2 Remote Sync Provider Profile Configuration
+
+Completed:
+
+- Added a zero-default `remoteSync.providers` configuration group for future provider setup surfaces.
+- Added a provider-neutral `native-request` remote sync profile shape with provider id, title, base URL, optional remote scope id, named `secretRef` bindings, and bounded non-secret metadata.
+- Reused the same HTTPS-or-loopback URL policy as other native request boundaries instead of embedding provider-specific endpoints.
+- Normalized duplicate/invalid profiles out of persisted configuration and kept empty provider arrays valid for explicit cleanup.
+- Filtered sensitive-looking metadata keys so token, secret, credential, password, authorization, and API-key values stay on the native secret path instead of regular configuration.
+- Kept Feishu endpoints, OAuth scopes, app ids, folder tokens, access tokens, provider ids, token refresh policy, model defaults, and decrypted secret values out of defaults and tests.
+- Updated maintained docs without adding new documentation surfaces.
+
+Quality gate:
+
+- `npx vitest run packages/platform/src/platform.test.ts`: passed, 1 file / 105 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 78 files / 737 tests, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Remote sync provider configuration implementation hardcode scan for endpoint/OAuth/token/secret/model/provider defaults: passed
+
+Review:
+
+- Configuration now has a validated place for future remote sync connection profiles, matching the existing AI provider configuration pattern without registering any built-in cloud provider.
+- Secret material remains split from regular configuration: profiles contain only named secret references, while actual values must use the native secret bridge.
+- The profile shape is intentionally narrow. It supports base URL, remote scope id, and bounded metadata, but leaves provider-specific route construction, OAuth, pagination, retries, and execution semantics to future adapters.
+
+Known limitations:
+
+- No Workbench remote sync provider Settings UI consumes these profiles yet.
+- No configured remote sync provider factory is registered yet, so these profiles are preparatory configuration rather than an executable Feishu integration.
+- No Feishu Drive provider, OAuth flow, token refresh flow, upload/download adapter, or streaming transfer path is implemented yet.
