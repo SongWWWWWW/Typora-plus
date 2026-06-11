@@ -78,7 +78,7 @@ import {
 import {
   createWorkbenchLineNavigationCallbacks,
   createWorkbenchLineNavigationEnvironment,
-  openWorkbenchLineTargetAction,
+  createWorkbenchLineTargetOpenHandler,
   scrollWorkbenchLine
 } from "./workbenchLineNavigation";
 import {
@@ -336,6 +336,10 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
       setSaveConflict
     }
   );
+  const lineTargetOpenHandler = createWorkbenchLineTargetOpenHandler(
+    services,
+    lineNavigationCallbacks
+  );
   const saveConflictActionCallbacks = createWorkbenchSaveConflictActionCallbacks({
     setOperationError,
     setSaveConflict
@@ -399,16 +403,10 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
             onSearchQueryChange={setSearchQuery}
             onClose={() => setSideView(null)}
             onSelectLine={(line) => scrollWorkbenchLine(lineNavigationCallbacks, { line })}
-            onOpenSearchResult={(result) => {
-              void openWorkbenchLineTargetAction(services, result, lineNavigationCallbacks);
-            }}
-            onOpenBacklink={(link) => {
-              void openWorkbenchLineTargetAction(services, link, lineNavigationCallbacks);
-            }}
+            onOpenSearchResult={lineTargetOpenHandler}
+            onOpenBacklink={lineTargetOpenHandler}
             onSelectTag={setSelectedTag}
-            onOpenTaggedResource={(tag) => {
-              void openWorkbenchLineTargetAction(services, tag, lineNavigationCallbacks);
-            }}
+            onOpenTaggedResource={lineTargetOpenHandler}
             onOpenWorkspace={() => executeCommand("file.openWorkspace")}
             onOpenRecentWorkspace={(recent) => {
               void openWorkbenchRecentWorkspaceResourceAction(services, recent, resourceOpeningCallbacks);

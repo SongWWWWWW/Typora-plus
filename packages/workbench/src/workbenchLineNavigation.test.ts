@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   createWorkbenchLineNavigationCallbacks,
   createWorkbenchLineNavigationEnvironment,
+  createWorkbenchLineTargetOpenHandler,
   openWorkbenchLineResource,
   openWorkbenchLineTargetAction,
   scrollWorkbenchLine,
@@ -175,6 +176,33 @@ describe("workbench line navigation", () => {
     expect(callbacks.defer).not.toHaveBeenCalled();
     expect(callbacks.scrollToLine).not.toHaveBeenCalled();
   });
+
+  it("creates a line target open handler with the shared action boundary", async () => {
+    const operationErrors: Array<string | undefined> = [];
+    const callbacks = {
+      clearSaveConflict: vi.fn(),
+      defer: vi.fn(),
+      scrollToLine: vi.fn(),
+      setOperationError: (value: string | undefined) => operationErrors.push(value),
+      setSaveConflict: vi.fn()
+    };
+    const services = createServices({
+      openFile: async () => {
+        throw new Error("open failed");
+      }
+    });
+    const openLineTarget = createWorkbenchLineTargetOpenHandler(services, callbacks);
+
+    openLineTarget({ line: 5 });
+    openLineTarget({ uri: URI.file("C:/Notes/missing.md"), line: 8 });
+    await waitForLineTargetHandler();
+
+    expect(callbacks.scrollToLine).toHaveBeenCalledWith(5);
+    expect(callbacks.clearSaveConflict).toHaveBeenCalledOnce();
+    expect(services.textFileService.openFile).toHaveBeenCalledWith(URI.file("C:/Notes/missing.md"));
+    expect(callbacks.defer).not.toHaveBeenCalled();
+    expect(operationErrors).toEqual([undefined, "open failed"]);
+  });
 });
 
 function createServices(overrides: {
@@ -188,6 +216,12 @@ function createServices(overrides: {
       addRecentFile: vi.fn()
     }
   };
+}
+
+function waitForLineTargetHandler(): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, 0);
+  });
 }
 
 function model(path: string): TextFileModel {

@@ -5481,3 +5481,31 @@ Review:
 Known limitations:
 
 - Save Conflict dialog visibility remains shell state because it is the UI representation of the current platform conflict.
+
+## 2026-06-11 - P2 Sidebar Line Target Open Handler
+
+Completed:
+
+- Added a focused Sidebar line target open handler factory that adapts search, backlink, and tagged-resource row selections into the shared line-navigation action boundary.
+- Routed `Application.tsx` Sidebar `onOpenSearchResult`, `onOpenBacklink`, and `onOpenTaggedResource` wiring through one handler instead of dispatching line-target actions inline.
+- Preserved immediate local line scrolling, resource file opening, recent-file recording, stale save-conflict clearing, deferred line scrolling, and operation-error mapping.
+- Covered handler delegation for local and resource line targets alongside the existing line-navigation tests.
+
+Quality gate:
+
+- `npx vitest run packages/workbench/src/workbenchLineNavigation.test.ts`: passed, 8 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 55 files / 563 tests, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Dev server smoke check: passed at `http://127.0.0.1:5173`; status 200 and root element present
+
+Review:
+
+- Sidebar search, backlink, and tag resource selections now cross into `ITextFileService` and editor line scrolling through a Workbench-local handler instead of three shell-local inline action callbacks.
+- `Application.tsx` still renders the Sidebar and owns selected tag/search state, while `workbenchLineNavigation` owns target dispatch, local-vs-resource branching, and error/save-conflict mapping.
+- No new dependency, configuration key, storage path, visual token, extra documentation file, or hard-coded platform assumption was introduced.
+
+Known limitations:
+
+- Sidebar close and selected-tag state remain direct shell state because they are local view-selection concerns with no service boundary.

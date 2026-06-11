@@ -77,6 +77,15 @@ export function createWorkbenchLineNavigationCallbacks(
   };
 }
 
+export function createWorkbenchLineTargetOpenHandler(
+  services: WorkbenchFileOpeningServices,
+  callbacks: WorkbenchLineNavigationActionCallbacks
+): (target: WorkbenchLineNavigationTarget) => void {
+  return (target) => {
+    void openWorkbenchLineTargetAction(services, target, callbacks);
+  };
+}
+
 export function scrollWorkbenchLine(
   callbacks: Pick<WorkbenchLineNavigationCallbacks, "scrollToLine">,
   target: WorkbenchLineTarget
