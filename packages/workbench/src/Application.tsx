@@ -61,7 +61,7 @@ import {
   applyWorkbenchStateContext,
   createWorkbenchCapabilityContext
 } from "./workbenchContextModel";
-import { updateWorkbenchConfigurationAction } from "./workbenchConfigurationUpdates";
+import { createWorkbenchConfigurationUpdateHandler } from "./workbenchConfigurationUpdates";
 import { createWorkbenchEditorAdapter } from "./workbenchEditorAdapter";
 import {
   createWorkbenchFileTreeRows,
@@ -342,6 +342,9 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
     setPaletteOpen,
     setSaveConflict
   });
+  const settingsUpdateHandler = createWorkbenchConfigurationUpdateHandler(services, {
+    setOperationError
+  });
 
   return (
     <main className={[
@@ -456,11 +459,7 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
         getKeybindingLabel={commandSurface.getKeybindingLabel}
         getKeybindingLabelForKeybinding={commandSurface.getKeybindingLabelForKeybinding}
         onClose={() => setSettingsOpen(false)}
-        onUpdate={(value) => {
-          void updateWorkbenchConfigurationAction(services, value, {
-            setOperationError
-          });
-        }}
+        onUpdate={settingsUpdateHandler}
       />
     </main>
   );

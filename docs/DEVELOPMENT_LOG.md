@@ -5397,3 +5397,31 @@ Review:
 Known limitations:
 
 - Settings update callback wiring is still assembled directly in `Application.tsx`.
+
+## 2026-06-11 - P2 Workbench Settings Update Handler
+
+Completed:
+
+- Added a focused Settings update handler factory that adapts `SettingsDialog` partial configuration updates into the shared configuration action boundary.
+- Routed `Application.tsx` Settings `onUpdate` wiring through the handler instead of dispatching configuration actions inline.
+- Preserved configuration service updates, stale operation-error clearing, and storage failure mapping.
+- Covered handler delegation and failure handling alongside the existing configuration update tests.
+
+Quality gate:
+
+- `npx vitest run packages/workbench/src/workbenchConfigurationUpdates.test.ts`: passed, 4 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 560 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Dev server smoke check: passed at `http://127.0.0.1:5173`; status 200 and root element present
+
+Review:
+
+- Settings update wiring now crosses into `IConfigurationService` through a Workbench-local handler instead of a shell-local inline callback.
+- `Application.tsx` still renders Settings and supplies state setters, while `workbenchConfigurationUpdates` owns update dispatch and operation-error mapping.
+- No new dependency, configuration key, storage path, visual token, extra documentation file, or hard-coded platform assumption was introduced.
+
+Known limitations:
+
+- Settings close behavior is still a direct shell state update because it has no service or action boundary.

@@ -15,6 +15,15 @@ export interface WorkbenchConfigurationUpdateCallbacks {
   readonly setOperationError: WorkbenchOperationErrorSetter;
 }
 
+export function createWorkbenchConfigurationUpdateHandler(
+  services: WorkbenchConfigurationUpdateServices,
+  callbacks: WorkbenchConfigurationUpdateCallbacks
+): (value: PartialConfiguration) => void {
+  return (value) => {
+    void updateWorkbenchConfigurationAction(services, value, callbacks);
+  };
+}
+
 export function updateWorkbenchConfiguration(
   services: WorkbenchConfigurationUpdateServices,
   value: PartialConfiguration
