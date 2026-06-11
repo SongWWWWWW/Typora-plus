@@ -26,6 +26,7 @@ describe("workbench menu icons", () => {
       refreshCw: "refresh-cw",
       save: "save",
       search: "search",
+      sparkles: "sparkles",
       settings: "settings",
       target: "target",
       theme: "theme",
@@ -54,6 +55,7 @@ describe("workbench menu icons", () => {
     expect(resolveWorkbenchMenuIconName(workbenchMenuIconIds.refreshCw, lightConfiguration)).toBe("refresh-cw");
     expect(resolveWorkbenchMenuIconName(workbenchMenuIconIds.save, lightConfiguration)).toBe("save");
     expect(resolveWorkbenchMenuIconName(workbenchMenuIconIds.search, lightConfiguration)).toBe("search");
+    expect(resolveWorkbenchMenuIconName(workbenchMenuIconIds.sparkles, lightConfiguration)).toBe("sparkles");
     expect(resolveWorkbenchMenuIconName(workbenchMenuIconIds.settings, lightConfiguration)).toBe("settings");
     expect(resolveWorkbenchMenuIconName(workbenchMenuIconIds.target, lightConfiguration)).toBe("target");
     expect(resolveWorkbenchMenuIconName(workbenchMenuIconIds.type, lightConfiguration)).toBe("type");

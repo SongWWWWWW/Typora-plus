@@ -12,6 +12,7 @@ export const workbenchMenuIconIds = {
   refreshCw: "refresh-cw",
   save: "save",
   search: "search",
+  sparkles: "sparkles",
   settings: "settings",
   target: "target",
   theme: "theme",
@@ -31,6 +32,7 @@ export type WorkbenchMenuIconName =
   | "refresh-cw"
   | "save"
   | "search"
+  | "sparkles"
   | "settings"
   | "sun"
   | "target"
@@ -52,6 +54,7 @@ const workbenchMenuIconNamesById: Readonly<Record<string, WorkbenchMenuIconName 
   [workbenchMenuIconIds.refreshCw]: "refresh-cw",
   [workbenchMenuIconIds.save]: "save",
   [workbenchMenuIconIds.search]: "search",
+  [workbenchMenuIconIds.sparkles]: "sparkles",
   [workbenchMenuIconIds.settings]: "settings",
   [workbenchMenuIconIds.target]: "target",
   [workbenchMenuIconIds.type]: "type"

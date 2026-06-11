@@ -84,6 +84,30 @@ describe("workbench contributions", () => {
     ]);
   });
 
+  it("shows active note AI summary only when an AI provider is available", () => {
+    expect(workbenchMenuCommands("titlebar.primary", {
+      aiProviderAvailable: false,
+      fileSystemAvailable: true,
+      workspaceOpen: true
+    })).not.toContain(workbenchCommandIds.ai.summarizeActiveNote);
+    expect(workbenchMenuCommands("titlebar.primary", {
+      aiProviderAvailable: true,
+      fileSystemAvailable: true,
+      workspaceOpen: true
+    })).toEqual([
+      workbenchCommandIds.file.newUntitled,
+      workbenchCommandIds.file.openWorkspace,
+      workbenchCommandIds.file.save,
+      workbenchCommandIds.file.saveAs,
+      workbenchCommandIds.file.exportHtml,
+      workbenchCommandIds.editor.focusModeToggle,
+      workbenchCommandIds.editor.typewriterModeToggle,
+      workbenchCommandIds.ai.summarizeActiveNote,
+      workbenchCommandIds.theme.toggle,
+      workbenchCommandIds.workbench.commandPaletteOpen
+    ]);
+  });
+
   it("keeps menu contribution ids unique", () => {
     const ids = defaultWorkbenchMenuItems.map((item) => item.id);
 
@@ -163,6 +187,7 @@ describe("workbench contributions", () => {
 function workbenchMenuCommands(
   menu: string,
   context: {
+    readonly aiProviderAvailable?: boolean;
     readonly fileSystemAvailable: boolean;
     readonly remoteSyncProviderAvailable?: boolean;
     readonly workspaceOpen: boolean;
@@ -170,6 +195,7 @@ function workbenchMenuCommands(
 ): readonly string[] {
   const contextKeyService = new ContextKeyService();
   const service = new MenuService(contextKeyService);
+  contextKeyService.setValue(workbenchContextKeys.aiProviderAvailable, context.aiProviderAvailable ?? false);
   contextKeyService.setValue(workbenchContextKeys.fileSystemAvailable, context.fileSystemAvailable);
   contextKeyService.setValue(
     workbenchContextKeys.remoteSyncProviderAvailable,

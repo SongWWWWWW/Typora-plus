@@ -6580,3 +6580,33 @@ Known limitations:
 
 - The titlebar entry still depends on a future remote sync provider being registered.
 - The plan dialog remains non-executing; operation approval, progress, cancellation, and conflict-resolution UI are still future work.
+
+## 2026-06-11 - P2 AI Summary Menu Contribution
+
+Completed:
+
+- Added a default titlebar menu contribution for `ai.summarizeActiveNote`.
+- Gated the menu item behind `ai.providerAvailable` so Workbench does not surface a dead AI action without a registered provider.
+- Added a stable `sparkles` menu icon id and local lucide renderer mapping for AI-oriented menu contributions.
+- Covered AI-provider-gated titlebar visibility, stable command ordering, and icon-id resolution with focused Workbench tests.
+- Updated maintained docs to record the provider-gated AI titlebar discovery path.
+
+Quality gate:
+
+- `npx vitest run packages/workbench/src/workbenchContributions.test.ts packages/workbench/src/workbenchMenuIcons.test.ts packages/workbench/src/workbenchMenuModel.test.ts packages/workbench/src/workbenchCommandRegistration.test.ts`: passed, 4 files / 29 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 67 files / 645 tests, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Dev server smoke check: passed at `http://127.0.0.1:5173`; status 200 and root element present
+
+Review:
+
+- The summarize-active-note command is now discoverable through the same contribution path as file, editor, AI, sync, and workbench actions.
+- Visibility remains context-key driven and provider-neutral, matching the existing command registration guard.
+- No OpenAI endpoint, Codex surface, model id, token, provider id, credential behavior, or note mutation policy was introduced.
+
+Known limitations:
+
+- The titlebar entry still depends on a future AI provider being registered.
+- Streaming responses, insert/replace workflows, and workspace-grounded retrieval remain future work.

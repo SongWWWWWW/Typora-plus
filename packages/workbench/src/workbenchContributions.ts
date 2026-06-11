@@ -97,6 +97,17 @@ export const defaultWorkbenchExtensionManifest = {
         toggled: { context: workbenchContextKeys.editorTypewriterMode, value: true }
       },
       {
+        id: "titlebar.ai.summarizeActiveNote",
+        menu: workbenchMenuIds.titlebarPrimary,
+        command: workbenchCommandIds.ai.summarizeActiveNote,
+        title: "Summarize Active Note",
+        icon: workbenchMenuIconIds.sparkles,
+        group: "25_ai",
+        order: 10,
+        compactHidden: true,
+        when: workbenchContextKeys.aiProviderAvailable
+      },
+      {
         id: "titlebar.remoteSync.planWorkspace",
         menu: workbenchMenuIds.titlebarPrimary,
         command: workbenchCommandIds.remoteSync.planWorkspace,
