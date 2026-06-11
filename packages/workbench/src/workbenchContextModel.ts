@@ -1,8 +1,10 @@
 import type {
   ContextKeyValue,
   IAttachmentService,
+  IAiService,
   IContextKeyService,
   IFileService,
+  IRemoteSyncService,
   IResourceService,
   TextFileModel,
   TyporaPlusConfiguration,
@@ -18,7 +20,9 @@ export const workbenchContextKeys = {
   editorFocusMode: "editor.focusMode",
   editorTypewriterMode: "editor.typewriterMode",
   sideView: "sideView",
-  workspaceOpen: "workspace.open"
+  workspaceOpen: "workspace.open",
+  aiProviderAvailable: "ai.providerAvailable",
+  remoteSyncProviderAvailable: "remoteSync.providerAvailable"
 } as const;
 
 export type WorkbenchContextKey =
@@ -50,7 +54,19 @@ export interface WorkbenchStateContextConfiguration {
 }
 
 export interface WorkbenchStateContextServices {
+  readonly aiService: Pick<IAiService, "getProviders">;
   readonly contextKeyService: Pick<IContextKeyService, "setValue">;
+  readonly remoteSyncService: Pick<IRemoteSyncService, "getProviders">;
+}
+
+export interface WorkbenchProviderAvailabilityContext {
+  readonly aiProviderAvailable: boolean;
+  readonly remoteSyncProviderAvailable: boolean;
+}
+
+export interface WorkbenchProviderAvailabilityContextServices {
+  readonly aiService: Pick<IAiService, "getProviders">;
+  readonly remoteSyncService: Pick<IRemoteSyncService, "getProviders">;
 }
 
 export function createWorkbenchCapabilityContextValues(
@@ -95,7 +111,8 @@ export function createWorkbenchStateContextValues(
   configuration: WorkbenchStateContextConfiguration,
   model: Pick<TextFileModel, "uri">,
   sideView: WorkbenchSideView | null,
-  workspace: Pick<WorkspaceState, "files">
+  workspace: Pick<WorkspaceState, "files">,
+  providers: WorkbenchProviderAvailabilityContext
 ): readonly WorkbenchContextEntry[] {
   return [
     {
@@ -117,8 +134,25 @@ export function createWorkbenchStateContextValues(
     {
       key: workbenchContextKeys.workspaceOpen,
       value: workspace.files ? true : false
+    },
+    {
+      key: workbenchContextKeys.aiProviderAvailable,
+      value: providers.aiProviderAvailable
+    },
+    {
+      key: workbenchContextKeys.remoteSyncProviderAvailable,
+      value: providers.remoteSyncProviderAvailable
     }
   ];
+}
+
+export function createWorkbenchProviderAvailabilityContext(
+  services: WorkbenchProviderAvailabilityContextServices
+): WorkbenchProviderAvailabilityContext {
+  return {
+    aiProviderAvailable: services.aiService.getProviders().length > 0,
+    remoteSyncProviderAvailable: services.remoteSyncService.getProviders().length > 0
+  };
 }
 
 export function applyWorkbenchContextValues(
@@ -139,6 +173,12 @@ export function applyWorkbenchStateContext(
 ): void {
   applyWorkbenchContextValues(
     services.contextKeyService,
-    createWorkbenchStateContextValues(configuration, model, sideView, workspace)
+    createWorkbenchStateContextValues(
+      configuration,
+      model,
+      sideView,
+      workspace,
+      createWorkbenchProviderAvailabilityContext(services)
+    )
   );
 }

@@ -7,6 +7,7 @@ import {
   applyWorkbenchStateContext,
   createWorkbenchCapabilityContext,
   createWorkbenchCapabilityContextValues,
+  createWorkbenchProviderAvailabilityContext,
   createWorkbenchStateContextValues,
   workbenchContextKeys
 } from "./workbenchContextModel";
@@ -58,7 +59,7 @@ describe("workbench context model", () => {
       }
     }, {
       uri: URI.file("/workspace/README.md")
-    }, "tags", workspace(true))).toEqual([
+    }, "tags", workspace(true), providers(true, false))).toEqual([
       {
         key: workbenchContextKeys.activeResourceScheme,
         value: "file"
@@ -78,6 +79,14 @@ describe("workbench context model", () => {
       {
         key: workbenchContextKeys.workspaceOpen,
         value: true
+      },
+      {
+        key: workbenchContextKeys.aiProviderAvailable,
+        value: true
+      },
+      {
+        key: workbenchContextKeys.remoteSyncProviderAvailable,
+        value: false
       }
     ]);
   });
@@ -90,7 +99,7 @@ describe("workbench context model", () => {
       }
     }, {
       uri: URI.parse("untitled://default")
-    }, null, workspace(false));
+    }, null, workspace(false), providers(false, true));
 
     expect(values.find((entry) => entry.key === workbenchContextKeys.activeResourceScheme)?.value)
       .toBe("untitled");
@@ -98,6 +107,24 @@ describe("workbench context model", () => {
       .toBeNull();
     expect(values.find((entry) => entry.key === workbenchContextKeys.workspaceOpen)?.value)
       .toBe(false);
+    expect(values.find((entry) => entry.key === workbenchContextKeys.aiProviderAvailable)?.value)
+      .toBe(false);
+    expect(values.find((entry) => entry.key === workbenchContextKeys.remoteSyncProviderAvailable)?.value)
+      .toBe(true);
+  });
+
+  it("captures provider availability through service boundaries", () => {
+    const services = createProviderAvailabilityServices({
+      aiProviderCount: 1,
+      remoteSyncProviderCount: 0
+    });
+
+    expect(createWorkbenchProviderAvailabilityContext(services)).toEqual({
+      aiProviderAvailable: true,
+      remoteSyncProviderAvailable: false
+    });
+    expect(services.aiService.getProviders).toHaveBeenCalledOnce();
+    expect(services.remoteSyncService.getProviders).toHaveBeenCalledOnce();
   });
 
   it("applies context values through the context key service boundary", () => {
@@ -142,6 +169,10 @@ describe("workbench context model", () => {
     const setValue = vi.fn<(key: string, value: ContextKeyValue | undefined) => void>();
 
     applyWorkbenchStateContext({
+      ...createProviderAvailabilityServices({
+        aiProviderCount: 0,
+        remoteSyncProviderCount: 1
+      }),
       contextKeyService: {
         setValue
       }
@@ -159,10 +190,22 @@ describe("workbench context model", () => {
       [workbenchContextKeys.editorFocusMode, true],
       [workbenchContextKeys.editorTypewriterMode, true],
       [workbenchContextKeys.sideView, "search"],
-      [workbenchContextKeys.workspaceOpen, true]
+      [workbenchContextKeys.workspaceOpen, true],
+      [workbenchContextKeys.aiProviderAvailable, false],
+      [workbenchContextKeys.remoteSyncProviderAvailable, true]
     ]);
   });
 });
+
+function providers(
+  aiProviderAvailable: boolean,
+  remoteSyncProviderAvailable: boolean
+) {
+  return {
+    aiProviderAvailable,
+    remoteSyncProviderAvailable
+  };
+}
 
 function workspace(open: boolean): Pick<WorkspaceState, "files"> {
   if (!open) {
@@ -199,6 +242,26 @@ function createCapabilityServices(options: {
     },
     resourceService: {
       isAvailable: vi.fn(() => options.resourceAvailable)
+    }
+  };
+}
+
+function createProviderAvailabilityServices(options: {
+  readonly aiProviderCount: number;
+  readonly remoteSyncProviderCount: number;
+}) {
+  return {
+    aiService: {
+      getProviders: vi.fn(() => new Array(options.aiProviderCount).fill({
+        id: "ai.provider",
+        title: "AI Provider"
+      }))
+    },
+    remoteSyncService: {
+      getProviders: vi.fn(() => new Array(options.remoteSyncProviderCount).fill({
+        id: "sync.provider",
+        title: "Sync Provider"
+      }))
     }
   };
 }

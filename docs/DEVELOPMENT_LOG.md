@@ -6246,3 +6246,33 @@ Known limitations:
 
 - No visible AI or sync UI consumes these revisions yet.
 - Extension/runtime APIs still do not expose AI or remote sync provider registration surfaces.
+
+## 2026-06-11 - P2 Provider Availability Context Keys
+
+Completed:
+
+- Added `ai.providerAvailable` and `remoteSync.providerAvailable` Workbench context keys.
+- Derived provider availability from `IAiService.getProviders()` and `IRemoteSyncService.getProviders()` instead of fixed provider ids.
+- Re-applied Workbench state context when AI or remote sync provider revisions change.
+- Covered provider availability context value creation, service-boundary reads, and state-context application with focused context model tests.
+- Updated maintained architecture notes to document provider availability as context-key state for future commands and menu contributions.
+
+Quality gate:
+
+- `npx vitest run packages/workbench/src/workbenchContextModel.test.ts`: passed, 8 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 62 files / 617 tests, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Dev server smoke check: passed at `http://127.0.0.1:5173`; status 200 and root element present
+
+Review:
+
+- Future AI and sync commands can use context-key `when` clauses without inspecting provider internals or hard-coding provider ids.
+- The implementation follows the existing VS Code-style split between services, context keys, commands, menus, and UI rendering.
+- No OpenAI, Codex, Feishu, endpoint, model, token, storage, credential, or provider id was hard-coded.
+
+Known limitations:
+
+- No visible AI or sync commands consume these context keys yet.
+- Extension/runtime APIs still do not expose AI or remote sync provider registration surfaces.
