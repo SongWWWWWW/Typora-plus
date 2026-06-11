@@ -2,10 +2,15 @@ import { URI } from "@typora-plus/base";
 import { describe, expect, it } from "vitest";
 import type { FileTreeEntry, WorkspaceFileTree } from "./files";
 import {
+  createRemoteSyncManifestStorageKey,
   createRemoteSyncPlanFromDiff,
   createRemoteSyncPlanFromManifest,
   createRemoteSyncResourcesFromWorkspace,
+  defaultRemoteSyncManifestStoreOptions,
+  remoteSyncManifestSnapshotVersion,
+  RemoteSyncManifestStore,
   RemoteSyncService,
+  type RemoteSyncManifestStorage,
   type RemoteSyncManifestResource,
   type RemoteSyncPlan,
   type RemoteSyncPlanRequest,
@@ -888,6 +893,192 @@ describe("remote sync service", () => {
       ]
     })).toThrow("Remote sync manifest resource 0 relative path must not contain parent traversal");
   });
+
+  it("persists and restores normalized manifest resources", () => {
+    const storage = manifestStorage();
+    const scope = {
+      workspaceUri: URI.file("C:/Notes"),
+      providerId: " sync.provider ",
+      remoteScopeId: " folder "
+    };
+    const store = new RemoteSyncManifestStore({ storage });
+
+    store.setScope(scope);
+    store.writeResources([
+      manifestResource(" z\\later.md ", { remoteId: " remote-z ", size: 12, mtime: 2, contentHash: " hash-z " }),
+      manifestResource("a.md", { remoteId: "remote-a", size: 4, mtime: 1, contentHash: "hash-a" })
+    ]);
+
+    const restored = new RemoteSyncManifestStore({ storage });
+    restored.setScope({
+      workspaceUri: URI.file("C:/Notes"),
+      providerId: "sync.provider",
+      remoteScopeId: "folder"
+    });
+
+    expect(restored.readResources()).toEqual([
+      manifestResource("a.md", { remoteId: "remote-a", size: 4, mtime: 1, contentHash: "hash-a" }),
+      manifestResource("z/later.md", { remoteId: "remote-z", size: 12, mtime: 2, contentHash: "hash-z" })
+    ]);
+
+    restored.clear();
+    expect(store.readResources()).toEqual([]);
+  });
+
+  it("scopes persisted manifests by workspace, provider, and remote scope", () => {
+    const storage = manifestStorage();
+    const store = new RemoteSyncManifestStore({ storage });
+    const workspaceScope = {
+      workspaceUri: URI.file("C:/Notes"),
+      providerId: "sync.provider",
+      remoteScopeId: "folder-a"
+    };
+    const sameScopeWithTrimmedValues = {
+      workspaceUri: URI.file("C:/Notes"),
+      providerId: " sync.provider ",
+      remoteScopeId: " folder-a "
+    };
+    const otherWorkspaceScope = {
+      workspaceUri: URI.file("C:/Other"),
+      providerId: "sync.provider",
+      remoteScopeId: "folder-a"
+    };
+    const otherProviderScope = {
+      workspaceUri: URI.file("C:/Notes"),
+      providerId: "other.provider",
+      remoteScopeId: "folder-a"
+    };
+    const otherRemoteScope = {
+      workspaceUri: URI.file("C:/Notes"),
+      providerId: "sync.provider",
+      remoteScopeId: "folder-b"
+    };
+
+    expect(createRemoteSyncManifestStorageKey("manifest", workspaceScope))
+      .toBe(createRemoteSyncManifestStorageKey("manifest", sameScopeWithTrimmedValues));
+    expect(createRemoteSyncManifestStorageKey("manifest", workspaceScope))
+      .not.toBe(createRemoteSyncManifestStorageKey("manifest", otherWorkspaceScope));
+    expect(createRemoteSyncManifestStorageKey("manifest", workspaceScope))
+      .not.toBe(createRemoteSyncManifestStorageKey("manifest", otherProviderScope));
+    expect(createRemoteSyncManifestStorageKey("manifest", workspaceScope))
+      .not.toBe(createRemoteSyncManifestStorageKey("manifest", otherRemoteScope));
+
+    store.setScope(workspaceScope);
+    store.writeResources([manifestResource("a.md", { remoteId: "a" })]);
+
+    store.setScope(otherWorkspaceScope);
+    expect(store.readResources()).toEqual([]);
+    store.writeResources([manifestResource("b.md", { remoteId: "b" })]);
+
+    store.setScope(otherProviderScope);
+    expect(store.readResources()).toEqual([]);
+
+    store.setScope(otherRemoteScope);
+    expect(store.readResources()).toEqual([]);
+
+    store.setScope(workspaceScope);
+    expect(store.readResources()).toEqual([manifestResource("a.md", { remoteId: "a" })]);
+
+    store.setScope(otherWorkspaceScope);
+    expect(store.readResources()).toEqual([manifestResource("b.md", { remoteId: "b" })]);
+  });
+
+  it("ignores malformed, old-version, and mismatched manifest snapshots", () => {
+    const storage = manifestStorage();
+    const scope = {
+      workspaceUri: URI.file("C:/Notes"),
+      providerId: "sync.provider",
+      remoteScopeId: "folder"
+    };
+    const key = createRemoteSyncManifestStorageKey(defaultRemoteSyncManifestStoreOptions.storageKey, scope);
+    const store = new RemoteSyncManifestStore({ storage });
+
+    store.setScope(scope);
+    storage.values.set(key, "{bad json");
+    expect(store.readResources()).toEqual([]);
+
+    storage.values.set(key, JSON.stringify({
+      version: remoteSyncManifestSnapshotVersion + 1,
+      resources: [manifestResource("a.md")]
+    }));
+    expect(store.readResources()).toEqual([]);
+
+    storage.values.set(key, JSON.stringify({
+      version: remoteSyncManifestSnapshotVersion,
+      scope: "other",
+      resources: [manifestResource("a.md")]
+    }));
+    expect(store.readResources()).toEqual([]);
+
+    storage.values.set(key, JSON.stringify({
+      version: remoteSyncManifestSnapshotVersion,
+      resources: [manifestResource("a.md")]
+    }));
+    expect(store.readResources()).toEqual([]);
+  });
+
+  it("rejects ambiguous manifest store writes and ignores unsafe stored snapshots", () => {
+    const storage = manifestStorage();
+    const store = new RemoteSyncManifestStore({ storage });
+
+    expect(() => store.writeResources([
+      manifestResource("../escape.md")
+    ])).toThrow("Remote sync manifest resource 0 relative path must not contain parent traversal");
+
+    expect(() => store.writeResources([
+      manifestResource("same.md"),
+      manifestResource("same.md")
+    ])).toThrow("Duplicate manifest store remote sync resource: same.md");
+
+    storage.values.set(defaultRemoteSyncManifestStoreOptions.storageKey, JSON.stringify({
+      version: remoteSyncManifestSnapshotVersion,
+      resources: [manifestResource("../escape.md")]
+    }));
+    expect(store.readResources()).toEqual([]);
+
+    storage.values.set(defaultRemoteSyncManifestStoreOptions.storageKey, JSON.stringify({
+      version: remoteSyncManifestSnapshotVersion,
+      resources: [
+        manifestResource("same.md"),
+        manifestResource("same.md")
+      ]
+    }));
+    expect(store.readResources()).toEqual([]);
+  });
+
+  it("clears oversized manifest snapshots and write failures without throwing", () => {
+    const storage = manifestStorage();
+    const store = new RemoteSyncManifestStore({
+      storage,
+      maxSnapshotBytes: 10
+    });
+
+    store.writeResources([
+      manifestResource("large.md", { remoteId: "large", contentHash: "x".repeat(64) })
+    ]);
+
+    expect(store.readResources()).toEqual([]);
+
+    const failingStorage = manifestStorage();
+    let shouldFail = true;
+    const recoveringStorage: RemoteSyncManifestStorage = {
+      read: (key) => failingStorage.read(key),
+      write(key, value) {
+        if (shouldFail) {
+          shouldFail = false;
+          throw new Error("quota exhausted");
+        }
+
+        failingStorage.write(key, value);
+      }
+    };
+    const recoveringStore = new RemoteSyncManifestStore({ storage: recoveringStorage });
+
+    expect(() => recoveringStore.writeResources([
+      manifestResource("a.md", { remoteId: "a" })
+    ])).not.toThrow();
+    expect(recoveringStore.readResources()).toEqual([]);
+  });
 });
 
 function provider(id: string, title: string): RemoteSyncProvider {
@@ -993,6 +1184,20 @@ function manifestResource(
     ...(metadata.size === undefined ? {} : { size: metadata.size }),
     ...(metadata.mtime === undefined ? {} : { mtime: metadata.mtime }),
     ...(metadata.contentHash === undefined ? {} : { contentHash: metadata.contentHash })
+  };
+}
+
+function manifestStorage(): RemoteSyncManifestStorage & { readonly values: Map<string, string> } {
+  const values = new Map<string, string>();
+
+  return {
+    values,
+    read(key) {
+      return values.get(key);
+    },
+    write(key, value) {
+      values.set(key, value);
+    }
   };
 }
 

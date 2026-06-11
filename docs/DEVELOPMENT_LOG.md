@@ -7275,3 +7275,35 @@ Known limitations:
 - No Feishu Drive provider is registered yet.
 - No manifest persistence boundary exists yet; future providers need a storage bridge or metadata file strategy.
 - Current comparison quality depends on provider-supplied content hashes or size/mtime pairs.
+
+## 2026-06-12 - P2 Remote Sync Manifest Persistence
+
+Completed:
+
+- Added a provider-neutral `RemoteSyncManifestStore` with versioned manifest snapshots and injected storage.
+- Scoped manifest storage keys by workspace URI, provider id, and remote scope id so separate mirrors do not overwrite each other's last-sync baseline.
+- Added browser storage fallback without introducing a Feishu provider, OAuth flow, endpoint, scope, token, credential, model, or storage path default.
+- Normalized and sorted stored manifest resources, rejected ambiguous writes, ignored malformed or old-version snapshots, and fell back to an empty manifest on oversized snapshots or recoverable storage write failures.
+- Kept manifest persistence in the platform remote sync model so future Feishu Drive providers can reuse the same boundary instead of persisting last-sync state in Workbench UI.
+- Updated maintained docs without adding new documentation surfaces.
+
+Quality gate:
+
+- `npx vitest run packages/platform/src/remoteSync.test.ts`: passed, 1 file / 23 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 76 files / 722 tests, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Remote sync implementation hardcode scan for endpoint/secret/token/model literal patterns: passed
+
+Review:
+
+- The store is a persistence boundary only: it does not fetch remote state, execute sync operations, or infer conflict policy.
+- Snapshot reads are defensive while writes stay strict, which prevents corrupted local state from poisoning future plan creation without hiding ambiguous provider output during execution.
+- Scope hashing mirrors the workspace index snapshot pattern while adding provider and remote-scope separation for cloud mirrors.
+
+Known limitations:
+
+- No Feishu Drive provider, OAuth flow, token storage, or upload/download execution adapter is registered yet.
+- Manifest storage currently has a browser storage fallback; a future Electron/native bridge can implement the same injected storage contract when Feishu credentials and local app-data policy are introduced.
+- The manifest still depends on provider-supplied remote ids plus content hashes or size/mtime metadata for comparison quality.

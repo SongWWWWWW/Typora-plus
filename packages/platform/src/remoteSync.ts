@@ -1,4 +1,5 @@
 import { Emitter, toDisposable, type Event, type IDisposable, type URI as URIType } from "@typora-plus/base";
+import { configurationBytesPerMegabyte } from "./configuration";
 import { createServiceIdentifier } from "./instantiation";
 import type { FileKind, FileTreeEntry, WorkspaceFileTree } from "./files";
 
@@ -103,6 +104,38 @@ export interface RemoteSyncManifestPlanInput extends RemoteSyncDiffPlanInput {
   readonly manifestResources: readonly RemoteSyncManifestResource[];
 }
 
+export const remoteSyncManifestSnapshotVersion = 1;
+
+export interface RemoteSyncManifestSnapshot {
+  readonly version: typeof remoteSyncManifestSnapshotVersion;
+  readonly scope?: string;
+  readonly providerId?: string;
+  readonly remoteScopeId?: string;
+  readonly resources: readonly RemoteSyncManifestResource[];
+}
+
+export interface RemoteSyncManifestStoreScope {
+  readonly workspaceUri?: URIType | string;
+  readonly providerId?: string;
+  readonly remoteScopeId?: string;
+}
+
+export interface RemoteSyncManifestStorage {
+  read(key: string): string | undefined;
+  write(key: string, value: string): void;
+}
+
+export interface RemoteSyncManifestStoreOptions {
+  readonly storage: RemoteSyncManifestStorage;
+  readonly storageKey?: string;
+  readonly maxSnapshotBytes?: number;
+}
+
+export const defaultRemoteSyncManifestStoreOptions = {
+  storageKey: "typora-plus.remoteSync.manifest",
+  maxSnapshotBytes: configurationBytesPerMegabyte
+} as const;
+
 export interface RegisteredRemoteSyncProvider {
   readonly id: RemoteSyncProviderId;
   readonly title: string;
@@ -121,6 +154,105 @@ export interface IRemoteSyncService {
 }
 
 export const IRemoteSyncService = createServiceIdentifier<IRemoteSyncService>("remoteSync");
+
+export class RemoteSyncManifestStore {
+  private readonly storage: RemoteSyncManifestStorage;
+  private readonly baseStorageKey: string;
+  private readonly maxSnapshotBytes: number;
+  private storageKey: string;
+  private currentScope: NormalizedRemoteSyncManifestStoreScope = {};
+
+  constructor(options: RemoteSyncManifestStoreOptions) {
+    this.storage = options.storage;
+    this.baseStorageKey = options.storageKey ?? defaultRemoteSyncManifestStoreOptions.storageKey;
+    this.storageKey = this.baseStorageKey;
+    this.maxSnapshotBytes = options.maxSnapshotBytes ?? defaultRemoteSyncManifestStoreOptions.maxSnapshotBytes;
+  }
+
+  setScope(scope: RemoteSyncManifestStoreScope | string | undefined): void {
+    this.currentScope = normalizeRemoteSyncManifestStoreScope(scope);
+    this.storageKey = createRemoteSyncManifestStorageKey(this.baseStorageKey, this.currentScope.scope);
+  }
+
+  readResources(): readonly RemoteSyncManifestResource[] {
+    const snapshot = this.readSnapshot();
+    return snapshot?.resources ?? [];
+  }
+
+  writeResources(resources: readonly RemoteSyncManifestResource[]): void {
+    this.writeSnapshot(createRemoteSyncManifestSnapshot(
+      normalizeUniqueRemoteSyncManifestResources(resources, "manifest store"),
+      this.currentScope
+    ));
+  }
+
+  clear(): void {
+    this.writeSnapshot(createRemoteSyncManifestSnapshot([], this.currentScope));
+  }
+
+  private readSnapshot(): RemoteSyncManifestSnapshot | undefined {
+    const snapshot = readRemoteSyncManifestSnapshot(this.storage.read(this.storageKey));
+
+    if (!snapshot) {
+      return undefined;
+    }
+
+    if (snapshot.scope !== this.currentScope.scope) {
+      return undefined;
+    }
+
+    return snapshot;
+  }
+
+  private writeSnapshot(snapshot: RemoteSyncManifestSnapshot): void {
+    const value = JSON.stringify(snapshot);
+    const persistedValue = value.length <= this.maxSnapshotBytes
+      ? value
+      : JSON.stringify(createRemoteSyncManifestSnapshot([], this.currentScope));
+
+    try {
+      this.storage.write(this.storageKey, persistedValue);
+    } catch {
+      try {
+        this.storage.write(this.storageKey, JSON.stringify(createRemoteSyncManifestSnapshot([], this.currentScope)));
+      } catch {
+        // Storage backends such as localStorage can reject writes when quota is exhausted.
+      }
+    }
+  }
+}
+
+export function createRemoteSyncManifestStorageKey(
+  baseKey: string,
+  scope: RemoteSyncManifestStoreScope | string | undefined
+): string {
+  const normalizedScope = normalizeRemoteSyncManifestStoreScope(scope).scope;
+
+  if (!normalizedScope) {
+    return baseKey;
+  }
+
+  return `${baseKey}.${hashRemoteSyncManifestScope(normalizedScope)}`;
+}
+
+export function createDefaultRemoteSyncManifestStorage(): RemoteSyncManifestStorage | undefined {
+  return createBrowserRemoteSyncManifestStorage();
+}
+
+export function createBrowserRemoteSyncManifestStorage(): RemoteSyncManifestStorage | undefined {
+  if (!hasLocalStorage()) {
+    return undefined;
+  }
+
+  return {
+    read(key) {
+      return window.localStorage.getItem(key) ?? undefined;
+    },
+    write(key, value) {
+      window.localStorage.setItem(key, value);
+    }
+  };
+}
 
 export function createRemoteSyncResourcesFromWorkspace(
   workspace: WorkspaceFileTree,
@@ -580,6 +712,116 @@ function sortRemoteSyncPaths(
     .sort((first, second) => first.localeCompare(second));
 }
 
+interface NormalizedRemoteSyncManifestStoreScope {
+  readonly scope?: string;
+  readonly providerId?: string;
+  readonly remoteScopeId?: string;
+}
+
+function normalizeRemoteSyncManifestStoreScope(
+  scope: RemoteSyncManifestStoreScope | string | undefined
+): NormalizedRemoteSyncManifestStoreScope {
+  if (scope === undefined) {
+    return {};
+  }
+
+  if (typeof scope === "string") {
+    const normalizedScope = normalizeRemoteSyncManifestScopeValue(scope);
+    return normalizedScope ? { scope: normalizedScope } : {};
+  }
+
+  const record = expectRecord(scope, "Remote sync manifest store scope");
+  const workspaceUri = readOptionalUriString(record.workspaceUri, "Remote sync manifest workspace URI");
+  const providerId = readOptionalString(record.providerId, "Remote sync manifest provider id");
+  const remoteScopeId = readOptionalString(record.remoteScopeId, "Remote sync manifest remote scope id");
+  const normalizedScope = createRemoteSyncManifestScopeValue({
+    ...(workspaceUri ? { workspaceUri } : {}),
+    ...(providerId ? { providerId } : {}),
+    ...(remoteScopeId ? { remoteScopeId } : {})
+  });
+
+  return {
+    ...(normalizedScope ? { scope: normalizedScope } : {}),
+    ...(providerId ? { providerId } : {}),
+    ...(remoteScopeId ? { remoteScopeId } : {})
+  };
+}
+
+function createRemoteSyncManifestScopeValue(scope: {
+  readonly workspaceUri?: string;
+  readonly providerId?: string;
+  readonly remoteScopeId?: string;
+}): string | undefined {
+  if (!scope.workspaceUri && !scope.providerId && !scope.remoteScopeId) {
+    return undefined;
+  }
+
+  return JSON.stringify(scope);
+}
+
+function normalizeRemoteSyncManifestScopeValue(value: string): string | undefined {
+  return value.trim() || undefined;
+}
+
+function createRemoteSyncManifestSnapshot(
+  resources: readonly RemoteSyncManifestResource[],
+  scope: NormalizedRemoteSyncManifestStoreScope
+): RemoteSyncManifestSnapshot {
+  return {
+    version: remoteSyncManifestSnapshotVersion,
+    ...(scope.scope ? { scope: scope.scope } : {}),
+    ...(scope.providerId ? { providerId: scope.providerId } : {}),
+    ...(scope.remoteScopeId ? { remoteScopeId: scope.remoteScopeId } : {}),
+    resources
+  };
+}
+
+function readRemoteSyncManifestSnapshot(value: string | undefined): RemoteSyncManifestSnapshot | undefined {
+  if (!value) {
+    return undefined;
+  }
+
+  try {
+    return sanitizeRemoteSyncManifestSnapshot(JSON.parse(value));
+  } catch {
+    return undefined;
+  }
+}
+
+function sanitizeRemoteSyncManifestSnapshot(value: unknown): RemoteSyncManifestSnapshot | undefined {
+  try {
+    const record = expectRecord(value, "Remote sync manifest snapshot");
+
+    if (record.version !== remoteSyncManifestSnapshotVersion || !Array.isArray(record.resources)) {
+      return undefined;
+    }
+
+    const scope = readOptionalString(record.scope, "Remote sync manifest snapshot scope");
+    const providerId = readOptionalString(record.providerId, "Remote sync manifest snapshot provider id");
+    const remoteScopeId = readOptionalString(
+      record.remoteScopeId,
+      "Remote sync manifest snapshot remote scope id"
+    );
+
+    return {
+      version: remoteSyncManifestSnapshotVersion,
+      ...(scope ? { scope } : {}),
+      ...(providerId ? { providerId } : {}),
+      ...(remoteScopeId ? { remoteScopeId } : {}),
+      resources: normalizeUniqueRemoteSyncManifestResources(record.resources, "manifest snapshot")
+    };
+  } catch {
+    return undefined;
+  }
+}
+
+function normalizeUniqueRemoteSyncManifestResources(value: unknown, label: string): readonly RemoteSyncManifestResource[] {
+  const resources = normalizeRemoteSyncManifestResources(value);
+  mapRemoteSyncResources(resources, label);
+
+  return [...resources].sort((first, second) => first.relativePath.localeCompare(second.relativePath));
+}
+
 function remoteSyncResourceFromFileEntry(entry: FileTreeEntry): RemoteSyncResource {
   return {
     uri: entry.uri,
@@ -993,4 +1235,35 @@ function readOptionalString(value: unknown, label: string): string | undefined {
   }
 
   return readString(value, label).trim() || undefined;
+}
+
+function readOptionalUriString(value: unknown, label: string): string | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (typeof value === "string") {
+    return normalizeRemoteSyncManifestScopeValue(value);
+  }
+
+  if (typeof value !== "object" || value === null || typeof (value as { toString?: unknown }).toString !== "function") {
+    throw new Error(`${label} must be a URI or string`);
+  }
+
+  return normalizeRemoteSyncManifestScopeValue((value as { toString(): string }).toString());
+}
+
+function hashRemoteSyncManifestScope(scope: string): string {
+  let hash = 2166136261;
+
+  for (let index = 0; index < scope.length; index += 1) {
+    hash ^= scope.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+
+  return (hash >>> 0).toString(36);
+}
+
+function hasLocalStorage(): boolean {
+  return typeof window !== "undefined" && "localStorage" in window;
 }
