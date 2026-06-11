@@ -6550,3 +6550,33 @@ Known limitations:
 
 - The plan dialog does not approve or execute sync operations yet.
 - No built-in Feishu provider, OAuth flow, secret storage, Electron network bridge, progress reporting, or conflict-resolution UI exists yet.
+
+## 2026-06-11 - P2 Remote Sync Plan Menu Contribution
+
+Completed:
+
+- Added a default titlebar menu contribution for `remoteSync.planWorkspace`.
+- Gated the menu item behind `workspace.open && remoteSync.providerAvailable` so Workbench does not surface a dead sync action without a workspace and provider.
+- Added a stable `refresh-cw` menu icon id and local lucide renderer mapping for sync-oriented menu contributions.
+- Covered provider-gated titlebar visibility, stable command ordering, and icon-id resolution with focused Workbench tests.
+- Updated maintained docs to record the provider/workspace-gated titlebar discovery path.
+
+Quality gate:
+
+- `npx vitest run packages/workbench/src/workbenchContributions.test.ts packages/workbench/src/workbenchMenuIcons.test.ts packages/workbench/src/workbenchMenuModel.test.ts`: passed, 3 files / 22 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 67 files / 644 tests, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Dev server smoke check: passed at `http://127.0.0.1:5173`; status 200 and root element present
+
+Review:
+
+- The remote sync plan command is now discoverable through the same VS Code-style contribution path as other titlebar actions.
+- Visibility remains data-driven through context keys and the menu service rather than React-owned conditionals.
+- No Feishu endpoint, OAuth scope, token, storage path, provider id, execution approval, or credential behavior was introduced.
+
+Known limitations:
+
+- The titlebar entry still depends on a future remote sync provider being registered.
+- The plan dialog remains non-executing; operation approval, progress, cancellation, and conflict-resolution UI are still future work.

@@ -97,6 +97,17 @@ export const defaultWorkbenchExtensionManifest = {
         toggled: { context: workbenchContextKeys.editorTypewriterMode, value: true }
       },
       {
+        id: "titlebar.remoteSync.planWorkspace",
+        menu: workbenchMenuIds.titlebarPrimary,
+        command: workbenchCommandIds.remoteSync.planWorkspace,
+        title: "Plan Workspace Sync",
+        icon: workbenchMenuIconIds.refreshCw,
+        group: "25_remoteSync",
+        order: 10,
+        compactHidden: true,
+        when: `${workbenchContextKeys.workspaceOpen} && ${workbenchContextKeys.remoteSyncProviderAvailable}`
+      },
+      {
         id: "titlebar.workbench.theme",
         menu: workbenchMenuIds.titlebarPrimary,
         command: workbenchCommandIds.theme.toggle,

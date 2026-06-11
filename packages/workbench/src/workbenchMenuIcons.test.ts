@@ -23,6 +23,7 @@ describe("workbench menu icons", () => {
       hash: "hash",
       link: "link",
       listTree: "list-tree",
+      refreshCw: "refresh-cw",
       save: "save",
       search: "search",
       settings: "settings",
@@ -50,6 +51,7 @@ describe("workbench menu icons", () => {
     expect(resolveWorkbenchMenuIconName(workbenchMenuIconIds.hash, lightConfiguration)).toBe("hash");
     expect(resolveWorkbenchMenuIconName(workbenchMenuIconIds.link, lightConfiguration)).toBe("link");
     expect(resolveWorkbenchMenuIconName(workbenchMenuIconIds.listTree, lightConfiguration)).toBe("list-tree");
+    expect(resolveWorkbenchMenuIconName(workbenchMenuIconIds.refreshCw, lightConfiguration)).toBe("refresh-cw");
     expect(resolveWorkbenchMenuIconName(workbenchMenuIconIds.save, lightConfiguration)).toBe("save");
     expect(resolveWorkbenchMenuIconName(workbenchMenuIconIds.search, lightConfiguration)).toBe("search");
     expect(resolveWorkbenchMenuIconName(workbenchMenuIconIds.settings, lightConfiguration)).toBe("settings");

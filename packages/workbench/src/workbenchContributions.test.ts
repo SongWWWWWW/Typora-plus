@@ -55,6 +55,35 @@ describe("workbench contributions", () => {
     ]);
   });
 
+  it("shows workspace sync planning only when a workspace and remote sync provider are available", () => {
+    expect(workbenchMenuCommands("titlebar.primary", {
+      fileSystemAvailable: true,
+      remoteSyncProviderAvailable: true,
+      workspaceOpen: false
+    })).not.toContain(workbenchCommandIds.remoteSync.planWorkspace);
+    expect(workbenchMenuCommands("titlebar.primary", {
+      fileSystemAvailable: true,
+      remoteSyncProviderAvailable: false,
+      workspaceOpen: true
+    })).not.toContain(workbenchCommandIds.remoteSync.planWorkspace);
+    expect(workbenchMenuCommands("titlebar.primary", {
+      fileSystemAvailable: true,
+      remoteSyncProviderAvailable: true,
+      workspaceOpen: true
+    })).toEqual([
+      workbenchCommandIds.file.newUntitled,
+      workbenchCommandIds.file.openWorkspace,
+      workbenchCommandIds.file.save,
+      workbenchCommandIds.file.saveAs,
+      workbenchCommandIds.file.exportHtml,
+      workbenchCommandIds.editor.focusModeToggle,
+      workbenchCommandIds.editor.typewriterModeToggle,
+      workbenchCommandIds.remoteSync.planWorkspace,
+      workbenchCommandIds.theme.toggle,
+      workbenchCommandIds.workbench.commandPaletteOpen
+    ]);
+  });
+
   it("keeps menu contribution ids unique", () => {
     const ids = defaultWorkbenchMenuItems.map((item) => item.id);
 
@@ -133,12 +162,20 @@ describe("workbench contributions", () => {
 
 function workbenchMenuCommands(
   menu: string,
-  context: { readonly fileSystemAvailable: boolean; readonly workspaceOpen: boolean }
+  context: {
+    readonly fileSystemAvailable: boolean;
+    readonly remoteSyncProviderAvailable?: boolean;
+    readonly workspaceOpen: boolean;
+  }
 ): readonly string[] {
   const contextKeyService = new ContextKeyService();
   const service = new MenuService(contextKeyService);
-  contextKeyService.setValue("fileSystem.available", context.fileSystemAvailable);
-  contextKeyService.setValue("workspace.open", context.workspaceOpen);
+  contextKeyService.setValue(workbenchContextKeys.fileSystemAvailable, context.fileSystemAvailable);
+  contextKeyService.setValue(
+    workbenchContextKeys.remoteSyncProviderAvailable,
+    context.remoteSyncProviderAvailable ?? false
+  );
+  contextKeyService.setValue(workbenchContextKeys.workspaceOpen, context.workspaceOpen);
 
   for (const item of defaultWorkbenchMenuItems) {
     service.registerMenuItem(item);

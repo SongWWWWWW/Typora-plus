@@ -9,6 +9,7 @@ export const workbenchMenuIconIds = {
   hash: "hash",
   link: "link",
   listTree: "list-tree",
+  refreshCw: "refresh-cw",
   save: "save",
   search: "search",
   settings: "settings",
@@ -27,6 +28,7 @@ export type WorkbenchMenuIconName =
   | "link"
   | "list-tree"
   | "moon"
+  | "refresh-cw"
   | "save"
   | "search"
   | "settings"
@@ -47,6 +49,7 @@ const workbenchMenuIconNamesById: Readonly<Record<string, WorkbenchMenuIconName 
   [workbenchMenuIconIds.hash]: "hash",
   [workbenchMenuIconIds.link]: "link",
   [workbenchMenuIconIds.listTree]: "list-tree",
+  [workbenchMenuIconIds.refreshCw]: "refresh-cw",
   [workbenchMenuIconIds.save]: "save",
   [workbenchMenuIconIds.search]: "search",
   [workbenchMenuIconIds.settings]: "settings",
