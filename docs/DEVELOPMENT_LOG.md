@@ -6366,3 +6366,33 @@ Known limitations:
 
 - The summarize action is not yet registered as a Workbench command or surfaced in menus.
 - There is still no built-in AI provider or credential bridge.
+
+## 2026-06-11 - P2 Command Metadata Change Events
+
+Completed:
+
+- Added `onDidChangeCommands` to `ICommandService` and `CommandService`.
+- Fired command change events when command metadata is added or removed through explicit metadata registration.
+- Fired command change events when command handlers create or remove implicit metadata.
+- Kept handler-only registration and disposal quiet when explicit metadata already owns the command surface entry.
+- Covered event snapshots, duplicate metadata rejection, repeated disposal, and listener disposal with focused command tests.
+
+Quality gate:
+
+- `npx vitest run packages/platform/src/platform.test.ts -t commands`: passed, 7 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 65 files / 625 tests, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Dev server smoke check: passed at `http://127.0.0.1:5173`; status 200 and root element present
+
+Review:
+
+- Future dynamic command contributions can refresh command surfaces from service events instead of polling `getCommands()`.
+- The event fires only when the visible command metadata snapshot changes, preserving the metadata/handler split.
+- This is a platform capability and does not introduce AI, sync, provider, model, endpoint, token, or UI-specific policy.
+
+Known limitations:
+
+- Workbench command surfaces do not yet subscribe to command metadata change events.
+- AI and remote sync commands are still not registered as user-visible commands.

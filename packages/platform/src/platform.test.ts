@@ -475,6 +475,52 @@ describe("commands", () => {
     await expect(commandService.executeCommand("test.metadata")).rejects.toThrow("Unknown command");
   });
 
+  it("fires command change events only when command metadata changes", () => {
+    const services = new ServiceCollection();
+    const commandService = new CommandService(services);
+    const snapshots: string[][] = [];
+    const listener = commandService.onDidChangeCommands(() => {
+      snapshots.push(commandService.getCommands().map((command) => command.id));
+    });
+
+    const implicitDisposable = commandService.registerCommand({
+      id: "test.implicit",
+      title: "Implicit",
+      run: () => undefined
+    });
+    const metadataDisposable = commandService.registerCommandMetadata({
+      id: "test.metadata",
+      title: "Metadata"
+    });
+    const handlerDisposable = commandService.registerCommand({
+      id: "test.metadata",
+      title: "Runtime Metadata",
+      run: () => undefined
+    });
+
+    handlerDisposable.dispose();
+    expect(() => commandService.registerCommandMetadata({
+      id: "test.metadata",
+      title: "Duplicate"
+    })).toThrow("Command metadata already registered");
+    implicitDisposable.dispose();
+    implicitDisposable.dispose();
+    metadataDisposable.dispose();
+    listener.dispose();
+    commandService.registerCommand({
+      id: "test.afterListener",
+      title: "After Listener",
+      run: () => undefined
+    });
+
+    expect(snapshots).toEqual([
+      ["test.implicit"],
+      ["test.implicit", "test.metadata"],
+      ["test.metadata"],
+      []
+    ]);
+  });
+
   it("rejects duplicate command metadata and handlers independently", () => {
     const services = new ServiceCollection();
     const commandService = new CommandService(services);

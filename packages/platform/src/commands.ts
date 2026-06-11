@@ -1,4 +1,4 @@
-import { Disposable, type IDisposable, toDisposable } from "@typora-plus/base";
+import { Disposable, Emitter, type Event, type IDisposable, toDisposable } from "@typora-plus/base";
 import { createServiceIdentifier, type ServicesAccessor } from "./instantiation";
 
 export interface CommandMetadata {
@@ -18,6 +18,7 @@ export interface CommandServiceOptions {
 }
 
 export interface ICommandService {
+  readonly onDidChangeCommands: Event<void>;
   registerCommand(command: Command): IDisposable;
   registerCommandMetadata(metadata: CommandMetadata): IDisposable;
   executeCommand<T = unknown>(id: string, ...args: unknown[]): Promise<T>;
@@ -29,6 +30,9 @@ export const ICommandService = createServiceIdentifier<ICommandService>("command
 export class CommandService extends Disposable implements ICommandService {
   private readonly handlers = new Map<string, Command>();
   private readonly metadata = new Map<string, CommandMetadata>();
+  private readonly onDidChangeCommandsEmitter = this.store.add(new Emitter<void>());
+
+  readonly onDidChangeCommands = this.onDidChangeCommandsEmitter.event;
 
   constructor(
     private readonly accessor: ServicesAccessor,
@@ -53,6 +57,7 @@ export class CommandService extends Disposable implements ICommandService {
 
     if (implicitMetadata) {
       this.metadata.set(normalizedCommand.id, metadata);
+      this.onDidChangeCommandsEmitter.fire();
     }
 
     return toDisposable(() => {
@@ -62,6 +67,7 @@ export class CommandService extends Disposable implements ICommandService {
 
       if (implicitMetadata) {
         this.metadata.delete(normalizedCommand.id);
+        this.onDidChangeCommandsEmitter.fire();
       }
     });
   }
@@ -74,10 +80,12 @@ export class CommandService extends Disposable implements ICommandService {
     }
 
     this.metadata.set(normalizedMetadata.id, normalizedMetadata);
+    this.onDidChangeCommandsEmitter.fire();
 
     return toDisposable(() => {
       if (this.metadata.get(normalizedMetadata.id) === normalizedMetadata) {
         this.metadata.delete(normalizedMetadata.id);
+        this.onDidChangeCommandsEmitter.fire();
       }
     });
   }
