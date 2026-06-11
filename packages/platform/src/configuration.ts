@@ -618,7 +618,7 @@ function normalizeAiProviderEndpointUrl(value: unknown): string | undefined {
 
   try {
     const url = new URL(normalized);
-    return url.protocol === "https:" || url.protocol === "http:"
+    return url.protocol === "https:" || isLoopbackHttpUrl(url)
       ? url.toString()
       : undefined;
   } catch {
@@ -634,6 +634,11 @@ function normalizeAiProviderSecretRef(value: unknown): string | undefined {
   }
 
   return normalized;
+}
+
+function isLoopbackHttpUrl(url: URL): boolean {
+  return url.protocol === "http:" &&
+    (url.hostname === "localhost" || url.hostname === "127.0.0.1" || url.hostname === "[::1]");
 }
 
 function normalizeConfigurationText(value: unknown, maxLength: number): string | undefined {

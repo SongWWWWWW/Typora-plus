@@ -40,6 +40,7 @@ import {
   WorkspaceIndexService,
   WorkspaceTextFileService,
   WorkspaceService,
+  createNativeResponsesAiProviderFactoryOptions,
   createDefaultWorkspaceIndexSnapshotStorage,
   type IAttachmentService as AttachmentServiceContract,
   type IAiService as AiServiceContract,
@@ -67,6 +68,7 @@ import { applyWorkbenchConfigurationToServices } from "./workbenchConfigurationS
 import {
   applyWorkbenchCapabilityContext
 } from "./workbenchContextModel";
+import { synchronizeWorkbenchConfiguredAiProviders } from "./workbenchConfiguredAiProviders";
 
 export interface WorkbenchServices {
   readonly serviceCollection: ServiceCollection;
@@ -97,6 +99,7 @@ export function createWorkbenchServices(): WorkbenchServices {
 
   const configurationService = new ConfigurationService();
   const aiService = new AiService();
+  const configuredAiProviderOptions = createNativeResponsesAiProviderFactoryOptions();
   const workspaceService = new WorkspaceService({
     name: "Typora Plus"
   });
@@ -132,6 +135,10 @@ export function createWorkbenchServices(): WorkbenchServices {
     defaultName: "Untitled.md",
     defaultContent: createWelcomeDocument()
   });
+  const configuredAiProviders = synchronizeWorkbenchConfiguredAiProviders({
+    aiService,
+    configurationService
+  }, configuredAiProviderOptions);
 
   serviceCollection.set(IAttachmentService, attachmentService);
   serviceCollection.set(IAiService, aiService);
@@ -178,6 +185,7 @@ export function createWorkbenchServices(): WorkbenchServices {
   serviceCollection.set(IExtensionService, extensionService);
   exportService.registerProvider(markdownHtmlExportProvider);
   extensionService.registerExtension(defaultWorkbenchExtensionManifest);
+  void configuredAiProviders;
   applyWorkbenchConfigurationToServices({
     attachmentService,
     indexService,

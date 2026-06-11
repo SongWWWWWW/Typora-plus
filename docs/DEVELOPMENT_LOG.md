@@ -6698,3 +6698,35 @@ Known limitations:
 - No UI exists yet for editing AI provider configuration or secrets.
 - No native secret storage or network bridge is wired yet.
 - Streaming, tool calls, and workspace-grounded retrieval remain future work.
+
+## 2026-06-11 - P2 Native Responses AI Bridge
+
+Completed:
+
+- Added an Electron native AI IPC bridge with bounded secret writes, secret deletion, and Responses request execution.
+- Stored AI secrets in a separate native secret store encrypted with Electron `safeStorage`, while keeping normal configuration limited to non-secret `secretRef` values.
+- Moved authenticated Responses request execution behind the native bridge so renderer/Workbench code passes request body plus `secretRef` and never receives the raw secret.
+- Added request validation for endpoint URL protocol, request body size, response body size, and native request timeout through shell configuration.
+- Added a Workbench configured-provider synchronizer that registers configured Responses providers through `IAiService`, refreshes them on configuration changes, and skips provider-id collisions with existing extension/runtime providers.
+- Kept provider identity, endpoint, model, and credential values configuration/user supplied; no provider is registered unless configuration plus native bridge support are present.
+
+Quality gate:
+
+- `npx vitest run packages/platform/src/configurationAi.test.ts packages/platform/src/responsesAiProvider.test.ts packages/workbench/src/workbenchConfiguredAiProviders.test.ts`: passed, 3 files / 15 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 71 files / 668 tests, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Browser smoke check at `http://127.0.0.1:5173/`: Workbench loaded with root content and no console errors
+
+Review:
+
+- The secure request path now matches the intended Electron boundary: secret material stays in main, renderer only invokes bounded operations.
+- The Workbench synchronizer keeps provider registration out of React components and mirrors the existing service/contribution pattern used elsewhere in the app.
+- The legacy `readSecret + transport` provider injection remains available for tests and non-Electron adapters, but Electron uses the bridge request handler.
+
+Known limitations:
+
+- There is still no Settings UI for creating provider configuration or setting/deleting secrets.
+- Request cancellation does not yet cross the Electron IPC boundary.
+- Streaming, tool calls, and workspace-grounded retrieval remain future work.

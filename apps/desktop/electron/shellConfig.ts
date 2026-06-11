@@ -8,6 +8,13 @@ export const desktopShellConfig = {
     title: "Typora Plus",
     backgroundColor: "#f8f7f2"
   },
+  ai: {
+    secretsStorageFile: "ai-secrets.json",
+    maxSecretBytes: 64 * 1024,
+    maxRequestBytes: 5 * 1024 * 1024,
+    maxResponseBytes: 5 * 1024 * 1024,
+    requestTimeoutMs: 60_000
+  },
   configuration: {
     storageFile: "configuration.json",
     maxValueBytes: 256 * 1024

@@ -2,6 +2,7 @@ import { URI } from "@typora-plus/base";
 import { describe, expect, it, vi } from "vitest";
 import {
   createConfiguredAiProviders,
+  createNativeResponsesAiProviderFactoryOptions,
   createResponsesAiProvider,
   type ResponsesAiProviderTransportRequest
 } from "./responsesAiProvider";
@@ -104,6 +105,33 @@ describe("Responses AI provider", () => {
     });
   });
 
+  it("can delegate request execution to a native bridge without exposing secrets", async () => {
+    const provider = createResponsesAiProvider(configuration(), {
+      request: async (request) => {
+        expect(request).toEqual({
+          endpointUrl: "https://api.example.test/v1/responses",
+          secretRef: "typora-plus.ai.notes",
+          body: JSON.stringify({
+            model: "notes-model",
+            instructions: "Summarize.",
+            input: "# Note",
+            store: false
+          })
+        });
+
+        return { output_text: "Summary" };
+      }
+    });
+
+    await expect(provider.requestText({
+      instruction: "Summarize.",
+      input: "# Note"
+    })).resolves.toEqual({
+      value: "Summary",
+      model: "notes-model"
+    });
+  });
+
   it("requires a configured secret before sending a request", async () => {
     const transport = vi.fn();
     const provider = createResponsesAiProvider(configuration(), {
@@ -150,6 +178,45 @@ describe("Responses AI provider", () => {
       { id: "team.primary", title: "Team Primary" },
       { id: "local.compatible", title: "Local Compatible" }
     ]);
+  });
+
+  it("creates factory options from an available native bridge", async () => {
+    const bridge = {
+      isAvailable: true,
+      setSecret: vi.fn(),
+      deleteSecret: vi.fn(),
+      requestResponses: vi.fn(async () => ({ output_text: "ok" }))
+    };
+    const options = createNativeResponsesAiProviderFactoryOptions(bridge);
+
+    expect(options).toBeDefined();
+
+    const provider = createResponsesAiProvider(configuration(), options!);
+    await provider.requestText({
+      instruction: "Summarize.",
+      input: "# Note"
+    });
+
+    expect(bridge.requestResponses).toHaveBeenCalledWith({
+      endpointUrl: "https://api.example.test/v1/responses",
+      secretRef: "typora-plus.ai.notes",
+      body: JSON.stringify({
+        model: "notes-model",
+        instructions: "Summarize.",
+        input: "# Note",
+        store: false
+      })
+    });
+  });
+
+  it("does not create factory options when the native bridge is unavailable", () => {
+    expect(createNativeResponsesAiProviderFactoryOptions(undefined)).toBeUndefined();
+    expect(createNativeResponsesAiProviderFactoryOptions({
+      isAvailable: false,
+      setSecret: vi.fn(),
+      deleteSecret: vi.fn(),
+      requestResponses: vi.fn()
+    })).toBeUndefined();
   });
 });
 

@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from "electron";
+import { nativeAiIpcChannels } from "./nativeAiIpc.js";
 import { nativeConfigurationIpcChannels } from "./nativeConfigurationIpc.js";
 import { nativeExportIpcChannels } from "./nativeExportIpc.js";
 import { nativeFileIpcChannels } from "./nativeFileIpc.js";
@@ -6,6 +7,15 @@ import { nativeIndexSnapshotIpcChannels } from "./nativeIndexSnapshotIpc.js";
 
 contextBridge.exposeInMainWorld("typoraPlus", {
   platform: process.platform,
+  ai: {
+    isAvailable: true,
+    setSecret: (secretRef: string, value: string) =>
+      ipcRenderer.invoke(nativeAiIpcChannels.setSecret, secretRef, value),
+    deleteSecret: (secretRef: string) =>
+      ipcRenderer.invoke(nativeAiIpcChannels.deleteSecret, secretRef),
+    requestResponses: (request: { readonly endpointUrl: string; readonly secretRef: string; readonly body: string }) =>
+      ipcRenderer.invoke(nativeAiIpcChannels.requestResponses, request)
+  },
   configuration: {
     isAvailable: true,
     read: (key: string) => ipcRenderer.sendSync(nativeConfigurationIpcChannels.read, key),

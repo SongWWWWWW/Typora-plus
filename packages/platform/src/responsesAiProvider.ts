@@ -21,9 +21,33 @@ export type ResponsesAiProviderTransport =
 export type ResponsesAiProviderSecretReader =
   (secretRef: string) => string | undefined | Promise<string | undefined>;
 
+export interface ResponsesAiProviderRequest {
+  readonly endpointUrl: string;
+  readonly secretRef: string;
+  readonly body: string;
+  readonly signal?: AbortSignal;
+}
+
+export type ResponsesAiProviderRequestHandler =
+  (request: ResponsesAiProviderRequest) => Promise<unknown>;
+
 export interface ResponsesAiProviderFactoryOptions {
-  readonly readSecret: ResponsesAiProviderSecretReader;
-  readonly transport: ResponsesAiProviderTransport;
+  readonly request?: ResponsesAiProviderRequestHandler;
+  readonly readSecret?: ResponsesAiProviderSecretReader;
+  readonly transport?: ResponsesAiProviderTransport;
+}
+
+export interface NativeResponsesAiBridge {
+  readonly isAvailable: boolean;
+  setSecret(secretRef: string, value: string): Promise<boolean>;
+  deleteSecret(secretRef: string): Promise<boolean>;
+  requestResponses(request: NativeResponsesAiRequest): Promise<unknown>;
+}
+
+export interface NativeResponsesAiRequest {
+  readonly endpointUrl: string;
+  readonly secretRef: string;
+  readonly body: string;
 }
 
 export function createConfiguredAiProviders(
@@ -43,28 +67,77 @@ export function createResponsesAiProvider(
     id: normalizedConfiguration.id,
     title: normalizedConfiguration.title,
     requestText: async (request) => {
-      const apiKey = await options.readSecret(normalizedConfiguration.secretRef);
-      const normalizedApiKey = apiKey?.trim();
-
-      if (!normalizedApiKey) {
-        throw new Error(`Missing AI provider secret for ${normalizedConfiguration.id}`);
-      }
-
-      const response = await options.transport({
-        url: normalizedConfiguration.endpointUrl,
-        method: "POST",
-        headers: {
-          "Accept": "application/json",
-          "Authorization": `Bearer ${normalizedApiKey}`,
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify(createResponsesRequestBody(normalizedConfiguration, request)),
-        ...(request.signal !== undefined ? { signal: request.signal } : {})
-      });
+      const body = JSON.stringify(createResponsesRequestBody(normalizedConfiguration, request));
+      const response = await requestResponses(normalizedConfiguration, options, body, request.signal);
 
       return readResponsesProviderResult(response, normalizedConfiguration.model);
     }
   };
+}
+
+export function createNativeResponsesAiProviderFactoryOptions(
+  bridge: NativeResponsesAiBridge | undefined = createNativeResponsesAiBridge()
+): ResponsesAiProviderFactoryOptions | undefined {
+  if (!bridge?.isAvailable) {
+    return undefined;
+  }
+
+  return {
+    request: (request) => bridge.requestResponses({
+      endpointUrl: request.endpointUrl,
+      secretRef: request.secretRef,
+      body: request.body
+    })
+  };
+}
+
+function requestResponses(
+  configuration: AiProviderConfiguration,
+  options: ResponsesAiProviderFactoryOptions,
+  body: string,
+  signal: AbortSignal | undefined
+): Promise<unknown> {
+  if (options.request) {
+    return options.request({
+      endpointUrl: configuration.endpointUrl,
+      secretRef: configuration.secretRef,
+      body,
+      ...(signal !== undefined ? { signal } : {})
+    });
+  }
+
+  if (!options.readSecret || !options.transport) {
+    throw new Error("Responses AI provider requires a request handler or secret reader plus transport");
+  }
+
+  return requestResponsesWithSecret(configuration, options.readSecret, options.transport, body, signal);
+}
+
+async function requestResponsesWithSecret(
+  configuration: AiProviderConfiguration,
+  readSecret: ResponsesAiProviderSecretReader,
+  transport: ResponsesAiProviderTransport,
+  body: string,
+  signal: AbortSignal | undefined
+): Promise<unknown> {
+  const apiKey = await readSecret(configuration.secretRef);
+  const normalizedApiKey = apiKey?.trim();
+
+  if (!normalizedApiKey) {
+    throw new Error(`Missing AI provider secret for ${configuration.id}`);
+  }
+
+  return transport({
+    url: configuration.endpointUrl,
+    method: "POST",
+    headers: {
+      "Accept": "application/json",
+      "Authorization": `Bearer ${normalizedApiKey}`,
+      "Content-Type": "application/json"
+    },
+    body,
+    ...(signal !== undefined ? { signal } : {})
+  });
 }
 
 function createResponsesRequestBody(
@@ -240,6 +313,17 @@ function normalizeResponsesAiProviderConfiguration(
     secretRef: readRequiredString(record.secretRef, "Responses AI provider secret reference"),
     ...(typeof record.store === "boolean" ? { store: record.store } : {})
   };
+}
+
+function createNativeResponsesAiBridge(): NativeResponsesAiBridge | undefined {
+  const candidate = globalThis as {
+    readonly typoraPlus?: {
+      readonly ai?: NativeResponsesAiBridge;
+    };
+  };
+  const bridge = candidate.typoraPlus?.ai;
+
+  return bridge?.isAvailable ? bridge : undefined;
 }
 
 function expectRecord(value: unknown, label: string): Record<string, unknown> {

@@ -1,6 +1,7 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { app, BrowserWindow } from "electron";
+import { registerNativeAiIpc } from "./nativeAiIpc.js";
 import { registerNativeConfigurationIpc } from "./nativeConfigurationIpc.js";
 import { registerNativeExportIpc } from "./nativeExportIpc.js";
 import { registerNativeFileIpc } from "./nativeFileIpc.js";
@@ -9,6 +10,7 @@ import { desktopShellConfig } from "./shellConfig.js";
 
 const currentDir = path.dirname(fileURLToPath(import.meta.url));
 
+registerNativeAiIpc(desktopShellConfig.ai);
 registerNativeConfigurationIpc(desktopShellConfig.configuration);
 registerNativeExportIpc(desktopShellConfig.exportDocuments);
 registerNativeIndexSnapshotIpc(desktopShellConfig.indexSnapshots);

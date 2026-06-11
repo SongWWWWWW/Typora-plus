@@ -80,6 +80,14 @@ describe("AI provider configuration", () => {
             secretRef: "typora-plus.ai.bad"
           },
           {
+            id: "bad.http",
+            title: "Bad HTTP",
+            kind: "responses",
+            endpointUrl: "http://api.example.test/v1/responses",
+            model: "notes-model",
+            secretRef: "typora-plus.ai.badHttp"
+          },
+          {
             id: "bad.kind",
             title: "Bad Kind",
             kind: "chat",
@@ -105,6 +113,40 @@ describe("AI provider configuration", () => {
         endpointUrl: "https://api.example.test/v1/responses",
         model: "notes-model",
         secretRef: "typora-plus.ai.notes"
+      }
+    ]);
+  });
+
+  it("allows loopback HTTP endpoints for local compatible providers", () => {
+    const storage = createMemoryStorage();
+    const service = new ConfigurationService({
+      storageKey: "configuration",
+      storage
+    });
+
+    service.updateValue({
+      ai: {
+        providers: [
+          {
+            id: "local.responses",
+            title: "Local Responses",
+            kind: "responses",
+            endpointUrl: "http://127.0.0.1:11434/v1/responses",
+            model: "local-model",
+            secretRef: "typora-plus.ai.local"
+          }
+        ]
+      }
+    });
+
+    expect(service.getValue().ai.providers).toEqual([
+      {
+        id: "local.responses",
+        title: "Local Responses",
+        kind: "responses",
+        endpointUrl: "http://127.0.0.1:11434/v1/responses",
+        model: "local-model",
+        secretRef: "typora-plus.ai.local"
       }
     ]);
   });
