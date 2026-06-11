@@ -37,6 +37,16 @@ export interface WorkbenchSaveConflictShellActionCallbacks extends WorkbenchSave
   readonly clearSaveConflict: () => void;
 }
 
+export interface WorkbenchSaveConflictActionState {
+  readonly conflict: FileSaveConflict;
+  readonly workspaceFiles: WorkspaceState["files"];
+}
+
+export interface WorkbenchSaveConflictDialogActionHandlers {
+  readonly reload: () => void;
+  readonly overwrite: () => void;
+}
+
 export function createWorkbenchSaveConflictActionCallbacks(
   callbacks: WorkbenchSaveConflictShellCallbacks
 ): WorkbenchSaveConflictShellActionCallbacks {
@@ -44,6 +54,21 @@ export function createWorkbenchSaveConflictActionCallbacks(
     clearSaveConflict: () => callbacks.setSaveConflict(undefined),
     setOperationError: callbacks.setOperationError,
     setSaveConflict: callbacks.setSaveConflict
+  };
+}
+
+export function createWorkbenchSaveConflictDialogActionHandlers(
+  services: WorkbenchSaveConflictResolutionServices,
+  state: WorkbenchSaveConflictActionState,
+  callbacks: WorkbenchSaveConflictActionCallbacks
+): WorkbenchSaveConflictDialogActionHandlers {
+  return {
+    reload: () => {
+      void reloadWorkbenchSaveConflictAction(services, state.conflict, callbacks);
+    },
+    overwrite: () => {
+      void overwriteWorkbenchSaveConflictAction(services, state.workspaceFiles, callbacks);
+    }
   };
 }
 

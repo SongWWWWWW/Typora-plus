@@ -73,8 +73,7 @@ import {
 } from "./workbenchInitialState";
 import {
   createWorkbenchSaveConflictActionCallbacks,
-  overwriteWorkbenchSaveConflictAction,
-  reloadWorkbenchSaveConflictAction
+  createWorkbenchSaveConflictDialogActionHandlers
 } from "./workbenchSaveConflictResolution";
 import {
   createWorkbenchLineNavigationCallbacks,
@@ -341,6 +340,16 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
     setOperationError,
     setSaveConflict
   });
+  const saveConflictDialogActions = saveConflict
+    ? createWorkbenchSaveConflictDialogActionHandlers(
+        services,
+        {
+          conflict: saveConflict,
+          workspaceFiles: workspace.files
+        },
+        saveConflictActionCallbacks
+      )
+    : undefined;
   const commandPaletteExecutionCallbacks = createCommandPaletteExecutionCallbacks({
     setOperationError,
     setPaletteOpen,
@@ -424,16 +433,12 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
         </section>
       </div>
       <Statusbar model={model} stats={stats} operationError={operationError} />
-      {saveConflict ? (
+      {saveConflict && saveConflictDialogActions ? (
         <SaveConflictDialog
           conflict={saveConflict}
           onClose={saveConflictActionCallbacks.clearSaveConflict}
-          onReload={() => {
-            void reloadWorkbenchSaveConflictAction(services, saveConflict, saveConflictActionCallbacks);
-          }}
-          onOverwrite={() => {
-            void overwriteWorkbenchSaveConflictAction(services, workspace.files, saveConflictActionCallbacks);
-          }}
+          onReload={saveConflictDialogActions.reload}
+          onOverwrite={saveConflictDialogActions.overwrite}
         />
       ) : null}
       <CommandPalette

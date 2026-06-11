@@ -9,6 +9,7 @@ import type {
 import { describe, expect, it, vi } from "vitest";
 import {
   createWorkbenchSaveConflictActionCallbacks,
+  createWorkbenchSaveConflictDialogActionHandlers,
   overwriteWorkbenchSaveConflictAction,
   overwriteWorkbenchSaveConflict,
   reloadWorkbenchSaveConflictAction,
@@ -161,6 +162,41 @@ describe("workbench save conflict resolution", () => {
     expect(clearSaveConflict).not.toHaveBeenCalled();
     expect(setSaveConflict).not.toHaveBeenCalled();
   });
+
+  it("creates dialog action handlers with the shared action boundary", async () => {
+    const conflict = saveConflict("C:/Notes/a.md");
+    const workspaceFiles = workspace([file("C:/Notes/a.md", "a.md")]);
+    const opened = model("C:/Notes/a.md", "# Disk");
+    const clearSaveConflict = vi.fn();
+    const operationErrors: Array<string | undefined> = [];
+    const setSaveConflict = vi.fn();
+    const services = createServices({
+      openFile: vi.fn(async () => opened),
+      save: vi.fn(async () => {
+        throw new Error("save failed");
+      })
+    });
+    const handlers = createWorkbenchSaveConflictDialogActionHandlers(
+      services,
+      { conflict, workspaceFiles },
+      {
+        clearSaveConflict,
+        setOperationError: (value) => operationErrors.push(value),
+        setSaveConflict
+      }
+    );
+
+    handlers.reload();
+    await waitForSaveConflictHandler();
+    handlers.overwrite();
+    await waitForSaveConflictHandler();
+
+    expect(services.textFileService.openFile).toHaveBeenCalledWith(conflict.uri);
+    expect(services.textFileService.save).toHaveBeenCalledWith({ overwrite: true });
+    expect(clearSaveConflict).toHaveBeenCalledOnce();
+    expect(setSaveConflict).not.toHaveBeenCalled();
+    expect(operationErrors).toEqual([undefined, undefined, "save failed"]);
+  });
 });
 
 function createServices(overrides: {
@@ -189,6 +225,12 @@ function createServices(overrides: {
       setWorkspace: vi.fn()
     }
   };
+}
+
+function waitForSaveConflictHandler(): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, 0);
+  });
 }
 
 function saveConflict(path: string): FileSaveConflict {

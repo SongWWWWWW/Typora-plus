@@ -5453,3 +5453,31 @@ Review:
 Known limitations:
 
 - Quick Open close behavior remains a direct shell state update because it is local overlay state with no service or action boundary.
+
+## 2026-06-11 - P2 Save Conflict Dialog Handler Factory
+
+Completed:
+
+- Added a focused Save Conflict dialog action handler factory that adapts reload and overwrite button actions into the shared conflict-resolution action boundary.
+- Routed `Application.tsx` Save Conflict dialog `onReload` and `onOverwrite` wiring through the handler instead of dispatching action helpers inline.
+- Preserved reload file opening, recent-file recording, overwrite save/indexing, stale operation-error clearing, conflict clearing after success, and failure mapping.
+- Covered handler delegation for reload and overwrite alongside existing save-conflict resolution tests.
+
+Quality gate:
+
+- `npx vitest run packages/workbench/src/workbenchSaveConflictResolution.test.ts`: passed, 8 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 55 files / 562 tests, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Dev server smoke check: passed at `http://127.0.0.1:5173`; status 200 and root element present
+
+Review:
+
+- Save Conflict dialog button actions now cross into `ITextFileService`, `IRecentService`, and indexing through a Workbench-local handler and the shared action runner instead of shell-local inline dispatch.
+- `Application.tsx` still owns dialog visibility and current conflict state, while `workbenchSaveConflictResolution` owns reload/overwrite dispatch and operation-error/save-conflict mapping.
+- No new dependency, configuration key, storage path, visual token, extra documentation file, or hard-coded platform assumption was introduced.
+
+Known limitations:
+
+- Save Conflict dialog visibility remains shell state because it is the UI representation of the current platform conflict.
