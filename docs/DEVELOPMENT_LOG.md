@@ -6610,3 +6610,32 @@ Known limitations:
 
 - The titlebar entry still depends on a future AI provider being registered.
 - Streaming responses, insert/replace workflows, and workspace-grounded retrieval remain future work.
+
+## 2026-06-11 - P2 AI Response Copy Action
+
+Completed:
+
+- Added a focused Workbench clipboard helper for copying text through `navigator.clipboard.writeText` with a hidden textarea fallback for restricted browser environments.
+- Added an explicit Copy action to the AI summary response dialog with idle, copied, and failed states.
+- Kept AI responses non-destructive: copying is user-initiated and does not mutate the active Markdown note.
+- Covered clipboard API success, textarea fallback, fallback cleanup, unavailable clipboard targets, and failed fallback behavior with focused tests.
+- Updated maintained docs to record the copyable AI response workflow.
+
+Quality gate:
+
+- `npx vitest run packages/workbench/src/workbenchClipboard.test.ts`: passed, 1 file / 5 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 68 files / 650 tests, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Browser smoke check at `http://127.0.0.1:5173/`: Workbench loaded with root content and no console errors
+
+Review:
+
+- Clipboard behavior is Workbench-local and browser-environment injected, so AI providers stay provider-neutral and do not learn about DOM or note mutation policy.
+- The dialog exposes provider output as a reusable result without adding insert/replace semantics before a future explicit edit-preview flow exists.
+
+Known limitations:
+
+- Clipboard contents are not asserted through the in-app browser automation path yet; the helper is covered by injected-environment unit tests.
+- Streaming responses, insert/replace workflows, and workspace-grounded retrieval remain future work.

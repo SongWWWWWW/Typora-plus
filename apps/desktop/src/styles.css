@@ -558,6 +558,13 @@ button {
   border-color: var(--tp-color-border-strong);
 }
 
+.tp-dialog-button:disabled {
+  border-color: var(--tp-color-border);
+  color: var(--tp-color-text-soft);
+  cursor: default;
+  opacity: 0.65;
+}
+
 .tp-ai-dialog {
   width: min(560px, calc(100vw - 32px));
   max-height: min(640px, calc(100vh - 32px));

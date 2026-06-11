@@ -18,6 +18,7 @@ import type {
 import {
   AlertTriangle,
   Command as CommandIcon,
+  Copy,
   FileText,
   Folder,
   FolderOpen,
@@ -48,6 +49,7 @@ import {
 } from "./workbenchAutoSave";
 import { registerWorkbenchCommands } from "./workbenchCommandRegistration";
 import { createWorkbenchCommandSurface } from "./workbenchCommandSurface";
+import { copyWorkbenchTextToClipboard } from "./workbenchClipboard";
 import type { WorkbenchRemoteSyncPlanResult } from "./workbenchRemoteSyncActions";
 import {
   applyWorkbenchStateContext,
@@ -1103,6 +1105,19 @@ function AiResponseDialog({
   readonly response: AiTextResponse;
   readonly onClose: () => void;
 }) {
+  const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
+  const canCopyResponse = response.value.length > 0;
+
+  useEffect(() => {
+    setCopyState("idle");
+  }, [response.value]);
+
+  const onCopy = () => {
+    void copyWorkbenchTextToClipboard(response.value).then((copied) => {
+      setCopyState(copied ? "copied" : "failed");
+    });
+  };
+
   return (
     <div className="tp-dialog-overlay" role="presentation" onMouseDown={onClose}>
       <section
@@ -1129,6 +1144,15 @@ function AiResponseDialog({
           <p className="tp-ai-response">{response.value || "No response content."}</p>
         </div>
         <div className="tp-dialog-actions">
+          <button
+            className="tp-dialog-button"
+            type="button"
+            disabled={!canCopyResponse}
+            onClick={onCopy}
+          >
+            <Copy size={15} />
+            <span>{formatAiResponseCopyLabel(copyState)}</span>
+          </button>
           <button className="tp-dialog-button tp-dialog-button-primary" type="button" onClick={onClose}>
             <span>Close</span>
           </button>
@@ -1136,6 +1160,17 @@ function AiResponseDialog({
       </section>
     </div>
   );
+}
+
+function formatAiResponseCopyLabel(copyState: "idle" | "copied" | "failed"): string {
+  switch (copyState) {
+    case "copied":
+      return "Copied";
+    case "failed":
+      return "Copy failed";
+    case "idle":
+      return "Copy";
+  }
 }
 
 function RemoteSyncPlanDialog({
