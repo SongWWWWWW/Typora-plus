@@ -6186,3 +6186,33 @@ Known limitations:
 
 - No built-in AI provider, Feishu provider, AI command UI, sync UI, OAuth flow, secret storage, or Electron network bridge is wired yet.
 - Extension/runtime APIs still do not expose AI or remote sync registration surfaces.
+
+## 2026-06-11 - P2 AI And Remote Sync Provider Lifecycle Events
+
+Completed:
+
+- Added `onDidChangeAiProviders` to `IAiService` and `AiService`.
+- Added `onDidChangeRemoteSyncProviders` to `IRemoteSyncService` and `RemoteSyncService`.
+- Fired provider lifecycle events on successful provider registration and successful unregister disposal.
+- Covered event snapshots, duplicate registration rejection, repeated disposal, and listener disposal with focused AI and remote sync tests.
+- Updated the maintained architecture notes to record provider lifecycle observability as part of the platform contracts.
+
+Quality gate:
+
+- `npx vitest run packages/platform/src/ai.test.ts packages/platform/src/remoteSync.test.ts`: passed, 19 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 62 files / 616 tests, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Dev server smoke check: passed at `http://127.0.0.1:5173`; status 200 and root element present
+
+Review:
+
+- Future AI and sync UI can subscribe to provider availability instead of polling or hard-coding provider assumptions.
+- Provider lifecycle events stay at the platform service boundary and do not introduce OpenAI, Codex, Feishu, endpoint, model, token, storage, or credential behavior.
+- The event shape follows the existing `IMarkdownRendererService` change event pattern.
+
+Known limitations:
+
+- Workbench surfaces do not yet subscribe to these events.
+- Extension/runtime APIs still do not expose AI or remote sync provider registration surfaces.

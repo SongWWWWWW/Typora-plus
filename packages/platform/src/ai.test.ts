@@ -79,6 +79,28 @@ describe("ai service", () => {
     ]);
   });
 
+  it("fires provider change events when providers are registered and unregistered", () => {
+    const service = new AiService();
+    const snapshots: string[][] = [];
+    const listener = service.onDidChangeAiProviders(() => {
+      snapshots.push(service.getProviders().map((registeredProvider) => registeredProvider.id));
+    });
+
+    const disposable = service.registerProvider(provider("openai.responses", "OpenAI Responses"));
+    expect(() => service.registerProvider(provider(" openai.responses ", "Duplicate")))
+      .toThrow("AI provider already registered: openai.responses");
+
+    disposable.dispose();
+    disposable.dispose();
+    listener.dispose();
+    service.registerProvider(provider("local.model", "Local Model"));
+
+    expect(snapshots).toEqual([
+      ["openai.responses"],
+      []
+    ]);
+  });
+
   it("rejects duplicate providers and missing providers", async () => {
     const service = new AiService();
     service.registerProvider(provider("openai.responses", "OpenAI Responses"));

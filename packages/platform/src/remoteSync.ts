@@ -1,4 +1,4 @@
-import { toDisposable, type IDisposable, type URI as URIType } from "@typora-plus/base";
+import { Emitter, toDisposable, type Event, type IDisposable, type URI as URIType } from "@typora-plus/base";
 import { createServiceIdentifier } from "./instantiation";
 import type { FileKind, FileTreeEntry, WorkspaceFileTree } from "./files";
 
@@ -88,6 +88,7 @@ export interface RegisteredRemoteSyncProvider {
 }
 
 export interface IRemoteSyncService {
+  readonly onDidChangeRemoteSyncProviders: Event<void>;
   registerProvider(provider: RemoteSyncProvider): IDisposable;
   getProviders(): readonly RegisteredRemoteSyncProvider[];
   createPlan(providerId: RemoteSyncProviderId, request: RemoteSyncPlanRequest): Promise<RemoteSyncPlan>;
@@ -136,6 +137,9 @@ export function createRemoteSyncPlanFromDiff(input: RemoteSyncDiffPlanInput): Re
 
 export class RemoteSyncService implements IRemoteSyncService {
   private readonly providers = new Map<RemoteSyncProviderId, RemoteSyncProvider>();
+  private readonly onDidChangeRemoteSyncProvidersEmitter = new Emitter<void>();
+
+  readonly onDidChangeRemoteSyncProviders = this.onDidChangeRemoteSyncProvidersEmitter.event;
 
   registerProvider(provider: RemoteSyncProvider): IDisposable {
     const normalizedProvider = normalizeRemoteSyncProvider(provider);
@@ -145,9 +149,12 @@ export class RemoteSyncService implements IRemoteSyncService {
     }
 
     this.providers.set(normalizedProvider.id, normalizedProvider);
+    this.onDidChangeRemoteSyncProvidersEmitter.fire();
+
     return toDisposable(() => {
       if (this.providers.get(normalizedProvider.id) === normalizedProvider) {
         this.providers.delete(normalizedProvider.id);
+        this.onDidChangeRemoteSyncProvidersEmitter.fire();
       }
     });
   }

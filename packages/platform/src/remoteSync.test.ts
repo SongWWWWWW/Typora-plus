@@ -137,6 +137,28 @@ describe("remote sync service", () => {
     ]);
   });
 
+  it("fires provider change events when providers are registered and unregistered", () => {
+    const service = new RemoteSyncService();
+    const snapshots: string[][] = [];
+    const listener = service.onDidChangeRemoteSyncProviders(() => {
+      snapshots.push(service.getProviders().map((registeredProvider) => registeredProvider.id));
+    });
+
+    const disposable = service.registerProvider(provider("feishu.drive", "Feishu Drive"));
+    expect(() => service.registerProvider(provider(" feishu.drive ", "Duplicate")))
+      .toThrow("Remote sync provider already registered: feishu.drive");
+
+    disposable.dispose();
+    disposable.dispose();
+    listener.dispose();
+    service.registerProvider(provider("local.folder", "Local Folder"));
+
+    expect(snapshots).toEqual([
+      ["feishu.drive"],
+      []
+    ]);
+  });
+
   it("rejects duplicate providers, missing providers, and unregisters through disposables", async () => {
     const service = new RemoteSyncService();
     const disposable = service.registerProvider(provider("feishu.drive", "Feishu Drive"));

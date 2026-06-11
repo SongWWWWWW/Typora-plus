@@ -1,4 +1,4 @@
-import { toDisposable, type IDisposable, type URI as URIType } from "@typora-plus/base";
+import { Emitter, toDisposable, type Event, type IDisposable, type URI as URIType } from "@typora-plus/base";
 import { createServiceIdentifier } from "./instantiation";
 
 export type AiProviderId = string;
@@ -46,6 +46,7 @@ export interface RegisteredAiProvider {
 }
 
 export interface IAiService {
+  readonly onDidChangeAiProviders: Event<void>;
   registerProvider(provider: AiProvider): IDisposable;
   getProviders(): readonly RegisteredAiProvider[];
   requestText(providerId: AiProviderId, request: AiTextRequest): Promise<AiTextResponse>;
@@ -55,6 +56,9 @@ export const IAiService = createServiceIdentifier<IAiService>("ai");
 
 export class AiService implements IAiService {
   private readonly providers = new Map<AiProviderId, AiProvider>();
+  private readonly onDidChangeAiProvidersEmitter = new Emitter<void>();
+
+  readonly onDidChangeAiProviders = this.onDidChangeAiProvidersEmitter.event;
 
   registerProvider(provider: AiProvider): IDisposable {
     const normalizedProvider = normalizeAiProvider(provider);
@@ -64,9 +68,12 @@ export class AiService implements IAiService {
     }
 
     this.providers.set(normalizedProvider.id, normalizedProvider);
+    this.onDidChangeAiProvidersEmitter.fire();
+
     return toDisposable(() => {
       if (this.providers.get(normalizedProvider.id) === normalizedProvider) {
         this.providers.delete(normalizedProvider.id);
+        this.onDidChangeAiProvidersEmitter.fire();
       }
     });
   }
