@@ -5033,3 +5033,31 @@ Review:
 Known limitations:
 
 - Command metadata and keybinding label reads are still passed directly to Command Palette and Settings surfaces.
+
+## 2026-06-11 - P2 Workbench Command Surface
+
+Completed:
+
+- Added a focused Workbench command surface helper that captures command metadata once per render and provides command-title and keybinding lookup callbacks.
+- Routed titlebar, activitybar, Command Palette, and Settings command props through the command surface instead of direct `Application.tsx` command/keybinding service reads.
+- Preserved command title fallbacks, active shortcut labels, keybinding conflict lookup, and keybinding label formatting behavior.
+- Covered command snapshot reads, title fallback, and keybinding service delegation.
+
+Quality gate:
+
+- `npx vitest run packages/workbench/src/workbenchCommandSurface.test.ts packages/workbench/src/workbenchMenuModel.test.ts`: passed, 8 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 542 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Dev server smoke check: passed at `http://127.0.0.1:5173`; status 200 and root element present
+
+Review:
+
+- Command metadata and keybinding label access now have one Workbench-local surface boundary shared by menu, palette, and Settings UI.
+- `Application.tsx` still decides which surfaces are rendered, while `workbenchCommandSurface` owns command metadata and keybinding lookup wiring.
+- No new dependency, configuration key, storage path, visual token, extra documentation file, or hard-coded platform assumption was introduced.
+
+Known limitations:
+
+- Editor content updates still call the text-file service directly from the editor surface.

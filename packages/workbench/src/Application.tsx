@@ -52,6 +52,7 @@ import type { WorkbenchServices } from "./services";
 import { executeWorkbenchCommand } from "./workbenchActionRunner";
 import { scheduleWorkbenchAutoSave } from "./workbenchAutoSave";
 import { registerWorkbenchCommands } from "./workbenchCommandRegistration";
+import { createWorkbenchCommandSurface } from "./workbenchCommandSurface";
 import {
   applyWorkbenchContextValues,
   createWorkbenchStateContextValues
@@ -80,7 +81,6 @@ import {
   getWorkbenchMenuItems,
   isWorkbenchMenuItemActive,
   registerWorkbenchMenuItemsSubscription,
-  workbenchCommandTitle,
   workbenchMenuItemTitle
 } from "./workbenchMenuModel";
 import {
@@ -157,6 +157,7 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
   const titlebarMenuItems = useMenuItems(services, "titlebar.primary");
   const activitybarPrimaryMenuItems = useMenuItems(services, "activitybar.primary");
   const activitybarSecondaryMenuItems = useMenuItems(services, "activitybar.secondary");
+  const commandSurface = createWorkbenchCommandSurface(services);
   const executeCommand = (id: string) => {
     executeWorkbenchCommand(services, id, setOperationError, setSaveConflict);
   };
@@ -328,7 +329,7 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
         workspaceName={workspace.name}
         configuration={configuration}
         menuItems={titlebarMenuItems}
-        getCommandTitle={(id) => workbenchCommandTitle(services.commandService.getCommands(), id)}
+        getCommandTitle={commandSurface.getCommandTitle}
         onCommand={executeCommand}
       />
       <div className="tp-body">
@@ -337,7 +338,7 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
           configuration={configuration}
           primaryMenuItems={activitybarPrimaryMenuItems}
           secondaryMenuItems={activitybarSecondaryMenuItems}
-          getCommandTitle={(id) => workbenchCommandTitle(services.commandService.getCommands(), id)}
+          getCommandTitle={commandSurface.getCommandTitle}
           onCommand={executeCommand}
         />
         {sideView ? (
@@ -414,8 +415,8 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
       ) : null}
       <CommandPalette
         open={paletteOpen}
-        commands={services.commandService.getCommands()}
-        getKeybindingLabel={(id) => services.keybindingService.getKeybindingLabel(id)}
+        commands={commandSurface.commands}
+        getKeybindingLabel={commandSurface.getKeybindingLabel}
         onClose={() => setPaletteOpen(false)}
         onExecute={(id) => {
           executeCommandPaletteCommand(services, id, {
@@ -437,11 +438,11 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
       <SettingsDialog
         open={settingsOpen}
         configuration={configuration}
-        commands={services.commandService.getCommands()}
+        commands={commandSurface.commands}
         themes={themes}
-        getCommandForKeybinding={(keybinding) => services.keybindingService.getCommandForKeybinding(keybinding)}
-        getKeybindingLabel={(id) => services.keybindingService.getKeybindingLabel(id)}
-        getKeybindingLabelForKeybinding={(keybinding) => services.keybindingService.getKeybindingLabelForKeybinding(keybinding)}
+        getCommandForKeybinding={commandSurface.getCommandForKeybinding}
+        getKeybindingLabel={commandSurface.getKeybindingLabel}
+        getKeybindingLabelForKeybinding={commandSurface.getKeybindingLabelForKeybinding}
         onClose={() => setSettingsOpen(false)}
         onUpdate={(value) => {
           void updateWorkbenchConfigurationAction(services, value, {
