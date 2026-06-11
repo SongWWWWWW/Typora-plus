@@ -4,7 +4,8 @@ import { workbenchCommandIds } from "./workbenchCommandIds";
 export const workbenchCommandCategories = {
   file: "File",
   workbench: "Workbench",
-  editor: "Editor"
+  editor: "Editor",
+  ai: "AI"
 } as const satisfies Record<string, string>;
 
 export const workbenchCommandMetadata = {
@@ -102,6 +103,13 @@ export const workbenchCommandMetadata = {
       id: workbenchCommandIds.editor.taskRemoveMarkers,
       title: "Remove Task Markers",
       category: workbenchCommandCategories.editor
+    }
+  },
+  ai: {
+    summarizeActiveNote: {
+      id: workbenchCommandIds.ai.summarizeActiveNote,
+      title: "Summarize Active Note",
+      category: workbenchCommandCategories.ai
     }
   },
   theme: {

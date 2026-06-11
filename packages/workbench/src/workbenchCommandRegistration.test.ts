@@ -1,6 +1,7 @@
 import { URI } from "@typora-plus/base";
 import {
   defaultConfiguration,
+  type AiTextRequest,
   type Command,
   type TextFileModel
 } from "@typora-plus/platform";
@@ -69,6 +70,42 @@ describe("workbench command registration", () => {
       .toBe("files");
   });
 
+  it("registers the AI summarize command only when an AI provider is available", async () => {
+    const registered = new Map<string, Command>();
+    const testCallbacks = callbacks();
+    const services = createServices(registered, [], {
+      aiProviders: [{ id: "openai.responses", title: "OpenAI Responses" }]
+    });
+
+    registerWorkbenchCommands(services, state(), testCallbacks);
+
+    expect(registered.has(workbenchCommandIds.ai.summarizeActiveNote)).toBe(true);
+
+    await registered.get(workbenchCommandIds.ai.summarizeActiveNote)?.run({} as never);
+
+    expect(services.aiService.requestText).toHaveBeenCalledWith("openai.responses", {
+      instruction: expect.stringContaining("Summarize"),
+      input: "# A",
+      metadata: {
+        surface: "command",
+        action: "summarizeActiveNote",
+        source: "active-note",
+        sourceName: "a.md",
+        sourceScheme: "file",
+        languageId: "markdown"
+      }
+    });
+    expect(testCallbacks.setAiResponse).toHaveBeenCalledWith({
+      providerId: "openai.responses",
+      value: "Summary"
+    });
+
+    const noProviderCommands = new Map<string, Command>();
+    registerWorkbenchCommands(createServices(noProviderCommands), state(), callbacks());
+
+    expect(noProviderCommands.has(workbenchCommandIds.ai.summarizeActiveNote)).toBe(false);
+  });
+
   it("exports the active model through the export service", async () => {
     const registered = new Map<string, Command>();
     const services = createServices(registered);
@@ -135,11 +172,23 @@ describe("workbench command registration", () => {
 
 function createServices(
   registered: Map<string, Command>,
-  disposeCalls: string[] = []
+  disposeCalls: string[] = [],
+  options: {
+    readonly aiProviders?: readonly { readonly id: string; readonly title: string }[];
+  } = {}
 ): WorkbenchServices {
   const activeModel = model("C:/Notes/a.md", "# A");
 
   return {
+    aiService: {
+      onDidChangeAiProviders: vi.fn(),
+      registerProvider: vi.fn(),
+      getProviders: vi.fn(() => options.aiProviders ?? []),
+      requestText: vi.fn(async (providerId: string, _request: AiTextRequest) => ({
+        providerId,
+        value: "Summary"
+      }))
+    },
     commandService: {
       registerCommand: vi.fn((command: Command) => {
         registered.set(command.id, command);
@@ -269,6 +318,7 @@ function callbacks(
 ): WorkbenchCommandRegistrationCallbacks {
   return {
     getEditorHandle: vi.fn(() => null),
+    setAiResponse: vi.fn(),
     setOperationError: vi.fn(),
     setPaletteOpen: vi.fn(),
     setQuickOpen: vi.fn(),

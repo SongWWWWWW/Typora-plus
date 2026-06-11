@@ -1,6 +1,7 @@
 import { MarkdownEditor, type MarkdownEditorHandle } from "@typora-plus/editor";
 import { calculateMarkdownStats, extractOutline, type OutlineEntry } from "@typora-plus/markdown";
 import type {
+  AiTextResponse,
   FileSaveConflict,
   FileTreeEntry,
   MenuId,
@@ -158,6 +159,7 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedTag, setSelectedTag] = useState<string | undefined>();
   const [operationError, setOperationError] = useState<string | undefined>();
+  const [aiResponse, setAiResponse] = useState<AiTextResponse | undefined>();
   const [saveConflict, setSaveConflict] = useState<FileSaveConflict | undefined>();
   const [indexStatus, setIndexStatus] = useState<WorkspaceIndexStatus>(initialState.indexStatus);
   const [commandRevision, setCommandRevision] = useState(0);
@@ -281,6 +283,7 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
       workspaceFiles: workspace.files
     }, {
       getEditorHandle: () => editorRef.current,
+      setAiResponse,
       setOperationError,
       setPaletteOpen,
       setQuickOpen,
@@ -290,7 +293,7 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
     });
 
     return () => disposable.dispose();
-  }, [configuration, services, workspace.files]);
+  }, [aiProviderRevision, configuration, services, workspace.files]);
 
   useEffect(() => {
     const disposable = registerWorkbenchKeybindingDispatch(
@@ -449,6 +452,12 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
           onClose={saveConflictActionCallbacks.clearSaveConflict}
           onReload={saveConflictDialogActions.reload}
           onOverwrite={saveConflictDialogActions.overwrite}
+        />
+      ) : null}
+      {aiResponse ? (
+        <AiResponseDialog
+          response={aiResponse}
+          onClose={() => setAiResponse(undefined)}
         />
       ) : null}
       <CommandPalette
@@ -1071,6 +1080,48 @@ function SaveConflictDialog({
           <button className="tp-dialog-button tp-dialog-button-primary" type="button" onClick={onOverwrite}>
             <Save size={15} />
             <span>Overwrite</span>
+          </button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function AiResponseDialog({
+  response,
+  onClose
+}: {
+  readonly response: AiTextResponse;
+  readonly onClose: () => void;
+}) {
+  return (
+    <div className="tp-dialog-overlay" role="presentation" onMouseDown={onClose}>
+      <section
+        className="tp-dialog tp-ai-dialog"
+        role="dialog"
+        aria-label="AI summary"
+        aria-modal="true"
+        onMouseDown={(event) => event.stopPropagation()}
+      >
+        <div className="tp-dialog-header">
+          <div className="tp-dialog-title tp-ai-dialog-title">
+            <FileText size={18} />
+            <span>AI Summary</span>
+          </div>
+          <IconButton title="Close" onClick={onClose}>
+            <X size={16} />
+          </IconButton>
+        </div>
+        <div className="tp-ai-dialog-body">
+          <div className="tp-ai-dialog-meta">
+            <span>{response.providerId}</span>
+            {response.model ? <span>{response.model}</span> : null}
+          </div>
+          <p className="tp-ai-response">{response.value || "No response content."}</p>
+        </div>
+        <div className="tp-dialog-actions">
+          <button className="tp-dialog-button tp-dialog-button-primary" type="button" onClick={onClose}>
+            <span>Close</span>
           </button>
         </div>
       </section>

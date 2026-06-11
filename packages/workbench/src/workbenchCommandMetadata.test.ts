@@ -15,7 +15,8 @@ describe("workbench command metadata", () => {
     expect(workbenchCommandCategories).toEqual({
       file: "File",
       workbench: "Workbench",
-      editor: "Editor"
+      editor: "Editor",
+      ai: "AI"
     });
   });
 
@@ -39,6 +40,11 @@ describe("workbench command metadata", () => {
       category: workbenchCommandCategories.workbench,
       id: workbenchCommandIds.theme.toggle,
       title: "Toggle Theme"
+    });
+    expect(workbenchCommandMetadata.ai.summarizeActiveNote).toEqual({
+      category: workbenchCommandCategories.ai,
+      id: workbenchCommandIds.ai.summarizeActiveNote,
+      title: "Summarize Active Note"
     });
   });
 

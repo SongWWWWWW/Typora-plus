@@ -1,5 +1,6 @@
 import { DisposableStore, type IDisposable } from "@typora-plus/base";
 import type {
+  AiTextResponse,
   FileSaveConflict,
   TyporaPlusConfiguration,
   WorkspaceState
@@ -15,10 +16,12 @@ import {
   editorTaskCommandMetadata,
   workbenchCommandMetadata
 } from "./workbenchCommandMetadata";
+import { runWorkbenchSummarizeActiveNoteAiAction } from "./workbenchAiActions";
 import {
   saveWorkbenchFile,
   saveWorkbenchFileAs
 } from "./workbenchFileSaving";
+import { selectWorkbenchDefaultAiProviderId } from "./workbenchProviderSelection";
 import {
   openWorkbenchWorkspace,
   refreshWorkbenchWorkspace
@@ -40,6 +43,7 @@ export interface WorkbenchCommandRegistrationCallbacks {
     MarkdownEditorHandle,
     "removeTaskListMarkers" | "toggleTaskListLines"
   > | null;
+  readonly setAiResponse: (response: AiTextResponse | undefined) => void;
   readonly setOperationError: WorkbenchOperationErrorSetter;
   readonly setPaletteOpen: (open: boolean) => void;
   readonly setQuickOpen: (open: boolean) => void;
@@ -81,6 +85,19 @@ export function registerWorkbenchCommands(
       callbacks.setSaveConflict
     )
   }));
+  if (selectWorkbenchDefaultAiProviderId(services)) {
+    disposables.add(services.commandService.registerCommand({
+      ...workbenchCommandMetadata.ai.summarizeActiveNote,
+      run: () => runWorkbenchAction(async () => {
+        const response = await runWorkbenchSummarizeActiveNoteAiAction(services, {
+          metadata: {
+            surface: "command"
+          }
+        });
+        callbacks.setAiResponse(response);
+      }, callbacks.setOperationError, callbacks.setSaveConflict)
+    }));
+  }
   disposables.add(services.commandService.registerCommand({
     ...workbenchCommandMetadata.workbench.quickOpen,
     run: () => callbacks.setQuickOpen(true)

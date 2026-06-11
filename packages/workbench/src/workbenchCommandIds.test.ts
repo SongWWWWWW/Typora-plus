@@ -36,6 +36,9 @@ describe("workbench command ids", () => {
         taskToggleLines: "editor.task.toggleLines",
         taskRemoveMarkers: "editor.task.removeMarkers"
       },
+      ai: {
+        summarizeActiveNote: "ai.summarizeActiveNote"
+      },
       theme: {
         toggle: "theme.toggle"
       }

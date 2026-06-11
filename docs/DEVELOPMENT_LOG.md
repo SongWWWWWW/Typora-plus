@@ -6426,3 +6426,34 @@ Known limitations:
 
 - AI and remote sync commands are still not registered as user-visible commands.
 - The command palette itself still receives a command metadata snapshot from the Workbench shell rather than owning subscription logic.
+
+## 2026-06-11 - P2 Dynamic Summarize Active Note AI Command
+
+Completed:
+
+- Added `ai.summarizeActiveNote` command id and command metadata under an AI command category.
+- Registered the summarize-active-note command only when `IAiService` has an available provider, keeping the command palette free of dead AI actions when no provider is installed.
+- Routed command execution through the existing Workbench AI action runner with command-surface metadata and shared operation-error/save-conflict handling.
+- Added a bounded AI response dialog that shows the provider response without implicitly mutating the active Markdown note.
+- Kept the implementation provider-neutral: no OpenAI, Codex, model, endpoint, OAuth scope, token, Feishu, or storage path assumptions were added.
+- Updated maintained docs to record the AI command/result loop and Feishu raw Markdown/assets mirroring as the practical first remote-sync path.
+
+Quality gate:
+
+- `npx vitest run packages/workbench/src/workbenchCommandIds.test.ts packages/workbench/src/workbenchCommandMetadata.test.ts packages/workbench/src/workbenchCommandRegistration.test.ts`: passed, 3 files / 12 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 65 files / 626 tests, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Dev server smoke check: passed at `http://127.0.0.1:5173`; status 200 and root element present
+
+Review:
+
+- The current AI implementation is now an end-to-end Workbench loop for provider-backed text assistance: command metadata, dynamic handler registration, active-note request construction, service dispatch, and visible response feedback.
+- OpenAI Responses API or a local model should be implemented as future `IAiService` providers. Codex remains feasible for coding-agent and repository workflows, but not as the default Markdown writing-assistant integration.
+- The Feishu integration should start as a raw file mirror over the remote sync provider boundary. Feishu Docs publishing can be a later one-way adapter, while full bidirectional Docs sync remains high risk because it needs Markdown-to-block conversion, asset mapping, permission handling, and remote edit conflict resolution.
+
+Known limitations:
+
+- No built-in AI provider, credential bridge, streaming response UI, insertion workflow, or workspace-grounded retrieval provider exists yet.
+- No built-in Feishu provider exists yet; the current work keeps sync planning and execution contracts ready for a future provider.

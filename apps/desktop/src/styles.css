@@ -558,6 +558,59 @@ button {
   border-color: var(--tp-color-border-strong);
 }
 
+.tp-ai-dialog {
+  width: min(560px, calc(100vw - 32px));
+  max-height: min(640px, calc(100vh - 32px));
+  display: flex;
+  flex-direction: column;
+}
+
+.tp-ai-dialog-title {
+  color: var(--tp-color-accent-strong);
+}
+
+.tp-ai-dialog-body {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+  padding: 14px 16px 4px;
+}
+
+.tp-ai-dialog-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+
+.tp-ai-dialog-meta span {
+  max-width: 100%;
+  overflow: hidden;
+  border: 1px solid var(--tp-color-border);
+  border-radius: var(--tp-radius-control);
+  padding: 2px 6px;
+  color: var(--tp-color-text-soft);
+  font-size: 11px;
+  line-height: 16px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tp-ai-response {
+  min-height: 88px;
+  min-width: 0;
+  max-height: min(420px, calc(100vh - 190px));
+  margin: 0;
+  overflow: auto;
+  color: var(--tp-color-text-muted);
+  font-size: 13px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
 .tp-command-overlay {
   position: fixed;
   inset: 0;
