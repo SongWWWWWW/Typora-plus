@@ -4582,3 +4582,31 @@ Review:
 Known limitations:
 
 - Service-specific validation still belongs to the platform services; this helper intentionally does not duplicate bounds or sanitization logic from configuration.
+
+## 2026-06-11 - P2 Workbench Auto Save Coordinator
+
+Completed:
+
+- Added a focused Workbench auto-save helper for dirty/file/conflict guards, configured delay scheduling, cleanup, and save execution.
+- Replaced inline auto-save timer coordination in `Application.tsx` with the helper while leaving React effect lifecycle ownership in the shell.
+- Reused the existing Workbench file-saving helper with recent tracking disabled so auto-save continues to refresh indexes without polluting recent files.
+- Added focused tests for scheduling guards, timer cleanup, gated-off behavior, and auto-save execution.
+
+Quality gate:
+
+- `npx vitest run packages/workbench/src/workbenchAutoSave.test.ts packages/workbench/src/workbenchFileSaving.test.ts`: passed, 11 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 499 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Dev server smoke check: passed at `http://127.0.0.1:5173`; status 200 and root element present
+
+Review:
+
+- Auto-save behavior remains Workbench-local and consumes the existing save coordination and action-runner boundaries.
+- The shell now supplies timer lifecycle and current state, while the helper owns auto-save policy and the no-recent save path.
+- No new dependency, configuration key, storage path, visual token, extra documentation file, or hard-coded platform assumption was introduced.
+
+Known limitations:
+
+- Auto-save still relies on the shell effect dependency list for rescheduling; a future DOM-facing hook could own that if more timer-based editor workflows appear.

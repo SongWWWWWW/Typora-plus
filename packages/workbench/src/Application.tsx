@@ -51,6 +51,7 @@ import {
   executeWorkbenchCommand,
   runWorkbenchAction
 } from "./workbenchActionRunner";
+import { scheduleWorkbenchAutoSave } from "./workbenchAutoSave";
 import { editorTaskCommandMetadata } from "./workbenchContributions";
 import { applyWorkbenchConfigurationToServices } from "./workbenchConfigurationSync";
 import {
@@ -235,16 +236,16 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
   }, [configuration.workspace.searchMaxFileSizeBytes, services, workspace.files]);
 
   useEffect(() => {
-    if (!configuration.editor.autoSave || !model.dirty || model.uri.scheme !== "file" || saveConflict) {
-      return;
-    }
-
-    const handle = window.setTimeout(() => {
-      void runWorkbenchAction(async () => {
-        return saveWorkbenchFile(services, workspace.files, { recordRecent: false });
-      }, setOperationError, setSaveConflict);
-    }, configuration.editor.autoSaveDelayMs);
-    return () => window.clearTimeout(handle);
+    return scheduleWorkbenchAutoSave(
+      services,
+      workspace.files,
+      { configuration, model, saveConflict },
+      { setOperationError, setSaveConflict },
+      {
+        setTimeout: (callback, delayMs) => window.setTimeout(callback, delayMs),
+        clearTimeout: (handle) => window.clearTimeout(handle as number)
+      }
+    );
   }, [
     configuration.editor.autoSave,
     configuration.editor.autoSaveDelayMs,
