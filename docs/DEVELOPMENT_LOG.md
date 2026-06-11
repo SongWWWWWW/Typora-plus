@@ -6011,3 +6011,32 @@ Review:
 Known limitations:
 
 - Number field updates are still dispatched directly by `SettingsDialog`; a broader typed field action model remains deferred until more Settings inputs share complex commit behavior.
+
+## 2026-06-11 - P2 AI Provider Service Boundary
+
+Completed:
+
+- Added a platform `IAiService` with provider registration, provider metadata listing, text request delegation, and disposable unregister behavior.
+- Added normalized AI text request and result contracts for instructions, input, optional context, metadata, cancellation signals, model metadata, and token usage.
+- Kept OpenAI, Codex, local model, network, and credential behavior out of the UI and out of hard-coded platform defaults.
+- Exported the AI service from the platform package and covered provider delegation, sorting, duplicate rejection, unregister behavior, and validation with focused tests.
+
+Quality gate:
+
+- `npx vitest run packages/platform/src/ai.test.ts`: passed, 5 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 60 files / 601 tests, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Dev server smoke check: passed at `http://127.0.0.1:5173`; status 200 and root element present
+
+Review:
+
+- AI integration now has the same provider-backed shape used by export and Markdown renderer services.
+- The service does not own API keys, Electron networking, or a concrete model id; those remain future provider concerns.
+- No new dependency, configuration key, storage path, visual token, extra documentation file, or hard-coded platform assumption was introduced.
+
+Known limitations:
+
+- No built-in AI provider, UI command, secret storage, or OpenAI/Codex runtime bridge is wired yet.
+- Workspace-grounded prompts still need an adapter that selects context through `IIndexService` before calling `IAiService`.
