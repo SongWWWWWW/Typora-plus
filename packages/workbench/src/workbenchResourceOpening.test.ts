@@ -7,7 +7,9 @@ import type {
 import { FileSaveConflictError } from "@typora-plus/platform";
 import { describe, expect, it, vi } from "vitest";
 import {
+  createWorkbenchFileResourceOpenHandler,
   createWorkbenchQuickOpenFileOpenHandler,
+  createWorkbenchRecentWorkspaceResourceOpenHandler,
   createWorkbenchResourceOpeningCallbacks,
   openWorkbenchFileResourceAction,
   openWorkbenchFileResource,
@@ -212,6 +214,70 @@ describe("workbench resource opening", () => {
     expect(operationErrors).toEqual([undefined, "Open failed"]);
   });
 
+  it("creates a file resource handler with the shared action boundary", async () => {
+    const entry = createFileEntry("notes/a.md");
+    const operationErrors: Array<string | undefined> = [];
+    const callbacks = createActionCallbacks({
+      setOperationError: (value) => operationErrors.push(value)
+    });
+    const services = createServices({
+      openFile: async () => {
+        throw new Error("Open failed");
+      }
+    });
+    const openFileResource = createWorkbenchFileResourceOpenHandler(services, callbacks);
+
+    openFileResource(entry);
+    await waitForResourceOpeningHandler();
+
+    expect(callbacks.clearSaveConflict).toHaveBeenCalledOnce();
+    expect(callbacks.closeQuickOpen).not.toHaveBeenCalled();
+    expect(services.textFileService.openFile).toHaveBeenCalledWith(entry.uri);
+    expect(operationErrors).toEqual([undefined, "Open failed"]);
+  });
+
+  it("creates a recent workspace resource handler with the shared action boundary", async () => {
+    const firstFile = createFileEntry("notes/a.md");
+    const workspaceFiles = createWorkspaceFileTree([firstFile]);
+    const calls: string[] = [];
+    const callbacks = createActionCallbacks({
+      clearSaveConflict: () => calls.push("clear"),
+      showFilesView: () => calls.push("showFiles"),
+      setOperationError: (value) => calls.push(`error:${value ?? "none"}`)
+    });
+    const services = createServices({
+      openRecentWorkspace: async () => {
+        calls.push("openRecentWorkspace");
+        return workspaceFiles;
+      },
+      setWorkspace: () => calls.push("setWorkspace"),
+      addRecentWorkspace: (_uri, name) => calls.push(`recentWorkspace:${name}`),
+      openFile: async (uri) => {
+        calls.push(`openFile:${uri.toString()}`);
+        return createModel(uri, "a.md");
+      },
+      addRecentFile: (_uri, name) => calls.push(`recentFile:${name}`)
+    });
+    const openRecentWorkspace = createWorkbenchRecentWorkspaceResourceOpenHandler(
+      services,
+      callbacks
+    );
+
+    openRecentWorkspace({ uri: workspaceFiles.root.uri });
+    await waitForResourceOpeningHandler();
+
+    expect(calls).toEqual([
+      "error:none",
+      "openRecentWorkspace",
+      "setWorkspace",
+      "recentWorkspace:Notes",
+      "showFiles",
+      "clear",
+      "openFile:file:///workspace/notes/a.md",
+      "recentFile:a.md"
+    ]);
+  });
+
   it("forwards save conflicts from recent workspace resource actions", async () => {
     const conflict = {
       uri: URI.file("/workspace/notes/a.md"),
@@ -292,6 +358,10 @@ function createActionCallbacks(
 }
 
 function waitForQuickOpenHandler(): Promise<void> {
+  return waitForResourceOpeningHandler();
+}
+
+function waitForResourceOpeningHandler(): Promise<void> {
   return new Promise((resolve) => {
     setTimeout(resolve, 0);
   });

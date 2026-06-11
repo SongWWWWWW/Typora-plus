@@ -51,12 +51,30 @@ export function createWorkbenchResourceOpeningCallbacks(
   };
 }
 
+export function createWorkbenchFileResourceOpenHandler(
+  services: WorkbenchFileOpeningServices,
+  callbacks: WorkbenchResourceOpeningActionCallbacks
+): (entry: FileTreeEntry) => void {
+  return (entry) => {
+    void openWorkbenchFileResourceAction(services, entry, callbacks);
+  };
+}
+
 export function createWorkbenchQuickOpenFileOpenHandler(
   services: WorkbenchFileOpeningServices,
   callbacks: WorkbenchResourceOpeningActionCallbacks
 ): (entry: FileTreeEntry) => void {
   return (entry) => {
     void openWorkbenchQuickOpenFileAction(services, entry, callbacks);
+  };
+}
+
+export function createWorkbenchRecentWorkspaceResourceOpenHandler(
+  services: WorkbenchRecentWorkspaceOpeningServices,
+  callbacks: WorkbenchResourceOpeningActionCallbacks
+): (recent: Pick<RecentResource, "uri">) => void {
+  return (recent) => {
+    void openWorkbenchRecentWorkspaceResourceAction(services, recent, callbacks);
   };
 }
 

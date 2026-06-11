@@ -5509,3 +5509,31 @@ Review:
 Known limitations:
 
 - Sidebar close and selected-tag state remain direct shell state because they are local view-selection concerns with no service boundary.
+
+## 2026-06-11 - P2 Sidebar Resource Open Handlers
+
+Completed:
+
+- Added focused file-resource and recent-workspace resource open handler factories that adapt Sidebar selections into the shared resource-opening action boundary.
+- Routed `Application.tsx` Sidebar `onOpenFile` and `onOpenRecentWorkspace` wiring through handlers instead of dispatching resource-opening actions inline.
+- Preserved file opening, recent-file recording, recent-workspace reopening, Files view reveal, stale save-conflict clearing, and operation-error/save-conflict mapping.
+- Covered handler delegation and failure/success behavior alongside the existing resource-opening tests.
+
+Quality gate:
+
+- `npx vitest run packages/workbench/src/workbenchResourceOpening.test.ts`: passed, 11 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 55 files / 565 tests, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Dev server smoke check: passed at `http://127.0.0.1:5173`; status 200 and root element present
+
+Review:
+
+- Sidebar file-tree and recent-workspace selections now reach `ITextFileService`, `IRecentService`, and workspace services through Workbench-local handlers instead of shell-local inline action callbacks.
+- `Application.tsx` still renders Sidebar and supplies shell state callbacks, while `workbenchResourceOpening` owns selected-resource dispatch, follow-up callbacks, and error/save-conflict mapping.
+- No new dependency, configuration key, storage path, visual token, extra documentation file, or hard-coded platform assumption was introduced.
+
+Known limitations:
+
+- Sidebar open-workspace and refresh-workspace buttons still execute command ids from the shell command executor because they are command surface entries rather than resource-opening rows.

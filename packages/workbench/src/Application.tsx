@@ -112,10 +112,10 @@ import {
   type WorkbenchSearchResult
 } from "./workbenchSearchResultsModel";
 import {
+  createWorkbenchFileResourceOpenHandler,
   createWorkbenchQuickOpenFileOpenHandler,
+  createWorkbenchRecentWorkspaceResourceOpenHandler,
   createWorkbenchResourceOpeningCallbacks,
-  openWorkbenchFileResourceAction,
-  openWorkbenchRecentWorkspaceResourceAction
 } from "./workbenchResourceOpening";
 import { scheduleWorkbenchOverlayFocus } from "./workbenchOverlayFocus";
 import { indexWorkbenchWorkspaceAction } from "./workbenchWorkspaceIndexing";
@@ -327,6 +327,14 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
     services,
     resourceOpeningCallbacks
   );
+  const fileResourceOpenHandler = createWorkbenchFileResourceOpenHandler(
+    services,
+    resourceOpeningCallbacks
+  );
+  const recentWorkspaceResourceOpenHandler = createWorkbenchRecentWorkspaceResourceOpenHandler(
+    services,
+    resourceOpeningCallbacks
+  );
   const lineNavigationCallbacks = createWorkbenchLineNavigationCallbacks(
     createWorkbenchLineNavigationEnvironment(window),
     { getEditorHandle: () => editorRef.current },
@@ -408,13 +416,9 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
             onSelectTag={setSelectedTag}
             onOpenTaggedResource={lineTargetOpenHandler}
             onOpenWorkspace={() => executeCommand("file.openWorkspace")}
-            onOpenRecentWorkspace={(recent) => {
-              void openWorkbenchRecentWorkspaceResourceAction(services, recent, resourceOpeningCallbacks);
-            }}
+            onOpenRecentWorkspace={recentWorkspaceResourceOpenHandler}
             onRefreshWorkspace={() => executeCommand("file.refreshWorkspace")}
-            onOpenFile={(entry) => {
-              void openWorkbenchFileResourceAction(services, entry, resourceOpeningCallbacks);
-            }}
+            onOpenFile={fileResourceOpenHandler}
           />
         ) : null}
         <section className="tp-editor-pane" aria-label="Editor">
