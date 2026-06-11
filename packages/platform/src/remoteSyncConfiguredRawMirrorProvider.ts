@@ -112,6 +112,7 @@ async function listConfiguredRawMirrorResources(
     ...(listRequest.signal !== undefined ? { signal: listRequest.signal } : {})
   });
 
+  ensureConfiguredRawMirrorResponseOk(response, "list");
   return readConfiguredRawMirrorResourceList(response.body);
 }
 
@@ -207,7 +208,7 @@ async function requestConfiguredRawMirrorUpload(
   resource: RemoteSyncResource,
   uploadContent: RemoteSyncRawMirrorUploadFileContent
 ): Promise<void> {
-  await context.request({
+  ensureConfiguredRawMirrorResponseOk(await context.request({
     path: context.rawMirror.uploadPath,
     method: "PUT",
     query: createConfiguredRawMirrorOperationQuery(context.profile, operation),
@@ -231,7 +232,7 @@ async function requestConfiguredRawMirrorUpload(
     responseType: "json",
     ...createConfiguredRawMirrorSecretRequest(context.rawMirror),
     ...(executeRequest.signal !== undefined ? { signal: executeRequest.signal } : {})
-  });
+  }), "upload");
 }
 
 async function requestConfiguredRawMirrorDelete(
@@ -239,14 +240,14 @@ async function requestConfiguredRawMirrorDelete(
   executeRequest: RemoteSyncRawMirrorExecuteRequest,
   operation: RemoteSyncOperation
 ): Promise<void> {
-  await context.request({
+  ensureConfiguredRawMirrorResponseOk(await context.request({
     path: context.rawMirror.deletePath,
     method: "DELETE",
     query: createConfiguredRawMirrorOperationQuery(context.profile, operation),
     responseType: "json",
     ...createConfiguredRawMirrorSecretRequest(context.rawMirror),
     ...(executeRequest.signal !== undefined ? { signal: executeRequest.signal } : {})
-  });
+  }), "delete");
 }
 
 async function downloadConfiguredRawMirrorFile(
@@ -275,6 +276,7 @@ async function downloadConfiguredRawMirrorFile(
     ...(executeRequest.signal !== undefined ? { signal: executeRequest.signal } : {})
   });
 
+  ensureConfiguredRawMirrorResponseOk(response, "download");
   return readConfiguredRawMirrorFileContent(response.body, operation.relativePath);
 }
 
@@ -325,6 +327,17 @@ function createConfiguredRawMirrorJsonBody(value: unknown): string {
   }
 
   return body;
+}
+
+function ensureConfiguredRawMirrorResponseOk(
+  response: { readonly status: number; readonly statusText: string },
+  operation: string
+): void {
+  if (response.status >= 200 && response.status < 300) {
+    return;
+  }
+
+  throw new Error(`Configured raw mirror ${operation} request failed: ${response.status} ${response.statusText}`);
 }
 
 function readConfiguredRawMirrorProfile(
@@ -436,6 +449,7 @@ function readConfiguredRawMirrorResourceList(value: unknown): readonly RemoteSyn
   }
 
   return resources.map(readConfiguredRawMirrorRemoteResource)
+    .filter((resource) => resource.kind === "file")
     .sort((first, second) => first.relativePath.localeCompare(second.relativePath));
 }
 

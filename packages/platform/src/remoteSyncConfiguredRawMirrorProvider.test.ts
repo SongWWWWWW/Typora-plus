@@ -215,6 +215,74 @@ describe("configured raw mirror remote sync provider", () => {
 
     expect(providers).toEqual([]);
   });
+
+  it("keeps configured raw mirror snapshots file-only", async () => {
+    const providers = createConfiguredRemoteSyncProviders([
+      configuration()
+    ], {
+      transport: createTransport([], [
+        {
+          resources: [
+            directoryResource("Folder"),
+            remoteResource("Folder/Remote.md", "remote-1")
+          ]
+        }
+      ]),
+      workspaceResources: {
+        readResource: vi.fn(),
+        writeResource: vi.fn(),
+        deleteResource: vi.fn()
+      },
+      createProvider: createRemoteSyncConfiguredRawMirrorProviderFactory({
+        manifestStorage: createMemoryManifestStorage()
+      })
+    });
+
+    await expect(providers[0]!.createPlan({
+      workspaceUri: URI.file("C:/Notes"),
+      resources: [],
+      direction: "pull",
+      dryRun: true
+    })).resolves.toMatchObject({
+      operations: [
+        {
+          kind: "create",
+          target: "local",
+          relativePath: "Folder/Remote.md"
+        }
+      ],
+      summary: {
+        creates: 1,
+        updates: 0,
+        deletes: 0,
+        skips: 0,
+        conflicts: 0
+      }
+    });
+  });
+
+  it("rejects failed gateway responses before parsing raw mirror payloads", async () => {
+    const providers = createConfiguredRemoteSyncProviders([
+      configuration()
+    ], {
+      transport: createStatusTransport(503, "Service Unavailable", { resources: [] }),
+      workspaceResources: {
+        readResource: vi.fn(),
+        writeResource: vi.fn(),
+        deleteResource: vi.fn()
+      },
+      createProvider: createRemoteSyncConfiguredRawMirrorProviderFactory({
+        manifestStorage: createMemoryManifestStorage()
+      })
+    });
+
+    await expect(providers[0]!.createPlan({
+      workspaceUri: URI.file("C:/Notes"),
+      resources: [],
+      direction: "pull",
+      dryRun: true
+    })).rejects.toThrow("Configured raw mirror list request failed: 503 Service Unavailable");
+  });
 });
 
 function configuration(): RemoteSyncProviderConfiguration {
@@ -258,6 +326,13 @@ function remoteResource(
   };
 }
 
+function directoryResource(relativePath: string) {
+  return {
+    relativePath,
+    kind: "directory" as const
+  };
+}
+
 function createTransport(
   requests: RemoteSyncNativeRequestInput[],
   bodies: unknown[]
@@ -271,6 +346,19 @@ function createTransport(
       body: bodies.shift()
     };
   });
+}
+
+function createStatusTransport(
+  status: number,
+  statusText: string,
+  body: unknown
+): RemoteSyncNativeRequestTransport {
+  return vi.fn(async () => ({
+    status,
+    statusText,
+    headers: {},
+    body
+  }));
 }
 
 function createMemoryManifestStorage(): RemoteSyncManifestStorage {

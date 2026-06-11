@@ -7958,3 +7958,31 @@ Known limitations:
 
 - The configured raw mirror factory targets HTTP gateway adapters; direct Feishu Drive API translation remains a future provider/adapter concern.
 - Directory create/delete semantics, provider-specific retries, remote folder mapping, and large multipart uploads are still adapter-specific.
+
+## 2026-06-12 - P2 Configured Raw Mirror Gateway Hardening
+
+Completed:
+
+- Added explicit non-2xx HTTP response rejection for configured raw mirror list, upload, delete, and download gateway calls.
+- Kept configured raw mirror remote snapshots file-only by ignoring remote directory entries before diff planning.
+- Covered file-only snapshot behavior and gateway failure propagation with focused tests.
+
+Quality gate:
+
+- `npx vitest run packages/platform/src/remoteSyncConfiguredRawMirrorProvider.test.ts packages/platform/src/remoteSyncConfiguredProviders.test.ts packages/workbench/src/workbenchConfiguredRemoteSyncProviders.test.ts packages/workbench/src/services.test.ts`: passed, 4 files / 13 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 87 files / 820 tests, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Configured raw mirror hardcode scan for OpenAI endpoints, model ids, API keys, Feishu endpoints, OAuth/token/secret literals, and provider credentials: passed
+
+Review:
+
+- Gateway status handling now fails before parsing stale or partial response bodies, which makes provider errors clearer and avoids manifest updates from failed calls.
+- The generic configured raw mirror path remains a raw file mirror; directory semantics stay outside the platform factory.
+- No Feishu endpoint, OAuth scope, token name, provider id, model id, storage path, or credential literal was added.
+
+Known limitations:
+
+- Directory create/delete semantics remain adapter-specific.
+- Provider-specific retries, rate-limit handling, remote folder mapping, and multipart upload sessions remain future adapter work.
