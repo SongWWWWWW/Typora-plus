@@ -8048,3 +8048,33 @@ Known limitations:
 - Retry is only available for configured raw mirror HTTP gateway profiles that opt in through metadata.
 - Settings still exposes raw mirror retry settings through metadata text rather than a guided profile editor.
 - Direct Feishu Drive API translation and OAuth token lifecycle handling remain future adapter work.
+
+## 2026-06-12 - P2 Structured Raw Mirror Settings Metadata Drafts
+
+Completed:
+
+- Added a structured Settings raw mirror metadata draft model for configured remote sync provider drafts.
+- Added helper coverage for reading raw mirror route, secret header, and retry metadata from existing metadata text.
+- Added helper coverage for applying structured raw mirror metadata back to provider draft text while preserving unrelated metadata keys.
+- Kept malformed metadata text from being silently overwritten by guided raw mirror field application.
+- Kept raw mirror key strings centralized through the platform-owned metadata keys rather than duplicating string literals in UI code.
+
+Quality gate:
+
+- `npx vitest run packages/workbench/src/settingsModel.test.ts`: passed, 1 file / 31 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 87 files / 826 tests, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Structured raw mirror Settings metadata hardcode scan for OpenAI endpoints, model ids, API keys, Feishu endpoints, OAuth/token/secret literals, and provider credentials: passed
+
+Review:
+
+- This stage does not add a new React form yet; it creates the tested model boundary that a guided raw mirror or future Feishu setup surface can consume.
+- Unknown metadata is preserved, so provider-specific adapter metadata remains extensible while raw mirror-owned keys get a stable structured editing path.
+- No Feishu endpoint, OAuth scope, token name, folder id, model id, provider id, storage path, or credential literal was added.
+
+Known limitations:
+
+- Settings still renders remote sync metadata as key-value text until the guided form is wired into the dialog.
+- Direct Feishu Drive API translation, token lifecycle handling, remote folder mapping, and multipart upload sessions remain future adapter work.

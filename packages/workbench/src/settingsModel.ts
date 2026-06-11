@@ -148,6 +148,20 @@ export interface SettingsRemoteSyncProviderDraftValidation {
   readonly canSave: boolean;
 }
 
+export interface SettingsRawMirrorMetadataDraft {
+  readonly enabled: boolean;
+  readonly listPath: string;
+  readonly uploadPath: string;
+  readonly downloadPath: string;
+  readonly deletePath: string;
+  readonly headerBinding: string;
+  readonly headerName: string;
+  readonly headerScheme: string;
+  readonly retryStatusCodes: string;
+  readonly retryMaxRetries: string;
+  readonly retryDelayMs: string;
+}
+
 export const settingsSections = [
   { id: settingsSectionIds.appearance, title: "Appearance" },
   { id: settingsSectionIds.editor, title: "Editor" },
@@ -225,6 +239,19 @@ const settingsRemoteSyncProviderInvalidIssue =
   "Complete provider id, title, HTTPS or loopback base URL, and valid profile bindings.";
 const settingsRawMirrorMetadataInvalidIssue = "Complete raw mirror metadata paths and header binding.";
 const settingsRawMirrorRetryInvalidIssue = "Complete raw mirror retry metadata.";
+const settingsRawMirrorMetadataKeyOrder = [
+  remoteSyncConfiguredRawMirrorMetadataKeys.adapter,
+  remoteSyncConfiguredRawMirrorMetadataKeys.listPath,
+  remoteSyncConfiguredRawMirrorMetadataKeys.uploadPath,
+  remoteSyncConfiguredRawMirrorMetadataKeys.downloadPath,
+  remoteSyncConfiguredRawMirrorMetadataKeys.deletePath,
+  remoteSyncConfiguredRawMirrorMetadataKeys.headerBinding,
+  remoteSyncConfiguredRawMirrorMetadataKeys.headerName,
+  remoteSyncConfiguredRawMirrorMetadataKeys.headerScheme,
+  remoteSyncConfiguredRawMirrorMetadataKeys.retryStatusCodes,
+  remoteSyncConfiguredRawMirrorMetadataKeys.retryMaxRetries,
+  remoteSyncConfiguredRawMirrorMetadataKeys.retryDelayMs
+] as const satisfies readonly string[];
 
 export const settingsNumberConstraints = {
   aiWorkspaceContextMaxPreviewLength: configurationNumberConstraints.aiWorkspaceContextMaxPreviewLength,
@@ -398,6 +425,92 @@ export function validateSettingsRemoteSyncProviderDraft(
     ...(provider ? { provider } : {}),
     issues,
     canSave: issues.length === 0 && !!provider
+  };
+}
+
+export function createSettingsRawMirrorMetadataDraft(
+  draft: SettingsRemoteSyncProviderDraft
+): SettingsRawMirrorMetadataDraft {
+  const metadata = readSettingsMetadataText(draft.metadataText);
+  const enabled = metadata[remoteSyncConfiguredRawMirrorMetadataKeys.adapter] ===
+    remoteSyncConfiguredRawMirrorAdapterName;
+
+  return {
+    enabled,
+    listPath: metadata[remoteSyncConfiguredRawMirrorMetadataKeys.listPath] ?? "",
+    uploadPath: metadata[remoteSyncConfiguredRawMirrorMetadataKeys.uploadPath] ?? "",
+    downloadPath: metadata[remoteSyncConfiguredRawMirrorMetadataKeys.downloadPath] ?? "",
+    deletePath: metadata[remoteSyncConfiguredRawMirrorMetadataKeys.deletePath] ?? "",
+    headerBinding: metadata[remoteSyncConfiguredRawMirrorMetadataKeys.headerBinding] ?? "",
+    headerName: metadata[remoteSyncConfiguredRawMirrorMetadataKeys.headerName] ?? "",
+    headerScheme: metadata[remoteSyncConfiguredRawMirrorMetadataKeys.headerScheme] ?? "",
+    retryStatusCodes: metadata[remoteSyncConfiguredRawMirrorMetadataKeys.retryStatusCodes] ?? "",
+    retryMaxRetries: metadata[remoteSyncConfiguredRawMirrorMetadataKeys.retryMaxRetries] ?? "",
+    retryDelayMs: metadata[remoteSyncConfiguredRawMirrorMetadataKeys.retryDelayMs] ?? ""
+  };
+}
+
+export function applySettingsRawMirrorMetadataDraft(
+  providerDraft: SettingsRemoteSyncProviderDraft,
+  rawMirrorDraft: SettingsRawMirrorMetadataDraft
+): SettingsRemoteSyncProviderDraft {
+  const metadataLines = parseSettingsKeyValueLines(providerDraft.metadataText);
+
+  if (!metadataLines) {
+    return providerDraft;
+  }
+
+  const metadata = new Map(metadataLines);
+
+  for (const key of settingsRawMirrorMetadataKeyOrder) {
+    metadata.delete(key);
+  }
+
+  if (rawMirrorDraft.enabled) {
+    applySettingsMetadataValue(
+      metadata,
+      remoteSyncConfiguredRawMirrorMetadataKeys.adapter,
+      remoteSyncConfiguredRawMirrorAdapterName
+    );
+    applySettingsMetadataValue(metadata, remoteSyncConfiguredRawMirrorMetadataKeys.listPath, rawMirrorDraft.listPath);
+    applySettingsMetadataValue(metadata, remoteSyncConfiguredRawMirrorMetadataKeys.uploadPath, rawMirrorDraft.uploadPath);
+    applySettingsMetadataValue(
+      metadata,
+      remoteSyncConfiguredRawMirrorMetadataKeys.downloadPath,
+      rawMirrorDraft.downloadPath
+    );
+    applySettingsMetadataValue(metadata, remoteSyncConfiguredRawMirrorMetadataKeys.deletePath, rawMirrorDraft.deletePath);
+    applySettingsMetadataValue(
+      metadata,
+      remoteSyncConfiguredRawMirrorMetadataKeys.headerBinding,
+      rawMirrorDraft.headerBinding
+    );
+    applySettingsMetadataValue(metadata, remoteSyncConfiguredRawMirrorMetadataKeys.headerName, rawMirrorDraft.headerName);
+    applySettingsMetadataValue(
+      metadata,
+      remoteSyncConfiguredRawMirrorMetadataKeys.headerScheme,
+      rawMirrorDraft.headerScheme
+    );
+    applySettingsMetadataValue(
+      metadata,
+      remoteSyncConfiguredRawMirrorMetadataKeys.retryStatusCodes,
+      rawMirrorDraft.retryStatusCodes
+    );
+    applySettingsMetadataValue(
+      metadata,
+      remoteSyncConfiguredRawMirrorMetadataKeys.retryMaxRetries,
+      rawMirrorDraft.retryMaxRetries
+    );
+    applySettingsMetadataValue(
+      metadata,
+      remoteSyncConfiguredRawMirrorMetadataKeys.retryDelayMs,
+      rawMirrorDraft.retryDelayMs
+    );
+  }
+
+  return {
+    ...providerDraft,
+    metadataText: formatSettingsRawMirrorMetadataLines(metadata)
   };
 }
 
@@ -635,6 +748,12 @@ function normalizeSettingsRemoteSyncProviderDraft(
   });
 }
 
+function readSettingsMetadataText(value: string): Readonly<Record<string, string>> {
+  const lines = parseSettingsKeyValueLines(value);
+
+  return lines ? Object.fromEntries(lines) : {};
+}
+
 function getSettingsRawMirrorMetadataIssue(
   provider: RemoteSyncProviderConfiguration
 ): string | undefined {
@@ -832,6 +951,39 @@ function parseSettingsKeyValueLines(value: string): readonly (readonly [string, 
   }
 
   return entries;
+}
+
+function applySettingsMetadataValue(
+  metadata: Map<string, string>,
+  key: string,
+  value: string
+): void {
+  const normalized = value.trim();
+
+  if (normalized) {
+    metadata.set(key, normalized);
+  }
+}
+
+function formatSettingsRawMirrorMetadataLines(metadata: ReadonlyMap<string, string>): string {
+  const orderedEntries: (readonly [string, string])[] = [];
+  const rawMirrorKeys = new Set<string>(settingsRawMirrorMetadataKeyOrder);
+
+  for (const key of settingsRawMirrorMetadataKeyOrder) {
+    const value = metadata.get(key);
+
+    if (value !== undefined) {
+      orderedEntries.push([key, value]);
+    }
+  }
+
+  for (const entry of metadata) {
+    if (!rawMirrorKeys.has(entry[0])) {
+      orderedEntries.push(entry);
+    }
+  }
+
+  return formatSettingsKeyValueLines(orderedEntries);
 }
 
 function parseSettingsOptionalPositiveInteger(value: string): {

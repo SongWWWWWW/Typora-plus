@@ -6,10 +6,12 @@ import {
 } from "@typora-plus/platform";
 import {
   bytesToMegabytes,
+  applySettingsRawMirrorMetadataDraft,
   canAddSettingsAiProvider,
   canAddSettingsRemoteSyncProvider,
   clampSettingNumber,
   createSettingsAiProviderDraft,
+  createSettingsRawMirrorMetadataDraft,
   createSettingsRemoteSyncProviderDraft,
   createSettingsThemeOptions,
   createSettingsSearchResult,
@@ -644,6 +646,122 @@ describe("settings model", () => {
 
     expect(highRetryValidation.canSave).toBe(false);
     expect(highRetryValidation.issues).toContain("Complete raw mirror retry metadata.");
+  });
+
+  it("maps raw mirror metadata through a structured Settings draft", () => {
+    const provider = {
+      id: "mirror.sync",
+      title: "Mirror Sync",
+      kind: "native-request" as const,
+      baseUrl: "https://sync.example.test/root",
+      secrets: [
+        {
+          name: "access",
+          secretRef: "typora-plus.remote-sync.mirror.access"
+        }
+      ],
+      metadata: createRawMirrorMetadata({
+        [remoteSyncConfiguredRawMirrorMetadataKeys.headerBinding]: "access",
+        [remoteSyncConfiguredRawMirrorMetadataKeys.headerName]: "Authorization",
+        [remoteSyncConfiguredRawMirrorMetadataKeys.headerScheme]: "Bearer",
+        [remoteSyncConfiguredRawMirrorMetadataKeys.retryStatusCodes]: "429, 503",
+        [remoteSyncConfiguredRawMirrorMetadataKeys.retryMaxRetries]: "2",
+        [remoteSyncConfiguredRawMirrorMetadataKeys.retryDelayMs]: "0",
+        "custom.flag": "keep"
+      })
+    };
+    const draft = createSettingsRemoteSyncProviderDraft(provider);
+    const rawMirrorDraft = createSettingsRawMirrorMetadataDraft(draft);
+
+    expect(rawMirrorDraft).toEqual({
+      enabled: true,
+      listPath: "mirror/list",
+      uploadPath: "mirror/upload",
+      downloadPath: "mirror/download",
+      deletePath: "mirror/delete",
+      headerBinding: "access",
+      headerName: "Authorization",
+      headerScheme: "Bearer",
+      retryStatusCodes: "429, 503",
+      retryMaxRetries: "2",
+      retryDelayMs: "0"
+    });
+
+    const updated = applySettingsRawMirrorMetadataDraft(draft, {
+      ...rawMirrorDraft,
+      uploadPath: "gateway/upload",
+      headerScheme: "",
+      retryMaxRetries: "3",
+      retryDelayMs: "50"
+    });
+    const keys = remoteSyncConfiguredRawMirrorMetadataKeys;
+
+    expect(updated.metadataText).toBe([
+      `${keys.adapter}=${remoteSyncConfiguredRawMirrorAdapterName}`,
+      `${keys.listPath}=mirror/list`,
+      `${keys.uploadPath}=gateway/upload`,
+      `${keys.downloadPath}=mirror/download`,
+      `${keys.deletePath}=mirror/delete`,
+      `${keys.headerBinding}=access`,
+      `${keys.headerName}=Authorization`,
+      `${keys.retryStatusCodes}=429, 503`,
+      `${keys.retryMaxRetries}=3`,
+      `${keys.retryDelayMs}=50`,
+      "custom.flag=keep"
+    ].join("\n"));
+    expect(validateSettingsRemoteSyncProviderDraft(updated, [], undefined)).toMatchObject({
+      canSave: true,
+      issues: []
+    });
+  });
+
+  it("removes guided raw mirror metadata without dropping unrelated metadata", () => {
+    const draft = createSettingsRemoteSyncProviderDraft({
+      id: "mirror.sync",
+      title: "Mirror Sync",
+      kind: "native-request",
+      baseUrl: "https://sync.example.test/root",
+      secrets: [],
+      metadata: createRawMirrorMetadata({
+        "custom.flag": "keep"
+      })
+    });
+    const rawMirrorDraft = createSettingsRawMirrorMetadataDraft(draft);
+    const updated = applySettingsRawMirrorMetadataDraft(draft, {
+      ...rawMirrorDraft,
+      enabled: false
+    });
+
+    expect(updated.metadataText).toBe("custom.flag=keep");
+    expect(createSettingsRawMirrorMetadataDraft(updated)).toMatchObject({
+      enabled: false,
+      listPath: "",
+      uploadPath: "",
+      downloadPath: "",
+      deletePath: ""
+    });
+  });
+
+  it("does not overwrite malformed metadata text when applying guided raw mirror fields", () => {
+    const draft = {
+      ...createSettingsRemoteSyncProviderDraft(),
+      metadataText: remoteSyncConfiguredRawMirrorMetadataKeys.adapter
+    };
+    const updated = applySettingsRawMirrorMetadataDraft(draft, {
+      enabled: true,
+      listPath: "mirror/list",
+      uploadPath: "mirror/upload",
+      downloadPath: "mirror/download",
+      deletePath: "mirror/delete",
+      headerBinding: "",
+      headerName: "",
+      headerScheme: "",
+      retryStatusCodes: "",
+      retryMaxRetries: "",
+      retryDelayMs: ""
+    });
+
+    expect(updated).toBe(draft);
   });
 
   it("upserts and removes remote sync provider configuration without duplicate ids", () => {
