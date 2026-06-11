@@ -94,6 +94,65 @@ describe("remote sync profile request transport", () => {
     });
   });
 
+  it("forwards structured multipart parts through a profile request", async () => {
+    const nativeTransport = createNativeTransport();
+    const request = createRemoteSyncProfileRequestTransport(createProfile(), nativeTransport)!;
+
+    await request({
+      path: "files/upload",
+      method: "POST",
+      multipart: [
+        {
+          kind: "text",
+          name: "file_name",
+          value: "note.md"
+        },
+        {
+          kind: "file",
+          name: "file",
+          fileName: "note.md",
+          value: "# Note\n",
+          encoding: "utf8",
+          contentType: "text/markdown"
+        }
+      ],
+      secretHeaders: [
+        {
+          name: "Authorization",
+          secretName: "session",
+          prefix: "Bearer "
+        }
+      ]
+    });
+
+    expect(nativeTransport).toHaveBeenCalledWith({
+      url: "https://sync.example.test/api/files/upload",
+      method: "POST",
+      multipart: [
+        {
+          kind: "text",
+          name: "file_name",
+          value: "note.md"
+        },
+        {
+          kind: "file",
+          name: "file",
+          fileName: "note.md",
+          value: "# Note\n",
+          encoding: "utf8",
+          contentType: "text/markdown"
+        }
+      ],
+      secretHeaders: [
+        {
+          name: "Authorization",
+          prefix: "Bearer ",
+          secretRef: "typora-plus.remote-sync.session"
+        }
+      ]
+    });
+  });
+
   it.each([
     "/files",
     "//files",

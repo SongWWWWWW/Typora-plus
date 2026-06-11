@@ -3,6 +3,7 @@ import {
   type RemoteSyncNativeRequestBodyEncoding,
   type RemoteSyncNativeRequestInput,
   type RemoteSyncNativeRequestMethod,
+  type RemoteSyncNativeMultipartPart,
   type RemoteSyncNativeRequestTransport,
   type RemoteSyncNativeResponse,
   type RemoteSyncNativeResponseType
@@ -32,6 +33,7 @@ export interface RemoteSyncProfileRequestInput {
   readonly headers?: Readonly<Record<string, string>>;
   readonly body?: string;
   readonly bodyEncoding?: RemoteSyncNativeRequestBodyEncoding;
+  readonly multipart?: readonly RemoteSyncNativeMultipartPart[];
   readonly responseType?: RemoteSyncNativeResponseType;
   readonly secretHeaders?: readonly RemoteSyncProfileSecretHeader[];
   readonly secretJsonFields?: readonly RemoteSyncProfileSecretJsonField[];
@@ -77,6 +79,7 @@ function createRemoteSyncNativeRequestFromProfile(
     ...(request.headers !== undefined ? { headers: request.headers } : {}),
     ...(request.body !== undefined ? { body: request.body } : {}),
     ...(request.bodyEncoding !== undefined ? { bodyEncoding: request.bodyEncoding } : {}),
+    ...(request.multipart !== undefined ? { multipart: request.multipart } : {}),
     ...(request.responseType !== undefined ? { responseType: request.responseType } : {}),
     ...(secretHeaders !== undefined ? { secretHeaders } : {}),
     ...(secretJsonFields !== undefined ? { secretJsonFields } : {}),

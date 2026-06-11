@@ -101,6 +101,68 @@ describe("remote sync native request transport", () => {
     });
   });
 
+  it("delegates structured multipart requests through the native bridge", async () => {
+    const bridge = createBridge();
+    const transport = createNativeRemoteSyncRequestTransport(bridge)!;
+
+    await transport({
+      url: "https://api.example.test/upload",
+      method: "POST",
+      multipart: [
+        {
+          kind: "text",
+          name: "file_name",
+          value: "note.md"
+        },
+        {
+          kind: "file",
+          name: "file",
+          fileName: "note.md",
+          value: "IyBOb3RlCg==",
+          encoding: "base64",
+          contentType: "text/markdown"
+        }
+      ],
+      secretHeaders: [
+        {
+          name: "Authorization",
+          prefix: "Bearer ",
+          secretRef: "typora-plus.remote-sync.session"
+        }
+      ],
+      responseType: "json"
+    });
+
+    expect(bridge.request).toHaveBeenCalledWith({
+      requestId: expect.stringMatching(/^remote-sync:\d+$/),
+      url: "https://api.example.test/upload",
+      method: "POST",
+      multipart: [
+        {
+          kind: "text",
+          name: "file_name",
+          value: "note.md"
+        },
+        {
+          kind: "file",
+          name: "file",
+          fileName: "note.md",
+          value: "IyBOb3RlCg==",
+          encoding: "base64",
+          contentType: "text/markdown"
+        }
+      ],
+      secretHeaders: [
+        {
+          name: "Authorization",
+          prefix: "Bearer ",
+          secretRef: "typora-plus.remote-sync.session"
+        }
+      ],
+      responseType: "json"
+    });
+  });
+
   it("does not start native requests when the signal is already aborted", async () => {
     const controller = new AbortController();
     const bridge = createBridge();

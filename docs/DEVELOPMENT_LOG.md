@@ -7688,3 +7688,33 @@ Known limitations:
 
 - No concrete Feishu/raw-mirror adapter is implemented yet.
 - The validation checks resource presence and operation semantics, but content transfer success still depends on the future adapter returning comparable post-execution snapshots.
+
+## 2026-06-12 - P2 Remote Sync Native Multipart Request Boundary
+
+Completed:
+
+- Added provider-neutral structured multipart text/file parts to the native remote sync request contract.
+- Forwarded multipart request data through the profile-scoped request helper without adding provider routes, token names, endpoint defaults, or upload policy.
+- Extended the Electron native request bridge to validate multipart part counts, field names, file names, content types, decoded request size, and file encodings before constructing `FormData`.
+- Rejected multipart requests that also provide raw bodies, JSON secret fields, `bodyEncoding`, or caller-owned `Content-Type`, keeping multipart boundary generation and secret injection in the main process.
+- Preserved existing secret header injection, response parsing, timeout, and cancellation behavior.
+
+Quality gate:
+
+- `npx vitest run packages/platform/src/remoteSyncNativeRequest.test.ts packages/platform/src/remoteSyncProfileRequest.test.ts`: passed, 2 files / 26 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 82 files / 783 tests, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Native multipart request implementation hardcode scan for Feishu endpoints, OAuth scopes, token/secret names, model ids, provider ids, and credential literals: passed
+
+Review:
+
+- The change moves a concrete Feishu/Drive prerequisite into a provider-neutral transport boundary instead of creating a provider-specific adapter too early.
+- Multipart callers provide structured data only; they cannot smuggle sensitive headers, raw multipart boundaries, or JSON secret-field mutations through renderer code.
+- The request bridge still contains no provider ids, endpoints, OAuth scopes, access tokens, folder tokens, model ids, or retry policy defaults.
+
+Known limitations:
+
+- No concrete Feishu/raw-mirror adapter is implemented yet.
+- Native remote sync still lacks a trusted workspace binary read/write/delete boundary for full Markdown assets mirroring.

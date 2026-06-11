@@ -14,6 +14,25 @@ export type NativeRemoteSyncRequestMethod = "DELETE" | "GET" | "PATCH" | "POST" 
 export type NativeRemoteSyncResponseType = "base64" | "json" | "text";
 export type NativeRemoteSyncRequestBodyEncoding = "base64" | "utf8";
 
+type SerializedNativeRemoteSyncMultipartPart =
+  | SerializedNativeRemoteSyncMultipartFilePart
+  | SerializedNativeRemoteSyncMultipartTextPart;
+
+interface SerializedNativeRemoteSyncMultipartTextPart {
+  readonly kind: "text";
+  readonly name: string;
+  readonly value: string;
+}
+
+interface SerializedNativeRemoteSyncMultipartFilePart {
+  readonly kind: "file";
+  readonly name: string;
+  readonly fileName: string;
+  readonly value: string;
+  readonly encoding: NativeRemoteSyncRequestBodyEncoding;
+  readonly contentType?: string;
+}
+
 export interface NativeRemoteSyncRequestConfig extends NativeSecretStoreConfig {
   readonly maxHeaderCount: number;
   readonly maxHeaderValueBytes: number;
@@ -30,6 +49,7 @@ interface SerializedNativeRemoteSyncRequest {
   readonly headers?: Readonly<Record<string, string>>;
   readonly body?: string;
   readonly bodyEncoding?: NativeRemoteSyncRequestBodyEncoding;
+  readonly multipart?: readonly SerializedNativeRemoteSyncMultipartPart[];
   readonly responseType?: NativeRemoteSyncResponseType;
   readonly secretHeaders?: readonly SerializedNativeRemoteSyncSecretHeader[];
   readonly secretJsonFields?: readonly SerializedNativeRemoteSyncSecretJsonField[];
@@ -64,6 +84,12 @@ interface NativeRemoteSyncResponsePayload {
 
 const activeRemoteSyncRequests = new Map<string, AbortController>();
 const nativeRemoteSyncRequestSecretLabel = "Remote sync";
+const nativeRemoteSyncMultipartLimits = {
+  maxParts: 64,
+  maxPartNameLength: 128,
+  maxFileNameLength: 255,
+  maxContentTypeLength: 128
+} as const;
 
 export function registerNativeRemoteSyncRequestIpc(config: NativeRemoteSyncRequestConfig): void {
   ipcMain.handle(nativeRemoteSyncRequestIpcChannels.request, async (event, request: SerializedNativeRemoteSyncRequest) =>
@@ -140,9 +166,15 @@ function normalizeRemoteSyncRequest(
     throw new Error("Remote sync request has too many secret bindings");
   }
 
+  const multipart = normalizeMultipartParts(config, value.multipart);
+
+  if (multipart !== undefined && value.bodyEncoding !== undefined) {
+    throw new Error("Remote sync multipart requests must not set bodyEncoding");
+  }
+
   const bodyEncoding = normalizeBodyEncoding(value.bodyEncoding);
-  const body = normalizeRequestBody(config, value.body, bodyEncoding, secretJsonFields);
-  const headers = createRequestHeaders(config, value.headers, secretHeaders);
+  const body = normalizeRequestBody(config, value.body, bodyEncoding, secretJsonFields, multipart);
+  const headers = createRequestHeaders(config, value.headers, secretHeaders, multipart !== undefined);
 
   return {
     requestId: readRequiredRequestId(value.requestId),
@@ -157,7 +189,8 @@ function normalizeRemoteSyncRequest(
 function createRequestHeaders(
   config: NativeRemoteSyncRequestConfig,
   headers: unknown,
-  secretHeaders: readonly NormalizedSecretHeader[]
+  secretHeaders: readonly NormalizedSecretHeader[],
+  isMultipart: boolean
 ): Readonly<Record<string, string>> {
   const normalizedHeaders = normalizeHeaders(config, headers);
   const seenHeaderNames = new Set(Object.keys(normalizedHeaders).map((name) => name.toLowerCase()));
@@ -177,6 +210,10 @@ function createRequestHeaders(
     const headerValue = normalizeSecretHeaderValue(config, `${secretHeader.prefix ?? ""}${secret}`);
     normalizedHeaders[secretHeader.name] = headerValue;
     seenHeaderNames.add(normalizedName);
+  }
+
+  if (isMultipart && seenHeaderNames.has("content-type")) {
+    throw new Error("Remote sync multipart requests must not set Content-Type");
   }
 
   return normalizedHeaders;
@@ -226,8 +263,21 @@ function normalizeRequestBody(
   config: NativeRemoteSyncRequestConfig,
   value: unknown,
   encoding: NativeRemoteSyncRequestBodyEncoding,
-  secretJsonFields: readonly NormalizedSecretJsonField[]
+  secretJsonFields: readonly NormalizedSecretJsonField[],
+  multipart: readonly NormalizedMultipartPart[] | undefined
 ): BodyInit | undefined {
+  if (multipart !== undefined) {
+    if (value !== undefined) {
+      throw new Error("Remote sync multipart requests must not include a raw request body");
+    }
+
+    if (secretJsonFields.length > 0) {
+      throw new Error("Remote sync multipart requests cannot use secret JSON fields");
+    }
+
+    return createMultipartRequestBody(multipart);
+  }
+
   if (value === undefined && secretJsonFields.length === 0) {
     return undefined;
   }
@@ -313,6 +363,191 @@ function normalizeBase64RequestBody(config: NativeRemoteSyncRequestConfig, value
   }
 
   return new Uint8Array(body).buffer;
+}
+
+function normalizeMultipartParts(
+  config: NativeRemoteSyncRequestConfig,
+  value: unknown
+): readonly NormalizedMultipartPart[] | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (!Array.isArray(value)) {
+    throw new Error("Remote sync multipart parts must be an array");
+  }
+
+  if (value.length === 0 || value.length > nativeRemoteSyncMultipartLimits.maxParts) {
+    throw new Error("Remote sync multipart request has an invalid part count");
+  }
+
+  const parts: NormalizedMultipartPart[] = [];
+  let totalBytes = 0;
+
+  for (const item of value) {
+    const part = normalizeMultipartPart(item);
+    totalBytes += part.byteLength;
+
+    if (totalBytes > config.maxRequestBytes) {
+      throw new Error("Remote sync request body is too large");
+    }
+
+    parts.push(part);
+  }
+
+  return parts;
+}
+
+function normalizeMultipartPart(value: unknown): NormalizedMultipartPart {
+  const record = expectRecord(value, "Remote sync multipart part");
+  const name = normalizeMultipartPartName(record.name);
+
+  if (record.kind === "text") {
+    const textValue = normalizeMultipartTextValue(record.value);
+
+    return {
+      kind: "text",
+      name,
+      value: textValue,
+      byteLength: Buffer.byteLength(textValue, "utf8")
+    };
+  }
+
+  if (record.kind !== "file") {
+    throw new Error("Remote sync multipart part kind is invalid");
+  }
+
+  const content = normalizeMultipartFileContent(record.value, normalizeMultipartFileEncoding(record.encoding));
+
+  return {
+    kind: "file",
+    name,
+    fileName: normalizeMultipartFileName(record.fileName),
+    value: content,
+    byteLength: content.byteLength,
+    ...normalizeMultipartContentType(record.contentType)
+  };
+}
+
+function normalizeMultipartPartName(value: unknown): string {
+  if (typeof value !== "string") {
+    throw new Error("Remote sync multipart part name is invalid");
+  }
+
+  const normalized = value.trim();
+
+  if (
+    !normalized ||
+    normalized.length > nativeRemoteSyncMultipartLimits.maxPartNameLength ||
+    !/^[A-Za-z0-9][A-Za-z0-9_.:-]*$/.test(normalized)
+  ) {
+    throw new Error("Remote sync multipart part name is invalid");
+  }
+
+  return normalized;
+}
+
+function normalizeMultipartTextValue(value: unknown): string {
+  if (typeof value !== "string") {
+    throw new Error("Remote sync multipart text part value must be a string");
+  }
+
+  return value;
+}
+
+function normalizeMultipartFileName(value: unknown): string {
+  if (typeof value !== "string") {
+    throw new Error("Remote sync multipart file name is invalid");
+  }
+
+  const normalized = value.trim();
+
+  if (
+    !normalized ||
+    normalized === "." ||
+    normalized === ".." ||
+    normalized.length > nativeRemoteSyncMultipartLimits.maxFileNameLength ||
+    /[\\/\0-\x1f\x7f]/.test(normalized)
+  ) {
+    throw new Error("Remote sync multipart file name is invalid");
+  }
+
+  return normalized;
+}
+
+function normalizeMultipartFileContent(
+  value: unknown,
+  encoding: NativeRemoteSyncRequestBodyEncoding
+): Uint8Array {
+  if (typeof value !== "string") {
+    throw new Error("Remote sync multipart file part value must be a string");
+  }
+
+  if (encoding === "base64") {
+    if (!isBase64Value(value)) {
+      throw new Error("Remote sync multipart base64 file part is invalid");
+    }
+
+    return new Uint8Array(Buffer.from(value, "base64"));
+  }
+
+  return new Uint8Array(Buffer.from(value, "utf8"));
+}
+
+function normalizeMultipartFileEncoding(value: unknown): NativeRemoteSyncRequestBodyEncoding {
+  if (value !== "base64" && value !== "utf8") {
+    throw new Error("Remote sync multipart file encoding is invalid");
+  }
+
+  return value;
+}
+
+function normalizeMultipartContentType(value: unknown): { readonly contentType?: string } {
+  if (value === undefined) {
+    return {};
+  }
+
+  if (typeof value !== "string") {
+    throw new Error("Remote sync multipart content type is invalid");
+  }
+
+  const normalized = value.trim();
+
+  if (
+    !normalized ||
+    normalized.length > nativeRemoteSyncMultipartLimits.maxContentTypeLength ||
+    hasUnsafeHeaderText(normalized) ||
+    !/^[!#$%&'*+\-.^_`|~0-9A-Za-z]+\/[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/.test(normalized)
+  ) {
+    throw new Error("Remote sync multipart content type is invalid");
+  }
+
+  return { contentType: normalized };
+}
+
+function createMultipartRequestBody(parts: readonly NormalizedMultipartPart[]): FormData {
+  const formData = new FormData();
+
+  for (const part of parts) {
+    if (part.kind === "text") {
+      formData.append(part.name, part.value);
+      continue;
+    }
+
+    const blobPart = createMultipartBlobPart(part.value);
+    const blob = part.contentType
+      ? new Blob([blobPart], { type: part.contentType })
+      : new Blob([blobPart]);
+    formData.append(part.name, blob, part.fileName);
+  }
+
+  return formData;
+}
+
+function createMultipartBlobPart(value: Uint8Array): ArrayBuffer {
+  const copy = new Uint8Array(value.byteLength);
+  copy.set(value);
+  return copy.buffer;
 }
 
 async function readRemoteSyncResponse(
@@ -634,4 +869,24 @@ interface NormalizedSecretHeader {
 interface NormalizedSecretJsonField {
   readonly name: string;
   readonly secretRef: string;
+}
+
+type NormalizedMultipartPart =
+  | NormalizedMultipartFilePart
+  | NormalizedMultipartTextPart;
+
+interface NormalizedMultipartTextPart {
+  readonly kind: "text";
+  readonly name: string;
+  readonly value: string;
+  readonly byteLength: number;
+}
+
+interface NormalizedMultipartFilePart {
+  readonly kind: "file";
+  readonly name: string;
+  readonly fileName: string;
+  readonly value: Uint8Array;
+  readonly byteLength: number;
+  readonly contentType?: string;
 }

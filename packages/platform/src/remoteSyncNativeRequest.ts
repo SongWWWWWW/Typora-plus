@@ -2,6 +2,25 @@ export type RemoteSyncNativeRequestMethod = "DELETE" | "GET" | "PATCH" | "POST" 
 export type RemoteSyncNativeResponseType = "base64" | "json" | "text";
 export type RemoteSyncNativeRequestBodyEncoding = "base64" | "utf8";
 
+export interface RemoteSyncNativeMultipartTextPart {
+  readonly kind: "text";
+  readonly name: string;
+  readonly value: string;
+}
+
+export interface RemoteSyncNativeMultipartFilePart {
+  readonly kind: "file";
+  readonly name: string;
+  readonly fileName: string;
+  readonly value: string;
+  readonly encoding: RemoteSyncNativeRequestBodyEncoding;
+  readonly contentType?: string;
+}
+
+export type RemoteSyncNativeMultipartPart =
+  | RemoteSyncNativeMultipartFilePart
+  | RemoteSyncNativeMultipartTextPart;
+
 export interface RemoteSyncNativeSecretHeader {
   readonly name: string;
   readonly secretRef: string;
@@ -20,6 +39,7 @@ export interface RemoteSyncNativeRequest {
   readonly headers?: Readonly<Record<string, string>>;
   readonly body?: string;
   readonly bodyEncoding?: RemoteSyncNativeRequestBodyEncoding;
+  readonly multipart?: readonly RemoteSyncNativeMultipartPart[];
   readonly responseType?: RemoteSyncNativeResponseType;
   readonly secretHeaders?: readonly RemoteSyncNativeSecretHeader[];
   readonly secretJsonFields?: readonly RemoteSyncNativeSecretJsonField[];
@@ -89,6 +109,7 @@ async function requestNativeRemoteSyncWithBridge(
       ...(request.headers !== undefined ? { headers: request.headers } : {}),
       ...(request.body !== undefined ? { body: request.body } : {}),
       ...(request.bodyEncoding !== undefined ? { bodyEncoding: request.bodyEncoding } : {}),
+      ...(request.multipart !== undefined ? { multipart: request.multipart } : {}),
       ...(request.responseType !== undefined ? { responseType: request.responseType } : {}),
       ...(request.secretHeaders !== undefined ? { secretHeaders: request.secretHeaders } : {}),
       ...(request.secretJsonFields !== undefined ? { secretJsonFields: request.secretJsonFields } : {})
