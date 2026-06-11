@@ -7,6 +7,7 @@ import {
   editorTaskCommandMetadata
 } from "./workbenchContributions";
 import { workbenchCommandIds } from "./workbenchCommandIds";
+import { workbenchContextKeys } from "./workbenchContextModel";
 import {
   workbenchMermaidRendererId,
   workbenchMermaidRendererLanguage
@@ -15,6 +16,7 @@ import {
   workbenchStatusRendererId,
   workbenchStatusRendererLanguage
 } from "./statusMarkdownRenderer";
+import { workbenchSideViews } from "./workbenchSideViewModel";
 
 describe("workbench contributions", () => {
   it("contributes titlebar actions in stable command order", () => {
@@ -58,6 +60,17 @@ describe("workbench contributions", () => {
     const ids = defaultWorkbenchMenuItems.map((item) => item.id);
 
     expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it("keeps activitybar toggles aligned with known side views", () => {
+    const sideViewValues = new Set<string>(Object.values(workbenchSideViews));
+    const unknownValues = defaultWorkbenchMenuItems.flatMap((item) =>
+      item.toggled?.context === workbenchContextKeys.sideView && !sideViewValues.has(String(item.toggled.value))
+        ? [item.toggled.value]
+        : []
+    );
+
+    expect(unknownValues).toEqual([]);
   });
 
   it("keeps default keybindings scoped to unique command and shortcut pairs", () => {

@@ -1,7 +1,15 @@
-export type WorkbenchSideView = "files" | "search" | "outline" | "backlinks" | "tags";
+export const workbenchSideViews = {
+  files: "files",
+  search: "search",
+  outline: "outline",
+  backlinks: "backlinks",
+  tags: "tags"
+} as const satisfies Record<string, string>;
 
-export const workbenchFilesSideView: WorkbenchSideView = "files";
-export const defaultWorkbenchSideView: WorkbenchSideView = "outline";
+export type WorkbenchSideView = typeof workbenchSideViews[keyof typeof workbenchSideViews];
+
+export const workbenchFilesSideView: WorkbenchSideView = workbenchSideViews.files;
+export const defaultWorkbenchSideView: WorkbenchSideView = workbenchSideViews.outline;
 
 export function toggleWorkbenchSideView(
   view: WorkbenchSideView,
@@ -12,15 +20,15 @@ export function toggleWorkbenchSideView(
 
 export function workbenchSideViewTitle(view: WorkbenchSideView): string {
   switch (view) {
-    case "files":
+    case workbenchSideViews.files:
       return "Files";
-    case "search":
+    case workbenchSideViews.search:
       return "Search";
-    case "outline":
+    case workbenchSideViews.outline:
       return "Outline";
-    case "backlinks":
+    case workbenchSideViews.backlinks:
       return "Backlinks";
-    case "tags":
+    case workbenchSideViews.tags:
       return "Tags";
   }
 }

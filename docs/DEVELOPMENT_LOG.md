@@ -5733,3 +5733,31 @@ Review:
 Known limitations:
 
 - Command titles and categories still live near their command metadata/handlers; this is acceptable until repeated title/category policy emerges.
+
+## 2026-06-11 - P2 Workbench Side View Id Model
+
+Completed:
+
+- Added a stable Workbench side view id table for Files, Search, Outline, Backlinks, and Tags.
+- Routed Activity Bar toggled context values, Workbench sidebar command targets, and Sidebar render branches through the shared side view ids.
+- Preserved the Files side view alias, default Outline side view, side view toggle behavior, sidebar titles, and Activity Bar command behavior.
+- Covered stable side view ids and default menu side-view toggle alignment with focused tests.
+
+Quality gate:
+
+- `npx vitest run packages/workbench/src/workbenchSideViewModel.test.ts packages/workbench/src/workbenchContributions.test.ts packages/workbench/src/workbenchCommandRegistration.test.ts`: passed, 20 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 58 files / 580 tests, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Dev server smoke check: passed at `http://127.0.0.1:5173`; status 200 and root element present
+
+Review:
+
+- Side view ids now have one model shared by contribution metadata, command registration, and Sidebar rendering.
+- The shell still owns which panel component is rendered for the active side view, but it no longer owns the side view id literals.
+- No new dependency, configuration key, storage path, visual token, extra documentation file, or hard-coded platform assumption was introduced.
+
+Known limitations:
+
+- Sidebar panel composition remains in `Application.tsx` because it is React layout branching, not platform or contribution policy.

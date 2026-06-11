@@ -113,6 +113,7 @@ import { scheduleWorkbenchOverlayFocus } from "./workbenchOverlayFocus";
 import { createWorkbenchWorkspaceIndexingHandler } from "./workbenchWorkspaceIndexing";
 import {
   defaultWorkbenchSideView,
+  workbenchSideViews,
   workbenchSideViewTitle,
   type WorkbenchSideView
 } from "./workbenchSideViewModel";
@@ -622,7 +623,7 @@ function Sidebar({
           <PanelLeft size={17} />
         </IconButton>
       </div>
-      {view === "files" ? (
+      {view === workbenchSideViews.files ? (
         <FilesPanel
           model={model}
           workspace={workspace}
@@ -634,7 +635,7 @@ function Sidebar({
           onOpenFile={onOpenFile}
         />
       ) : null}
-      {view === "search" ? (
+      {view === workbenchSideViews.search ? (
         <SearchPanel
           query={searchQuery}
           results={searchResults}
@@ -643,15 +644,15 @@ function Sidebar({
           onOpenResult={onOpenSearchResult}
         />
       ) : null}
-      {view === "outline" ? <OutlinePanel outline={outline} onSelectLine={onSelectLine} /> : null}
-      {view === "backlinks" ? (
+      {view === workbenchSideViews.outline ? <OutlinePanel outline={outline} onSelectLine={onSelectLine} /> : null}
+      {view === workbenchSideViews.backlinks ? (
         <BacklinksPanel
           backlinks={backlinks}
           indexStatus={indexStatus}
           onOpenBacklink={onOpenBacklink}
         />
       ) : null}
-      {view === "tags" ? (
+      {view === workbenchSideViews.tags ? (
         <TagsPanel
           tags={tags}
           selectedTag={selectedTag}

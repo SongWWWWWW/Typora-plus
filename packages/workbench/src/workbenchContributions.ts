@@ -18,6 +18,7 @@ import { workbenchCommandIds } from "./workbenchCommandIds";
 import { workbenchContextKeys } from "./workbenchContextModel";
 import { workbenchMenuIconIds } from "./workbenchMenuIconModel";
 import { workbenchMenuIds } from "./workbenchMenuModel";
+import { workbenchSideViews } from "./workbenchSideViewModel";
 
 export const editorTaskCommandMetadata = {
   removeTaskMarkers: {
@@ -135,7 +136,7 @@ export const defaultWorkbenchExtensionManifest = {
         title: "Files",
         icon: workbenchMenuIconIds.fileText,
         order: 10,
-        toggled: { context: workbenchContextKeys.sideView, value: "files" },
+        toggled: { context: workbenchContextKeys.sideView, value: workbenchSideViews.files },
         when: workbenchContextKeys.fileSystemAvailable
       },
       {
@@ -145,7 +146,7 @@ export const defaultWorkbenchExtensionManifest = {
         title: "Search",
         icon: workbenchMenuIconIds.search,
         order: 20,
-        toggled: { context: workbenchContextKeys.sideView, value: "search" }
+        toggled: { context: workbenchContextKeys.sideView, value: workbenchSideViews.search }
       },
       {
         id: "activitybar.primary.outline",
@@ -154,7 +155,7 @@ export const defaultWorkbenchExtensionManifest = {
         title: "Outline",
         icon: workbenchMenuIconIds.listTree,
         order: 30,
-        toggled: { context: workbenchContextKeys.sideView, value: "outline" }
+        toggled: { context: workbenchContextKeys.sideView, value: workbenchSideViews.outline }
       },
       {
         id: "activitybar.primary.backlinks",
@@ -163,7 +164,7 @@ export const defaultWorkbenchExtensionManifest = {
         title: "Backlinks",
         icon: workbenchMenuIconIds.link,
         order: 40,
-        toggled: { context: workbenchContextKeys.sideView, value: "backlinks" },
+        toggled: { context: workbenchContextKeys.sideView, value: workbenchSideViews.backlinks },
         when: workbenchContextKeys.workspaceOpen
       },
       {
@@ -173,7 +174,7 @@ export const defaultWorkbenchExtensionManifest = {
         title: "Tags",
         icon: workbenchMenuIconIds.hash,
         order: 50,
-        toggled: { context: workbenchContextKeys.sideView, value: "tags" },
+        toggled: { context: workbenchContextKeys.sideView, value: workbenchSideViews.tags },
         when: workbenchContextKeys.workspaceOpen
       },
       {

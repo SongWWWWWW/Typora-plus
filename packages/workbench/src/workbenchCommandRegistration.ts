@@ -24,6 +24,7 @@ import {
 import {
   toggleWorkbenchSideView,
   workbenchFilesSideView,
+  workbenchSideViews,
   type WorkbenchSideView
 } from "./workbenchSideViewModel";
 
@@ -112,25 +113,25 @@ export function registerWorkbenchCommands(
     id: workbenchCommandIds.workbench.sidebarSearch,
     title: "Show Search",
     category: "Workbench",
-    run: () => callbacks.setSideView((activeView) => toggleWorkbenchSideView("search", activeView))
+    run: () => callbacks.setSideView((activeView) => toggleWorkbenchSideView(workbenchSideViews.search, activeView))
   }));
   disposables.add(services.commandService.registerCommand({
     id: workbenchCommandIds.workbench.sidebarOutline,
     title: "Show Outline",
     category: "Workbench",
-    run: () => callbacks.setSideView((activeView) => toggleWorkbenchSideView("outline", activeView))
+    run: () => callbacks.setSideView((activeView) => toggleWorkbenchSideView(workbenchSideViews.outline, activeView))
   }));
   disposables.add(services.commandService.registerCommand({
     id: workbenchCommandIds.workbench.sidebarBacklinks,
     title: "Show Backlinks",
     category: "Workbench",
-    run: () => callbacks.setSideView((activeView) => toggleWorkbenchSideView("backlinks", activeView))
+    run: () => callbacks.setSideView((activeView) => toggleWorkbenchSideView(workbenchSideViews.backlinks, activeView))
   }));
   disposables.add(services.commandService.registerCommand({
     id: workbenchCommandIds.workbench.sidebarTags,
     title: "Show Tags",
     category: "Workbench",
-    run: () => callbacks.setSideView((activeView) => toggleWorkbenchSideView("tags", activeView))
+    run: () => callbacks.setSideView((activeView) => toggleWorkbenchSideView(workbenchSideViews.tags, activeView))
   }));
   disposables.add(services.commandService.registerCommand({
     id: workbenchCommandIds.file.save,
