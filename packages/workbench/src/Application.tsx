@@ -59,6 +59,7 @@ import {
 import { createWorkbenchConfigurationUpdateHandler } from "./workbenchConfigurationUpdates";
 import { createWorkbenchEditorAdapter } from "./workbenchEditorAdapter";
 import { appendWorkbenchAiResponseToActiveNote } from "./workbenchAiActions";
+import { createWorkbenchAiSecretActions } from "./workbenchAiSecrets";
 import {
   createWorkbenchFileTreeRows,
   type WorkbenchFileTreeRow
@@ -387,6 +388,10 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
   const settingsUpdateHandler = createWorkbenchConfigurationUpdateHandler(services, {
     setOperationError
   });
+  const aiSecretActions = useMemo(
+    () => createWorkbenchAiSecretActions({ setOperationError }),
+    []
+  );
   const sidebarCommandHandlers = createWorkbenchSidebarCommandHandlers(executeCommand);
 
   return (
@@ -497,6 +502,7 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
         configuration={configuration}
         commands={commandSurface.commands}
         themes={themes}
+        aiSecretActions={aiSecretActions}
         getCommandForKeybinding={commandSurface.getCommandForKeybinding}
         getKeybindingLabel={commandSurface.getKeybindingLabel}
         getKeybindingLabelForKeybinding={commandSurface.getKeybindingLabelForKeybinding}

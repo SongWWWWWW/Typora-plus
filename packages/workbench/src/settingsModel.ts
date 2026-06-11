@@ -1,7 +1,10 @@
 import {
+  configurationMaxAiProviders,
   clampConfigurationNumber,
   configurationBytesPerMegabyte,
   configurationNumberConstraints,
+  normalizeAiProviderConfiguration,
+  type AiProviderConfiguration,
   type ColorSchemePreference,
   type ConfigurationNumberConstraint,
   type RegisteredTheme,
@@ -16,6 +19,7 @@ export interface SettingsOption<TValue extends string> {
 }
 
 export const settingsSectionIds = {
+  ai: "ai",
   appearance: "appearance",
   editor: "editor",
   workspace: "workspace",
@@ -39,6 +43,9 @@ export const settingsEntryIds = {
     lineHeight: "editor.lineHeight",
     maxWidth: "editor.maxWidth",
     rendererPreviewCacheEntries: "editor.rendererPreviewCacheEntries"
+  },
+  ai: {
+    providers: "ai.providers"
   },
   workspace: {
     defaultAssetFolder: "workspace.defaultAssetFolder",
@@ -93,9 +100,25 @@ export type SettingsAssetFolderCommit =
   | { readonly kind: "update"; readonly defaultAssetFolder: string }
   | { readonly kind: "reset"; readonly draft: string };
 
+export interface SettingsAiProviderDraft {
+  readonly id: string;
+  readonly title: string;
+  readonly endpointUrl: string;
+  readonly model: string;
+  readonly secretRef: string;
+  readonly store: boolean;
+}
+
+export interface SettingsAiProviderDraftValidation {
+  readonly provider?: AiProviderConfiguration;
+  readonly issues: readonly string[];
+  readonly canSave: boolean;
+}
+
 export const settingsSections = [
   { id: settingsSectionIds.appearance, title: "Appearance" },
   { id: settingsSectionIds.editor, title: "Editor" },
+  { id: settingsSectionIds.ai, title: "AI" },
   { id: settingsSectionIds.workspace, title: "Workspace" },
   { id: settingsSectionIds.keybindings, title: "Keybindings" }
 ] as const satisfies readonly SettingsSectionDefinition[];
@@ -132,6 +155,7 @@ export const settingsEntries = [
   { id: settingsEntryIds.editor.lineHeight, sectionId: settingsSectionIds.editor, label: "Line Height", keywords: ["line", "spacing"] },
   { id: settingsEntryIds.editor.maxWidth, sectionId: settingsSectionIds.editor, label: "Editor Width", keywords: ["width", "content"] },
   { id: settingsEntryIds.editor.rendererPreviewCacheEntries, sectionId: settingsSectionIds.editor, label: "Renderer Cache", keywords: ["preview", "renderer", "cache", "mermaid"] },
+  { id: settingsEntryIds.ai.providers, sectionId: settingsSectionIds.ai, label: "Providers", keywords: ["openai", "responses", "assistant", "model", "endpoint", "secret", "api key"] },
   { id: settingsEntryIds.workspace.defaultAssetFolder, sectionId: settingsSectionIds.workspace, label: "Asset Folder", keywords: ["assets", "images", "attachments", "folder"] },
   { id: settingsEntryIds.workspace.quickOpenMaxResults, sectionId: settingsSectionIds.workspace, label: "Quick Open Results", keywords: ["quick open", "files", "results", "limit"] },
   { id: settingsEntryIds.workspace.searchMaxFileSize, sectionId: settingsSectionIds.workspace, label: "Search File Limit", keywords: ["search", "index", "file", "size", "limit"] },
@@ -200,6 +224,75 @@ export function resolveSettingsAssetFolderCommit(
   return defaultAssetFolder
     ? { kind: "update", defaultAssetFolder }
     : { kind: "reset", draft: currentDefaultAssetFolder };
+}
+
+export function createSettingsAiProviderDraft(
+  provider: AiProviderConfiguration | undefined = undefined
+): SettingsAiProviderDraft {
+  return {
+    id: provider?.id ?? "",
+    title: provider?.title ?? "",
+    endpointUrl: provider?.endpointUrl ?? "",
+    model: provider?.model ?? "",
+    secretRef: provider?.secretRef ?? "",
+    store: provider?.store ?? false
+  };
+}
+
+export function validateSettingsAiProviderDraft(
+  draft: SettingsAiProviderDraft,
+  providers: readonly AiProviderConfiguration[],
+  originalId: string | undefined = undefined
+): SettingsAiProviderDraftValidation {
+  const provider = normalizeSettingsAiProviderDraft(draft);
+  const issues: string[] = [];
+
+  if (!provider) {
+    issues.push("Complete provider id, title, HTTPS or loopback endpoint, model, and secret reference.");
+  } else if (providers.some((candidate) => candidate.id === provider.id && candidate.id !== originalId)) {
+    issues.push("Provider id is already used.");
+  }
+
+  return {
+    ...(provider ? { provider } : {}),
+    issues,
+    canSave: issues.length === 0 && !!provider
+  };
+}
+
+export function upsertSettingsAiProvider(
+  providers: readonly AiProviderConfiguration[],
+  draft: SettingsAiProviderDraft,
+  originalId: string | undefined = undefined
+): readonly AiProviderConfiguration[] {
+  const validation = validateSettingsAiProviderDraft(draft, providers, originalId);
+
+  if (!validation.provider || !validation.canSave) {
+    return providers;
+  }
+
+  const withoutOriginal = originalId
+    ? providers.filter((provider) => provider.id !== originalId)
+    : providers;
+
+  if (withoutOriginal.length >= configurationMaxAiProviders && !originalId) {
+    return providers;
+  }
+
+  return [...withoutOriginal, validation.provider].sort(compareSettingsAiProviders);
+}
+
+export function removeSettingsAiProvider(
+  providers: readonly AiProviderConfiguration[],
+  id: string
+): readonly AiProviderConfiguration[] {
+  return providers.filter((provider) => provider.id !== id);
+}
+
+export function canAddSettingsAiProvider(
+  providers: readonly AiProviderConfiguration[]
+): boolean {
+  return providers.length < configurationMaxAiProviders;
 }
 
 export function settingSectionAnchorId(sectionId: SettingsSectionId): string {
@@ -357,4 +450,23 @@ function matchesSettingsEntry(entry: SettingsEntryDefinition, terms: readonly st
 function matchesTerms(haystack: string, terms: readonly string[]): boolean {
   const normalizedHaystack = haystack.toLowerCase();
   return terms.every((term) => normalizedHaystack.includes(term));
+}
+
+function normalizeSettingsAiProviderDraft(draft: SettingsAiProviderDraft): AiProviderConfiguration | undefined {
+  return normalizeAiProviderConfiguration({
+    id: draft.id,
+    title: draft.title,
+    kind: "responses",
+    endpointUrl: draft.endpointUrl,
+    model: draft.model,
+    secretRef: draft.secretRef,
+    store: draft.store
+  });
+}
+
+function compareSettingsAiProviders(
+  left: AiProviderConfiguration,
+  right: AiProviderConfiguration
+): number {
+  return left.title.localeCompare(right.title) || left.id.localeCompare(right.id);
 }

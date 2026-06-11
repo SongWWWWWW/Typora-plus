@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   bytesToMegabytes,
+  canAddSettingsAiProvider,
   clampSettingNumber,
+  createSettingsAiProviderDraft,
   createSettingsThemeOptions,
   createSettingsSearchResult,
   createSettingsVisibilityState,
@@ -16,6 +18,7 @@ import {
   isSettingsSectionVisible,
   megabytesToBytes,
   normalizeAssetFolderInput,
+  removeSettingsAiProvider,
   resolveNearestSettingsSection,
   resolveSelectedSettingsThemeId,
   resolveSettingsAssetFolderCommit,
@@ -28,12 +31,15 @@ import {
   settingsEntryIds,
   settingsSectionIds,
   settingsSections,
-  settingsNumberConstraints
+  settingsNumberConstraints,
+  upsertSettingsAiProvider,
+  validateSettingsAiProviderDraft
 } from "./settingsModel";
 
 describe("settings model", () => {
   it("defines stable settings section ids", () => {
     expect(settingsSectionIds).toEqual({
+      ai: "ai",
       appearance: "appearance",
       editor: "editor",
       workspace: "workspace",
@@ -59,6 +65,9 @@ describe("settings model", () => {
         maxWidth: "editor.maxWidth",
         rendererPreviewCacheEntries: "editor.rendererPreviewCacheEntries"
       },
+      ai: {
+        providers: "ai.providers"
+      },
       workspace: {
         defaultAssetFolder: "workspace.defaultAssetFolder",
         quickOpenMaxResults: "workspace.quickOpenMaxResults",
@@ -75,6 +84,7 @@ describe("settings model", () => {
     expect(settingsSections.map((section) => [section.id, section.title])).toEqual([
       ["appearance", "Appearance"],
       ["editor", "Editor"],
+      ["ai", "AI"],
       ["workspace", "Workspace"],
       ["keybindings", "Keybindings"]
     ]);
@@ -149,6 +159,7 @@ describe("settings model", () => {
     expect(anchors).toEqual([
       "tp-settings-section-appearance",
       "tp-settings-section-editor",
+      "tp-settings-section-ai",
       "tp-settings-section-workspace",
       "tp-settings-section-keybindings"
     ]);
@@ -193,6 +204,8 @@ describe("settings model", () => {
     expect(createSettingsSearchResult("custom theme").visibleEntries).toEqual(["appearance.customTheme"]);
     expect(createSettingsSearchResult("save delay").visibleEntries).toEqual(["editor.autoSaveDelay"]);
     expect(createSettingsSearchResult("renderer cache").visibleEntries).toEqual(["editor.rendererPreviewCacheEntries"]);
+    expect(createSettingsSearchResult("api key").visibleEntries).toEqual(["ai.providers"]);
+    expect(createSettingsSearchResult("responses model").visibleEntries).toEqual(["ai.providers"]);
     expect(createSettingsSearchResult("shortcut").visibleEntries).toEqual(["keybindings.editor"]);
     expect(createSettingsSearchResult("search limit").visibleEntries).toEqual([
       "workspace.searchMaxFileSize",
@@ -275,5 +288,100 @@ describe("settings model", () => {
       kind: "reset",
       draft: "assets"
     });
+  });
+
+  it("creates and validates AI provider drafts through platform configuration rules", () => {
+    const provider = {
+      id: "notes.responses",
+      title: "Notes",
+      kind: "responses" as const,
+      endpointUrl: "https://api.example.test/v1/responses",
+      model: "notes-model",
+      secretRef: "typora-plus.ai.notes",
+      store: false
+    };
+
+    expect(createSettingsAiProviderDraft(provider)).toEqual({
+      id: "notes.responses",
+      title: "Notes",
+      endpointUrl: "https://api.example.test/v1/responses",
+      model: "notes-model",
+      secretRef: "typora-plus.ai.notes",
+      store: false
+    });
+    expect(validateSettingsAiProviderDraft(createSettingsAiProviderDraft(provider), [], undefined)).toMatchObject({
+      provider,
+      canSave: true,
+      issues: []
+    });
+    expect(validateSettingsAiProviderDraft({
+      ...createSettingsAiProviderDraft(provider),
+      endpointUrl: "http://api.example.test/v1/responses"
+    }, [], undefined)).toEqual({
+      canSave: false,
+      issues: ["Complete provider id, title, HTTPS or loopback endpoint, model, and secret reference."]
+    });
+  });
+
+  it("upserts and removes AI provider configuration without duplicate ids", () => {
+    const existing = {
+      id: "existing.responses",
+      title: "Existing",
+      kind: "responses" as const,
+      endpointUrl: "https://api.example.test/v1/responses",
+      model: "existing-model",
+      secretRef: "typora-plus.ai.existing"
+    };
+    const draft = createSettingsAiProviderDraft({
+      id: "notes.responses",
+      title: "Notes",
+      kind: "responses",
+      endpointUrl: "http://127.0.0.1:11434/v1/responses",
+      model: "notes-model",
+      secretRef: "typora-plus.ai.notes"
+    });
+
+    expect(upsertSettingsAiProvider([existing], draft)).toEqual([
+      existing,
+      {
+        id: "notes.responses",
+        title: "Notes",
+        kind: "responses",
+        endpointUrl: "http://127.0.0.1:11434/v1/responses",
+        model: "notes-model",
+        secretRef: "typora-plus.ai.notes",
+        store: false
+      }
+    ]);
+    const duplicateValidation = validateSettingsAiProviderDraft({
+      ...draft,
+      id: existing.id
+    }, [existing]);
+
+    expect(duplicateValidation.canSave).toBe(false);
+    expect(duplicateValidation.issues).toEqual(["Provider id is already used."]);
+    expect(removeSettingsAiProvider([existing], existing.id)).toEqual([]);
+  });
+
+  it("honors the configured AI provider count limit", () => {
+    const providers = Array.from({ length: 20 }, (_, index) => ({
+      id: `provider.${index}`,
+      title: `Provider ${index}`,
+      kind: "responses" as const,
+      endpointUrl: "https://api.example.test/v1/responses",
+      model: "model",
+      secretRef: `typora-plus.ai.${index}`
+    }));
+
+    expect(canAddSettingsAiProvider(providers)).toBe(false);
+    expect(canAddSettingsAiProvider(providers.slice(0, 19))).toBe(true);
+    expect(upsertSettingsAiProvider(providers, createSettingsAiProviderDraft({
+      id: "extra.provider",
+      title: "Extra",
+      kind: "responses",
+      endpointUrl: "https://api.example.test/v1/responses",
+      model: "model",
+      secretRef: "typora-plus.ai.extra"
+    }))).toBe(providers);
   });
 });

@@ -6730,3 +6730,34 @@ Known limitations:
 - There is still no Settings UI for creating provider configuration or setting/deleting secrets.
 - Request cancellation does not yet cross the Electron IPC boundary.
 - Streaming, tool calls, and workspace-grounded retrieval remain future work.
+
+## 2026-06-11 - P2 AI Provider Settings
+
+Completed:
+
+- Added an AI section to the existing Settings dialog for editing configuration-backed Responses providers.
+- Kept provider settings limited to non-secret values: provider id, title, endpoint URL, model, secret reference, and store preference.
+- Added native secret save/delete controls that call a Workbench AI secret action helper and then the Electron native AI bridge instead of storing API keys in configuration.
+- Reused the platform AI provider normalizer from Settings so UI save behavior and persisted configuration sanitization share one rule set.
+- Added compact provider-card styling for desktop and mobile Settings layouts.
+
+Quality gate:
+
+- `npx vitest run packages/platform/src/configurationAi.test.ts packages/workbench/src/settingsModel.test.ts packages/workbench/src/workbenchAiSecrets.test.ts`: passed, 3 files / 33 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 72 files / 676 tests, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Browser smoke check at `http://127.0.0.1:5173/`: Settings opened, AI section rendered, Add Provider created a provider card, and no fresh console errors were emitted after the interaction
+
+Review:
+
+- Settings now completes the first usable configured Responses provider path without hardcoding provider ids, endpoints, model ids, API keys, or provider defaults.
+- Secret handling remains split from configuration: renderer collects a typed value only long enough to invoke the native bridge, while persisted configuration stores only `secretRef`.
+- The UI reuses the existing Settings search/navigation model and configuration update action boundary instead of adding a parallel provider-management surface.
+
+Known limitations:
+
+- There is still no provider connection test button or live model discovery.
+- Request cancellation does not yet cross the Electron IPC boundary.
+- Streaming, tool calls, and workspace-grounded retrieval remain future work.

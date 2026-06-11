@@ -1,12 +1,13 @@
 import { keybindingFromEvent } from "@typora-plus/platform";
 import type {
+  AiProviderConfiguration,
   CommandMetadata,
   Keybinding,
   PartialConfiguration,
   RegisteredTheme,
   TyporaPlusConfiguration
 } from "@typora-plus/platform";
-import { Search, Settings as SettingsIcon, X } from "lucide-react";
+import { KeyRound, Plus, Save, Search, Settings as SettingsIcon, Trash2, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import {
@@ -17,6 +18,8 @@ import {
 } from "./keybindingSettings";
 import {
   bytesToMegabytes,
+  canAddSettingsAiProvider,
+  createSettingsAiProviderDraft,
   createSettingsSearchResult,
   createSettingsThemeOptions,
   createSettingsVisibilityState,
@@ -26,6 +29,7 @@ import {
   isSettingsEntryVisible,
   isSettingsSectionVisible,
   megabytesToBytes,
+  removeSettingsAiProvider,
   resolveNearestSettingsSection,
   resolveSelectedSettingsThemeId,
   resolveSettingsAssetFolderCommit,
@@ -37,15 +41,20 @@ import {
   settingsEntryIds,
   settingsNumberConstraints,
   settingsSectionIds,
+  upsertSettingsAiProvider,
+  validateSettingsAiProviderDraft,
+  type SettingsAiProviderDraft,
   type SettingsSectionId,
   type NumberSettingConstraint
 } from "./settingsModel";
+import type { WorkbenchAiSecretBridge } from "./workbenchAiSecrets";
 
 export function SettingsDialog({
   open,
   configuration,
   commands,
   themes,
+  aiSecretActions,
   getCommandForKeybinding,
   getKeybindingLabel,
   getKeybindingLabelForKeybinding,
@@ -56,6 +65,11 @@ export function SettingsDialog({
   readonly configuration: TyporaPlusConfiguration;
   readonly commands: readonly CommandMetadata[];
   readonly themes: readonly RegisteredTheme[];
+  readonly aiSecretActions?: {
+    readonly isAvailable: boolean;
+    readonly setSecret: WorkbenchAiSecretBridge["setSecret"];
+    readonly deleteSecret: WorkbenchAiSecretBridge["deleteSecret"];
+  };
   readonly getCommandForKeybinding: (keybinding: Keybinding) => string | undefined;
   readonly getKeybindingLabel: (command: string) => string | undefined;
   readonly getKeybindingLabelForKeybinding: (keybinding: Keybinding) => string;
@@ -68,9 +82,16 @@ export function SettingsDialog({
   const [keybindingQuery, setKeybindingQuery] = useState("");
   const [modifiedKeybindingsOnly, setModifiedKeybindingsOnly] = useState(false);
   const [pendingKeybinding, setPendingKeybinding] = useState<PendingKeybindingOverride | undefined>();
+  const [aiProviderDrafts, setAiProviderDrafts] = useState<readonly AiProviderDraftState[]>(
+    () => createAiProviderDraftStates(configuration.ai.providers)
+  );
+  const [aiSecretDrafts, setAiSecretDrafts] = useState<Record<string, string>>({});
+  const [aiSecretStates, setAiSecretStates] = useState<Record<string, AiSecretState>>({});
   const [activeSettingsSection, setActiveSettingsSection] = useState<SettingsSectionId>(defaultSettingsSectionId);
   const settingsContentRef = useRef<HTMLDivElement | null>(null);
+  const nextAiProviderDraftIdRef = useRef(0);
   const hasKeybindingOverrides = configuration.keybindings.overrides.length > 0;
+  const hasUnsavedAiProviderDraft = aiProviderDrafts.some((draft) => !draft.originalId);
   const selectedThemeId = resolveSelectedSettingsThemeId(configuration.appearance.themeId, themes);
   const themeOptions = useMemo(() => createSettingsThemeOptions(themes), [themes]);
   const searchMaxFileSizeMegabytes = bytesToMegabytes(configuration.workspace.searchMaxFileSizeBytes);
@@ -96,9 +117,12 @@ export function SettingsDialog({
       setKeybindingQuery("");
       setModifiedKeybindingsOnly(false);
       setPendingKeybinding(undefined);
+      setAiProviderDrafts(createAiProviderDraftStates(configuration.ai.providers));
+      setAiSecretDrafts({});
+      setAiSecretStates({});
       setActiveSettingsSection(defaultSettingsSectionId);
     }
-  }, [configuration.workspace.defaultAssetFolder, open]);
+  }, [configuration.ai.providers, configuration.workspace.defaultAssetFolder, open]);
 
   useEffect(() => {
     if (!open) {
@@ -199,6 +223,86 @@ export function SettingsDialog({
     settingsContentRef.current
       ?.querySelector<HTMLElement>(`#${settingSectionAnchorId(sectionId)}`)
       ?.scrollIntoView({ block: "start", behavior: "smooth" });
+  };
+
+  const addAiProviderDraft = () => {
+    const key = `new:${nextAiProviderDraftIdRef.current++}`;
+    setAiProviderDrafts((drafts) => [...drafts, {
+      key,
+      ...createSettingsAiProviderDraft()
+    }]);
+  };
+
+  const updateAiProviderDraft = (
+    key: string,
+    value: Partial<SettingsAiProviderDraft>
+  ) => {
+    setAiProviderDrafts((drafts) => drafts.map((draft) =>
+      draft.key === key ? { ...draft, ...value } : draft
+    ));
+  };
+
+  const saveAiProviderDraft = (draft: AiProviderDraftState) => {
+    const validation = validateSettingsAiProviderDraft(
+      draft,
+      configuration.ai.providers,
+      draft.originalId
+    );
+    const nextProviders = upsertSettingsAiProvider(
+      configuration.ai.providers,
+      draft,
+      draft.originalId
+    );
+
+    if (nextProviders === configuration.ai.providers) {
+      return;
+    }
+
+    setAiProviderDrafts((drafts) => drafts.map((candidate) =>
+      candidate.key === draft.key
+        ? validation.provider
+          ? {
+              ...candidate,
+              originalId: validation.provider.id
+            }
+          : candidate
+        : candidate
+    ));
+    onUpdate({ ai: { providers: nextProviders } });
+  };
+
+  const removeAiProviderDraft = (draft: AiProviderDraftState) => {
+    if (draft.originalId) {
+      onUpdate({
+        ai: {
+          providers: removeSettingsAiProvider(configuration.ai.providers, draft.originalId)
+        }
+      });
+    }
+
+    setAiProviderDrafts((drafts) => drafts.filter((candidate) => candidate.key !== draft.key));
+  };
+
+  const updateAiSecretDraft = (key: string, value: string) => {
+    setAiSecretDrafts((drafts) => ({ ...drafts, [key]: value }));
+    setAiSecretStates((states) => ({ ...states, [key]: "idle" }));
+  };
+
+  const saveAiSecret = (draft: AiProviderDraftState) => {
+    const value = aiSecretDrafts[draft.key] ?? "";
+
+    void aiSecretActions?.setSecret(draft.secretRef, value).then((saved) => {
+      setAiSecretStates((states) => ({ ...states, [draft.key]: saved ? "saved" : "failed" }));
+      if (saved) {
+        setAiSecretDrafts((drafts) => ({ ...drafts, [draft.key]: "" }));
+      }
+    });
+  };
+
+  const deleteAiSecret = (draft: AiProviderDraftState) => {
+    void aiSecretActions?.deleteSecret(draft.secretRef).then((deleted) => {
+      setAiSecretStates((states) => ({ ...states, [draft.key]: deleted ? "deleted" : "failed" }));
+    });
   };
 
   const syncActiveSettingsSection = () => {
@@ -406,6 +510,156 @@ export function SettingsDialog({
               </SettingsSection>
             ) : null}
 
+            {isSettingsSectionVisible(settingsVisibility, settingsSectionIds.ai) ? (
+              <SettingsSection sectionId={settingsSectionIds.ai}>
+                {isSettingsEntryVisible(settingsVisibility, settingsEntryIds.ai.providers) ? (
+                  <>
+                    <div className="tp-settings-ai-toolbar">
+                      <button
+                        className="tp-settings-small-button"
+                        type="button"
+                        disabled={!canAddSettingsAiProvider(configuration.ai.providers) || hasUnsavedAiProviderDraft}
+                        onClick={addAiProviderDraft}
+                      >
+                        <Plus size={13} />
+                        <span>Add Provider</span>
+                      </button>
+                    </div>
+                    <div className="tp-settings-ai-list">
+                      {aiProviderDrafts.map((draft) => {
+                        const validation = validateSettingsAiProviderDraft(
+                          draft,
+                          configuration.ai.providers,
+                          draft.originalId
+                        );
+                        const secretValue = aiSecretDrafts[draft.key] ?? "";
+                        const secretState = aiSecretStates[draft.key] ?? "idle";
+                        const canSaveSecret = !!aiSecretActions?.isAvailable &&
+                          validation.canSave &&
+                          secretValue.trim().length > 0;
+                        const canDeleteSecret = !!aiSecretActions?.isAvailable && validation.canSave;
+
+                        return (
+                          <section className="tp-settings-ai-card" key={draft.key}>
+                            <div className="tp-settings-ai-card-header">
+                              <span>{draft.title || draft.id || "AI Provider"}</span>
+                              <div className="tp-settings-ai-card-actions">
+                                <button
+                                  className="tp-settings-small-button"
+                                  type="button"
+                                  disabled={!validation.canSave}
+                                  onClick={() => saveAiProviderDraft(draft)}
+                                >
+                                  <Save size={13} />
+                                  <span>Save</span>
+                                </button>
+                                <button
+                                  className="tp-settings-small-button"
+                                  type="button"
+                                  onClick={() => removeAiProviderDraft(draft)}
+                                >
+                                  <Trash2 size={13} />
+                                  <span>Remove</span>
+                                </button>
+                              </div>
+                            </div>
+                            <SettingsField label="Provider ID">
+                              <input
+                                className="tp-settings-text-input"
+                                type="text"
+                                value={draft.id}
+                                aria-label="AI Provider ID"
+                                onChange={(event) => updateAiProviderDraft(draft.key, { id: event.target.value })}
+                              />
+                            </SettingsField>
+                            <SettingsField label="Title">
+                              <input
+                                className="tp-settings-text-input"
+                                type="text"
+                                value={draft.title}
+                                aria-label="AI Provider Title"
+                                onChange={(event) => updateAiProviderDraft(draft.key, { title: event.target.value })}
+                              />
+                            </SettingsField>
+                            <SettingsField label="Endpoint">
+                              <input
+                                className="tp-settings-text-input"
+                                type="url"
+                                value={draft.endpointUrl}
+                                aria-label="AI Provider Endpoint"
+                                onChange={(event) => updateAiProviderDraft(draft.key, { endpointUrl: event.target.value })}
+                              />
+                            </SettingsField>
+                            <SettingsField label="Model">
+                              <input
+                                className="tp-settings-text-input"
+                                type="text"
+                                value={draft.model}
+                                aria-label="AI Provider Model"
+                                onChange={(event) => updateAiProviderDraft(draft.key, { model: event.target.value })}
+                              />
+                            </SettingsField>
+                            <SettingsField label="Secret Ref">
+                              <input
+                                className="tp-settings-text-input"
+                                type="text"
+                                value={draft.secretRef}
+                                aria-label="AI Provider Secret Reference"
+                                onChange={(event) => updateAiProviderDraft(draft.key, { secretRef: event.target.value })}
+                              />
+                            </SettingsField>
+                            <SettingsField label="Store Response">
+                              <ToggleControl
+                                checked={draft.store}
+                                label="AI Provider Store Response"
+                                onChange={(store) => updateAiProviderDraft(draft.key, { store })}
+                              />
+                            </SettingsField>
+                            <SettingsField label="API Key">
+                              <span className="tp-settings-secret-control">
+                                <input
+                                  className="tp-settings-text-input"
+                                  type="password"
+                                  value={secretValue}
+                                  aria-label="AI Provider API Key"
+                                  disabled={!aiSecretActions?.isAvailable}
+                                  onChange={(event) => updateAiSecretDraft(draft.key, event.target.value)}
+                                />
+                                <button
+                                  className="tp-settings-small-button"
+                                  type="button"
+                                  disabled={!canSaveSecret}
+                                  onClick={() => saveAiSecret(draft)}
+                                >
+                                  <KeyRound size={13} />
+                                  <span>{formatAiSecretSaveLabel(secretState)}</span>
+                                </button>
+                                <button
+                                  className="tp-settings-small-button"
+                                  type="button"
+                                  disabled={!canDeleteSecret}
+                                  onClick={() => deleteAiSecret(draft)}
+                                >
+                                  <Trash2 size={13} />
+                                  <span>{formatAiSecretDeleteLabel(secretState)}</span>
+                                </button>
+                              </span>
+                            </SettingsField>
+                            {validation.issues.length > 0 ? (
+                              <div className="tp-settings-validation-row">{validation.issues[0]}</div>
+                            ) : null}
+                          </section>
+                        );
+                      })}
+                      {aiProviderDrafts.length === 0 ? (
+                        <div className="tp-settings-empty-row">No AI providers configured</div>
+                      ) : null}
+                    </div>
+                  </>
+                ) : null}
+              </SettingsSection>
+            ) : null}
+
             {isSettingsSectionVisible(settingsVisibility, settingsSectionIds.workspace) ? (
               <SettingsSection sectionId={settingsSectionIds.workspace}>
                 {isSettingsEntryVisible(settingsVisibility, settingsEntryIds.workspace.defaultAssetFolder) ? (
@@ -586,6 +840,47 @@ interface PendingKeybindingOverride {
   readonly keybinding: Keybinding;
   readonly conflictCommand: string;
   readonly label: string;
+}
+
+type AiSecretState = "idle" | "saved" | "deleted" | "failed";
+
+interface AiProviderDraftState extends SettingsAiProviderDraft {
+  readonly key: string;
+  readonly originalId?: string;
+}
+
+function createAiProviderDraftStates(
+  providers: readonly AiProviderConfiguration[]
+): readonly AiProviderDraftState[] {
+  return providers.map((provider) => ({
+    key: `provider:${provider.id}`,
+    originalId: provider.id,
+    ...createSettingsAiProviderDraft(provider)
+  }));
+}
+
+function formatAiSecretSaveLabel(state: AiSecretState): string {
+  switch (state) {
+    case "saved":
+      return "Saved";
+    case "failed":
+      return "Failed";
+    case "deleted":
+    case "idle":
+      return "Save Key";
+  }
+}
+
+function formatAiSecretDeleteLabel(state: AiSecretState): string {
+  switch (state) {
+    case "deleted":
+      return "Deleted";
+    case "failed":
+      return "Failed";
+    case "saved":
+    case "idle":
+      return "Delete";
+  }
 }
 
 function applyKeybindingOverride(

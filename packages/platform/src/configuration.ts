@@ -391,31 +391,14 @@ function sanitizeAiProviderConfigurations(value: unknown): readonly AiProviderCo
   const seenIds = new Set<string>();
 
   for (const candidate of value.slice(0, configurationMaxAiProviders)) {
-    if (!isRecord(candidate)) {
+    const provider = normalizeAiProviderConfiguration(candidate);
+
+    if (!provider || seenIds.has(provider.id)) {
       continue;
     }
 
-    const id = normalizeAiProviderConfigurationId(candidate.id);
-    const title = normalizeConfigurationText(candidate.title, configurationMaxAiProviderTitleLength);
-    const kind = normalizeAiProviderConfigurationKind(candidate.kind);
-    const endpointUrl = normalizeAiProviderEndpointUrl(candidate.endpointUrl);
-    const model = normalizeConfigurationText(candidate.model, configurationMaxAiProviderModelLength);
-    const secretRef = normalizeAiProviderSecretRef(candidate.secretRef);
-
-    if (!id || !title || !kind || !endpointUrl || !model || !secretRef || seenIds.has(id)) {
-      continue;
-    }
-
-    seenIds.add(id);
-    providers.push({
-      id,
-      title,
-      kind,
-      endpointUrl,
-      model,
-      secretRef,
-      ...(typeof candidate.store === "boolean" ? { store: candidate.store } : {})
-    });
+    seenIds.add(provider.id);
+    providers.push(provider);
   }
 
   if (providers.length === 0 && value.length > 0) {
@@ -423,6 +406,33 @@ function sanitizeAiProviderConfigurations(value: unknown): readonly AiProviderCo
   }
 
   return providers;
+}
+
+export function normalizeAiProviderConfiguration(value: unknown): AiProviderConfiguration | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+
+  const id = normalizeAiProviderConfigurationId(value.id);
+  const title = normalizeConfigurationText(value.title, configurationMaxAiProviderTitleLength);
+  const kind = normalizeAiProviderConfigurationKind(value.kind);
+  const endpointUrl = normalizeAiProviderEndpointUrl(value.endpointUrl);
+  const model = normalizeConfigurationText(value.model, configurationMaxAiProviderModelLength);
+  const secretRef = normalizeAiProviderSecretRef(value.secretRef);
+
+  if (!id || !title || !kind || !endpointUrl || !model || !secretRef) {
+    return undefined;
+  }
+
+  return {
+    id,
+    title,
+    kind,
+    endpointUrl,
+    model,
+    secretRef,
+    ...(typeof value.store === "boolean" ? { store: value.store } : {})
+  };
 }
 
 function sanitizeWorkspaceConfiguration(value: Record<string, unknown>): Partial<TyporaPlusConfiguration["workspace"]> {

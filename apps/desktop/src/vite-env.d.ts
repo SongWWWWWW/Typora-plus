@@ -8,6 +8,16 @@ interface Window {
       read(key: string): string | undefined;
       write(key: string, value: string): boolean;
     };
+    readonly ai?: {
+      readonly isAvailable: boolean;
+      setSecret(secretRef: string, value: string): Promise<boolean>;
+      deleteSecret(secretRef: string): Promise<boolean>;
+      requestResponses(request: {
+        readonly endpointUrl: string;
+        readonly secretRef: string;
+        readonly body: string;
+      }): Promise<unknown>;
+    };
     readonly indexSnapshots?: {
       readonly isAvailable: boolean;
       read(key: string): string | undefined;

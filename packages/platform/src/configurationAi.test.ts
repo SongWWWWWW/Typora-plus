@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   ConfigurationService,
   defaultConfiguration,
-  mergeConfiguration
+  mergeConfiguration,
+  normalizeAiProviderConfiguration
 } from "./configuration";
 
 describe("AI provider configuration", () => {
@@ -149,6 +150,35 @@ describe("AI provider configuration", () => {
         secretRef: "typora-plus.ai.local"
       }
     ]);
+  });
+
+  it("normalizes a single AI provider configuration for UI callers", () => {
+    expect(normalizeAiProviderConfiguration({
+      id: " notes.responses ",
+      title: " Notes ",
+      kind: "responses",
+      endpointUrl: "https://api.example.test/v1/responses",
+      model: " notes-model ",
+      secretRef: " typora-plus.ai.notes ",
+      store: true
+    })).toEqual({
+      id: "notes.responses",
+      title: "Notes",
+      kind: "responses",
+      endpointUrl: "https://api.example.test/v1/responses",
+      model: "notes-model",
+      secretRef: "typora-plus.ai.notes",
+      store: true
+    });
+
+    expect(normalizeAiProviderConfiguration({
+      id: "public.http",
+      title: "Public HTTP",
+      kind: "responses",
+      endpointUrl: "http://api.example.test/v1/responses",
+      model: "notes-model",
+      secretRef: "typora-plus.ai.public"
+    })).toBeUndefined();
   });
 
   it("keeps AI configuration isolated during partial merges", () => {

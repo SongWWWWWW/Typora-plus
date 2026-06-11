@@ -1055,6 +1055,72 @@ button {
   border-color: var(--tp-color-accent);
 }
 
+.tp-settings-ai-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  min-width: 0;
+}
+
+.tp-settings-ai-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+.tp-settings-ai-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--tp-color-border);
+  border-radius: var(--tp-radius-control);
+  background: var(--tp-color-surface);
+}
+
+.tp-settings-ai-card-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, auto);
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.tp-settings-ai-card-header > span {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--tp-color-text);
+  font-size: 13px;
+  font-weight: 720;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tp-settings-ai-card-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(76px, auto));
+  gap: 6px;
+  min-width: 0;
+}
+
+.tp-settings-secret-control {
+  display: grid;
+  grid-template-columns: minmax(80px, 1fr) minmax(92px, auto) minmax(78px, auto);
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.tp-settings-validation-row {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--tp-color-danger);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .tp-settings-keybinding-list {
   display: flex;
   flex-direction: column;
@@ -1188,6 +1254,11 @@ button {
 }
 
 .tp-settings-small-button {
+  display: inline-grid;
+  grid-auto-flow: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
   min-width: 0;
   height: 30px;
   padding: 0 8px;
@@ -1286,6 +1357,12 @@ button {
   .tp-settings-field {
     grid-template-columns: minmax(0, 1fr);
     gap: 6px;
+  }
+
+  .tp-settings-ai-card-header,
+  .tp-settings-ai-card-actions,
+  .tp-settings-secret-control {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .tp-settings-number-control {
