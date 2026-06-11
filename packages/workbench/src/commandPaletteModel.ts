@@ -43,6 +43,13 @@ export function createCommandPaletteExecutionCallbacks(
   };
 }
 
+export function createCommandPaletteExecuteHandler(
+  services: CommandPaletteExecutionServices,
+  callbacks: CommandPaletteExecutionCallbacks
+): (commandId: string) => void {
+  return (commandId) => executeCommandPaletteCommand(services, commandId, callbacks);
+}
+
 export function filterCommandPaletteCommands(
   commands: readonly CommandPaletteCommand[],
   query: string,

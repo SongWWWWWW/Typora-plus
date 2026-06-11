@@ -2,6 +2,7 @@ import { URI } from "@typora-plus/base";
 import { FileSaveConflictError } from "@typora-plus/platform";
 import { describe, expect, it, vi } from "vitest";
 import {
+  createCommandPaletteExecuteHandler,
   createCommandPaletteExecutionCallbacks,
   executeCommandPaletteCommand,
   filterCommandPaletteCommands,
@@ -81,6 +82,23 @@ describe("command palette model", () => {
       setOperationError: (value) => calls.push(`error:${value ?? "none"}`)
     });
 
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(calls).toEqual(["error:none", "execute:file.save", "close"]);
+  });
+
+  it("creates an execute handler with the shared action boundary", async () => {
+    const calls: string[] = [];
+    const services = createExecutionServices(async (command) => {
+      calls.push(`execute:${command}`);
+    });
+    const executeCommand = createCommandPaletteExecuteHandler(services, {
+      closePalette: () => calls.push("close"),
+      setOperationError: (value) => calls.push(`error:${value ?? "none"}`)
+    });
+
+    executeCommand("file.save");
     await Promise.resolve();
     await Promise.resolve();
 

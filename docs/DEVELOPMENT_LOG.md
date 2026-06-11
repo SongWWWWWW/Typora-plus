@@ -5537,3 +5537,31 @@ Review:
 Known limitations:
 
 - Sidebar open-workspace and refresh-workspace buttons still execute command ids from the shell command executor because they are command surface entries rather than resource-opening rows.
+
+## 2026-06-11 - P2 Command Palette Execute Handler
+
+Completed:
+
+- Added a focused Command Palette execute handler factory that adapts selected command ids into the existing command-palette execution action boundary.
+- Routed `Application.tsx` Command Palette `onExecute` wiring through the handler instead of dispatching command execution inline.
+- Preserved command service execution, close-after-dispatch behavior, stale operation-error clearing, generic failure mapping, and save-conflict forwarding.
+- Covered handler delegation alongside the existing command palette filtering and execution tests.
+
+Quality gate:
+
+- `npx vitest run packages/workbench/src/commandPaletteModel.test.ts`: passed, 8 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 55 files / 566 tests, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Dev server smoke check: passed at `http://127.0.0.1:5173`; status 200 and root element present
+
+Review:
+
+- Command Palette command selection now reaches `ICommandService` through a Workbench-local handler and the shared command action runner instead of a shell-local inline execute callback.
+- `Application.tsx` still renders Command Palette and supplies shell state callbacks, while `commandPaletteModel` owns search, execute dispatch, close follow-up, and error/save-conflict mapping.
+- No new dependency, configuration key, storage path, visual token, extra documentation file, or hard-coded platform assumption was introduced.
+
+Known limitations:
+
+- Command Palette query and active-row state remain local to the overlay because they are surface interaction state.

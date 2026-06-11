@@ -40,7 +40,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import {
   createCommandPaletteExecutionCallbacks,
-  executeCommandPaletteCommand,
+  createCommandPaletteExecuteHandler,
   filterCommandPaletteCommands
 } from "./commandPaletteModel";
 import {
@@ -367,6 +367,10 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
     setPaletteOpen,
     setSaveConflict
   });
+  const commandPaletteExecuteHandler = createCommandPaletteExecuteHandler(
+    services,
+    commandPaletteExecutionCallbacks
+  );
   const settingsUpdateHandler = createWorkbenchConfigurationUpdateHandler(services, {
     setOperationError
   });
@@ -448,9 +452,7 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
         commands={commandSurface.commands}
         getKeybindingLabel={commandSurface.getKeybindingLabel}
         onClose={commandPaletteExecutionCallbacks.closePalette}
-        onExecute={(id) => {
-          executeCommandPaletteCommand(services, id, commandPaletteExecutionCallbacks);
-        }}
+        onExecute={commandPaletteExecuteHandler}
       />
       <QuickOpen
         open={quickOpen}
