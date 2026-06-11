@@ -4808,3 +4808,32 @@ Review:
 Known limitations:
 
 - Command Palette still closes itself inline after command execution because that focus/visibility behavior is local to the palette surface.
+
+## 2026-06-11 - P2 Workbench Workspace Indexing Action
+
+Completed:
+
+- Added a focused Workbench workspace-indexing helper for active workspace reindex actions.
+- Replaced inline `Application.tsx` `indexService.indexWorkspace()` orchestration with a helper call.
+- Kept no-workspace behavior as a no-op that does not clear stale operation errors.
+- Routed workspace indexing failures through the existing Workbench action runner.
+- Covered no-workspace, direct indexing, action-runner success, action no-op, and failure mapping paths.
+
+Quality gate:
+
+- `npx vitest run packages/workbench/src/workbenchWorkspaceIndexing.test.ts packages/workbench/src/workbenchActionRunner.test.ts packages/workbench/src/savedFileIndexing.test.ts`: passed, 14 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 523 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Dev server smoke check: passed at `http://127.0.0.1:5173`; status 200 and root element present
+
+Review:
+
+- Workspace reindexing remains Workbench-local and consumes the public index service boundary without putting service orchestration inside React.
+- The shell still owns the effect dependency policy, including reindexing after workspace file-size configuration changes.
+- No new dependency, configuration key, storage path, visual token, extra documentation file, or hard-coded platform assumption was introduced.
+
+Known limitations:
+
+- Command Palette still closes itself inline after command execution because that focus/visibility behavior is local to the palette surface.

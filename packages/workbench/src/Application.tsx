@@ -100,6 +100,7 @@ import {
   openWorkbenchQuickOpenFile,
   openWorkbenchRecentWorkspaceResource
 } from "./workbenchResourceOpening";
+import { indexWorkbenchWorkspaceAction } from "./workbenchWorkspaceIndexing";
 import {
   defaultWorkbenchSideView,
   workbenchSideViewTitle,
@@ -204,17 +205,10 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
   }, [selectedTag, tags]);
 
   useEffect(() => {
-    const workspaceFiles = workspace.files;
-
-    if (!workspaceFiles) {
-      return;
-    }
-
-    void runWorkbenchAction(
-      () => services.indexService.indexWorkspace(workspaceFiles),
+    void indexWorkbenchWorkspaceAction(services, workspace.files, {
       setOperationError,
       setSaveConflict
-    );
+    });
   }, [configuration.workspace.searchMaxFileSizeBytes, services, workspace.files]);
 
   useEffect(() => {
