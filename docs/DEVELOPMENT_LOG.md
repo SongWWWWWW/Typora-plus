@@ -6977,3 +6977,37 @@ Known limitations:
 - Remote sync progress streaming and richer conflict-resolution UI are still not implemented.
 - Execution result feedback is summary-level; per-operation execution status remains provider-returned operation data only.
 - Workspace context is keyword search/snippet based, not semantic or vector retrieval.
+
+## 2026-06-11 - P2 Remote Sync Execution Cancellation UI
+
+Completed:
+
+- Added a focused remote sync dialog model for execute/cancel button state, blocked-state text, and execution summary formatting.
+- Added running-state handling around explicit remote sync execution so the dialog disables duplicate Execute clicks while a provider request is pending.
+- Wired a per-execution `AbortController` into `runWorkbenchExecuteWorkspaceRemoteSyncAction()` so Cancel and Close propagate `AbortSignal` cancellation to providers.
+- Cleared stale execution state when a new plan is created or the plan dialog is closed.
+- Added model tests for idle, running, executed, conflict-blocked, no-op-blocked, and summary-format states.
+- Updated maintained docs to record the UI cancellation boundary without introducing provider-specific Feishu details.
+
+Quality gate:
+
+- `npx vitest run packages/workbench/src/workbenchRemoteSyncDialogModel.test.ts packages/workbench/src/workbenchRemoteSyncActions.test.ts packages/workbench/src/workbenchRemoteSyncRequestModel.test.ts`: passed, 3 files / 12 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 75 files / 697 tests, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Dev server smoke check at `http://127.0.0.1:5173/`: status 200 and root element present
+
+Review:
+
+- Workbench still routes execution through `IRemoteSyncService.executePlan()` and passes only provider-neutral requests plus `AbortSignal`.
+- The dialog model keeps execution-state policy out of JSX and avoids duplicating conflict/no-op logic in React.
+- No Feishu provider id, endpoint, OAuth scope, token, storage path, or credential behavior was introduced.
+- Cancel/Close cancellation reuses the existing remote sync provider cancellation path instead of adding UI-owned provider policy.
+
+Known limitations:
+
+- Feishu OAuth and a built-in Feishu provider remain future work.
+- Remote sync progress streaming and richer conflict-resolution UI are still not implemented.
+- Execution result feedback is summary-level; per-operation execution status remains provider-returned operation data only.
+- Workspace context is keyword search/snippet based, not semantic or vector retrieval.

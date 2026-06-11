@@ -52,11 +52,14 @@ import { registerWorkbenchCommands } from "./workbenchCommandRegistration";
 import { createWorkbenchCommandSurface } from "./workbenchCommandSurface";
 import { copyWorkbenchTextToClipboard } from "./workbenchClipboard";
 import {
-  getWorkbenchRemoteSyncPlanExecutionBlockReason,
   runWorkbenchExecuteWorkspaceRemoteSyncAction,
   type WorkbenchRemoteSyncExecutionResult,
   type WorkbenchRemoteSyncPlanResult
 } from "./workbenchRemoteSyncActions";
+import {
+  createWorkbenchRemoteSyncDialogExecutionState,
+  formatWorkbenchRemoteSyncSummary
+} from "./workbenchRemoteSyncDialogModel";
 import {
   applyWorkbenchStateContext,
   createWorkbenchCapabilityContext
@@ -174,6 +177,7 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
   const [aiResponse, setAiResponse] = useState<AiTextResponse | undefined>();
   const [remoteSyncPlan, setRemoteSyncPlan] = useState<WorkbenchRemoteSyncPlanResult | undefined>();
   const [remoteSyncExecution, setRemoteSyncExecution] = useState<WorkbenchRemoteSyncExecutionResult | undefined>();
+  const [remoteSyncExecuting, setRemoteSyncExecuting] = useState(false);
   const [saveConflict, setSaveConflict] = useState<FileSaveConflict | undefined>();
   const [indexStatus, setIndexStatus] = useState<WorkspaceIndexStatus>(initialState.indexStatus);
   const [commandRevision, setCommandRevision] = useState(0);
@@ -181,6 +185,7 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
   const [aiProviderRevision, setAiProviderRevision] = useState(0);
   const [remoteSyncProviderRevision, setRemoteSyncProviderRevision] = useState(0);
   const editorRef = useRef<MarkdownEditorHandle | null>(null);
+  const remoteSyncExecutionAbortRef = useRef<AbortController | null>(null);
   const titlebarMenuItems = useMenuItems(services, workbenchMenuIds.titlebarPrimary);
   const activitybarPrimaryMenuItems = useMenuItems(services, workbenchMenuIds.activitybarPrimary);
   const activitybarSecondaryMenuItems = useMenuItems(services, workbenchMenuIds.activitybarSecondary);
@@ -302,6 +307,9 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
       setPaletteOpen,
       setQuickOpen,
       setRemoteSyncPlan: (result) => {
+        remoteSyncExecutionAbortRef.current?.abort();
+        remoteSyncExecutionAbortRef.current = null;
+        setRemoteSyncExecuting(false);
         setRemoteSyncPlan(result);
         setRemoteSyncExecution(undefined);
       },
@@ -495,22 +503,51 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
         <RemoteSyncPlanDialog
           result={remoteSyncPlan}
           execution={remoteSyncExecution}
+          executing={remoteSyncExecuting}
           onClose={() => {
+            remoteSyncExecutionAbortRef.current?.abort();
+            remoteSyncExecutionAbortRef.current = null;
+            setRemoteSyncExecuting(false);
             setRemoteSyncPlan(undefined);
             setRemoteSyncExecution(undefined);
           }}
-          onExecute={() => runWorkbenchAction(
-            async () => {
-              const execution = await runWorkbenchExecuteWorkspaceRemoteSyncAction(services, remoteSyncPlan, {
-                metadata: {
-                  surface: "dialog"
+          onCancel={() => remoteSyncExecutionAbortRef.current?.abort()}
+          onExecute={() => {
+            if (remoteSyncExecuting) {
+              return Promise.resolve(false);
+            }
+
+            const controller = new AbortController();
+            remoteSyncExecutionAbortRef.current = controller;
+            setRemoteSyncExecuting(true);
+            setRemoteSyncExecution(undefined);
+
+            return runWorkbenchAction(
+              async () => {
+                const execution = await runWorkbenchExecuteWorkspaceRemoteSyncAction(services, remoteSyncPlan, {
+                  metadata: {
+                    surface: "dialog"
+                  },
+                  signal: controller.signal
+                });
+
+                if (remoteSyncExecutionAbortRef.current === controller && !controller.signal.aborted) {
+                  setRemoteSyncExecution(execution);
+                }
+
+                return execution;
+              },
+              setOperationError,
+              setSaveConflict
+            )
+              .then(Boolean)
+              .finally(() => {
+                if (remoteSyncExecutionAbortRef.current === controller) {
+                  remoteSyncExecutionAbortRef.current = null;
+                  setRemoteSyncExecuting(false);
                 }
               });
-              setRemoteSyncExecution(execution);
-            },
-            setOperationError,
-            setSaveConflict
-          ).then(Boolean)}
+          }}
         />
       ) : null}
       <CommandPalette
@@ -1249,19 +1286,25 @@ function formatAiResponseAppendLabel(appendState: "idle" | "appended" | "failed"
 
 function RemoteSyncPlanDialog({
   execution,
+  executing,
+  onCancel,
   onExecute,
   result,
   onClose
 }: {
   readonly execution: WorkbenchRemoteSyncExecutionResult | undefined;
+  readonly executing: boolean;
+  readonly onCancel: () => void;
   readonly onExecute: () => Promise<boolean>;
   readonly result: WorkbenchRemoteSyncPlanResult;
   readonly onClose: () => void;
 }) {
   const visibleOperations = result.plan.operations.slice(0, 6);
   const hiddenOperationCount = Math.max(result.plan.operations.length - visibleOperations.length, 0);
-  const blockReason = getWorkbenchRemoteSyncPlanExecutionBlockReason(result.plan);
-  const canExecute = !execution && !blockReason;
+  const executionState = createWorkbenchRemoteSyncDialogExecutionState(result.plan, {
+    executing,
+    execution
+  });
 
   return (
     <div className="tp-dialog-overlay" role="presentation" onMouseDown={onClose}>
@@ -1288,7 +1331,7 @@ function RemoteSyncPlanDialog({
             {result.request.dryRun ? <span>dry run</span> : null}
           </div>
           <p className="tp-ai-response">
-            {formatRemoteSyncPlanSummary(result.plan.summary)}
+            {formatWorkbenchRemoteSyncSummary(result.plan.summary)}
           </p>
           {visibleOperations.length > 0 ? (
             <div className="tp-result-list">
@@ -1308,22 +1351,31 @@ function RemoteSyncPlanDialog({
           ) : (
             <div className="tp-empty-row">No operations planned</div>
           )}
-          {execution ? (
-            <p className="tp-ai-response">
-              Executed: {formatRemoteSyncPlanSummary(execution.result.summary)}
-            </p>
-          ) : blockReason ? (
-            <div className="tp-empty-row">{blockReason}</div>
+          {executionState.statusMessage ? (
+            execution ? (
+              <p className="tp-ai-response">{executionState.statusMessage}</p>
+            ) : (
+              <div className="tp-empty-row">{executionState.statusMessage}</div>
+            )
           ) : null}
         </div>
         <div className="tp-dialog-actions">
+          {executionState.canCancel ? (
+            <button
+              className="tp-dialog-button"
+              type="button"
+              onClick={onCancel}
+            >
+              <span>Cancel</span>
+            </button>
+          ) : null}
           <button
             className="tp-dialog-button"
             type="button"
             onClick={onExecute}
-            disabled={!canExecute}
+            disabled={!executionState.canExecute}
           >
-            <span>{execution ? "Executed" : "Execute"}</span>
+            <span>{executionState.executeLabel}</span>
           </button>
           <button className="tp-dialog-button tp-dialog-button-primary" type="button" onClick={onClose}>
             <span>Close</span>
@@ -1332,16 +1384,6 @@ function RemoteSyncPlanDialog({
       </section>
     </div>
   );
-}
-
-function formatRemoteSyncPlanSummary(summary: WorkbenchRemoteSyncPlanResult["plan"]["summary"]): string {
-  return [
-    `${summary.creates} create`,
-    `${summary.updates} update`,
-    `${summary.deletes} delete`,
-    `${summary.skips} skip`,
-    `${summary.conflicts} conflict`
-  ].join(", ");
 }
 
 function CommandPalette({
