@@ -3,6 +3,7 @@ import type {
   IWorkspaceService,
   RemoteSyncPlan,
   RemoteSyncPlanRequest,
+  RemoteSyncProgress,
   RemoteSyncResult
 } from "@typora-plus/platform";
 import {
@@ -29,6 +30,7 @@ export interface WorkbenchRemoteSyncPlanResult {
 
 export interface WorkbenchRemoteSyncExecutionOptions {
   readonly metadata?: Readonly<Record<string, string>>;
+  readonly onProgress?: (progress: RemoteSyncProgress) => void;
   readonly signal?: AbortSignal;
 }
 
@@ -107,6 +109,7 @@ function createWorkbenchRemoteSyncExecutionRequest(
   const {
     dryRun: _dryRun,
     metadata,
+    onProgress: _onProgress,
     signal: _signal,
     ...request
   } = planRequest;
@@ -119,6 +122,7 @@ function createWorkbenchRemoteSyncExecutionRequest(
       ...options.metadata,
       action: workbenchRemoteSyncRequestActions.executeWorkspace
     },
-    ...(options.signal !== undefined ? { signal: options.signal } : {})
+    ...(options.signal !== undefined ? { signal: options.signal } : {}),
+    ...(options.onProgress !== undefined ? { onProgress: options.onProgress } : {})
   };
 }

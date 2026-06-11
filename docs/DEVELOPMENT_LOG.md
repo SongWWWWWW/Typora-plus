@@ -7076,3 +7076,37 @@ Known limitations:
 - Remote sync progress streaming and richer conflict-resolution UI are still not implemented.
 - Execution result feedback is summary-level; per-operation execution status remains provider-returned operation data only.
 - Workspace context is keyword search/snippet based, not semantic or vector retrieval.
+
+## 2026-06-11 - P2 Remote Sync Execution Progress
+
+Completed:
+
+- Added a provider-neutral `RemoteSyncProgress` contract and optional execution progress callback on remote sync requests.
+- Wrapped provider progress callbacks at the platform boundary so progress messages, counts, and optional operations are normalized before callers consume them.
+- Routed extension-host remote sync execution progress through a protocol notification from runtime providers back to broker request callbacks.
+- Displayed the latest provider progress in the Workbench remote sync plan dialog while execution is running.
+- Added focused tests for platform progress normalization, Workbench action/model progress handling, protocol serialization, runtime notification emission, broker callback delivery, and session routing.
+- Updated maintained docs without adding Feishu-specific provider ids, endpoints, OAuth scopes, tokens, storage paths, or credentials.
+
+Quality gate:
+
+- `npx vitest run packages/platform/src/remoteSync.test.ts packages/platform/src/extensionHostProtocol.test.ts packages/platform/src/extensionHostProtocolRuntime.test.ts packages/platform/src/extensionHostRuntimeBroker.test.ts packages/platform/src/extensionHostProtocolSession.test.ts packages/workbench/src/workbenchRemoteSyncActions.test.ts packages/workbench/src/workbenchRemoteSyncDialogModel.test.ts`: passed, 7 files / 80 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 75 files / 703 tests, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Implementation hardcode scan for endpoint/secret/token/model patterns: passed
+- Dev server smoke check at `http://127.0.0.1:5173/`: status 200 and root element present
+
+Review:
+
+- Progress remains provider-neutral: providers can report a message, optional completed/total counts, and an optional normalized operation, but Workbench does not infer cloud-specific semantics.
+- Out-of-process extension providers use the same progress contract through protocol notifications, keeping the main service, runtime, and broker paths aligned.
+- The UI keeps only the latest progress event for concise feedback and clears it on new plans, completion, close, or cancellation.
+
+Known limitations:
+
+- Feishu OAuth and a built-in Feishu provider remain future work.
+- Richer remote sync conflict-resolution UI is still not implemented.
+- Progress events are latest-state feedback, not a retained execution timeline.
+- Workspace AI context is keyword/snippet based, not semantic or vector retrieval.

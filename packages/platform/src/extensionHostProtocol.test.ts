@@ -32,6 +32,7 @@ import {
   createExtensionHostRemoteSyncCreatePlanRequestMessage,
   createExtensionHostRemoteSyncCreatePlanResultMessage,
   createExtensionHostRemoteSyncExecutePlanCancelMessage,
+  createExtensionHostRemoteSyncExecutePlanProgressMessage,
   createExtensionHostRemoteSyncExecutePlanRequestMessage,
   createExtensionHostRemoteSyncExecutePlanResultMessage,
   createExtensionHostRemoteSyncProviderRegisterRequestMessage,
@@ -458,6 +459,23 @@ describe("extension host protocol", () => {
       "notes.main",
       "notes.main.sync"
     );
+    const executeProgress = createExtensionHostRemoteSyncExecutePlanProgressMessage(
+      "request-sync-4",
+      "notes.main",
+      "notes.main.sync",
+      {
+        message: " Uploading ",
+        completed: 1,
+        total: 3,
+        operation: {
+          kind: "create",
+          target: "remote",
+          relativePath: " ./A.md ",
+          localUri: " file://C:/Notes/A.md ",
+          message: " Sent "
+        }
+      }
+    );
     const executeResult = createExtensionHostRemoteSyncExecutePlanResultMessage(
       "request-sync-5",
       "notes.main",
@@ -535,6 +553,24 @@ describe("extension host protocol", () => {
       extensionId: "notes.main",
       providerId: "notes.main.sync"
     });
+    expect(executeProgress).toEqual({
+      type: extensionHostProtocolMessageTypes.remoteSyncExecutePlanProgress,
+      requestId: "request-sync-4",
+      extensionId: "notes.main",
+      providerId: "notes.main.sync",
+      progress: {
+        message: "Uploading",
+        completed: 1,
+        total: 3,
+        operation: {
+          kind: "create",
+          target: "remote",
+          relativePath: "A.md",
+          localUri: "file://C:/Notes/A.md",
+          message: "Sent"
+        }
+      }
+    });
     expect(executeResult).toEqual({
       type: extensionHostProtocolMessageTypes.remoteSyncExecutePlanResult,
       requestId: "request-sync-5",
@@ -558,6 +594,7 @@ describe("extension host protocol", () => {
     expect(deserializeExtensionHostProtocolMessage(serializeExtensionHostProtocolMessage(createResult))).toEqual(createResult);
     expect(deserializeExtensionHostProtocolMessage(serializeExtensionHostProtocolMessage(execute))).toEqual(execute);
     expect(deserializeExtensionHostProtocolMessage(serializeExtensionHostProtocolMessage(executeCancel))).toEqual(executeCancel);
+    expect(deserializeExtensionHostProtocolMessage(serializeExtensionHostProtocolMessage(executeProgress))).toEqual(executeProgress);
     expect(deserializeExtensionHostProtocolMessage(serializeExtensionHostProtocolMessage(executeResult))).toEqual(executeResult);
     expect(deserializeExtensionHostProtocolMessage(serializeExtensionHostProtocolMessage(unregister))).toEqual(unregister);
     expect(() => createExtensionHostRemoteSyncProviderRegisterRequestMessage("request-sync-7", "notes.main", {
@@ -602,6 +639,16 @@ describe("extension host protocol", () => {
       "notes.main",
       "bad provider"
     )).toThrow("remote sync create plan cancel provider id is invalid");
+    expect(() => createExtensionHostRemoteSyncExecutePlanProgressMessage(
+      "request-sync-11",
+      "notes.main",
+      "notes.main.sync",
+      {
+        message: "Uploading",
+        completed: 2,
+        total: 1
+      }
+    )).toThrow("remote sync progress completed must not exceed total");
   });
 
   it("serializes runtime API result and error broker messages", () => {

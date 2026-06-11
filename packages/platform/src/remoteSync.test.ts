@@ -7,6 +7,7 @@ import {
   RemoteSyncService,
   type RemoteSyncPlan,
   type RemoteSyncPlanRequest,
+  type RemoteSyncProgress,
   type RemoteSyncProvider,
   type RemoteSyncRemoteResource,
   type RemoteSyncResource
@@ -122,6 +123,56 @@ describe("remote sync service", () => {
     }]);
     expect(executedPlans).toEqual([plan]);
     expect(executeRequests).toEqual(planRequests);
+  });
+
+  it("normalizes provider progress callbacks before they reach callers", async () => {
+    const service = new RemoteSyncService();
+    const fileUri = URI.file("C:/Notes/daily/today.md");
+    const progressEvents: RemoteSyncProgress[] = [];
+
+    service.registerProvider({
+      id: "sync.progress",
+      title: "Sync Progress",
+      createPlan() {
+        return plan("update");
+      },
+      executePlan(nextPlan, nextRequest) {
+        nextRequest.onProgress?.({
+          message: " Uploading note ",
+          completed: 1,
+          total: 2,
+          operation: {
+            kind: "update",
+            target: "remote",
+            relativePath: " daily\\today.md ",
+            localUri: fileUri,
+            message: " Sent "
+          }
+        });
+
+        return {
+          operations: nextPlan.operations,
+          summary: nextPlan.summary
+        };
+      }
+    });
+
+    await service.executePlan("sync.progress", plan("update"), request({
+      onProgress: (progress) => progressEvents.push(progress)
+    }));
+
+    expect(progressEvents).toEqual([{
+      message: "Uploading note",
+      completed: 1,
+      total: 2,
+      operation: {
+        kind: "update",
+        target: "remote",
+        relativePath: "daily/today.md",
+        localUri: fileUri,
+        message: "Sent"
+      }
+    }]);
   });
 
   it("returns provider metadata sorted by title and id", () => {
@@ -279,6 +330,22 @@ describe("remote sync service", () => {
         };
       }
     });
+    service.registerProvider({
+      id: "bad.progress",
+      title: "Bad Progress",
+      createPlan() {
+        return plan();
+      },
+      executePlan(_plan, nextRequest) {
+        nextRequest.onProgress?.({
+          message: "Uploading",
+          completed: 3,
+          total: 2
+        });
+
+        return result();
+      }
+    });
 
     await expect(service.createPlan("bad.result", request({
       direction: "sideways" as never
@@ -300,6 +367,12 @@ describe("remote sync service", () => {
       .toThrow("Remote sync plan summary creates must match operation count");
     await expect(service.executePlan("bad.summary", plan(), request())).rejects
       .toThrow("Remote sync result summary updates must match operation count");
+    await expect(service.executePlan("bad.result", plan(), request({
+      onProgress: "not a callback" as never
+    }))).rejects.toThrow("Remote sync progress callback must be a function");
+    await expect(service.executePlan("bad.progress", plan(), request({
+      onProgress: () => undefined
+    }))).rejects.toThrow("Remote sync progress completed must not exceed total");
   });
 
   it("creates normalized sync resources from workspace files", () => {
@@ -692,19 +765,19 @@ function remoteResource(
   };
 }
 
-function plan(): RemoteSyncPlan {
+function plan(kind: RemoteSyncPlan["operations"][number]["kind"] = "skip"): RemoteSyncPlan {
   return {
     operations: [{
-      kind: "skip",
-      target: "none",
+      kind,
+      target: kind === "conflict" ? "both" : kind === "skip" ? "none" : "remote",
       relativePath: "a.md"
     }],
     summary: {
-      creates: 0,
-      updates: 0,
-      deletes: 0,
-      skips: 1,
-      conflicts: 0
+      creates: kind === "create" ? 1 : 0,
+      updates: kind === "update" ? 1 : 0,
+      deletes: kind === "delete" ? 1 : 0,
+      skips: kind === "skip" ? 1 : 0,
+      conflicts: kind === "conflict" ? 1 : 0
     }
   };
 }

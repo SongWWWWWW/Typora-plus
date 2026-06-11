@@ -1,6 +1,7 @@
 import type {
   RemoteSyncOperation,
-  RemoteSyncPlan
+  RemoteSyncPlan,
+  RemoteSyncProgress
 } from "@typora-plus/platform";
 import type { WorkbenchRemoteSyncExecutionResult } from "./workbenchRemoteSyncActions";
 import { getWorkbenchRemoteSyncPlanExecutionBlockReason } from "./workbenchRemoteSyncActions";
@@ -23,6 +24,7 @@ export function createWorkbenchRemoteSyncDialogExecutionState(
   options: {
     readonly executing: boolean;
     readonly execution: WorkbenchRemoteSyncExecutionResult | undefined;
+    readonly progress?: RemoteSyncProgress | undefined;
   }
 ): WorkbenchRemoteSyncDialogExecutionState {
   if (options.execution) {
@@ -39,7 +41,9 @@ export function createWorkbenchRemoteSyncDialogExecutionState(
       canCancel: true,
       canExecute: false,
       executeLabel: "Executing",
-      statusMessage: "Execution in progress"
+      statusMessage: options.progress
+        ? `Execution in progress: ${formatWorkbenchRemoteSyncProgress(options.progress)}`
+        : "Execution in progress"
     };
   }
 
@@ -90,4 +94,17 @@ export function createWorkbenchRemoteSyncDialogOperationPreview(
 
 export function formatWorkbenchRemoteSyncOperationDetail(operation: RemoteSyncOperation): string {
   return operation.message ? `${operation.target}: ${operation.message}` : operation.target;
+}
+
+export function formatWorkbenchRemoteSyncProgress(progress: RemoteSyncProgress): string {
+  const count = progress.total !== undefined
+    ? `${progress.completed ?? 0}/${progress.total}`
+    : progress.completed !== undefined
+      ? `${progress.completed} completed`
+      : undefined;
+  const operation = progress.operation
+    ? `${progress.operation.kind} ${progress.operation.relativePath}`
+    : undefined;
+
+  return [count, progress.message, operation].filter(Boolean).join(": ");
 }

@@ -8,6 +8,7 @@ import type {
   MenuItem,
   RecentResource,
   RemoteSyncOperation,
+  RemoteSyncProgress,
   TextFileModel,
   TyporaPlusConfiguration,
   WorkspaceIndexedLink,
@@ -181,6 +182,7 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
   const [remoteSyncPlan, setRemoteSyncPlan] = useState<WorkbenchRemoteSyncPlanResult | undefined>();
   const [remoteSyncExecution, setRemoteSyncExecution] = useState<WorkbenchRemoteSyncExecutionResult | undefined>();
   const [remoteSyncExecuting, setRemoteSyncExecuting] = useState(false);
+  const [remoteSyncProgress, setRemoteSyncProgress] = useState<RemoteSyncProgress | undefined>();
   const [saveConflict, setSaveConflict] = useState<FileSaveConflict | undefined>();
   const [indexStatus, setIndexStatus] = useState<WorkspaceIndexStatus>(initialState.indexStatus);
   const [commandRevision, setCommandRevision] = useState(0);
@@ -315,6 +317,7 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
         setRemoteSyncExecuting(false);
         setRemoteSyncPlan(result);
         setRemoteSyncExecution(undefined);
+        setRemoteSyncProgress(undefined);
       },
       setSaveConflict,
       setSettingsOpen,
@@ -507,12 +510,14 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
           result={remoteSyncPlan}
           execution={remoteSyncExecution}
           executing={remoteSyncExecuting}
+          progress={remoteSyncProgress}
           onClose={() => {
             remoteSyncExecutionAbortRef.current?.abort();
             remoteSyncExecutionAbortRef.current = null;
             setRemoteSyncExecuting(false);
             setRemoteSyncPlan(undefined);
             setRemoteSyncExecution(undefined);
+            setRemoteSyncProgress(undefined);
           }}
           onCancel={() => remoteSyncExecutionAbortRef.current?.abort()}
           onExecute={() => {
@@ -524,6 +529,7 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
             remoteSyncExecutionAbortRef.current = controller;
             setRemoteSyncExecuting(true);
             setRemoteSyncExecution(undefined);
+            setRemoteSyncProgress(undefined);
 
             return runWorkbenchAction(
               async () => {
@@ -531,11 +537,17 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
                   metadata: {
                     surface: "dialog"
                   },
+                  onProgress: (progress) => {
+                    if (remoteSyncExecutionAbortRef.current === controller && !controller.signal.aborted) {
+                      setRemoteSyncProgress(progress);
+                    }
+                  },
                   signal: controller.signal
                 });
 
                 if (remoteSyncExecutionAbortRef.current === controller && !controller.signal.aborted) {
                   setRemoteSyncExecution(execution);
+                  setRemoteSyncProgress(undefined);
                 }
 
                 return execution;
@@ -1292,6 +1304,7 @@ function RemoteSyncPlanDialog({
   executing,
   onCancel,
   onExecute,
+  progress,
   result,
   onClose
 }: {
@@ -1299,6 +1312,7 @@ function RemoteSyncPlanDialog({
   readonly executing: boolean;
   readonly onCancel: () => void;
   readonly onExecute: () => Promise<boolean>;
+  readonly progress: RemoteSyncProgress | undefined;
   readonly result: WorkbenchRemoteSyncPlanResult;
   readonly onClose: () => void;
 }) {
@@ -1314,7 +1328,8 @@ function RemoteSyncPlanDialog({
     : undefined;
   const executionState = createWorkbenchRemoteSyncDialogExecutionState(result.plan, {
     executing,
-    execution
+    execution,
+    progress
   });
 
   return (

@@ -24,6 +24,7 @@ export interface RemoteSyncPlanRequest {
   readonly remoteScopeId?: string;
   readonly dryRun?: boolean;
   readonly metadata?: Readonly<Record<string, string>>;
+  readonly onProgress?: (progress: RemoteSyncProgress) => void;
   readonly signal?: AbortSignal;
 }
 
@@ -53,6 +54,13 @@ export interface RemoteSyncResult {
   readonly operations: readonly RemoteSyncOperation[];
   readonly summary: RemoteSyncSummary;
   readonly completedAt?: number;
+}
+
+export interface RemoteSyncProgress {
+  readonly message: string;
+  readonly completed?: number;
+  readonly total?: number;
+  readonly operation?: RemoteSyncOperation;
 }
 
 export interface RemoteSyncProvider {
@@ -390,6 +398,7 @@ function normalizeRemoteSyncPlanRequest(request: RemoteSyncPlanRequest): RemoteS
   const direction = normalizeRemoteSyncDirection(record.direction);
   const remoteScopeId = readOptionalString(record.remoteScopeId, "Remote sync scope id");
   const metadata = normalizeRemoteSyncMetadata(record.metadata);
+  const onProgress = readOptionalRemoteSyncProgressCallback(record.onProgress);
 
   return {
     workspaceUri: readRequiredUri(record.workspaceUri, "Remote sync workspace URI"),
@@ -398,6 +407,7 @@ function normalizeRemoteSyncPlanRequest(request: RemoteSyncPlanRequest): RemoteS
     ...(remoteScopeId ? { remoteScopeId } : {}),
     ...(typeof record.dryRun === "boolean" ? { dryRun: record.dryRun } : {}),
     ...(metadata !== undefined ? { metadata } : {}),
+    ...(onProgress ? { onProgress } : {}),
     ...(record.signal !== undefined ? { signal: record.signal as AbortSignal } : {})
   };
 }
@@ -493,22 +503,54 @@ function normalizeRemoteSyncOperations(value: unknown): readonly RemoteSyncOpera
     throw new Error("Remote sync operations must be an array");
   }
 
-  return value.map((operation, index) => {
-    const record = expectRecord(operation, `Remote sync operation ${index}`);
-    const remoteId = readOptionalString(record.remoteId, `Remote sync operation ${index} remote id`);
-    const message = readOptionalString(record.message, `Remote sync operation ${index} message`);
+  return value.map((operation, index) => normalizeRemoteSyncOperation(operation, index));
+}
 
-    return {
-      kind: normalizeRemoteSyncOperationKind(record.kind),
-      target: normalizeRemoteSyncOperationTarget(record.target),
-      relativePath: normalizeRelativePath(record.relativePath, `Remote sync operation ${index} relative path`),
-      ...(record.localUri !== undefined
-        ? { localUri: readRequiredUri(record.localUri, `Remote sync operation ${index} local URI`) }
-        : {}),
-      ...(remoteId ? { remoteId } : {}),
-      ...(message ? { message } : {})
-    };
-  });
+function normalizeRemoteSyncOperation(value: unknown, index: number): RemoteSyncOperation {
+  const record = expectRecord(value, `Remote sync operation ${index}`);
+  const remoteId = readOptionalString(record.remoteId, `Remote sync operation ${index} remote id`);
+  const message = readOptionalString(record.message, `Remote sync operation ${index} message`);
+
+  return {
+    kind: normalizeRemoteSyncOperationKind(record.kind),
+    target: normalizeRemoteSyncOperationTarget(record.target),
+    relativePath: normalizeRelativePath(record.relativePath, `Remote sync operation ${index} relative path`),
+    ...(record.localUri !== undefined
+      ? { localUri: readRequiredUri(record.localUri, `Remote sync operation ${index} local URI`) }
+      : {}),
+    ...(remoteId ? { remoteId } : {}),
+    ...(message ? { message } : {})
+  };
+}
+
+function normalizeRemoteSyncProgress(value: unknown): RemoteSyncProgress {
+  const record = expectRecord(value, "Remote sync progress");
+  const message = readRequiredString(record.message, "Remote sync progress message");
+  const completed = readOptionalRemoteSyncProgressCount(record.completed, "Remote sync progress completed");
+  const total = readOptionalRemoteSyncProgressCount(record.total, "Remote sync progress total");
+
+  if (completed !== undefined && total !== undefined && completed > total) {
+    throw new Error("Remote sync progress completed must not exceed total");
+  }
+
+  return {
+    message,
+    ...(completed !== undefined ? { completed } : {}),
+    ...(total !== undefined ? { total } : {}),
+    ...(record.operation !== undefined ? { operation: normalizeRemoteSyncOperation(record.operation, 0) } : {})
+  };
+}
+
+function readOptionalRemoteSyncProgressCallback(value: unknown): ((progress: RemoteSyncProgress) => void) | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (typeof value !== "function") {
+    throw new Error("Remote sync progress callback must be a function");
+  }
+
+  return (progress) => value(normalizeRemoteSyncProgress(progress));
 }
 
 function normalizeRemoteSyncSummary(value: unknown): RemoteSyncSummary {
@@ -647,6 +689,18 @@ function readOptionalFiniteNumber(value: unknown, label: string): number | undef
 function readSummaryCount(value: unknown, key: keyof RemoteSyncSummary): number {
   if (typeof value !== "number" || !Number.isInteger(value) || value < 0) {
     throw new Error(`Remote sync summary ${key} must be a non-negative integer`);
+  }
+
+  return value;
+}
+
+function readOptionalRemoteSyncProgressCount(value: unknown, label: string): number | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (typeof value !== "number" || !Number.isInteger(value) || value < 0) {
+    throw new Error(`${label} must be a non-negative integer`);
   }
 
   return value;

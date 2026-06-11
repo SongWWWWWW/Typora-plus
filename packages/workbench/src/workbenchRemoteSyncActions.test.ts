@@ -83,6 +83,7 @@ describe("workbench remote sync actions", () => {
 
   it("executes an existing workspace plan with a non-dry-run request", async () => {
     const signal = new AbortController().signal;
+    const onProgress = vi.fn();
     const planResult = await runWorkbenchPlanWorkspaceRemoteSyncAction(createServices(), {
       metadata: {
         surface: "command"
@@ -104,6 +105,7 @@ describe("workbench remote sync actions", () => {
       metadata: {
         surface: "dialog"
       },
+      onProgress,
       signal
     });
 
@@ -122,6 +124,7 @@ describe("workbench remote sync actions", () => {
         workspaceName: "Notes",
         workspaceScheme: "file"
       },
+      onProgress,
       signal
     });
     expect(executePlan).toHaveBeenCalledWith("a.sync", planResult.plan, execution.request);

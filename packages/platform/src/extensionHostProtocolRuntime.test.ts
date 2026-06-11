@@ -17,6 +17,7 @@ import {
   createExtensionHostRemoteSyncCreatePlanRequestMessage,
   createExtensionHostRemoteSyncCreatePlanResultMessage,
   createExtensionHostRemoteSyncExecutePlanCancelMessage,
+  createExtensionHostRemoteSyncExecutePlanProgressMessage,
   createExtensionHostRemoteSyncExecutePlanRequestMessage,
   createExtensionHostRemoteSyncExecutePlanResultMessage,
   extensionHostProtocolMessageTypes,
@@ -435,6 +436,12 @@ describe("extension host protocol runtime", () => {
             expect(input.direction).toBe("push");
             expect(input.signal).toBeDefined();
             expect(input.signal?.aborted).toBe(false);
+            input.onProgress?.({
+              message: "Uploading",
+              completed: 1,
+              total: 1,
+              operation: plan.operations[0]!
+            });
 
             return {
               operations: plan.operations,
@@ -491,6 +498,8 @@ describe("extension host protocol runtime", () => {
       "notes.remote.sync",
       syncRequest
     ));
+    await flushPromises();
+
     transport.receive(createExtensionHostRemoteSyncExecutePlanRequestMessage(
       "main-sync-2",
       "notes.remote",
@@ -506,6 +515,17 @@ describe("extension host protocol runtime", () => {
         "notes.remote",
         "notes.remote.sync",
         plan
+      ),
+      createExtensionHostRemoteSyncExecutePlanProgressMessage(
+        "main-sync-2",
+        "notes.remote",
+        "notes.remote.sync",
+        {
+          message: "Uploading",
+          completed: 1,
+          total: 1,
+          operation: plan.operations[0]!
+        }
       ),
       createExtensionHostRemoteSyncExecutePlanResultMessage(
         "main-sync-2",

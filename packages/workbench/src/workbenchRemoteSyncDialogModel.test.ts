@@ -5,6 +5,7 @@ import {
   createWorkbenchRemoteSyncDialogOperationPreview,
   createWorkbenchRemoteSyncDialogExecutionState,
   formatWorkbenchRemoteSyncOperationDetail,
+  formatWorkbenchRemoteSyncProgress,
   formatWorkbenchRemoteSyncSummary
 } from "./workbenchRemoteSyncDialogModel";
 
@@ -29,6 +30,24 @@ describe("workbench remote sync dialog model", () => {
       canExecute: false,
       executeLabel: "Executing",
       statusMessage: "Execution in progress"
+    });
+  });
+
+  it("includes the latest provider progress while execution is pending", () => {
+    expect(createWorkbenchRemoteSyncDialogExecutionState(plan("update"), {
+      executing: true,
+      execution: undefined,
+      progress: {
+        message: "Uploading note",
+        completed: 2,
+        total: 5,
+        operation: operation("update", "A.md")
+      }
+    })).toEqual({
+      canCancel: true,
+      canExecute: false,
+      executeLabel: "Executing",
+      statusMessage: "Execution in progress: 2/5: Uploading note: update A.md"
     });
   });
 
@@ -107,6 +126,16 @@ describe("workbench remote sync dialog model", () => {
       .toBe("remote: uploaded");
     expect(formatWorkbenchRemoteSyncOperationDetail(operation("skip", "B.md")))
       .toBe("none");
+  });
+
+  it("formats progress with optional counts and operation details", () => {
+    expect(formatWorkbenchRemoteSyncProgress({
+      message: "Finalizing",
+      completed: 3
+    })).toBe("3 completed: Finalizing");
+    expect(formatWorkbenchRemoteSyncProgress({
+      message: "Checking remote"
+    })).toBe("Checking remote");
   });
 });
 

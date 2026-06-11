@@ -8,6 +8,7 @@ import type {
   ExportProvider,
   MarkdownRendererProvider,
   MarkdownRendererRuntimeMetadata,
+  RemoteSyncProgress,
   RemoteSyncProvider
 } from "./index";
 import {
@@ -34,6 +35,7 @@ import {
   createExtensionHostRemoteSyncCreatePlanRequestMessage,
   createExtensionHostRemoteSyncCreatePlanResultMessage,
   createExtensionHostRemoteSyncExecutePlanCancelMessage,
+  createExtensionHostRemoteSyncExecutePlanProgressMessage,
   createExtensionHostRemoteSyncExecutePlanRequestMessage,
   createExtensionHostRemoteSyncExecutePlanResultMessage,
   createExtensionHostRemoteSyncProviderRegisterRequestMessage,
@@ -285,9 +287,11 @@ describe("extension host runtime broker", () => {
   it("registers remote sync provider proxies that call the remote host", async () => {
     const { context, controls } = createBrokerTestContext();
     const requests: ExtensionHostProtocolMessage[] = [];
-    const broker = new ExtensionHostRuntimeBroker(context, {
+    const progressEvents: RemoteSyncProgress[] = [];
+    let broker!: ExtensionHostRuntimeBroker;
+    broker = new ExtensionHostRuntimeBroker(context, {
       createRequestId: createSequentialRequestId(),
-      request: (message) => {
+      request: async (message) => {
         const request = readExtensionHostProtocolMessage(message);
         requests.push(request);
 
@@ -322,6 +326,18 @@ describe("extension host runtime broker", () => {
         }
 
         if (request.type === extensionHostProtocolMessageTypes.remoteSyncExecutePlan) {
+          await broker.handleMessage(createExtensionHostRemoteSyncExecutePlanProgressMessage(
+            request.requestId,
+            request.extensionId,
+            request.providerId,
+            {
+              message: "Uploading",
+              completed: 1,
+              total: 1,
+              operation: request.plan.operations[0]!
+            }
+          ));
+
           return createExtensionHostRemoteSyncExecutePlanResultMessage(
             request.requestId,
             request.extensionId,
@@ -345,6 +361,7 @@ describe("extension host runtime broker", () => {
         kind: "file" as const
       }],
       direction: "push" as const,
+      onProgress: (progress: RemoteSyncProgress) => progressEvents.push(progress),
       signal: new AbortController().signal
     };
 
@@ -397,6 +414,17 @@ describe("extension host runtime broker", () => {
       summary: plan.summary,
       completedAt: 456
     });
+    expect(progressEvents).toEqual([{
+      message: "Uploading",
+      completed: 1,
+      total: 1,
+      operation: {
+        kind: "create",
+        target: "remote",
+        relativePath: "A.md",
+        localUri: URI.file("C:/Notes/A.md")
+      }
+    }]);
     expect(requests[1]).toEqual(createExtensionHostRemoteSyncExecutePlanRequestMessage(
       "remoteSyncExecutePlan-2",
       "notes.remote",

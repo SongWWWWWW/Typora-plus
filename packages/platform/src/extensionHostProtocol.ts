@@ -22,6 +22,7 @@ import type {
   RemoteSyncOperationTarget,
   RemoteSyncPlan,
   RemoteSyncPlanRequest,
+  RemoteSyncProgress,
   RemoteSyncResource,
   RemoteSyncResult,
   RemoteSyncSummary
@@ -59,6 +60,7 @@ export const extensionHostProtocolMessageTypes = {
   remoteSyncCreatePlanResult: "extensionHost/remoteSync/createPlanResult",
   remoteSyncExecutePlan: "extensionHost/remoteSync/executePlan",
   remoteSyncExecutePlanCancel: "extensionHost/remoteSync/executePlanCancel",
+  remoteSyncExecutePlanProgress: "extensionHost/remoteSync/executePlanProgress",
   remoteSyncExecutePlanResult: "extensionHost/remoteSync/executePlanResult",
   remoteSyncProviderRegister: "extensionHost/remoteSync/providerRegister",
   remoteSyncProviderUnregister: "extensionHost/remoteSync/providerUnregister"
@@ -179,6 +181,7 @@ export type ExtensionHostProtocolMessage =
   | ExtensionHostRemoteSyncCreatePlanRequestMessage
   | ExtensionHostRemoteSyncCreatePlanResultMessage
   | ExtensionHostRemoteSyncExecutePlanCancelMessage
+  | ExtensionHostRemoteSyncExecutePlanProgressMessage
   | ExtensionHostRemoteSyncExecutePlanRequestMessage
   | ExtensionHostRemoteSyncExecutePlanResultMessage
   | ExtensionHostRemoteSyncProviderRegisterRequestMessage
@@ -435,6 +438,14 @@ export interface ExtensionHostRemoteSyncExecutePlanCancelMessage {
   readonly providerId: string;
 }
 
+export interface ExtensionHostRemoteSyncExecutePlanProgressMessage {
+  readonly type: typeof extensionHostProtocolMessageTypes.remoteSyncExecutePlanProgress;
+  readonly requestId: string;
+  readonly extensionId: string;
+  readonly providerId: string;
+  readonly progress: ExtensionHostProtocolRemoteSyncProgress;
+}
+
 export interface ExtensionHostRemoteSyncExecutePlanResultMessage {
   readonly type: typeof extensionHostProtocolMessageTypes.remoteSyncExecutePlanResult;
   readonly requestId: string;
@@ -492,7 +503,7 @@ export interface ExtensionHostProtocolRemoteSyncProviderRegistration
   extends Pick<RegisteredRemoteSyncProvider, "id" | "title"> {}
 
 export interface ExtensionHostProtocolRemoteSyncPlanRequest
-  extends Omit<RemoteSyncPlanRequest, "resources" | "signal" | "workspaceUri"> {
+  extends Omit<RemoteSyncPlanRequest, "onProgress" | "resources" | "signal" | "workspaceUri"> {
   readonly workspaceUri: string;
   readonly resources: readonly ExtensionHostProtocolRemoteSyncResource[];
 }
@@ -516,6 +527,10 @@ export interface ExtensionHostProtocolRemoteSyncPlan extends Omit<RemoteSyncPlan
 
 export interface ExtensionHostProtocolRemoteSyncResult extends Omit<RemoteSyncResult, "operations"> {
   readonly operations: readonly ExtensionHostProtocolRemoteSyncOperation[];
+}
+
+export interface ExtensionHostProtocolRemoteSyncProgress extends Omit<RemoteSyncProgress, "operation"> {
+  readonly operation?: ExtensionHostProtocolRemoteSyncOperation;
 }
 
 export interface ExtensionHostProtocolExtension {
@@ -1017,6 +1032,21 @@ export function createExtensionHostRemoteSyncExecutePlanCancelMessage(
   };
 }
 
+export function createExtensionHostRemoteSyncExecutePlanProgressMessage(
+  requestId: string,
+  extensionId: string,
+  providerId: string,
+  progress: ExtensionHostProtocolRemoteSyncProgress
+): ExtensionHostRemoteSyncExecutePlanProgressMessage {
+  return {
+    type: extensionHostProtocolMessageTypes.remoteSyncExecutePlanProgress,
+    requestId: normalizeRequestId(requestId, "Extension host remote sync execute plan progress request id"),
+    extensionId: normalizeExtensionId(extensionId, "Extension host remote sync execute plan progress extension id"),
+    providerId: normalizeRemoteSyncProviderId(providerId, "Extension host remote sync execute plan progress provider id"),
+    progress: normalizeProtocolRemoteSyncProgress(progress)
+  };
+}
+
 export function createExtensionHostRemoteSyncExecutePlanResultMessage(
   requestId: string,
   extensionId: string,
@@ -1111,6 +1141,8 @@ export function readExtensionHostProtocolMessage(value: unknown): ExtensionHostP
       return readRemoteSyncExecutePlanRequestMessage(record);
     case extensionHostProtocolMessageTypes.remoteSyncExecutePlanCancel:
       return readRemoteSyncExecutePlanCancelMessage(record);
+    case extensionHostProtocolMessageTypes.remoteSyncExecutePlanProgress:
+      return readRemoteSyncExecutePlanProgressMessage(record);
     case extensionHostProtocolMessageTypes.remoteSyncExecutePlanResult:
       return readRemoteSyncExecutePlanResultMessage(record);
     default:
@@ -1494,6 +1526,18 @@ function readRemoteSyncExecutePlanCancelMessage(
     requestId: normalizeRequestId(record.requestId, "Extension host remote sync execute plan cancel request id"),
     extensionId: normalizeExtensionId(record.extensionId, "Extension host remote sync execute plan cancel extension id"),
     providerId: normalizeRemoteSyncProviderId(record.providerId, "Extension host remote sync execute plan cancel provider id")
+  };
+}
+
+function readRemoteSyncExecutePlanProgressMessage(
+  record: UnknownRecord
+): ExtensionHostRemoteSyncExecutePlanProgressMessage {
+  return {
+    type: extensionHostProtocolMessageTypes.remoteSyncExecutePlanProgress,
+    requestId: normalizeRequestId(record.requestId, "Extension host remote sync execute plan progress request id"),
+    extensionId: normalizeExtensionId(record.extensionId, "Extension host remote sync execute plan progress extension id"),
+    providerId: normalizeRemoteSyncProviderId(record.providerId, "Extension host remote sync execute plan progress provider id"),
+    progress: normalizeProtocolRemoteSyncProgress(record.progress)
   };
 }
 
@@ -2047,6 +2091,33 @@ function normalizeProtocolRemoteSyncResult(value: unknown): ExtensionHostProtoco
   };
 }
 
+function normalizeProtocolRemoteSyncProgress(value: unknown): ExtensionHostProtocolRemoteSyncProgress {
+  const record = expectRecord(value, "Extension host remote sync progress");
+  const completed = normalizeOptionalRemoteSyncProgressCount(
+    record.completed,
+    "Extension host remote sync progress completed"
+  );
+  const total = normalizeOptionalRemoteSyncProgressCount(
+    record.total,
+    "Extension host remote sync progress total"
+  );
+
+  if (completed !== undefined && total !== undefined && completed > total) {
+    throw new Error("Extension host remote sync progress completed must not exceed total");
+  }
+
+  return {
+    message: normalizeRequiredProtocolString(
+      record.message,
+      "Extension host remote sync progress message",
+      extensionHostProtocolLimits.remoteSyncMessageLength
+    ),
+    ...(completed !== undefined ? { completed } : {}),
+    ...(total !== undefined ? { total } : {}),
+    ...(record.operation !== undefined ? { operation: normalizeProtocolRemoteSyncOperation(record.operation, 0) } : {})
+  };
+}
+
 function normalizeProtocolRemoteSyncOperations(
   value: unknown
 ): readonly ExtensionHostProtocolRemoteSyncOperation[] {
@@ -2451,6 +2522,22 @@ function normalizeRemoteSyncSummaryCount(value: unknown, key: keyof RemoteSyncSu
     throw new Error(
       `Extension host remote sync summary ${key} must be at most ${extensionHostProtocolLimits.remoteSyncOperationCount}`
     );
+  }
+
+  return value;
+}
+
+function normalizeOptionalRemoteSyncProgressCount(value: unknown, label: string): number | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (typeof value !== "number" || !Number.isInteger(value) || value < 0) {
+    throw new Error(`${label} must be a non-negative integer`);
+  }
+
+  if (value > extensionHostProtocolLimits.remoteSyncOperationCount) {
+    throw new Error(`${label} must be at most ${extensionHostProtocolLimits.remoteSyncOperationCount}`);
   }
 
   return value;

@@ -16,7 +16,7 @@ import type {
   MarkdownRendererRuntimeMetadata,
   RegisteredMarkdownRenderer
 } from "./markdownRenderers";
-import type { RemoteSyncPlan, RemoteSyncPlanRequest, RemoteSyncProvider, RemoteSyncResult } from "./remoteSync";
+import type { RemoteSyncPlan, RemoteSyncPlanRequest, RemoteSyncProgress, RemoteSyncProvider, RemoteSyncResult } from "./remoteSync";
 import {
   createExtensionHostActivationErrorMessage,
   createExtensionHostActivationResultMessage,
@@ -38,6 +38,7 @@ import {
   createExtensionHostMarkdownRendererRenderResultMessage,
   createExtensionHostMarkdownRendererUnregisterRequestMessage,
   createExtensionHostRemoteSyncCreatePlanResultMessage,
+  createExtensionHostRemoteSyncExecutePlanProgressMessage,
   createExtensionHostRemoteSyncExecutePlanResultMessage,
   createExtensionHostRemoteSyncProviderRegisterRequestMessage,
   createExtensionHostRemoteSyncProviderUnregisterRequestMessage,
@@ -54,6 +55,7 @@ import {
   type ExtensionHostMarkdownRendererRenderResultMessage,
   type ExtensionHostProtocolRemoteSyncPlan,
   type ExtensionHostProtocolRemoteSyncPlanRequest,
+  type ExtensionHostProtocolRemoteSyncProgress,
   type ExtensionHostProtocolRemoteSyncResult,
   type ExtensionHostRemoteSyncCreatePlanCancelMessage,
   type ExtensionHostRemoteSyncCreatePlanRequestMessage,
@@ -524,7 +526,25 @@ export class ExtensionHostProtocolRuntime extends Disposable {
 
       const result = await provider.executePlan(
         toRuntimeRemoteSyncPlan(message.plan),
-        toRuntimeRemoteSyncPlanRequest(message.request, activeRequest.controller.signal)
+        toRuntimeRemoteSyncPlanRequest(
+          message.request,
+          activeRequest.controller.signal,
+          (progress) => {
+            if (activeRequest.cancelled) {
+              return;
+            }
+
+            const progressMessage = createExtensionHostRemoteSyncExecutePlanProgressMessage(
+              message.requestId,
+              message.extensionId,
+              message.providerId,
+              toProtocolRemoteSyncProgress(progress)
+            );
+
+            Promise.resolve(this.transport.send(progressMessage))
+              .catch((error: unknown) => this.reportError(toErrorLike(error)));
+          }
+        )
       );
 
       if (activeRequest.cancelled) {
@@ -1073,7 +1093,8 @@ function createRuntimeProviderRequestKey(extensionId: string, requestId: string)
 
 function toRuntimeRemoteSyncPlanRequest(
   request: ExtensionHostProtocolRemoteSyncPlanRequest,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  onProgress?: RemoteSyncPlanRequest["onProgress"]
 ): RemoteSyncPlanRequest {
   return {
     workspaceUri: URI.parse(request.workspaceUri),
@@ -1090,6 +1111,7 @@ function toRuntimeRemoteSyncPlanRequest(
     ...(request.remoteScopeId ? { remoteScopeId: request.remoteScopeId } : {}),
     ...(request.dryRun !== undefined ? { dryRun: request.dryRun } : {}),
     ...(request.metadata ? { metadata: request.metadata } : {}),
+    ...(onProgress ? { onProgress } : {}),
     ...(signal ? { signal } : {})
   };
 }
@@ -1127,6 +1149,24 @@ function toProtocolRemoteSyncResult(result: RemoteSyncResult): ExtensionHostProt
     operations: toProtocolRemoteSyncPlan(result).operations,
     summary: result.summary,
     ...(result.completedAt !== undefined ? { completedAt: result.completedAt } : {})
+  };
+}
+
+function toProtocolRemoteSyncProgress(progress: RemoteSyncProgress): ExtensionHostProtocolRemoteSyncProgress {
+  return {
+    message: progress.message,
+    ...(progress.completed !== undefined ? { completed: progress.completed } : {}),
+    ...(progress.total !== undefined ? { total: progress.total } : {}),
+    ...(progress.operation ? {
+      operation: {
+        kind: progress.operation.kind,
+        target: progress.operation.target,
+        relativePath: progress.operation.relativePath,
+        ...(progress.operation.localUri ? { localUri: progress.operation.localUri.toString() } : {}),
+        ...(progress.operation.remoteId ? { remoteId: progress.operation.remoteId } : {}),
+        ...(progress.operation.message ? { message: progress.operation.message } : {})
+      }
+    } : {})
   };
 }
 

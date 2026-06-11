@@ -1,7 +1,7 @@
 import { Disposable, URI, type IDisposable } from "@typora-plus/base";
 import type { AiTextRequest } from "./ai";
 import type { ExtensionContext } from "./extensions";
-import type { RemoteSyncPlan, RemoteSyncPlanRequest, RemoteSyncResult } from "./remoteSync";
+import type { RemoteSyncPlan, RemoteSyncPlanRequest, RemoteSyncProgress, RemoteSyncResult } from "./remoteSync";
 import {
   createExtensionHostAiTextCancelMessage,
   createExtensionHostAiTextRequestMessage,
@@ -22,9 +22,11 @@ import {
   type ExtensionHostExportDocumentResultMessage,
   type ExtensionHostMarkdownRendererRenderResultMessage,
   type ExtensionHostRemoteSyncCreatePlanResultMessage,
+  type ExtensionHostRemoteSyncExecutePlanProgressMessage,
   type ExtensionHostRemoteSyncExecutePlanResultMessage,
   type ExtensionHostProtocolRemoteSyncPlan,
   type ExtensionHostProtocolRemoteSyncPlanRequest,
+  type ExtensionHostProtocolRemoteSyncProgress,
   type ExtensionHostProtocolRemoteSyncResult,
   type ExtensionHostProtocolError,
   type ExtensionHostProtocolMessage
@@ -56,6 +58,10 @@ export class ExtensionHostRuntimeBroker extends Disposable {
   private readonly commandDisposables = new Map<string, IDisposable>();
   private readonly exportProviderDisposables = new Map<string, IDisposable>();
   private readonly markdownRendererDisposables = new Map<string, IDisposable>();
+  private readonly remoteSyncProgressCallbacks = new Map<string, {
+    readonly callback: (progress: RemoteSyncProgress) => void;
+    readonly providerId: string;
+  }>();
   private readonly remoteSyncProviderDisposables = new Map<string, IDisposable>();
   private requestCounter = 0;
 
@@ -128,6 +134,9 @@ export class ExtensionHostRuntimeBroker extends Disposable {
           return createExtensionHostApiResultMessage(message.requestId, message.extensionId);
         case extensionHostProtocolMessageTypes.remoteSyncProviderUnregister:
           this.unregisterProxy(this.remoteSyncProviderDisposables, message.providerId, "remote sync provider");
+          return createExtensionHostApiResultMessage(message.requestId, message.extensionId);
+        case extensionHostProtocolMessageTypes.remoteSyncExecutePlanProgress:
+          this.reportRemoteSyncExecutePlanProgress(message);
           return createExtensionHostApiResultMessage(message.requestId, message.extensionId);
         default:
           throw new Error(`Extension host runtime broker cannot handle message type: ${message.type}`);
@@ -321,6 +330,13 @@ export class ExtensionHostRuntimeBroker extends Disposable {
           request.signal?.addEventListener("abort", abortListener, { once: true });
         }
 
+        if (request.onProgress) {
+          this.remoteSyncProgressCallbacks.set(requestId, {
+            callback: request.onProgress,
+            providerId
+          });
+        }
+
         try {
           const response = await this.sendRemoteSyncExecutePlanRequest(requestId, providerId, plan, request);
           assertResponseIdentity(response, requestId, this.context.extension.id);
@@ -335,6 +351,8 @@ export class ExtensionHostRuntimeBroker extends Disposable {
 
           return toRuntimeRemoteSyncResult((response as ExtensionHostRemoteSyncExecutePlanResultMessage).result);
         } finally {
+          this.remoteSyncProgressCallbacks.delete(requestId);
+
           if (abortListener) {
             request.signal?.removeEventListener("abort", abortListener);
           }
@@ -447,6 +465,18 @@ export class ExtensionHostRuntimeBroker extends Disposable {
     ));
   }
 
+  private reportRemoteSyncExecutePlanProgress(
+    message: ExtensionHostRemoteSyncExecutePlanProgressMessage
+  ): void {
+    const registration = this.remoteSyncProgressCallbacks.get(message.requestId);
+
+    if (!registration || registration.providerId !== message.providerId) {
+      return;
+    }
+
+    registration.callback(toRuntimeRemoteSyncProgress(message.progress));
+  }
+
   private unregisterProxy(disposables: Map<string, IDisposable>, key: string, label: string): void {
     const disposable = disposables.get(key);
 
@@ -475,6 +505,7 @@ export class ExtensionHostRuntimeBroker extends Disposable {
     this.commandDisposables.clear();
     this.exportProviderDisposables.clear();
     this.markdownRendererDisposables.clear();
+    this.remoteSyncProgressCallbacks.clear();
     this.remoteSyncProviderDisposables.clear();
     super.dispose();
   }
@@ -498,6 +529,7 @@ function getRuntimeRequestInfo(
     case extensionHostProtocolMessageTypes.markdownRendererUnregister:
     case extensionHostProtocolMessageTypes.remoteSyncProviderRegister:
     case extensionHostProtocolMessageTypes.remoteSyncProviderUnregister:
+    case extensionHostProtocolMessageTypes.remoteSyncExecutePlanProgress:
       return {
         requestId: message.requestId,
         extensionId: message.extensionId
@@ -577,6 +609,24 @@ function toRuntimeRemoteSyncResult(result: ExtensionHostProtocolRemoteSyncResult
     operations: toRuntimeRemoteSyncPlan(result).operations,
     summary: result.summary,
     ...(result.completedAt !== undefined ? { completedAt: result.completedAt } : {})
+  };
+}
+
+function toRuntimeRemoteSyncProgress(progress: ExtensionHostProtocolRemoteSyncProgress): RemoteSyncProgress {
+  return {
+    message: progress.message,
+    ...(progress.completed !== undefined ? { completed: progress.completed } : {}),
+    ...(progress.total !== undefined ? { total: progress.total } : {}),
+    ...(progress.operation ? {
+      operation: {
+        kind: progress.operation.kind,
+        target: progress.operation.target,
+        relativePath: progress.operation.relativePath,
+        ...(progress.operation.localUri ? { localUri: URI.parse(progress.operation.localUri) } : {}),
+        ...(progress.operation.remoteId ? { remoteId: progress.operation.remoteId } : {}),
+        ...(progress.operation.message ? { message: progress.operation.message } : {})
+      }
+    } : {})
   };
 }
 
