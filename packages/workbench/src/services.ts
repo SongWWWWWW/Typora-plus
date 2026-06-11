@@ -69,6 +69,7 @@ import {
   applyWorkbenchCapabilityContext
 } from "./workbenchContextModel";
 import { synchronizeWorkbenchConfiguredAiProviders } from "./workbenchConfiguredAiProviders";
+import { synchronizeWorkbenchConfiguredRemoteSyncProviders } from "./workbenchConfiguredRemoteSyncProviders";
 
 export interface WorkbenchServices {
   readonly serviceCollection: ServiceCollection;
@@ -139,6 +140,10 @@ export function createWorkbenchServices(): WorkbenchServices {
     aiService,
     configurationService
   }, configuredAiProviderOptions);
+  const configuredRemoteSyncProviders = synchronizeWorkbenchConfiguredRemoteSyncProviders({
+    configurationService,
+    remoteSyncService
+  }, undefined);
 
   serviceCollection.set(IAttachmentService, attachmentService);
   serviceCollection.set(IAiService, aiService);
@@ -186,6 +191,7 @@ export function createWorkbenchServices(): WorkbenchServices {
   exportService.registerProvider(markdownHtmlExportProvider);
   extensionService.registerExtension(defaultWorkbenchExtensionManifest);
   void configuredAiProviders;
+  void configuredRemoteSyncProviders;
   applyWorkbenchConfigurationToServices({
     attachmentService,
     indexService,

@@ -7534,3 +7534,34 @@ Known limitations:
 - No configured remote sync provider factory consumes profiles yet.
 - No Feishu Drive provider, OAuth authorization flow, token refresh flow, upload/download adapter, folder mapping, pagination, rate-limit backoff, or streaming transfer path is implemented yet.
 - No Codex SDK/app-server integration is implemented; AI user-facing note commands still rely on registered text providers, with no built-in provider defaults.
+
+## 2026-06-12 - P2 Configured Remote Sync Provider Factory
+
+Completed:
+
+- Added a platform configured remote sync provider factory boundary that turns validated remote sync profiles plus a native request transport into provider instances through an injected adapter factory.
+- Added a native factory-options helper that returns no options when the native remote sync request bridge is unavailable.
+- Added a Workbench configuration synchronizer that listens to `remoteSync.providers`, registers generated providers with `IRemoteSyncService`, disposes stale configured providers on configuration changes, and skips ids already registered by extensions or other providers.
+- Wired the synchronizer into Workbench service creation with no built-in adapter, preserving the zero-default provider policy while creating the future Feishu/raw-mirror adapter insertion point.
+- Kept route construction, OAuth scopes, endpoint names, token refresh, provider-specific retry, upload/download behavior, app ids, folder tokens, and decrypted secret handling out of Workbench.
+
+Quality gate:
+
+- `npx vitest run packages/platform/src/remoteSyncConfiguredProviders.test.ts packages/platform/src/remoteSyncProfileRequest.test.ts packages/workbench/src/workbenchConfiguredRemoteSyncProviders.test.ts packages/workbench/src/workbenchConfiguredAiProviders.test.ts packages/workbench/src/services.test.ts`: passed, 5 files / 30 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 81 files / 766 tests, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Configured remote sync provider implementation hardcode scan for endpoint/OAuth/token/secret/model/provider literals: passed
+
+Review:
+
+- The new layer mirrors the existing configured AI provider lifecycle: platform owns provider construction primitives, Workbench owns configuration observation and provider registration, and provider-specific behavior remains injected.
+- The synchronizer deliberately skips provider id collisions instead of replacing extension-owned registrations, preserving the VS Code-style contribution boundary where separate contribution sources do not override each other silently.
+- No built-in Feishu provider is registered yet, so users can configure profiles safely without triggering network calls until an adapter is explicitly supplied.
+
+Known limitations:
+
+- The adapter factory is still absent; profiles can be synchronized only when a future Feishu/raw-mirror provider implementation supplies one.
+- No Feishu Drive snapshot, pagination, folder mapping, OAuth authorization/refresh, upload/download, rate-limit backoff, or streaming transfer implementation exists yet.
+- Workbench service creation currently passes `undefined` adapter options, so configured remote sync profiles remain inert by default.

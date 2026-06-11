@@ -22,6 +22,7 @@ export * from "./keybindings";
 export * from "./markdownRenderers";
 export * from "./menus";
 export * from "./remoteSync";
+export * from "./remoteSyncConfiguredProviders";
 export * from "./remoteSyncNativeRequest";
 export * from "./remoteSyncProfileRequest";
 export * from "./responsesAiProvider";
