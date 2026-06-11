@@ -6396,3 +6396,33 @@ Known limitations:
 
 - Workbench command surfaces do not yet subscribe to command metadata change events.
 - AI and remote sync commands are still not registered as user-visible commands.
+
+## 2026-06-11 - P2 Workbench Command Surface Refresh
+
+Completed:
+
+- Routed `ICommandService.onDidChangeCommands` through the centralized Workbench state subscription helper.
+- Added Workbench command revision state so command surfaces refresh from command metadata changes.
+- Memoized the Workbench command surface snapshot on command revision and service identity.
+- Covered command revision callback forwarding and disposal with focused Workbench state subscription tests.
+- Updated maintained architecture notes to record command surface refresh as part of the command contribution pipeline.
+
+Quality gate:
+
+- `npx vitest run packages/workbench/src/workbenchStateSubscriptions.test.ts`: passed, 3 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 65 files / 625 tests, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Dev server smoke check: passed at `http://127.0.0.1:5173`; status 200 and root element present
+
+Review:
+
+- Dynamic command metadata can now move from platform service events into Workbench command surfaces without polling.
+- This keeps command metadata, command execution handlers, keybindings, menus, and React rendering separated.
+- No AI, sync, provider id, endpoint, model, token, or UI-specific command policy was introduced.
+
+Known limitations:
+
+- AI and remote sync commands are still not registered as user-visible commands.
+- The command palette itself still receives a command metadata snapshot from the Workbench shell rather than owning subscription logic.

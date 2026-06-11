@@ -13,6 +13,7 @@ import { workspaceStateFromFiles } from "./workbenchWorkspaceOpening";
 
 export interface WorkbenchStateSubscriptionCallbacks {
   readonly bumpAiProviderRevision: () => void;
+  readonly bumpCommandRevision: () => void;
   readonly setConfiguration: (configuration: TyporaPlusConfiguration) => void;
   readonly setIndexStatus: (status: WorkspaceIndexStatus) => void;
   readonly setModel: (model: TextFileModel) => void;
@@ -29,6 +30,7 @@ export function registerWorkbenchStateSubscriptions(
 ): IDisposable {
   const disposables = new DisposableStore();
 
+  disposables.add(services.commandService.onDidChangeCommands(callbacks.bumpCommandRevision));
   disposables.add(services.configurationService.onDidChangeConfiguration((nextConfiguration) => {
     applyWorkbenchConfigurationToServices(services, nextConfiguration);
     callbacks.setConfiguration(nextConfiguration);

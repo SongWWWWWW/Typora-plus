@@ -64,6 +64,7 @@ describe("workbench state subscriptions", () => {
     harness.emitters.recents.fire(recents);
     harness.emitters.themes.fire();
     harness.emitters.indexStatus.fire(status);
+    harness.emitters.commands.fire();
     harness.emitters.markdownRenderers.fire();
     harness.emitters.aiProviders.fire();
     harness.emitters.remoteSyncProviders.fire();
@@ -83,6 +84,7 @@ describe("workbench state subscriptions", () => {
     expect(callbacks.setRecents).toHaveBeenCalledWith(recents);
     expect(callbacks.setThemes).toHaveBeenCalledWith(themes);
     expect(callbacks.setIndexStatus).toHaveBeenCalledWith(status);
+    expect(callbacks.bumpCommandRevision).toHaveBeenCalledOnce();
     expect(callbacks.bumpMarkdownRendererRevision).toHaveBeenCalledOnce();
     expect(callbacks.bumpAiProviderRevision).toHaveBeenCalledOnce();
     expect(callbacks.bumpRemoteSyncProviderRevision).toHaveBeenCalledOnce();
@@ -119,6 +121,7 @@ describe("workbench state subscriptions", () => {
     harness.emitters.workspace.fire({ name: "Workspace" });
     harness.emitters.recents.fire([]);
     harness.emitters.themes.fire();
+    harness.emitters.commands.fire();
     harness.emitters.indexStatus.fire({
       state: "idle",
       indexedFiles: 0,
@@ -138,6 +141,7 @@ describe("workbench state subscriptions", () => {
     expect(callbacks.setRecents).not.toHaveBeenCalled();
     expect(callbacks.setThemes).not.toHaveBeenCalled();
     expect(callbacks.setIndexStatus).not.toHaveBeenCalled();
+    expect(callbacks.bumpCommandRevision).not.toHaveBeenCalled();
     expect(callbacks.bumpMarkdownRendererRevision).not.toHaveBeenCalled();
     expect(callbacks.bumpAiProviderRevision).not.toHaveBeenCalled();
     expect(callbacks.bumpRemoteSyncProviderRevision).not.toHaveBeenCalled();
@@ -147,6 +151,7 @@ describe("workbench state subscriptions", () => {
 function createHarness(): {
   readonly emitters: {
     readonly aiProviders: Emitter<void>;
+    readonly commands: Emitter<void>;
     readonly configuration: Emitter<TyporaPlusConfiguration>;
     readonly indexStatus: Emitter<WorkspaceIndexStatus>;
     readonly markdownRenderers: Emitter<void>;
@@ -161,6 +166,7 @@ function createHarness(): {
 } {
   const emitters = {
     aiProviders: new Emitter<void>(),
+    commands: new Emitter<void>(),
     configuration: new Emitter<TyporaPlusConfiguration>(),
     indexStatus: new Emitter<WorkspaceIndexStatus>(),
     markdownRenderers: new Emitter<void>(),
@@ -177,6 +183,9 @@ function createHarness(): {
     },
     attachmentService: {
       configure: vi.fn()
+    },
+    commandService: {
+      onDidChangeCommands: emitters.commands.event
     },
     configurationService: {
       onDidChangeConfiguration: emitters.configuration.event
@@ -222,6 +231,7 @@ function createHarness(): {
 function createCallbacks(): WorkbenchStateSubscriptionCallbacks {
   return {
     bumpAiProviderRevision: vi.fn(),
+    bumpCommandRevision: vi.fn(),
     bumpMarkdownRendererRevision: vi.fn(),
     bumpRemoteSyncProviderRevision: vi.fn(),
     setConfiguration: vi.fn(),

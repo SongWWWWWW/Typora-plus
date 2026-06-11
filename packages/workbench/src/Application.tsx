@@ -160,6 +160,7 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
   const [operationError, setOperationError] = useState<string | undefined>();
   const [saveConflict, setSaveConflict] = useState<FileSaveConflict | undefined>();
   const [indexStatus, setIndexStatus] = useState<WorkspaceIndexStatus>(initialState.indexStatus);
+  const [commandRevision, setCommandRevision] = useState(0);
   const [markdownRendererRevision, setMarkdownRendererRevision] = useState(0);
   const [aiProviderRevision, setAiProviderRevision] = useState(0);
   const [remoteSyncProviderRevision, setRemoteSyncProviderRevision] = useState(0);
@@ -168,7 +169,10 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
   const activitybarPrimaryMenuItems = useMenuItems(services, workbenchMenuIds.activitybarPrimary);
   const activitybarSecondaryMenuItems = useMenuItems(services, workbenchMenuIds.activitybarSecondary);
   const capabilityContext = createWorkbenchCapabilityContext(services);
-  const commandSurface = createWorkbenchCommandSurface(services);
+  const commandSurface = useMemo(
+    () => createWorkbenchCommandSurface(services),
+    [commandRevision, services]
+  );
   const executeCommand = createWorkbenchCommandExecutor(services, {
     setOperationError,
     setSaveConflict
@@ -198,6 +202,7 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
   useEffect(() => {
     const disposable = registerWorkbenchStateSubscriptions(services, {
       bumpAiProviderRevision: () => setAiProviderRevision((revision) => revision + 1),
+      bumpCommandRevision: () => setCommandRevision((revision) => revision + 1),
       bumpMarkdownRendererRevision: () => setMarkdownRendererRevision((revision) => revision + 1),
       bumpRemoteSyncProviderRevision: () => setRemoteSyncProviderRevision((revision) => revision + 1),
       setConfiguration,
