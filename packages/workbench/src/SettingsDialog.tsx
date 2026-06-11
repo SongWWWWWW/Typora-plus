@@ -20,6 +20,7 @@ import {
   clampSettingNumber,
   createSettingsSearchResult,
   defaultSettingsSectionId,
+  getSettingsEntryLabel,
   megabytesToBytes,
   normalizeAssetFolderInput,
   settingSectionAnchorId,
@@ -295,9 +296,9 @@ export function SettingsDialog({
             {isSettingsSectionVisible(settingsSectionIds.appearance) ? (
               <SettingsSection sectionId={settingsSectionIds.appearance}>
                 {isSettingsEntryVisible(settingsEntryIds.appearance.theme) ? (
-                  <SettingsField label="Theme">
+                  <SettingsField label={getSettingsEntryLabel(settingsEntryIds.appearance.theme)}>
                     <SegmentedControl
-                      ariaLabel="Theme"
+                      ariaLabel={getSettingsEntryLabel(settingsEntryIds.appearance.theme)}
                       value={configuration.appearance.colorScheme}
                       options={[
                         { value: "system", label: "System" },
@@ -309,11 +310,11 @@ export function SettingsDialog({
                   </SettingsField>
                 ) : null}
                 {isSettingsEntryVisible(settingsEntryIds.appearance.customTheme) ? (
-                  <SettingsField label="Custom Theme">
+                  <SettingsField label={getSettingsEntryLabel(settingsEntryIds.appearance.customTheme)}>
                     <select
                       className="tp-settings-select"
                       value={selectedThemeId}
-                      aria-label="Custom Theme"
+                      aria-label={getSettingsEntryLabel(settingsEntryIds.appearance.customTheme)}
                       onChange={(event) => onUpdate({
                         appearance: {
                           themeId: event.target.value || undefined
@@ -330,9 +331,9 @@ export function SettingsDialog({
                   </SettingsField>
                 ) : null}
                 {isSettingsEntryVisible(settingsEntryIds.appearance.density) ? (
-                  <SettingsField label="Density">
+                  <SettingsField label={getSettingsEntryLabel(settingsEntryIds.appearance.density)}>
                     <SegmentedControl
-                      ariaLabel="Density"
+                      ariaLabel={getSettingsEntryLabel(settingsEntryIds.appearance.density)}
                       value={configuration.appearance.density}
                       options={[
                         { value: "comfortable", label: "Comfortable" },
@@ -348,17 +349,17 @@ export function SettingsDialog({
             {isSettingsSectionVisible(settingsSectionIds.editor) ? (
               <SettingsSection sectionId={settingsSectionIds.editor}>
                 {isSettingsEntryVisible(settingsEntryIds.editor.autoSave) ? (
-                  <SettingsField label="Auto Save">
+                  <SettingsField label={getSettingsEntryLabel(settingsEntryIds.editor.autoSave)}>
                     <ToggleControl
                       checked={configuration.editor.autoSave}
-                      label="Auto Save"
+                      label={getSettingsEntryLabel(settingsEntryIds.editor.autoSave)}
                       onChange={(autoSave) => onUpdate({ editor: { autoSave } })}
                     />
                   </SettingsField>
                 ) : null}
                 {isSettingsEntryVisible(settingsEntryIds.editor.autoSaveDelay) ? (
                   <NumberSetting
-                    label="Auto Save Delay"
+                    label={getSettingsEntryLabel(settingsEntryIds.editor.autoSaveDelay)}
                     value={configuration.editor.autoSaveDelayMs}
                     constraint={settingsNumberConstraints.editorAutoSaveDelayMs}
                     unit="ms"
@@ -366,26 +367,26 @@ export function SettingsDialog({
                   />
                 ) : null}
                 {isSettingsEntryVisible(settingsEntryIds.editor.focusMode) ? (
-                  <SettingsField label="Focus Mode">
+                  <SettingsField label={getSettingsEntryLabel(settingsEntryIds.editor.focusMode)}>
                     <ToggleControl
                       checked={configuration.editor.focusMode}
-                      label="Focus Mode"
+                      label={getSettingsEntryLabel(settingsEntryIds.editor.focusMode)}
                       onChange={(focusMode) => onUpdate({ editor: { focusMode } })}
                     />
                   </SettingsField>
                 ) : null}
                 {isSettingsEntryVisible(settingsEntryIds.editor.typewriterMode) ? (
-                  <SettingsField label="Typewriter Mode">
+                  <SettingsField label={getSettingsEntryLabel(settingsEntryIds.editor.typewriterMode)}>
                     <ToggleControl
                       checked={configuration.editor.typewriterMode}
-                      label="Typewriter Mode"
+                      label={getSettingsEntryLabel(settingsEntryIds.editor.typewriterMode)}
                       onChange={(typewriterMode) => onUpdate({ editor: { typewriterMode } })}
                     />
                   </SettingsField>
                 ) : null}
                 {isSettingsEntryVisible(settingsEntryIds.editor.fontSize) ? (
                   <NumberSetting
-                    label="Font Size"
+                    label={getSettingsEntryLabel(settingsEntryIds.editor.fontSize)}
                     value={configuration.editor.fontSize}
                     constraint={settingsNumberConstraints.editorFontSize}
                     unit="px"
@@ -394,7 +395,7 @@ export function SettingsDialog({
                 ) : null}
                 {isSettingsEntryVisible(settingsEntryIds.editor.lineHeight) ? (
                   <NumberSetting
-                    label="Line Height"
+                    label={getSettingsEntryLabel(settingsEntryIds.editor.lineHeight)}
                     value={configuration.editor.lineHeight}
                     constraint={settingsNumberConstraints.editorLineHeight}
                     onChange={(lineHeight) => onUpdate({ editor: { lineHeight } })}
@@ -402,7 +403,7 @@ export function SettingsDialog({
                 ) : null}
                 {isSettingsEntryVisible(settingsEntryIds.editor.maxWidth) ? (
                   <NumberSetting
-                    label="Editor Width"
+                    label={getSettingsEntryLabel(settingsEntryIds.editor.maxWidth)}
                     value={configuration.editor.maxWidth}
                     constraint={settingsNumberConstraints.editorMaxWidth}
                     unit="px"
@@ -411,7 +412,7 @@ export function SettingsDialog({
                 ) : null}
                 {isSettingsEntryVisible(settingsEntryIds.editor.rendererPreviewCacheEntries) ? (
                   <NumberSetting
-                    label="Renderer Cache"
+                    label={getSettingsEntryLabel(settingsEntryIds.editor.rendererPreviewCacheEntries)}
                     value={configuration.editor.rendererPreviewCacheEntries}
                     constraint={settingsNumberConstraints.editorRendererPreviewCacheEntries}
                     unit="entries"
@@ -424,12 +425,12 @@ export function SettingsDialog({
             {isSettingsSectionVisible(settingsSectionIds.workspace) ? (
               <SettingsSection sectionId={settingsSectionIds.workspace}>
                 {isSettingsEntryVisible(settingsEntryIds.workspace.defaultAssetFolder) ? (
-                  <SettingsField label="Asset Folder">
+                  <SettingsField label={getSettingsEntryLabel(settingsEntryIds.workspace.defaultAssetFolder)}>
                     <input
                       className="tp-settings-text-input"
                       type="text"
                       value={assetFolderDraft}
-                      aria-label="Asset Folder"
+                      aria-label={getSettingsEntryLabel(settingsEntryIds.workspace.defaultAssetFolder)}
                       onChange={(event) => setAssetFolderDraft(event.target.value)}
                       onBlur={commitAssetFolder}
                       onKeyDown={(event) => {
@@ -442,7 +443,7 @@ export function SettingsDialog({
                 ) : null}
                 {isSettingsEntryVisible(settingsEntryIds.workspace.searchMaxFileSize) ? (
                   <NumberSetting
-                    label="Search File Limit"
+                    label={getSettingsEntryLabel(settingsEntryIds.workspace.searchMaxFileSize)}
                     value={searchMaxFileSizeMegabytes}
                     constraint={settingsNumberConstraints.workspaceSearchMaxFileSizeMegabytes}
                     unit="MB"
@@ -455,7 +456,7 @@ export function SettingsDialog({
                 ) : null}
                 {isSettingsEntryVisible(settingsEntryIds.workspace.quickOpenMaxResults) ? (
                   <NumberSetting
-                    label="Quick Open Results"
+                    label={getSettingsEntryLabel(settingsEntryIds.workspace.quickOpenMaxResults)}
                     value={configuration.workspace.quickOpenMaxResults}
                     constraint={settingsNumberConstraints.workspaceQuickOpenMaxResults}
                     onChange={(quickOpenMaxResults) => onUpdate({ workspace: { quickOpenMaxResults } })}
@@ -463,7 +464,7 @@ export function SettingsDialog({
                 ) : null}
                 {isSettingsEntryVisible(settingsEntryIds.workspace.searchMaxResults) ? (
                   <NumberSetting
-                    label="Search Results"
+                    label={getSettingsEntryLabel(settingsEntryIds.workspace.searchMaxResults)}
                     value={configuration.workspace.searchMaxResults}
                     constraint={settingsNumberConstraints.workspaceSearchMaxResults}
                     onChange={(searchMaxResults) => onUpdate({ workspace: { searchMaxResults } })}

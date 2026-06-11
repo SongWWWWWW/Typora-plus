@@ -95,6 +95,10 @@ export const settingsEntries = [
   { id: settingsEntryIds.keybindings.editor, sectionId: settingsSectionIds.keybindings, label: "Keybindings", keywords: ["keyboard", "shortcut", "shortcuts", "commands", "record", "reset"] }
 ] as const satisfies readonly SettingsEntryDefinition[];
 
+const settingsEntryById = new Map<SettingsEntryId, SettingsEntryDefinition>(
+  settingsEntries.map((entry) => [entry.id, entry])
+);
+
 export const settingsNumberConstraints = {
   editorFontSize: configurationNumberConstraints.editorFontSize,
   editorLineHeight: configurationNumberConstraints.editorLineHeight,
@@ -134,6 +138,18 @@ export function normalizeAssetFolderInput(value: string): string | undefined {
 
 export function settingSectionAnchorId(sectionId: SettingsSectionId): string {
   return `tp-settings-section-${sectionId}`;
+}
+
+export function getSettingsEntryDefinition(entryId: SettingsEntryId): SettingsEntryDefinition {
+  const entry = settingsEntryById.get(entryId);
+  if (!entry) {
+    throw new Error(`Unknown settings entry: ${entryId}`);
+  }
+  return entry;
+}
+
+export function getSettingsEntryLabel(entryId: SettingsEntryId): string {
+  return getSettingsEntryDefinition(entryId).label;
 }
 
 export function createSettingsSearchResult(query: string): SettingsSearchResult {

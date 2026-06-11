@@ -4,6 +4,8 @@ import {
   clampSettingNumber,
   createSettingsSearchResult,
   defaultSettingsSectionId,
+  getSettingsEntryDefinition,
+  getSettingsEntryLabel,
   megabytesToBytes,
   normalizeAssetFolderInput,
   settingSectionAnchorId,
@@ -71,6 +73,13 @@ describe("settings model", () => {
     expect(settingsEntries.flatMap((entry) =>
       sectionIds.has(entry.sectionId) ? [] : [entry.sectionId]
     )).toEqual([]);
+  });
+
+  it("reads settings entry definitions and labels by id", () => {
+    for (const entry of settingsEntries) {
+      expect(getSettingsEntryDefinition(entry.id)).toBe(entry);
+      expect(getSettingsEntryLabel(entry.id)).toBe(entry.label);
+    }
   });
 
   it("generates unique settings section anchors", () => {

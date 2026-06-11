@@ -5816,3 +5816,31 @@ Review:
 Known limitations:
 
 - Settings field composition remains in `SettingsDialog` because it is still a compact Workbench UI surface; a contributed setting schema can be introduced later if the settings surface becomes extension-driven.
+
+## 2026-06-11 - P2 Settings Entry Label Model
+
+Completed:
+
+- Added Settings entry definition and label lookup helpers to the focused Settings model.
+- Routed Settings dialog field titles, control labels, and field aria labels through the shared Settings entry metadata.
+- Preserved Settings search metadata and visible field behavior while removing duplicate field-title literals from the dialog.
+- Covered entry definition and label lookup for every registered Settings entry.
+
+Quality gate:
+
+- `npx vitest run packages/workbench/src/settingsModel.test.ts packages/workbench/src/workbenchConfigurationUpdates.test.ts packages/workbench/src/keybindingSettings.test.ts`: passed, 23 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 59 files / 587 tests, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Dev server smoke check: passed at `http://127.0.0.1:5173`; status 200 and root element present
+
+Review:
+
+- Settings entry labels now have one model-level source of truth shared by search and rendered controls.
+- `SettingsDialog` still owns control layout and option labels, but field titles and matching metadata no longer drift independently.
+- No new dependency, configuration key, storage path, visual token, extra documentation file, or hard-coded platform assumption was introduced.
+
+Known limitations:
+
+- Theme, density, keybinding toolbar, and select option labels remain local UI copy because they describe control choices or actions rather than Settings entry metadata.
