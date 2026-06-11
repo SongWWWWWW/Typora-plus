@@ -7469,3 +7469,36 @@ Known limitations:
 - No Workbench remote sync provider Settings UI consumes these profiles yet.
 - No configured remote sync provider factory is registered yet, so these profiles are preparatory configuration rather than an executable Feishu integration.
 - No Feishu Drive provider, OAuth flow, token refresh flow, upload/download adapter, or streaming transfer path is implemented yet.
+
+## 2026-06-12 - P2 Remote Sync Profile Settings UI
+
+Completed:
+
+- Added a Remote Sync section to Settings with searchable provider profile editing.
+- Added Workbench draft, validation, upsert, remove, count-limit, and key/value line parsing helpers for remote sync provider profiles.
+- Routed profile saves through `IConfigurationService` partial updates instead of mutating remote sync service state directly.
+- Added native remote sync secret save/delete controls for configured profile `secretRef` bindings, reusing the existing native secret bridge and operation-error path.
+- Generalized Settings provider card/list CSS so AI and remote sync provider profiles share the same UI structure without AI-specific styling names.
+- Kept Feishu endpoints, OAuth scopes, app ids, folder tokens, access tokens, provider ids, token refresh policy, model defaults, and decrypted secret values out of defaults and tests.
+- Updated maintained docs without adding new documentation surfaces.
+
+Quality gate:
+
+- `npx vitest run packages/workbench/src/settingsModel.test.ts packages/workbench/src/workbenchRemoteSyncSecrets.test.ts packages/workbench/src/workbenchConfigurationUpdates.test.ts packages/platform/src/platform.test.ts`: passed, 4 files / 140 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 78 files / 740 tests, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Remote sync Settings implementation hardcode scan for endpoint/OAuth/token/secret/model/provider defaults: passed
+
+Review:
+
+- Settings now gives users a validated place to create remote sync connection profiles and manage their secret references, while still avoiding any built-in cloud provider behavior.
+- The React dialog remains a consumer of focused Settings model helpers; provider validation, sorting, search metadata, and line parsing do not live inline in JSX.
+- Remote sync secret values still never enter configuration: Settings sends only transient password input to the native secret bridge.
+
+Known limitations:
+
+- The profiles are still preparatory; no configured remote sync provider factory consumes them yet.
+- The secret binding and metadata editors use bounded key/value lines rather than a richer structured row editor.
+- No Feishu Drive provider, OAuth flow, token refresh flow, upload/download adapter, or streaming transfer path is implemented yet.

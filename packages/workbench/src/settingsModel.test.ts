@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   bytesToMegabytes,
   canAddSettingsAiProvider,
+  canAddSettingsRemoteSyncProvider,
   clampSettingNumber,
   createSettingsAiProviderDraft,
+  createSettingsRemoteSyncProviderDraft,
   createSettingsThemeOptions,
   createSettingsSearchResult,
   createSettingsVisibilityState,
@@ -19,6 +21,7 @@ import {
   megabytesToBytes,
   normalizeAssetFolderInput,
   removeSettingsAiProvider,
+  removeSettingsRemoteSyncProvider,
   resolveNearestSettingsSection,
   resolveSelectedSettingsThemeId,
   resolveSettingsAssetFolderCommit,
@@ -33,7 +36,9 @@ import {
   settingsSections,
   settingsNumberConstraints,
   upsertSettingsAiProvider,
-  validateSettingsAiProviderDraft
+  upsertSettingsRemoteSyncProvider,
+  validateSettingsAiProviderDraft,
+  validateSettingsRemoteSyncProviderDraft
 } from "./settingsModel";
 
 describe("settings model", () => {
@@ -42,6 +47,7 @@ describe("settings model", () => {
       ai: "ai",
       appearance: "appearance",
       editor: "editor",
+      remoteSync: "remoteSync",
       workspace: "workspace",
       keybindings: "keybindings"
     });
@@ -70,6 +76,9 @@ describe("settings model", () => {
         workspaceContextMaxPreviewLength: "ai.workspaceContextMaxPreviewLength",
         workspaceContextMaxResults: "ai.workspaceContextMaxResults"
       },
+      remoteSync: {
+        providers: "remoteSync.providers"
+      },
       workspace: {
         defaultAssetFolder: "workspace.defaultAssetFolder",
         quickOpenMaxResults: "workspace.quickOpenMaxResults",
@@ -87,6 +96,7 @@ describe("settings model", () => {
       ["appearance", "Appearance"],
       ["editor", "Editor"],
       ["ai", "AI"],
+      ["remoteSync", "Remote Sync"],
       ["workspace", "Workspace"],
       ["keybindings", "Keybindings"]
     ]);
@@ -162,6 +172,7 @@ describe("settings model", () => {
       "tp-settings-section-appearance",
       "tp-settings-section-editor",
       "tp-settings-section-ai",
+      "tp-settings-section-remoteSync",
       "tp-settings-section-workspace",
       "tp-settings-section-keybindings"
     ]);
@@ -215,6 +226,8 @@ describe("settings model", () => {
     expect(createSettingsSearchResult("responses model").visibleEntries).toEqual(["ai.providers"]);
     expect(createSettingsSearchResult("grounded context").visibleEntries).toEqual(["ai.workspaceContextMaxResults"]);
     expect(createSettingsSearchResult("snippet preview").visibleEntries).toEqual(["ai.workspaceContextMaxPreviewLength"]);
+    expect(createSettingsSearchResult("remote cloud").visibleEntries).toEqual(["remoteSync.providers"]);
+    expect(createSettingsSearchResult("native request").visibleEntries).toEqual(["remoteSync.providers"]);
     expect(createSettingsSearchResult("shortcut").visibleEntries).toEqual(["keybindings.editor"]);
     expect(createSettingsSearchResult("search limit").visibleEntries).toEqual([
       "workspace.searchMaxFileSize",
@@ -395,6 +408,130 @@ describe("settings model", () => {
       endpointUrl: "https://api.example.test/v1/responses",
       model: "model",
       secretRef: "typora-plus.ai.extra"
+    }))).toBe(providers);
+  });
+
+  it("creates and validates remote sync provider drafts through platform configuration rules", () => {
+    const provider = {
+      id: "notes.sync",
+      title: "Notes Sync",
+      kind: "native-request" as const,
+      baseUrl: "https://sync.example.test/root",
+      remoteScopeId: "workspace/root",
+      secrets: [
+        {
+          name: "access",
+          secretRef: "typora-plus.remote-sync.notes.access"
+        },
+        {
+          name: "refresh",
+          secretRef: "typora-plus.remote-sync.notes.refresh"
+        }
+      ],
+      metadata: {
+        mode: "raw"
+      }
+    };
+
+    expect(createSettingsRemoteSyncProviderDraft(provider)).toEqual({
+      id: "notes.sync",
+      title: "Notes Sync",
+      baseUrl: "https://sync.example.test/root",
+      remoteScopeId: "workspace/root",
+      secretsText: [
+        "access=typora-plus.remote-sync.notes.access",
+        "refresh=typora-plus.remote-sync.notes.refresh"
+      ].join("\n"),
+      metadataText: "mode=raw"
+    });
+    expect(validateSettingsRemoteSyncProviderDraft(
+      createSettingsRemoteSyncProviderDraft(provider),
+      [],
+      undefined
+    )).toMatchObject({
+      provider,
+      canSave: true,
+      issues: []
+    });
+    expect(validateSettingsRemoteSyncProviderDraft({
+      ...createSettingsRemoteSyncProviderDraft(provider),
+      baseUrl: "http://sync.example.test/root"
+    }, [], undefined)).toEqual({
+      canSave: false,
+      issues: ["Complete provider id, title, HTTPS or loopback base URL, and valid profile bindings."]
+    });
+    expect(validateSettingsRemoteSyncProviderDraft({
+      ...createSettingsRemoteSyncProviderDraft(provider),
+      secretsText: "access token=typora-plus.remote-sync.notes.access"
+    }, [], undefined)).toEqual({
+      canSave: false,
+      issues: ["Complete provider id, title, HTTPS or loopback base URL, and valid profile bindings."]
+    });
+  });
+
+  it("upserts and removes remote sync provider configuration without duplicate ids", () => {
+    const existing = {
+      id: "existing.sync",
+      title: "Existing",
+      kind: "native-request" as const,
+      baseUrl: "https://sync.example.test/existing",
+      secrets: []
+    };
+    const draft = createSettingsRemoteSyncProviderDraft({
+      id: "notes.sync",
+      title: "Notes Sync",
+      kind: "native-request",
+      baseUrl: "http://127.0.0.1:5173/sync",
+      secrets: [
+        {
+          name: "access",
+          secretRef: "typora-plus.remote-sync.notes.access"
+        }
+      ]
+    });
+
+    expect(upsertSettingsRemoteSyncProvider([existing], draft)).toEqual([
+      existing,
+      {
+        id: "notes.sync",
+        title: "Notes Sync",
+        kind: "native-request",
+        baseUrl: "http://127.0.0.1:5173/sync",
+        secrets: [
+          {
+            name: "access",
+            secretRef: "typora-plus.remote-sync.notes.access"
+          }
+        ]
+      }
+    ]);
+    const duplicateValidation = validateSettingsRemoteSyncProviderDraft({
+      ...draft,
+      id: existing.id
+    }, [existing]);
+
+    expect(duplicateValidation.canSave).toBe(false);
+    expect(duplicateValidation.issues).toEqual(["Provider id is already used."]);
+    expect(removeSettingsRemoteSyncProvider([existing], existing.id)).toEqual([]);
+  });
+
+  it("honors the configured remote sync provider count limit", () => {
+    const providers = Array.from({ length: 20 }, (_, index) => ({
+      id: `sync.${index}`,
+      title: `Sync ${index}`,
+      kind: "native-request" as const,
+      baseUrl: "https://sync.example.test/root",
+      secrets: []
+    }));
+
+    expect(canAddSettingsRemoteSyncProvider(providers)).toBe(false);
+    expect(canAddSettingsRemoteSyncProvider(providers.slice(0, 19))).toBe(true);
+    expect(upsertSettingsRemoteSyncProvider(providers, createSettingsRemoteSyncProviderDraft({
+      id: "extra.sync",
+      title: "Extra",
+      kind: "native-request",
+      baseUrl: "https://sync.example.test/root",
+      secrets: []
     }))).toBe(providers);
   });
 });

@@ -1,13 +1,17 @@
 import {
   configurationMaxAiProviders,
+  configurationMaxRemoteSyncProviders,
   clampConfigurationNumber,
   configurationBytesPerMegabyte,
   configurationNumberConstraints,
   normalizeAiProviderConfiguration,
+  normalizeRemoteSyncProviderConfiguration,
   type AiProviderConfiguration,
   type ColorSchemePreference,
   type ConfigurationNumberConstraint,
   type RegisteredTheme,
+  type RemoteSyncProviderConfiguration,
+  type RemoteSyncProviderSecretConfiguration,
   type TyporaPlusConfiguration
 } from "@typora-plus/platform";
 
@@ -22,6 +26,7 @@ export const settingsSectionIds = {
   ai: "ai",
   appearance: "appearance",
   editor: "editor",
+  remoteSync: "remoteSync",
   workspace: "workspace",
   keybindings: "keybindings"
 } as const satisfies Record<string, string>;
@@ -48,6 +53,9 @@ export const settingsEntryIds = {
     providers: "ai.providers",
     workspaceContextMaxPreviewLength: "ai.workspaceContextMaxPreviewLength",
     workspaceContextMaxResults: "ai.workspaceContextMaxResults"
+  },
+  remoteSync: {
+    providers: "remoteSync.providers"
   },
   workspace: {
     defaultAssetFolder: "workspace.defaultAssetFolder",
@@ -117,10 +125,26 @@ export interface SettingsAiProviderDraftValidation {
   readonly canSave: boolean;
 }
 
+export interface SettingsRemoteSyncProviderDraft {
+  readonly id: string;
+  readonly title: string;
+  readonly baseUrl: string;
+  readonly remoteScopeId: string;
+  readonly secretsText: string;
+  readonly metadataText: string;
+}
+
+export interface SettingsRemoteSyncProviderDraftValidation {
+  readonly provider?: RemoteSyncProviderConfiguration;
+  readonly issues: readonly string[];
+  readonly canSave: boolean;
+}
+
 export const settingsSections = [
   { id: settingsSectionIds.appearance, title: "Appearance" },
   { id: settingsSectionIds.editor, title: "Editor" },
   { id: settingsSectionIds.ai, title: "AI" },
+  { id: settingsSectionIds.remoteSync, title: "Remote Sync" },
   { id: settingsSectionIds.workspace, title: "Workspace" },
   { id: settingsSectionIds.keybindings, title: "Keybindings" }
 ] as const satisfies readonly SettingsSectionDefinition[];
@@ -160,6 +184,7 @@ export const settingsEntries = [
   { id: settingsEntryIds.ai.providers, sectionId: settingsSectionIds.ai, label: "Providers", keywords: ["openai", "responses", "assistant", "model", "endpoint", "secret", "api key"] },
   { id: settingsEntryIds.ai.workspaceContextMaxResults, sectionId: settingsSectionIds.ai, label: "Context Results", keywords: ["workspace", "context", "search", "retrieval", "grounded"] },
   { id: settingsEntryIds.ai.workspaceContextMaxPreviewLength, sectionId: settingsSectionIds.ai, label: "Context Preview", keywords: ["workspace", "context", "preview", "snippet", "retrieval"] },
+  { id: settingsEntryIds.remoteSync.providers, sectionId: settingsSectionIds.remoteSync, label: "Providers", keywords: ["sync", "remote", "cloud", "mirror", "native request", "scope", "secret"] },
   { id: settingsEntryIds.workspace.defaultAssetFolder, sectionId: settingsSectionIds.workspace, label: "Asset Folder", keywords: ["assets", "images", "attachments", "folder"] },
   { id: settingsEntryIds.workspace.quickOpenMaxResults, sectionId: settingsSectionIds.workspace, label: "Quick Open Results", keywords: ["quick open", "files", "results", "limit"] },
   { id: settingsEntryIds.workspace.searchMaxFileSize, sectionId: settingsSectionIds.workspace, label: "Search File Limit", keywords: ["search", "index", "file", "size", "limit"] },
@@ -299,6 +324,75 @@ export function canAddSettingsAiProvider(
   providers: readonly AiProviderConfiguration[]
 ): boolean {
   return providers.length < configurationMaxAiProviders;
+}
+
+export function createSettingsRemoteSyncProviderDraft(
+  provider: RemoteSyncProviderConfiguration | undefined = undefined
+): SettingsRemoteSyncProviderDraft {
+  return {
+    id: provider?.id ?? "",
+    title: provider?.title ?? "",
+    baseUrl: provider?.baseUrl ?? "",
+    remoteScopeId: provider?.remoteScopeId ?? "",
+    secretsText: formatSettingsKeyValueLines(provider?.secrets.map((secret) => [secret.name, secret.secretRef]) ?? []),
+    metadataText: formatSettingsKeyValueLines(Object.entries(provider?.metadata ?? {}))
+  };
+}
+
+export function validateSettingsRemoteSyncProviderDraft(
+  draft: SettingsRemoteSyncProviderDraft,
+  providers: readonly RemoteSyncProviderConfiguration[],
+  originalId: string | undefined = undefined
+): SettingsRemoteSyncProviderDraftValidation {
+  const provider = normalizeSettingsRemoteSyncProviderDraft(draft);
+  const issues: string[] = [];
+
+  if (!provider) {
+    issues.push("Complete provider id, title, HTTPS or loopback base URL, and valid profile bindings.");
+  } else if (providers.some((candidate) => candidate.id === provider.id && candidate.id !== originalId)) {
+    issues.push("Provider id is already used.");
+  }
+
+  return {
+    ...(provider ? { provider } : {}),
+    issues,
+    canSave: issues.length === 0 && !!provider
+  };
+}
+
+export function upsertSettingsRemoteSyncProvider(
+  providers: readonly RemoteSyncProviderConfiguration[],
+  draft: SettingsRemoteSyncProviderDraft,
+  originalId: string | undefined = undefined
+): readonly RemoteSyncProviderConfiguration[] {
+  const validation = validateSettingsRemoteSyncProviderDraft(draft, providers, originalId);
+
+  if (!validation.provider || !validation.canSave) {
+    return providers;
+  }
+
+  const withoutOriginal = originalId
+    ? providers.filter((provider) => provider.id !== originalId)
+    : providers;
+
+  if (withoutOriginal.length >= configurationMaxRemoteSyncProviders && !originalId) {
+    return providers;
+  }
+
+  return [...withoutOriginal, validation.provider].sort(compareSettingsRemoteSyncProviders);
+}
+
+export function removeSettingsRemoteSyncProvider(
+  providers: readonly RemoteSyncProviderConfiguration[],
+  id: string
+): readonly RemoteSyncProviderConfiguration[] {
+  return providers.filter((provider) => provider.id !== id);
+}
+
+export function canAddSettingsRemoteSyncProvider(
+  providers: readonly RemoteSyncProviderConfiguration[]
+): boolean {
+  return providers.length < configurationMaxRemoteSyncProviders;
 }
 
 export function settingSectionAnchorId(sectionId: SettingsSectionId): string {
@@ -470,9 +564,70 @@ function normalizeSettingsAiProviderDraft(draft: SettingsAiProviderDraft): AiPro
   });
 }
 
+function normalizeSettingsRemoteSyncProviderDraft(
+  draft: SettingsRemoteSyncProviderDraft
+): RemoteSyncProviderConfiguration | undefined {
+  const secretLines = parseSettingsKeyValueLines(draft.secretsText);
+  const metadataLines = parseSettingsKeyValueLines(draft.metadataText);
+
+  if (!secretLines || !metadataLines) {
+    return undefined;
+  }
+
+  return normalizeRemoteSyncProviderConfiguration({
+    id: draft.id,
+    title: draft.title,
+    kind: "native-request",
+    baseUrl: draft.baseUrl,
+    remoteScopeId: draft.remoteScopeId || undefined,
+    secrets: secretLines.map(([name, secretRef]): RemoteSyncProviderSecretConfiguration => ({ name, secretRef })),
+    metadata: Object.fromEntries(metadataLines)
+  });
+}
+
 function compareSettingsAiProviders(
   left: AiProviderConfiguration,
   right: AiProviderConfiguration
 ): number {
   return left.title.localeCompare(right.title) || left.id.localeCompare(right.id);
+}
+
+function compareSettingsRemoteSyncProviders(
+  left: RemoteSyncProviderConfiguration,
+  right: RemoteSyncProviderConfiguration
+): number {
+  return left.title.localeCompare(right.title) || left.id.localeCompare(right.id);
+}
+
+function parseSettingsKeyValueLines(value: string): readonly (readonly [string, string])[] | undefined {
+  const entries: (readonly [string, string])[] = [];
+
+  for (const rawLine of value.split(/\r?\n/)) {
+    const line = rawLine.trim();
+
+    if (!line) {
+      continue;
+    }
+
+    const separatorIndex = line.indexOf("=");
+
+    if (separatorIndex <= 0 || separatorIndex === line.length - 1) {
+      return undefined;
+    }
+
+    const key = line.slice(0, separatorIndex).trim();
+    const entryValue = line.slice(separatorIndex + 1).trim();
+
+    if (!key || !entryValue) {
+      return undefined;
+    }
+
+    entries.push([key, entryValue]);
+  }
+
+  return entries;
+}
+
+function formatSettingsKeyValueLines(entries: readonly (readonly [string, string])[]): string {
+  return entries.map(([key, value]) => `${key}=${value}`).join("\n");
 }

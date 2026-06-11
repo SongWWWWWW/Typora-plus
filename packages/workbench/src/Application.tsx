@@ -82,6 +82,7 @@ import {
 } from "./workbenchAiResponseModel";
 import { createWorkbenchAiProviderDiagnosticActions } from "./workbenchAiProviderDiagnostics";
 import { createWorkbenchAiSecretActions } from "./workbenchAiSecrets";
+import { createWorkbenchRemoteSyncSecretActions } from "./workbenchRemoteSyncSecrets";
 import {
   createWorkbenchFileTreeRows,
   type WorkbenchFileTreeRow
@@ -430,6 +431,10 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
     () => createWorkbenchAiSecretActions({ setOperationError }),
     []
   );
+  const remoteSyncSecretActions = useMemo(
+    () => createWorkbenchRemoteSyncSecretActions({ setOperationError }),
+    []
+  );
   const aiDiagnosticActions = useMemo(
     () => createWorkbenchAiProviderDiagnosticActions(services, { setOperationError }),
     [services]
@@ -603,6 +608,7 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
         themes={themes}
         aiDiagnosticActions={aiDiagnosticActions}
         aiSecretActions={aiSecretActions}
+        remoteSyncSecretActions={remoteSyncSecretActions}
         getCommandForKeybinding={commandSurface.getCommandForKeybinding}
         getKeybindingLabel={commandSurface.getKeybindingLabel}
         getKeybindingLabelForKeybinding={commandSurface.getKeybindingLabelForKeybinding}

@@ -41,7 +41,7 @@ The desktop renderer build uses manual chunks for the largest runtime families. 
 
 Current services:
 
-- `IConfigurationService`: centralized and persisted appearance, editor, and workspace defaults
+- `IConfigurationService`: centralized and persisted appearance, editor, workspace, AI provider, and remote sync provider profile defaults
 - `IContextKeyService`: structured context values and expression evaluation for conditional contributions
 - `ICommandService`: command metadata registration, command handler registration, metadata change events, async execution, and command activation bridging
 - `IExtensionService`: static extension manifest registration, theme contributions, activation events, and constrained runtime command/context-key/AI-provider/export-provider/Markdown renderer/remote-sync provider APIs

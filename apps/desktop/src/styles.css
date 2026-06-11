@@ -1006,11 +1006,11 @@ button {
 }
 
 .tp-settings-text-input,
+.tp-settings-textarea,
 .tp-settings-select,
 .tp-settings-number-input {
   width: 100%;
   min-width: 0;
-  height: 32px;
   border: 1px solid var(--tp-color-border);
   border-radius: var(--tp-radius-control);
   outline: 0;
@@ -1019,8 +1019,22 @@ button {
 }
 
 .tp-settings-text-input,
+.tp-settings-select,
+.tp-settings-number-input {
+  height: 32px;
+}
+
+.tp-settings-text-input,
+.tp-settings-textarea,
 .tp-settings-select {
   padding: 0 9px;
+}
+
+.tp-settings-textarea {
+  min-height: 68px;
+  padding-top: 7px;
+  padding-bottom: 7px;
+  resize: vertical;
 }
 
 .tp-settings-number-control {
@@ -1050,25 +1064,26 @@ button {
 }
 
 .tp-settings-text-input:focus,
+.tp-settings-textarea:focus,
 .tp-settings-select:focus,
 .tp-settings-number-input:focus {
   border-color: var(--tp-color-accent);
 }
 
-.tp-settings-ai-toolbar {
+.tp-settings-provider-toolbar {
   display: flex;
   justify-content: flex-end;
   min-width: 0;
 }
 
-.tp-settings-ai-list {
+.tp-settings-provider-list {
   display: flex;
   flex-direction: column;
   gap: 10px;
   min-width: 0;
 }
 
-.tp-settings-ai-card {
+.tp-settings-provider-card {
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -1079,7 +1094,7 @@ button {
   background: var(--tp-color-surface);
 }
 
-.tp-settings-ai-card-header {
+.tp-settings-provider-card-header {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, auto);
   align-items: center;
@@ -1087,7 +1102,7 @@ button {
   min-width: 0;
 }
 
-.tp-settings-ai-card-header > span {
+.tp-settings-provider-card-header > span {
   min-width: 0;
   overflow: hidden;
   color: var(--tp-color-text);
@@ -1097,10 +1112,17 @@ button {
   white-space: nowrap;
 }
 
-.tp-settings-ai-card-actions {
+.tp-settings-provider-card-actions {
   display: grid;
   grid-template-columns: repeat(3, minmax(76px, auto));
   gap: 6px;
+  min-width: 0;
+}
+
+.tp-settings-secret-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
   min-width: 0;
 }
 
@@ -1376,8 +1398,8 @@ button {
     gap: 6px;
   }
 
-  .tp-settings-ai-card-header,
-  .tp-settings-ai-card-actions,
+  .tp-settings-provider-card-header,
+  .tp-settings-provider-card-actions,
   .tp-settings-secret-control {
     grid-template-columns: minmax(0, 1fr);
   }

@@ -6,6 +6,8 @@ import type {
   Keybinding,
   PartialConfiguration,
   RegisteredTheme,
+  RemoteSyncProviderConfiguration,
+  RemoteSyncProviderSecretConfiguration,
   TyporaPlusConfiguration
 } from "@typora-plus/platform";
 import { KeyRound, Plus, RefreshCw, Save, Search, Settings as SettingsIcon, Trash2, X } from "lucide-react";
@@ -20,7 +22,9 @@ import {
 import {
   bytesToMegabytes,
   canAddSettingsAiProvider,
+  canAddSettingsRemoteSyncProvider,
   createSettingsAiProviderDraft,
+  createSettingsRemoteSyncProviderDraft,
   createSettingsSearchResult,
   createSettingsThemeOptions,
   createSettingsVisibilityState,
@@ -31,6 +35,7 @@ import {
   isSettingsSectionVisible,
   megabytesToBytes,
   removeSettingsAiProvider,
+  removeSettingsRemoteSyncProvider,
   resolveNearestSettingsSection,
   resolveSelectedSettingsThemeId,
   resolveSettingsAssetFolderCommit,
@@ -43,13 +48,17 @@ import {
   settingsNumberConstraints,
   settingsSectionIds,
   upsertSettingsAiProvider,
+  upsertSettingsRemoteSyncProvider,
   validateSettingsAiProviderDraft,
+  validateSettingsRemoteSyncProviderDraft,
   type SettingsAiProviderDraft,
+  type SettingsRemoteSyncProviderDraft,
   type SettingsSectionId,
   type NumberSettingConstraint
 } from "./settingsModel";
 import type { WorkbenchAiProviderDiagnosticActions } from "./workbenchAiProviderDiagnostics";
 import type { WorkbenchAiSecretBridge } from "./workbenchAiSecrets";
+import type { WorkbenchRemoteSyncSecretBridge } from "./workbenchRemoteSyncSecrets";
 
 export function SettingsDialog({
   open,
@@ -58,6 +67,7 @@ export function SettingsDialog({
   themes,
   aiDiagnosticActions,
   aiSecretActions,
+  remoteSyncSecretActions,
   getCommandForKeybinding,
   getKeybindingLabel,
   getKeybindingLabelForKeybinding,
@@ -74,6 +84,11 @@ export function SettingsDialog({
     readonly setSecret: WorkbenchAiSecretBridge["setSecret"];
     readonly deleteSecret: WorkbenchAiSecretBridge["deleteSecret"];
   };
+  readonly remoteSyncSecretActions?: {
+    readonly isAvailable: boolean;
+    readonly setSecret: WorkbenchRemoteSyncSecretBridge["setSecret"];
+    readonly deleteSecret: WorkbenchRemoteSyncSecretBridge["deleteSecret"];
+  };
   readonly getCommandForKeybinding: (keybinding: Keybinding) => string | undefined;
   readonly getKeybindingLabel: (command: string) => string | undefined;
   readonly getKeybindingLabelForKeybinding: (keybinding: Keybinding) => string;
@@ -89,16 +104,23 @@ export function SettingsDialog({
   const [aiProviderDrafts, setAiProviderDrafts] = useState<readonly AiProviderDraftState[]>(
     () => createAiProviderDraftStates(configuration.ai.providers)
   );
+  const [remoteSyncProviderDrafts, setRemoteSyncProviderDrafts] = useState<readonly RemoteSyncProviderDraftState[]>(
+    () => createRemoteSyncProviderDraftStates(configuration.remoteSync.providers)
+  );
   const [aiDiagnosticStates, setAiDiagnosticStates] = useState<Record<string, AiDiagnosticState>>({});
   const [aiDiagnosticMessages, setAiDiagnosticMessages] = useState<Record<string, string>>({});
   const [aiSecretDrafts, setAiSecretDrafts] = useState<Record<string, string>>({});
-  const [aiSecretStates, setAiSecretStates] = useState<Record<string, AiSecretState>>({});
+  const [aiSecretStates, setAiSecretStates] = useState<Record<string, SecretState>>({});
+  const [remoteSyncSecretDrafts, setRemoteSyncSecretDrafts] = useState<Record<string, string>>({});
+  const [remoteSyncSecretStates, setRemoteSyncSecretStates] = useState<Record<string, SecretState>>({});
   const [activeSettingsSection, setActiveSettingsSection] = useState<SettingsSectionId>(defaultSettingsSectionId);
   const settingsContentRef = useRef<HTMLDivElement | null>(null);
   const nextAiProviderDraftIdRef = useRef(0);
+  const nextRemoteSyncProviderDraftIdRef = useRef(0);
   const aiDiagnosticRequestIdsRef = useRef<Record<string, number>>({});
   const hasKeybindingOverrides = configuration.keybindings.overrides.length > 0;
   const hasUnsavedAiProviderDraft = aiProviderDrafts.some((draft) => !draft.originalId);
+  const hasUnsavedRemoteSyncProviderDraft = remoteSyncProviderDrafts.some((draft) => !draft.originalId);
   const selectedThemeId = resolveSelectedSettingsThemeId(configuration.appearance.themeId, themes);
   const themeOptions = useMemo(() => createSettingsThemeOptions(themes), [themes]);
   const searchMaxFileSizeMegabytes = bytesToMegabytes(configuration.workspace.searchMaxFileSizeBytes);
@@ -125,13 +147,16 @@ export function SettingsDialog({
       setModifiedKeybindingsOnly(false);
       setPendingKeybinding(undefined);
       setAiProviderDrafts(createAiProviderDraftStates(configuration.ai.providers));
+      setRemoteSyncProviderDrafts(createRemoteSyncProviderDraftStates(configuration.remoteSync.providers));
       setAiDiagnosticStates({});
       setAiDiagnosticMessages({});
       setAiSecretDrafts({});
       setAiSecretStates({});
+      setRemoteSyncSecretDrafts({});
+      setRemoteSyncSecretStates({});
       setActiveSettingsSection(defaultSettingsSectionId);
     }
-  }, [configuration.ai.providers, configuration.workspace.defaultAssetFolder, open]);
+  }, [configuration.ai.providers, configuration.remoteSync.providers, configuration.workspace.defaultAssetFolder, open]);
 
   useEffect(() => {
     if (!open) {
@@ -294,6 +319,64 @@ export function SettingsDialog({
     resetAiProviderDiagnostic(draft.key);
   };
 
+  const addRemoteSyncProviderDraft = () => {
+    const key = `new:${nextRemoteSyncProviderDraftIdRef.current++}`;
+    setRemoteSyncProviderDrafts((drafts) => [...drafts, {
+      key,
+      ...createSettingsRemoteSyncProviderDraft()
+    }]);
+  };
+
+  const updateRemoteSyncProviderDraft = (
+    key: string,
+    value: Partial<SettingsRemoteSyncProviderDraft>
+  ) => {
+    setRemoteSyncProviderDrafts((drafts) => drafts.map((draft) =>
+      draft.key === key ? { ...draft, ...value } : draft
+    ));
+  };
+
+  const saveRemoteSyncProviderDraft = (draft: RemoteSyncProviderDraftState) => {
+    const validation = validateSettingsRemoteSyncProviderDraft(
+      draft,
+      configuration.remoteSync.providers,
+      draft.originalId
+    );
+    const nextProviders = upsertSettingsRemoteSyncProvider(
+      configuration.remoteSync.providers,
+      draft,
+      draft.originalId
+    );
+
+    if (nextProviders === configuration.remoteSync.providers) {
+      return;
+    }
+
+    setRemoteSyncProviderDrafts((drafts) => drafts.map((candidate) =>
+      candidate.key === draft.key
+        ? validation.provider
+          ? {
+              ...candidate,
+              originalId: validation.provider.id
+            }
+          : candidate
+        : candidate
+    ));
+    onUpdate({ remoteSync: { providers: nextProviders } });
+  };
+
+  const removeRemoteSyncProviderDraft = (draft: RemoteSyncProviderDraftState) => {
+    if (draft.originalId) {
+      onUpdate({
+        remoteSync: {
+          providers: removeSettingsRemoteSyncProvider(configuration.remoteSync.providers, draft.originalId)
+        }
+      });
+    }
+
+    setRemoteSyncProviderDrafts((drafts) => drafts.filter((candidate) => candidate.key !== draft.key));
+  };
+
   const updateAiSecretDraft = (key: string, value: string) => {
     setAiSecretDrafts((drafts) => ({ ...drafts, [key]: value }));
     setAiSecretStates((states) => ({ ...states, [key]: "idle" }));
@@ -318,6 +401,28 @@ export function SettingsDialog({
       if (deleted) {
         resetAiProviderDiagnostic(draft.key);
       }
+    });
+  };
+
+  const updateRemoteSyncSecretDraft = (key: string, value: string) => {
+    setRemoteSyncSecretDrafts((drafts) => ({ ...drafts, [key]: value }));
+    setRemoteSyncSecretStates((states) => ({ ...states, [key]: "idle" }));
+  };
+
+  const saveRemoteSyncSecret = (key: string, secretRef: string) => {
+    const value = remoteSyncSecretDrafts[key] ?? "";
+
+    void remoteSyncSecretActions?.setSecret(secretRef, value).then((saved) => {
+      setRemoteSyncSecretStates((states) => ({ ...states, [key]: saved ? "saved" : "failed" }));
+      if (saved) {
+        setRemoteSyncSecretDrafts((drafts) => ({ ...drafts, [key]: "" }));
+      }
+    });
+  };
+
+  const deleteRemoteSyncSecret = (key: string, secretRef: string) => {
+    void remoteSyncSecretActions?.deleteSecret(secretRef).then((deleted) => {
+      setRemoteSyncSecretStates((states) => ({ ...states, [key]: deleted ? "deleted" : "failed" }));
     });
   };
 
@@ -567,7 +672,7 @@ export function SettingsDialog({
               <SettingsSection sectionId={settingsSectionIds.ai}>
                 {isSettingsEntryVisible(settingsVisibility, settingsEntryIds.ai.providers) ? (
                   <>
-                    <div className="tp-settings-ai-toolbar">
+                    <div className="tp-settings-provider-toolbar">
                       <button
                         className="tp-settings-small-button"
                         type="button"
@@ -578,7 +683,7 @@ export function SettingsDialog({
                         <span>Add Provider</span>
                       </button>
                     </div>
-                    <div className="tp-settings-ai-list">
+                    <div className="tp-settings-provider-list">
                       {aiProviderDrafts.map((draft) => {
                         const validation = validateSettingsAiProviderDraft(
                           draft,
@@ -598,10 +703,10 @@ export function SettingsDialog({
                         const canDeleteSecret = !!aiSecretActions?.isAvailable && validation.canSave;
 
                         return (
-                          <section className="tp-settings-ai-card" key={draft.key}>
-                            <div className="tp-settings-ai-card-header">
+                          <section className="tp-settings-provider-card" key={draft.key}>
+                            <div className="tp-settings-provider-card-header">
                               <span>{draft.title || draft.id || "AI Provider"}</span>
-                              <div className="tp-settings-ai-card-actions">
+                              <div className="tp-settings-provider-card-actions">
                                 <button
                                   className="tp-settings-small-button"
                                   type="button"
@@ -699,7 +804,7 @@ export function SettingsDialog({
                                   onClick={() => saveAiSecret(draft)}
                                 >
                                   <KeyRound size={13} />
-                                  <span>{formatAiSecretSaveLabel(secretState)}</span>
+                                  <span>{formatSecretSaveLabel(secretState)}</span>
                                 </button>
                                 <button
                                   className="tp-settings-small-button"
@@ -708,7 +813,7 @@ export function SettingsDialog({
                                   onClick={() => deleteAiSecret(draft)}
                                 >
                                   <Trash2 size={13} />
-                                  <span>{formatAiSecretDeleteLabel(secretState)}</span>
+                                  <span>{formatSecretDeleteLabel(secretState)}</span>
                                 </button>
                               </span>
                             </SettingsField>
@@ -745,6 +850,170 @@ export function SettingsDialog({
                     unit="chars"
                     onChange={(workspaceContextMaxPreviewLength) => onUpdate({ ai: { workspaceContextMaxPreviewLength } })}
                   />
+                ) : null}
+              </SettingsSection>
+            ) : null}
+
+            {isSettingsSectionVisible(settingsVisibility, settingsSectionIds.remoteSync) ? (
+              <SettingsSection sectionId={settingsSectionIds.remoteSync}>
+                {isSettingsEntryVisible(settingsVisibility, settingsEntryIds.remoteSync.providers) ? (
+                  <>
+                    <div className="tp-settings-provider-toolbar">
+                      <button
+                        className="tp-settings-small-button"
+                        type="button"
+                        disabled={
+                          !canAddSettingsRemoteSyncProvider(configuration.remoteSync.providers) ||
+                          hasUnsavedRemoteSyncProviderDraft
+                        }
+                        onClick={addRemoteSyncProviderDraft}
+                      >
+                        <Plus size={13} />
+                        <span>Add Profile</span>
+                      </button>
+                    </div>
+                    <div className="tp-settings-provider-list">
+                      {remoteSyncProviderDrafts.map((draft) => {
+                        const validation = validateSettingsRemoteSyncProviderDraft(
+                          draft,
+                          configuration.remoteSync.providers,
+                          draft.originalId
+                        );
+                        const secretBindings = validation.provider?.secrets ?? [];
+
+                        return (
+                          <section className="tp-settings-provider-card" key={draft.key}>
+                            <div className="tp-settings-provider-card-header">
+                              <span>{draft.title || draft.id || "Remote Sync Profile"}</span>
+                              <div className="tp-settings-provider-card-actions">
+                                <button
+                                  className="tp-settings-small-button"
+                                  type="button"
+                                  disabled={!validation.canSave}
+                                  onClick={() => saveRemoteSyncProviderDraft(draft)}
+                                >
+                                  <Save size={13} />
+                                  <span>Save</span>
+                                </button>
+                                <button
+                                  className="tp-settings-small-button"
+                                  type="button"
+                                  onClick={() => removeRemoteSyncProviderDraft(draft)}
+                                >
+                                  <Trash2 size={13} />
+                                  <span>Remove</span>
+                                </button>
+                              </div>
+                            </div>
+                            <SettingsField label="Provider ID">
+                              <input
+                                className="tp-settings-text-input"
+                                type="text"
+                                value={draft.id}
+                                aria-label="Remote Sync Provider ID"
+                                onChange={(event) => updateRemoteSyncProviderDraft(draft.key, { id: event.target.value })}
+                              />
+                            </SettingsField>
+                            <SettingsField label="Title">
+                              <input
+                                className="tp-settings-text-input"
+                                type="text"
+                                value={draft.title}
+                                aria-label="Remote Sync Provider Title"
+                                onChange={(event) => updateRemoteSyncProviderDraft(draft.key, { title: event.target.value })}
+                              />
+                            </SettingsField>
+                            <SettingsField label="Base URL">
+                              <input
+                                className="tp-settings-text-input"
+                                type="url"
+                                value={draft.baseUrl}
+                                aria-label="Remote Sync Provider Base URL"
+                                onChange={(event) => updateRemoteSyncProviderDraft(draft.key, { baseUrl: event.target.value })}
+                              />
+                            </SettingsField>
+                            <SettingsField label="Remote Scope">
+                              <input
+                                className="tp-settings-text-input"
+                                type="text"
+                                value={draft.remoteScopeId}
+                                aria-label="Remote Sync Provider Scope"
+                                onChange={(event) => updateRemoteSyncProviderDraft(draft.key, { remoteScopeId: event.target.value })}
+                              />
+                            </SettingsField>
+                            <SettingsField label="Secret Bindings">
+                              <textarea
+                                className="tp-settings-textarea"
+                                value={draft.secretsText}
+                                aria-label="Remote Sync Provider Secret Bindings"
+                                onChange={(event) => updateRemoteSyncProviderDraft(draft.key, { secretsText: event.target.value })}
+                              />
+                            </SettingsField>
+                            <SettingsField label="Metadata">
+                              <textarea
+                                className="tp-settings-textarea"
+                                value={draft.metadataText}
+                                aria-label="Remote Sync Provider Metadata"
+                                onChange={(event) => updateRemoteSyncProviderDraft(draft.key, { metadataText: event.target.value })}
+                              />
+                            </SettingsField>
+                            {secretBindings.length > 0 ? (
+                              <div className="tp-settings-secret-list">
+                                {secretBindings.map((secret) => {
+                                  const secretKey = remoteSyncSecretStateKey(draft.key, secret);
+                                  const secretValue = remoteSyncSecretDrafts[secretKey] ?? "";
+                                  const secretState = remoteSyncSecretStates[secretKey] ?? "idle";
+                                  const canSaveSecret = !!remoteSyncSecretActions?.isAvailable &&
+                                    validation.canSave &&
+                                    secretValue.trim().length > 0;
+                                  const canDeleteSecret = !!remoteSyncSecretActions?.isAvailable && validation.canSave;
+
+                                  return (
+                                    <SettingsField key={secretKey} label={secret.name}>
+                                      <span className="tp-settings-secret-control">
+                                        <input
+                                          className="tp-settings-text-input"
+                                          type="password"
+                                          value={secretValue}
+                                          aria-label={`Remote Sync Secret ${secret.name}`}
+                                          disabled={!remoteSyncSecretActions?.isAvailable}
+                                          onChange={(event) => updateRemoteSyncSecretDraft(secretKey, event.target.value)}
+                                        />
+                                        <button
+                                          className="tp-settings-small-button"
+                                          type="button"
+                                          disabled={!canSaveSecret}
+                                          onClick={() => saveRemoteSyncSecret(secretKey, secret.secretRef)}
+                                        >
+                                          <KeyRound size={13} />
+                                          <span>{formatSecretSaveLabel(secretState)}</span>
+                                        </button>
+                                        <button
+                                          className="tp-settings-small-button"
+                                          type="button"
+                                          disabled={!canDeleteSecret}
+                                          onClick={() => deleteRemoteSyncSecret(secretKey, secret.secretRef)}
+                                        >
+                                          <Trash2 size={13} />
+                                          <span>{formatSecretDeleteLabel(secretState)}</span>
+                                        </button>
+                                      </span>
+                                    </SettingsField>
+                                  );
+                                })}
+                              </div>
+                            ) : null}
+                            {validation.issues.length > 0 ? (
+                              <div className="tp-settings-validation-row">{validation.issues[0]}</div>
+                            ) : null}
+                          </section>
+                        );
+                      })}
+                      {remoteSyncProviderDrafts.length === 0 ? (
+                        <div className="tp-settings-empty-row">No remote sync profiles configured</div>
+                      ) : null}
+                    </div>
+                  </>
                 ) : null}
               </SettingsSection>
             ) : null}
@@ -931,10 +1200,15 @@ interface PendingKeybindingOverride {
   readonly label: string;
 }
 
-type AiSecretState = "idle" | "saved" | "deleted" | "failed";
+type SecretState = "idle" | "saved" | "deleted" | "failed";
 type AiDiagnosticState = "idle" | "testing" | "passed" | "failed";
 
 interface AiProviderDraftState extends SettingsAiProviderDraft {
+  readonly key: string;
+  readonly originalId?: string;
+}
+
+interface RemoteSyncProviderDraftState extends SettingsRemoteSyncProviderDraft {
   readonly key: string;
   readonly originalId?: string;
 }
@@ -949,7 +1223,24 @@ function createAiProviderDraftStates(
   }));
 }
 
-function formatAiSecretSaveLabel(state: AiSecretState): string {
+function createRemoteSyncProviderDraftStates(
+  providers: readonly RemoteSyncProviderConfiguration[]
+): readonly RemoteSyncProviderDraftState[] {
+  return providers.map((provider) => ({
+    key: `provider:${provider.id}`,
+    originalId: provider.id,
+    ...createSettingsRemoteSyncProviderDraft(provider)
+  }));
+}
+
+function remoteSyncSecretStateKey(
+  draftKey: string,
+  secret: RemoteSyncProviderSecretConfiguration
+): string {
+  return `${draftKey}:${secret.name}:${secret.secretRef}`;
+}
+
+function formatSecretSaveLabel(state: SecretState): string {
   switch (state) {
     case "saved":
       return "Saved";
@@ -961,7 +1252,7 @@ function formatAiSecretSaveLabel(state: AiSecretState): string {
   }
 }
 
-function formatAiSecretDeleteLabel(state: AiSecretState): string {
+function formatSecretDeleteLabel(state: SecretState): string {
   switch (state) {
     case "deleted":
       return "Deleted";
