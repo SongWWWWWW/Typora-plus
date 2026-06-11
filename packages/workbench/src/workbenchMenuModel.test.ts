@@ -1,8 +1,11 @@
+import { Emitter } from "@typora-plus/base";
 import type { MenuItem } from "@typora-plus/platform";
 import { describe, expect, it } from "vitest";
 import {
   createWorkbenchMenuContext,
+  getWorkbenchMenuItems,
   isWorkbenchMenuItemActive,
+  registerWorkbenchMenuItemsSubscription,
   workbenchCommandTitle,
   workbenchMenuItemTitle
 } from "./workbenchMenuModel";
@@ -60,6 +63,48 @@ describe("workbench menu model", () => {
     }), context)).toBe(true);
     expect(isWorkbenchMenuItemActive(menuItem({}), context)).toBe(false);
   });
+
+  it("reads menu items through the menu service boundary", () => {
+    const fileSave = menuItem({ command: "file.save" });
+    const services = createMenuServices({
+      "titlebar.primary": [fileSave]
+    });
+
+    expect(getWorkbenchMenuItems(services, "titlebar.primary")).toEqual([fileSave]);
+    expect(getWorkbenchMenuItems(services, "activitybar.primary")).toEqual([]);
+  });
+
+  it("subscribes to one menu id and refreshes its current items", () => {
+    const fileSave = menuItem({ command: "file.save" });
+    const quickOpen = menuItem({
+      id: "quick.open",
+      menu: "activitybar.primary",
+      command: "workbench.quickOpen"
+    });
+    const updates: Array<readonly MenuItem[]> = [];
+    const services = createMenuServices({
+      "activitybar.primary": [quickOpen],
+      "titlebar.primary": [fileSave]
+    });
+
+    const disposable = registerWorkbenchMenuItemsSubscription(
+      services,
+      "titlebar.primary",
+      (items) => updates.push(items)
+    );
+
+    services.emit("activitybar.primary");
+    expect(updates).toEqual([]);
+
+    services.setItems("titlebar.primary", []);
+    services.emit("titlebar.primary");
+    expect(updates).toEqual([[]]);
+
+    disposable.dispose();
+    services.setItems("titlebar.primary", [fileSave]);
+    services.emit("titlebar.primary");
+    expect(updates).toEqual([[]]);
+  });
 });
 
 function menuItem(overrides: Partial<MenuItem>): MenuItem {
@@ -68,5 +113,19 @@ function menuItem(overrides: Partial<MenuItem>): MenuItem {
     menu: "titlebar.primary",
     command: "file.save",
     ...overrides
+  };
+}
+
+function createMenuServices(initialItems: Record<string, readonly MenuItem[]>) {
+  const menuEmitter = new Emitter<string>();
+  const items = new Map(Object.entries(initialItems));
+
+  return {
+    menuService: {
+      getMenuItems: (menu: string) => items.get(menu) ?? [],
+      onDidChangeMenu: menuEmitter.event
+    },
+    emit: (menu: string) => menuEmitter.fire(menu),
+    setItems: (menu: string, nextItems: readonly MenuItem[]) => items.set(menu, nextItems)
   };
 }

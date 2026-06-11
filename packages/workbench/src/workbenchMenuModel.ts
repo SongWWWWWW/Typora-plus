@@ -1,5 +1,8 @@
+import type { IDisposable } from "@typora-plus/base";
 import type {
   CommandMetadata,
+  IMenuService,
+  MenuId,
   MenuItem,
   TyporaPlusConfiguration
 } from "@typora-plus/platform";
@@ -12,11 +15,34 @@ export interface WorkbenchMenuConfiguration {
   readonly editor: Pick<TyporaPlusConfiguration["editor"], "focusMode" | "typewriterMode">;
 }
 
+export interface WorkbenchMenuItemServices {
+  readonly menuService: Pick<IMenuService, "getMenuItems" | "onDidChangeMenu">;
+}
+
 export function workbenchCommandTitle(
   commands: readonly Pick<CommandMetadata, "id" | "title">[],
   id: string
 ): string {
   return commands.find((command) => command.id === id)?.title ?? id;
+}
+
+export function getWorkbenchMenuItems(
+  services: WorkbenchMenuItemServices,
+  menu: MenuId
+): readonly MenuItem[] {
+  return services.menuService.getMenuItems(menu);
+}
+
+export function registerWorkbenchMenuItemsSubscription(
+  services: WorkbenchMenuItemServices,
+  menu: MenuId,
+  setItems: (items: readonly MenuItem[]) => void
+): IDisposable {
+  return services.menuService.onDidChangeMenu((changedMenu) => {
+    if (changedMenu === menu) {
+      setItems(services.menuService.getMenuItems(menu));
+    }
+  });
 }
 
 export function workbenchMenuItemTitle(

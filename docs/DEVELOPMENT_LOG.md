@@ -4949,3 +4949,31 @@ Review:
 Known limitations:
 
 - Sidebar and Quick Open still own their local focus and active-row state because those are surface-specific interaction concerns.
+
+## 2026-06-11 - P2 Workbench Menu Item Subscription
+
+Completed:
+
+- Added focused Workbench menu helpers for reading menu items and subscribing to changes for one menu id.
+- Replaced direct `Application.tsx` menu-service reads and change filtering inside `useMenuItems()` with the menu helper boundary.
+- Preserved titlebar and activitybar menu refresh behavior for contributed, context-filtered menu items.
+- Covered initial menu reads, targeted menu refresh, ignored unrelated menu changes, and disposal.
+
+Quality gate:
+
+- `npx vitest run packages/workbench/src/workbenchMenuModel.test.ts`: passed, 6 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 536 tests
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Dev server smoke check: passed at `http://127.0.0.1:5173`; status 200 and root element present
+
+Review:
+
+- Menu item reads and menu-change lifecycle now share the same focused menu model as title fallback, menu context construction, and toggled active-state checks.
+- `Application.tsx` still owns React state for each rendered menu surface, while the menu model owns the service boundary and menu-id filtering policy.
+- No new dependency, configuration key, storage path, visual token, extra documentation file, or hard-coded platform assumption was introduced.
+
+Known limitations:
+
+- Menu icon rendering remains local to the React shell because icon ids map to concrete React icon components there.

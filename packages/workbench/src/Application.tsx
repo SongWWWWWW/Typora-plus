@@ -72,7 +72,9 @@ import {
 import { registerWorkbenchKeybindingDispatch } from "./workbenchKeybindingDispatch";
 import {
   createWorkbenchMenuContext,
+  getWorkbenchMenuItems,
   isWorkbenchMenuItemActive,
+  registerWorkbenchMenuItemsSubscription,
   workbenchCommandTitle,
   workbenchMenuItemTitle
 } from "./workbenchMenuModel";
@@ -436,13 +438,13 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
 }
 
 function useMenuItems(services: WorkbenchServices, menu: MenuId): readonly MenuItem[] {
-  const [items, setItems] = useState<readonly MenuItem[]>(() => services.menuService.getMenuItems(menu));
+  const [items, setItems] = useState<readonly MenuItem[]>(() => getWorkbenchMenuItems(services, menu));
 
-  useEffect(() => services.menuService.onDidChangeMenu((changedMenu) => {
-    if (changedMenu === menu) {
-      setItems(services.menuService.getMenuItems(menu));
-    }
-  }).dispose, [menu, services]);
+  useEffect(() => {
+    const disposable = registerWorkbenchMenuItemsSubscription(services, menu, setItems);
+
+    return () => disposable.dispose();
+  }, [menu, services]);
 
   return items;
 }
