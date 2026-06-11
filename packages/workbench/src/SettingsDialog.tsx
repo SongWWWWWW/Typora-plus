@@ -22,9 +22,12 @@ import {
   createSettingsThemeOptions,
   defaultSettingsSectionId,
   getSettingsEntryLabel,
+  getSettingsSectionTitle,
   megabytesToBytes,
   normalizeAssetFolderInput,
+  resolveNearestSettingsSection,
   resolveSelectedSettingsThemeId,
+  resolveVisibleSettingsSection,
   settingSectionAnchorId,
   settingsColorSchemeOptions,
   settingsDensityOptions,
@@ -165,16 +168,14 @@ export function SettingsDialog({
   }, [configuration, getCommandForKeybinding, getKeybindingLabelForKeybinding, onUpdate, recordingCommand]);
 
   useEffect(() => {
-    if (!open || settingsSearchResult.visibleSections.length === 0) {
+    if (!open) {
       return;
     }
 
-    if (!settingsSearchResult.visibleSections.includes(activeSettingsSection)) {
-      const nextSection = settingsSearchResult.visibleSections[0];
+    const nextSection = resolveVisibleSettingsSection(activeSettingsSection, settingsSearchResult.visibleSections);
 
-      if (nextSection) {
-        setActiveSettingsSection(nextSection);
-      }
+    if (nextSection !== activeSettingsSection) {
+      setActiveSettingsSection(nextSection);
     }
   }, [activeSettingsSection, open, settingsSearchResult.visibleSections]);
 
@@ -216,23 +217,19 @@ export function SettingsDialog({
     }
 
     const containerTop = container.getBoundingClientRect().top;
-    let nextSection = activeSettingsSection;
-    let nearestDistance = Number.POSITIVE_INFINITY;
-
-    for (const section of visibleSettingsSections) {
+    const distances = visibleSettingsSections.flatMap((section) => {
       const element = container.querySelector<HTMLElement>(`#${settingSectionAnchorId(section.id)}`);
 
       if (!element) {
-        continue;
+        return [];
       }
 
-      const distance = Math.abs(element.getBoundingClientRect().top - containerTop);
-
-      if (distance < nearestDistance) {
-        nearestDistance = distance;
-        nextSection = section.id;
-      }
-    }
+      return [{
+        sectionId: section.id,
+        distance: Math.abs(element.getBoundingClientRect().top - containerTop)
+      }];
+    });
+    const nextSection = resolveNearestSettingsSection(activeSettingsSection, distances);
 
     if (nextSection !== activeSettingsSection) {
       setActiveSettingsSection(nextSection);
@@ -622,8 +619,7 @@ function SettingsSection({
   readonly sectionId: SettingsSectionId;
   readonly children: ReactNode;
 }) {
-  const section = settingsSections.find((candidate) => candidate.id === sectionId);
-  const title = section?.title ?? sectionId;
+  const title = getSettingsSectionTitle(sectionId);
 
   return (
     <section className="tp-settings-section" id={settingSectionAnchorId(sectionId)}>

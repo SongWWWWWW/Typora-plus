@@ -77,12 +77,21 @@ export interface SettingsSearchResult {
   readonly visibleSections: readonly SettingsSectionId[];
 }
 
+export interface SettingsSectionDistance {
+  readonly sectionId: SettingsSectionId;
+  readonly distance: number;
+}
+
 export const settingsSections = [
   { id: settingsSectionIds.appearance, title: "Appearance" },
   { id: settingsSectionIds.editor, title: "Editor" },
   { id: settingsSectionIds.workspace, title: "Workspace" },
   { id: settingsSectionIds.keybindings, title: "Keybindings" }
 ] as const satisfies readonly SettingsSectionDefinition[];
+
+const settingsSectionById = new Map<SettingsSectionId, SettingsSectionDefinition>(
+  settingsSections.map((section) => [section.id, section])
+);
 
 export const settingsColorSchemeOptions = [
   { value: "system", label: "System" },
@@ -164,6 +173,18 @@ export function settingSectionAnchorId(sectionId: SettingsSectionId): string {
   return `tp-settings-section-${sectionId}`;
 }
 
+export function getSettingsSectionDefinition(sectionId: SettingsSectionId): SettingsSectionDefinition {
+  const section = settingsSectionById.get(sectionId);
+  if (!section) {
+    throw new Error(`Unknown settings section: ${sectionId}`);
+  }
+  return section;
+}
+
+export function getSettingsSectionTitle(sectionId: SettingsSectionId): string {
+  return getSettingsSectionDefinition(sectionId).title;
+}
+
 export function getSettingsEntryDefinition(entryId: SettingsEntryId): SettingsEntryDefinition {
   const entry = settingsEntryById.get(entryId);
   if (!entry) {
@@ -199,6 +220,32 @@ export function resolveSelectedSettingsThemeId(
 
 export function formatSettingsThemeOptionLabel(theme: Pick<RegisteredTheme, "colorScheme" | "label">): string {
   return theme.colorScheme ? `${theme.label} (${theme.colorScheme})` : theme.label;
+}
+
+export function resolveVisibleSettingsSection(
+  activeSection: SettingsSectionId,
+  visibleSections: readonly SettingsSectionId[]
+): SettingsSectionId {
+  return visibleSections.includes(activeSection)
+    ? activeSection
+    : visibleSections[0] ?? activeSection;
+}
+
+export function resolveNearestSettingsSection(
+  activeSection: SettingsSectionId,
+  distances: readonly SettingsSectionDistance[]
+): SettingsSectionId {
+  let nearestSection = activeSection;
+  let nearestDistance = Number.POSITIVE_INFINITY;
+
+  for (const { sectionId, distance } of distances) {
+    if (Number.isFinite(distance) && distance < nearestDistance) {
+      nearestSection = sectionId;
+      nearestDistance = distance;
+    }
+  }
+
+  return nearestSection;
 }
 
 export function createSettingsSearchResult(query: string): SettingsSearchResult {

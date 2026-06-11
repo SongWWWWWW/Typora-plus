@@ -5900,3 +5900,31 @@ Review:
 Known limitations:
 
 - Settings still renders each field explicitly in React; a schema-driven form layer remains deferred until more setting types or extension-contributed settings make it worthwhile.
+
+## 2026-06-11 - P2 Settings Navigation Model
+
+Completed:
+
+- Added Settings model helpers for section definition lookup, section title lookup, visible-section fallback, and nearest-section selection.
+- Routed Settings dialog search-result active-section fallback through the shared navigation helper.
+- Routed Settings dialog scroll synchronization through a pure nearest-section selection helper while leaving DOM measurement in the UI.
+- Covered section lookup, active-section fallback, nearest-section selection, and invalid measurement handling with focused Settings model tests.
+
+Quality gate:
+
+- `npx vitest run packages/workbench/src/settingsModel.test.ts packages/workbench/src/workbenchConfigurationUpdates.test.ts packages/workbench/src/keybindingSettings.test.ts`: passed, 29 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 59 files / 593 tests, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Dev server smoke check: passed at `http://127.0.0.1:5173`; status 200 and root element present
+
+Review:
+
+- Settings navigation policy now lives beside section metadata instead of in `SettingsDialog`.
+- `SettingsDialog` still measures DOM positions because that is a rendering concern, but the active-section decision is pure and unit-tested.
+- No new dependency, configuration key, storage path, visual token, extra documentation file, or hard-coded platform assumption was introduced.
+
+Known limitations:
+
+- Settings section content is still composed directly in React; extracting a schema-driven renderer remains a larger future step.

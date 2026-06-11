@@ -9,9 +9,13 @@ import {
   formatSettingsThemeOptionLabel,
   getSettingsEntryDefinition,
   getSettingsEntryLabel,
+  getSettingsSectionDefinition,
+  getSettingsSectionTitle,
   megabytesToBytes,
   normalizeAssetFolderInput,
+  resolveNearestSettingsSection,
   resolveSelectedSettingsThemeId,
+  resolveVisibleSettingsSection,
   settingSectionAnchorId,
   settingsColorSchemeOptions,
   settingsDensityOptions,
@@ -85,6 +89,13 @@ describe("settings model", () => {
     for (const entry of settingsEntries) {
       expect(getSettingsEntryDefinition(entry.id)).toBe(entry);
       expect(getSettingsEntryLabel(entry.id)).toBe(entry.label);
+    }
+  });
+
+  it("reads settings section definitions and titles by id", () => {
+    for (const section of settingsSections) {
+      expect(getSettingsSectionDefinition(section.id)).toBe(section);
+      expect(getSettingsSectionTitle(section.id)).toBe(section.title);
     }
   });
 
@@ -171,6 +182,30 @@ describe("settings model", () => {
 
     expect(result.visibleEntries).toEqual([]);
     expect(result.visibleSections).toEqual([]);
+  });
+
+  it("resolves active settings sections against visible search results", () => {
+    expect(resolveVisibleSettingsSection(settingsSectionIds.editor, [
+      settingsSectionIds.appearance,
+      settingsSectionIds.editor
+    ])).toBe(settingsSectionIds.editor);
+    expect(resolveVisibleSettingsSection(settingsSectionIds.workspace, [
+      settingsSectionIds.appearance,
+      settingsSectionIds.editor
+    ])).toBe(settingsSectionIds.appearance);
+    expect(resolveVisibleSettingsSection(settingsSectionIds.workspace, [])).toBe(settingsSectionIds.workspace);
+  });
+
+  it("resolves the nearest measured settings section", () => {
+    expect(resolveNearestSettingsSection(settingsSectionIds.appearance, [
+      { sectionId: settingsSectionIds.appearance, distance: 90 },
+      { sectionId: settingsSectionIds.editor, distance: 20 },
+      { sectionId: settingsSectionIds.workspace, distance: 40 }
+    ])).toBe(settingsSectionIds.editor);
+    expect(resolveNearestSettingsSection(settingsSectionIds.keybindings, [
+      { sectionId: settingsSectionIds.appearance, distance: Number.POSITIVE_INFINITY },
+      { sectionId: settingsSectionIds.editor, distance: Number.NaN }
+    ])).toBe(settingsSectionIds.keybindings);
   });
 
   it("clamps numeric settings to their configured bounds", () => {
