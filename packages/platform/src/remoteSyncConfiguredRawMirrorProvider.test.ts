@@ -12,7 +12,7 @@ import {
   remoteSyncConfiguredRawMirrorMetadataKeys,
   createRemoteSyncConfiguredRawMirrorProviderFactory
 } from "./index";
-import type { RemoteSyncManifestStorage } from "./remoteSync";
+import type { RemoteSyncManifestStorage, RemoteSyncProgress } from "./remoteSync";
 
 describe("configured raw mirror remote sync provider", () => {
   it("creates profile-backed raw mirror plans and uploads local files through native requests", async () => {
@@ -277,11 +277,14 @@ describe("configured raw mirror remote sync provider", () => {
       remoteId: "remote-1",
       message: "Local resource is missing"
     }]);
+    const progressEvents: RemoteSyncProgress[] = [];
+
     await expect(providers[0]!.executePlan(deletePlan, {
       workspaceUri,
       resources: [],
       direction: "bidirectional",
-      dryRun: false
+      dryRun: false,
+      onProgress: (progress) => progressEvents.push(progress)
     })).resolves.toMatchObject({
       summary: {
         creates: 0,
@@ -295,6 +298,12 @@ describe("configured raw mirror remote sync provider", () => {
       "DELETE",
       "https://sync.example.test/api/mirror/delete?remoteScopeId=workspace-root&path=Daily.md&remoteId=remote-1"
     ]);
+    expect(progressEvents).toEqual(expect.arrayContaining([{
+      message: "Deleted remote sync resource",
+      completed: 1,
+      total: 1,
+      operation: deletePlan.operations[0]
+    }]));
   });
 
   it("skips native-request profiles that do not opt into the raw mirror adapter", () => {
@@ -516,6 +525,7 @@ describe("configured raw mirror remote sync provider", () => {
 
   it("follows configured raw mirror list cursors before planning", async () => {
     const requests: RemoteSyncNativeRequestInput[] = [];
+    const progressEvents: RemoteSyncProgress[] = [];
     const providers = createConfiguredRemoteSyncProviders([
       configuration({
         metadata: {
@@ -546,7 +556,8 @@ describe("configured raw mirror remote sync provider", () => {
       workspaceUri: URI.file("C:/Notes"),
       resources: [],
       direction: "pull",
-      dryRun: true
+      dryRun: true,
+      onProgress: (progress) => progressEvents.push(progress)
     });
 
     expect(requests.map((request) => [request.method, request.url])).toEqual([
@@ -564,6 +575,16 @@ describe("configured raw mirror remote sync provider", () => {
       skips: 0,
       conflicts: 0
     });
+    expect(progressEvents).toEqual([
+      {
+        message: "Listed remote sync page",
+        completed: 1
+      },
+      {
+        message: "Listed remote sync page",
+        completed: 2
+      }
+    ]);
   });
 
   it("rejects configured raw mirror list cursor loops", async () => {

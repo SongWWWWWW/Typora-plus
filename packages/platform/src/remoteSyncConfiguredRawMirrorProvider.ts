@@ -1,6 +1,7 @@
 import type { RemoteSyncProviderConfiguration } from "./configuration";
 import type {
   RemoteSyncOperation,
+  RemoteSyncProgress,
   RemoteSyncRemoteResource,
   RemoteSyncResource
 } from "./remoteSync";
@@ -240,6 +241,10 @@ async function listConfiguredRawMirrorResources(
     ensureConfiguredRawMirrorResponseOk(response, "list");
     const page = readConfiguredRawMirrorResourceListPage(response.body);
     resources.push(...page.resources);
+    reportConfiguredRawMirrorProgress(listRequest, {
+      message: "Listed remote sync page",
+      completed: pageIndex + 1
+    });
 
     if (resources.length > remoteSyncConfiguredRawMirrorListLimits.maxResources) {
       throw new Error("Configured raw mirror resource list response is too large");
@@ -273,18 +278,20 @@ async function executeConfiguredRawMirrorOperations(
   const uploadedByPath = new Map(uploadContents.map((content) => [content.operation.relativePath, content]));
   const downloadedContents: RemoteSyncRawMirrorLocalFileContent[] = [];
 
-  for (const operation of executeRequest.operations) {
+  for (const [operationIndex, operation] of executeRequest.operations.entries()) {
     throwIfConfiguredRawMirrorAborted(executeRequest.signal);
 
     if (operation.target === "remote") {
       await executeConfiguredRawMirrorRemoteOperation(context, executeRequest, operation, uploadedByPath.get(
         operation.relativePath
       ));
+      reportConfiguredRawMirrorOperationProgress(executeRequest, operation, operationIndex + 1);
       continue;
     }
 
     if (operation.target === "local" && (operation.kind === "create" || operation.kind === "update")) {
       downloadedContents.push(await downloadConfiguredRawMirrorFile(context, executeRequest, operation));
+      reportConfiguredRawMirrorOperationProgress(executeRequest, operation, operationIndex + 1);
     }
   }
 
@@ -419,6 +426,32 @@ async function downloadConfiguredRawMirrorFile(
 
   ensureConfiguredRawMirrorResponseOk(response, "download");
   return readConfiguredRawMirrorFileContent(response.body, operation.relativePath);
+}
+
+function reportConfiguredRawMirrorOperationProgress(
+  request: RemoteSyncRawMirrorExecuteRequest,
+  operation: RemoteSyncOperation,
+  completed: number
+): void {
+  const action = operation.target === "local"
+    ? "Downloaded remote sync resource"
+    : operation.kind === "delete"
+      ? "Deleted remote sync resource"
+      : "Uploaded remote sync resource";
+
+  reportConfiguredRawMirrorProgress(request, {
+    message: action,
+    completed,
+    total: request.operations.length,
+    operation
+  });
+}
+
+function reportConfiguredRawMirrorProgress(
+  request: { readonly onProgress?: (progress: RemoteSyncProgress) => void },
+  progress: RemoteSyncProgress
+): void {
+  request.onProgress?.(progress);
 }
 
 function createConfiguredRawMirrorBaseQuery(

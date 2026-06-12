@@ -8281,3 +8281,30 @@ Review:
 Known limitations:
 
 - Direct Feishu Drive token lifecycle, folder traversal, upload-session handling, and Docs import remain future adapter work.
+
+## 2026-06-12 - P2 Raw Mirror Gateway Progress
+
+Completed:
+
+- Added configured raw mirror progress events after each paginated list page is read.
+- Added configured raw mirror progress events after each remote upload, download, or delete gateway operation completes.
+- Kept progress on the existing `RemoteSyncProgress` callback so Workbench and extension-host callers consume the same provider-neutral contract.
+- Covered list-page and remote-delete progress with focused platform tests.
+
+Quality gate:
+
+- `npx vitest run packages/platform/src/remoteSyncConfiguredRawMirrorProvider.test.ts`: passed, 1 file / 12 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 87 files / 834 tests, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Raw mirror gateway progress hardcode scan for OpenAI endpoints, model ids, API keys, Feishu endpoints, OAuth/token/secret literals, and provider credentials: passed
+
+Review:
+
+- Long-running raw mirror snapshots and gateway operations now surface more useful execution feedback without adding UI-specific progress state or cloud-specific progress protocols.
+- No Feishu endpoint, OAuth scope, token name, folder id, model id, provider id, storage path, or credential literal was added.
+
+Known limitations:
+
+- Direct Feishu Drive token lifecycle, folder traversal, upload-session handling, permission prompts, and Docs import remain future adapter work.
