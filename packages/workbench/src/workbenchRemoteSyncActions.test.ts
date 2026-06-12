@@ -495,6 +495,72 @@ describe("workbench remote sync actions", () => {
     expect(getWorkbenchRemoteSyncPlanExecutionBlockReason(resolved))
       .toBe("Resolve remote sync conflicts before execution");
   });
+
+  it("uses explicit conflict presence before legacy provider messages", () => {
+    const plan = {
+      operations: [
+        {
+          kind: "conflict" as const,
+          target: "both" as const,
+          relativePath: "UnknownButPresent.md",
+          localPresence: "present" as const,
+          localUri: URI.file("C:/Notes/UnknownButPresent.md"),
+          remotePresence: "present" as const,
+          remoteId: "remote-present",
+          message: "Resource state cannot be compared"
+        },
+        {
+          kind: "conflict" as const,
+          target: "both" as const,
+          relativePath: "LocalOnlyWithHistory.md",
+          localPresence: "present" as const,
+          localUri: URI.file("C:/Notes/LocalOnlyWithHistory.md"),
+          remotePresence: "missing" as const,
+          remoteId: "historical-remote",
+          message: "Resource state cannot be compared"
+        }
+      ],
+      summary: {
+        creates: 0,
+        updates: 0,
+        deletes: 0,
+        skips: 0,
+        conflicts: 2
+      }
+    };
+
+    const resolved = resolveWorkbenchRemoteSyncPlanConflicts(
+      plan,
+      workbenchRemoteSyncConflictResolutions.useLocal
+    );
+
+    expect(resolved).toEqual({
+      operations: [
+        {
+          kind: "update",
+          target: "remote",
+          relativePath: "UnknownButPresent.md",
+          localUri: URI.file("C:/Notes/UnknownButPresent.md"),
+          remoteId: "remote-present",
+          message: "Resolved by using local resource"
+        },
+        {
+          kind: "create",
+          target: "remote",
+          relativePath: "LocalOnlyWithHistory.md",
+          localUri: URI.file("C:/Notes/LocalOnlyWithHistory.md"),
+          message: "Resolved by using local resource"
+        }
+      ],
+      summary: {
+        creates: 1,
+        updates: 1,
+        deletes: 0,
+        skips: 0,
+        conflicts: 0
+      }
+    });
+  });
 });
 
 function createServices() {

@@ -7,6 +7,7 @@ export type RemoteSyncProviderId = string;
 export type RemoteSyncDirection = "push" | "pull" | "bidirectional";
 export type RemoteSyncOperationKind = "create" | "update" | "delete" | "skip" | "conflict";
 export type RemoteSyncOperationTarget = "local" | "remote" | "both" | "none";
+export type RemoteSyncResourcePresence = "present" | "missing" | "unknown";
 
 export interface RemoteSyncResource {
   readonly uri: URIType;
@@ -33,7 +34,9 @@ export interface RemoteSyncOperation {
   readonly kind: RemoteSyncOperationKind;
   readonly target: RemoteSyncOperationTarget;
   readonly relativePath: string;
+  readonly localPresence?: RemoteSyncResourcePresence;
   readonly localUri?: URIType;
+  readonly remotePresence?: RemoteSyncResourcePresence;
   readonly remoteId?: string;
   readonly message?: string;
 }
@@ -514,7 +517,9 @@ function createRemoteSyncDiffOperation(
 
   if (local.kind !== remote.kind) {
     return createRemoteSyncOperation("conflict", "both", relativePath, {
+      localPresence: "present",
       localUri: local.uri,
+      remotePresence: "present",
       remoteId: remote.remoteId,
       message: "Resource kind differs"
     });
@@ -531,7 +536,9 @@ function createRemoteSyncDiffOperation(
 
   if (direction === "bidirectional") {
     return createRemoteSyncOperation("conflict", "both", relativePath, {
+      localPresence: "present",
       localUri: local.uri,
+      remotePresence: "present",
       remoteId: remote.remoteId,
       message: comparison === "unknown" ? "Resource state cannot be compared" : "Resource differs on both sides"
     });
@@ -576,7 +583,9 @@ function createRemoteSyncManifestPresentOperation(
 ): RemoteSyncOperation {
   if (local.kind !== remote.kind) {
     return createRemoteSyncOperation("conflict", "both", relativePath, {
+      localPresence: "present",
       localUri: local.uri,
+      remotePresence: "present",
       remoteId: remote.remoteId,
       message: "Resource kind differs"
     });
@@ -593,7 +602,9 @@ function createRemoteSyncManifestPresentOperation(
 
   if (!manifest) {
     return createRemoteSyncOperation("conflict", "both", relativePath, {
+      localPresence: "present",
       localUri: local.uri,
+      remotePresence: "present",
       remoteId: remote.remoteId,
       message: currentComparison === "unknown"
         ? "Resource state cannot be compared"
@@ -603,7 +614,9 @@ function createRemoteSyncManifestPresentOperation(
 
   if (manifest.kind !== local.kind || manifest.kind !== remote.kind) {
     return createRemoteSyncOperation("conflict", "both", relativePath, {
+      localPresence: "present",
       localUri: local.uri,
+      remotePresence: "present",
       remoteId: remote.remoteId,
       message: "Synced baseline kind differs"
     });
@@ -614,7 +627,9 @@ function createRemoteSyncManifestPresentOperation(
 
   if (localState === "unknown" || remoteState === "unknown") {
     return createRemoteSyncOperation("conflict", "both", relativePath, {
+      localPresence: "present",
       localUri: local.uri,
+      remotePresence: "present",
       remoteId: remote.remoteId,
       message: "Resource state cannot be compared"
     });
@@ -635,7 +650,9 @@ function createRemoteSyncManifestPresentOperation(
   }
 
   return createRemoteSyncOperation("conflict", "both", relativePath, {
+    localPresence: "present",
     localUri: local.uri,
+    remotePresence: "present",
     remoteId: remote.remoteId,
     message: "Resource changed on both sides"
   });
@@ -655,7 +672,9 @@ function createRemoteSyncManifestLocalOnlyOperation(
 
   if (localState === "changed" || localState === "unknown") {
     return createRemoteSyncOperation("conflict", "both", relativePath, {
+      localPresence: "present",
       localUri: local.uri,
+      remotePresence: "missing",
       remoteId: manifest.remoteId,
       message: localState === "unknown"
         ? "Resource state cannot be compared"
@@ -690,6 +709,8 @@ function createRemoteSyncManifestRemoteOnlyOperation(
 
   if (remoteState === "changed" || remoteState === "unknown") {
     return createRemoteSyncOperation("conflict", "both", relativePath, {
+      localPresence: "missing",
+      remotePresence: "present",
       remoteId: remote.remoteId,
       message: remoteState === "unknown"
         ? "Resource state cannot be compared"
@@ -792,7 +813,9 @@ function createRemoteSyncOperation(
   target: RemoteSyncOperationTarget,
   relativePath: string,
   details: {
+    readonly localPresence?: RemoteSyncResourcePresence | undefined;
     readonly localUri?: URIType | undefined;
+    readonly remotePresence?: RemoteSyncResourcePresence | undefined;
     readonly remoteId?: string | undefined;
     readonly message?: string | undefined;
   } = {}
@@ -801,7 +824,9 @@ function createRemoteSyncOperation(
     kind,
     target,
     relativePath,
+    ...(details.localPresence ? { localPresence: details.localPresence } : {}),
     ...(details.localUri ? { localUri: details.localUri } : {}),
+    ...(details.remotePresence ? { remotePresence: details.remotePresence } : {}),
     ...(details.remoteId ? { remoteId: details.remoteId } : {}),
     ...(details.message ? { message: details.message } : {})
   };
@@ -1173,6 +1198,14 @@ function normalizeRemoteSyncOperations(value: unknown): readonly RemoteSyncOpera
 
 function normalizeRemoteSyncOperation(value: unknown, index: number): RemoteSyncOperation {
   const record = expectRecord(value, `Remote sync operation ${index}`);
+  const localPresence = normalizeOptionalRemoteSyncResourcePresence(
+    record.localPresence,
+    `Remote sync operation ${index} local presence`
+  );
+  const remotePresence = normalizeOptionalRemoteSyncResourcePresence(
+    record.remotePresence,
+    `Remote sync operation ${index} remote presence`
+  );
   const remoteId = readOptionalString(record.remoteId, `Remote sync operation ${index} remote id`);
   const message = readOptionalString(record.message, `Remote sync operation ${index} message`);
 
@@ -1180,9 +1213,11 @@ function normalizeRemoteSyncOperation(value: unknown, index: number): RemoteSync
     kind: normalizeRemoteSyncOperationKind(record.kind),
     target: normalizeRemoteSyncOperationTarget(record.target),
     relativePath: normalizeRelativePath(record.relativePath, `Remote sync operation ${index} relative path`),
+    ...(localPresence ? { localPresence } : {}),
     ...(record.localUri !== undefined
       ? { localUri: readRequiredUri(record.localUri, `Remote sync operation ${index} local URI`) }
       : {}),
+    ...(remotePresence ? { remotePresence } : {}),
     ...(remoteId ? { remoteId } : {}),
     ...(message ? { message } : {})
   };
@@ -1270,6 +1305,21 @@ function normalizeRemoteSyncOperationKind(value: unknown): RemoteSyncOperationKi
 function normalizeRemoteSyncOperationTarget(value: unknown): RemoteSyncOperationTarget {
   if (value !== "local" && value !== "remote" && value !== "both" && value !== "none") {
     throw new Error("Remote sync operation target must be local, remote, both, or none");
+  }
+
+  return value;
+}
+
+function normalizeOptionalRemoteSyncResourcePresence(
+  value: unknown,
+  label: string
+): RemoteSyncResourcePresence | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (value !== "present" && value !== "missing" && value !== "unknown") {
+    throw new Error(`${label} must be present, missing, or unknown`);
   }
 
   return value;

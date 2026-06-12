@@ -1122,7 +1122,9 @@ function toRuntimeRemoteSyncPlan(plan: ExtensionHostProtocolRemoteSyncPlan): Rem
       kind: operation.kind,
       target: operation.target,
       relativePath: operation.relativePath,
+      ...(operation.localPresence ? { localPresence: operation.localPresence } : {}),
       ...(operation.localUri ? { localUri: URI.parse(operation.localUri) } : {}),
+      ...(operation.remotePresence ? { remotePresence: operation.remotePresence } : {}),
       ...(operation.remoteId ? { remoteId: operation.remoteId } : {}),
       ...(operation.message ? { message: operation.message } : {})
     })),
@@ -1136,7 +1138,9 @@ function toProtocolRemoteSyncPlan(plan: RemoteSyncPlan): ExtensionHostProtocolRe
       kind: operation.kind,
       target: operation.target,
       relativePath: operation.relativePath,
+      ...(operation.localPresence ? { localPresence: operation.localPresence } : {}),
       ...(operation.localUri ? { localUri: operation.localUri.toString() } : {}),
+      ...(operation.remotePresence ? { remotePresence: operation.remotePresence } : {}),
       ...(operation.remoteId ? { remoteId: operation.remoteId } : {}),
       ...(operation.message ? { message: operation.message } : {})
     })),
@@ -1162,7 +1166,9 @@ function toProtocolRemoteSyncProgress(progress: RemoteSyncProgress): ExtensionHo
         kind: progress.operation.kind,
         target: progress.operation.target,
         relativePath: progress.operation.relativePath,
+        ...(progress.operation.localPresence ? { localPresence: progress.operation.localPresence } : {}),
         ...(progress.operation.localUri ? { localUri: progress.operation.localUri.toString() } : {}),
+        ...(progress.operation.remotePresence ? { remotePresence: progress.operation.remotePresence } : {}),
         ...(progress.operation.remoteId ? { remoteId: progress.operation.remoteId } : {}),
         ...(progress.operation.message ? { message: progress.operation.message } : {})
       }

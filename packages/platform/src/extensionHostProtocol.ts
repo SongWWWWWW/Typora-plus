@@ -23,6 +23,7 @@ import type {
   RemoteSyncPlan,
   RemoteSyncPlanRequest,
   RemoteSyncProgress,
+  RemoteSyncResourcePresence,
   RemoteSyncResource,
   RemoteSyncResult,
   RemoteSyncSummary
@@ -516,7 +517,9 @@ export interface ExtensionHostProtocolRemoteSyncOperation {
   readonly kind: RemoteSyncOperationKind;
   readonly target: RemoteSyncOperationTarget;
   readonly relativePath: string;
+  readonly localPresence?: RemoteSyncResourcePresence;
   readonly localUri?: string;
+  readonly remotePresence?: RemoteSyncResourcePresence;
   readonly remoteId?: string;
   readonly message?: string;
 }
@@ -2139,6 +2142,14 @@ function normalizeProtocolRemoteSyncOperation(
   index: number
 ): ExtensionHostProtocolRemoteSyncOperation {
   const record = expectRecord(value, `Extension host remote sync operation ${index + 1}`);
+  const localPresence = normalizeOptionalRemoteSyncResourcePresence(
+    record.localPresence,
+    `Extension host remote sync operation ${index + 1} local presence`
+  );
+  const remotePresence = normalizeOptionalRemoteSyncResourcePresence(
+    record.remotePresence,
+    `Extension host remote sync operation ${index + 1} remote presence`
+  );
   const remoteId = normalizeOptionalProtocolString(
     record.remoteId,
     `Extension host remote sync operation ${index + 1} remote id`,
@@ -2157,9 +2168,11 @@ function normalizeProtocolRemoteSyncOperation(
       record.relativePath,
       `Extension host remote sync operation ${index + 1} relative path`
     ),
+    ...(localPresence ? { localPresence } : {}),
     ...(record.localUri !== undefined
       ? { localUri: normalizeRemoteSyncUri(record.localUri, `Extension host remote sync operation ${index + 1} local URI`) }
       : {}),
+    ...(remotePresence ? { remotePresence } : {}),
     ...(remoteId ? { remoteId } : {}),
     ...(message ? { message } : {})
   };
@@ -2439,6 +2452,21 @@ function normalizeRemoteSyncOperationKind(value: unknown): RemoteSyncOperationKi
 function normalizeRemoteSyncOperationTarget(value: unknown): RemoteSyncOperationTarget {
   if (value !== "local" && value !== "remote" && value !== "both" && value !== "none") {
     throw new Error("Extension host remote sync operation target must be local, remote, both, or none");
+  }
+
+  return value;
+}
+
+function normalizeOptionalRemoteSyncResourcePresence(
+  value: unknown,
+  label: string
+): RemoteSyncResourcePresence | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (value !== "present" && value !== "missing" && value !== "unknown") {
+    throw new Error(`${label} must be present, missing, or unknown`);
   }
 
   return value;

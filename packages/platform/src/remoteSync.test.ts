@@ -354,6 +354,30 @@ describe("remote sync service", () => {
         return result();
       }
     });
+    service.registerProvider({
+      id: "bad.presence",
+      title: "Bad Presence",
+      createPlan() {
+        return {
+          operations: [{
+            kind: "conflict",
+            target: "both",
+            relativePath: "a.md",
+            localPresence: "nearby"
+          }],
+          summary: {
+            creates: 0,
+            updates: 0,
+            deletes: 0,
+            skips: 0,
+            conflicts: 1
+          }
+        } as never;
+      },
+      executePlan() {
+        return result();
+      }
+    });
 
     await expect(service.createPlan("bad.result", request({
       direction: "sideways" as never
@@ -381,6 +405,8 @@ describe("remote sync service", () => {
     await expect(service.executePlan("bad.progress", plan(), request({
       onProgress: () => undefined
     }))).rejects.toThrow("Remote sync progress completed must not exceed total");
+    await expect(service.createPlan("bad.presence", request())).rejects
+      .toThrow("Remote sync operation 0 local presence must be present, missing, or unknown");
   });
 
   it("creates normalized sync resources from workspace files", () => {
@@ -604,7 +630,9 @@ describe("remote sync service", () => {
           kind: "conflict",
           target: "both",
           relativePath: "changed.md",
+          localPresence: "present",
           localUri: URI.file("C:/Notes/changed.md"),
+          remotePresence: "present",
           remoteId: "changed",
           message: "Resource differs on both sides"
         },
@@ -612,7 +640,9 @@ describe("remote sync service", () => {
           kind: "conflict",
           target: "both",
           relativePath: "kind.md",
+          localPresence: "present",
           localUri: URI.file("C:/Notes/kind.md"),
+          remotePresence: "present",
           remoteId: "kind",
           message: "Resource kind differs"
         },
@@ -639,7 +669,9 @@ describe("remote sync service", () => {
           kind: "conflict",
           target: "both",
           relativePath: "unknown.md",
+          localPresence: "present",
           localUri: URI.file("C:/Notes/unknown.md"),
+          remotePresence: "present",
           remoteId: "unknown",
           message: "Resource state cannot be compared"
         }
@@ -803,7 +835,9 @@ describe("remote sync service", () => {
           kind: "conflict",
           target: "both",
           relativePath: "both-changed.md",
+          localPresence: "present",
           localUri: URI.file("C:/Notes/both-changed.md"),
+          remotePresence: "present",
           remoteId: "both-changed",
           message: "Resource changed on both sides"
         },
@@ -811,7 +845,9 @@ describe("remote sync service", () => {
           kind: "conflict",
           target: "both",
           relativePath: "local-changed-remote-missing.md",
+          localPresence: "present",
           localUri: URI.file("C:/Notes/local-changed-remote-missing.md"),
+          remotePresence: "missing",
           remoteId: "remote-missing",
           message: "Remote resource is missing and local resource changed"
         },
@@ -819,6 +855,8 @@ describe("remote sync service", () => {
           kind: "conflict",
           target: "both",
           relativePath: "local-missing-remote-changed.md",
+          localPresence: "missing",
+          remotePresence: "present",
           remoteId: "local-missing",
           message: "Local resource is missing and remote resource changed"
         },
@@ -826,7 +864,9 @@ describe("remote sync service", () => {
           kind: "conflict",
           target: "both",
           relativePath: "no-baseline.md",
+          localPresence: "present",
           localUri: URI.file("C:/Notes/no-baseline.md"),
+          remotePresence: "present",
           remoteId: "no-baseline",
           message: "Resource has no synced baseline"
         },
@@ -834,7 +874,9 @@ describe("remote sync service", () => {
           kind: "conflict",
           target: "both",
           relativePath: "unknown.md",
+          localPresence: "present",
           localUri: URI.file("C:/Notes/unknown.md"),
+          remotePresence: "present",
           remoteId: "unknown",
           message: "Resource state cannot be compared"
         }

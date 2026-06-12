@@ -8391,3 +8391,33 @@ Known limitations:
 
 - Ambiguous conflict plans remain blocked until the platform contract carries explicit local/remote presence metadata or the provider can re-plan with a forced priority.
 - Direct Feishu Drive token lifecycle, folder traversal, upload-session handling, permission prompts, and Docs import remain future adapter work.
+
+## 2026-06-12 - P2 Remote Sync Conflict Presence Metadata
+
+Completed:
+
+- Added optional provider-neutral `localPresence` and `remotePresence` metadata to remote sync operations.
+- Populated explicit presence metadata on platform diff and manifest conflict plans so missing-side conflicts do not depend on provider messages or historical `remoteId` values.
+- Preserved presence metadata through extension-host protocol plans, results, and operation progress contexts.
+- Updated Workbench conflict resolution to classify explicit presence before falling back to legacy message-based inference.
+- Documented the presence contract in the remote sync architecture notes.
+
+Quality gate:
+
+- `npx vitest run packages/platform/src/remoteSync.test.ts packages/platform/src/extensionHostProtocolRuntime.test.ts packages/platform/src/extensionHostRuntimeBroker.test.ts packages/workbench/src/workbenchRemoteSyncActions.test.ts`: passed, 4 files / 61 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 87 files / 842 tests, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Remote sync presence metadata hardcode scan for OpenAI endpoints, model ids, API keys, Feishu endpoints, OAuth/token/secret literals, folder ids, and provider credentials: passed
+
+Review:
+
+- Workbench can now resolve eligible conflict plans from explicit local/remote existence facts instead of parsing provider text when new providers supply presence metadata.
+- Extension-host providers stay aligned with in-process providers because the same operation metadata is serialized on request, result, and progress paths.
+- No Feishu endpoint, OAuth scope, token name, folder id, model id, provider id, storage path, or credential literal was added.
+
+Known limitations:
+
+- Providers that omit presence metadata still rely on the legacy conservative fallback and may leave ambiguous conflicts blocked.
+- Direct Feishu Drive token lifecycle, folder traversal, upload-session handling, permission prompts, and Docs import remain future adapter work.

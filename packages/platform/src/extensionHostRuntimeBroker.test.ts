@@ -312,7 +312,9 @@ describe("extension host runtime broker", () => {
                 kind: "create",
                 target: "remote",
                 relativePath: resource.relativePath,
-                localUri: resource.uri
+                localPresence: "present",
+                localUri: resource.uri,
+                remotePresence: "missing"
               }],
               summary: {
                 creates: 1,
@@ -384,7 +386,9 @@ describe("extension host runtime broker", () => {
         kind: "create",
         target: "remote",
         relativePath: "A.md",
-        localUri: URI.file("C:/Notes/A.md")
+        localPresence: "present",
+        localUri: URI.file("C:/Notes/A.md"),
+        remotePresence: "missing"
       }],
       summary: {
         creates: 1,
@@ -422,7 +426,9 @@ describe("extension host runtime broker", () => {
         kind: "create",
         target: "remote",
         relativePath: "A.md",
-        localUri: URI.file("C:/Notes/A.md")
+        localPresence: "present",
+        localUri: URI.file("C:/Notes/A.md"),
+        remotePresence: "missing"
       }
     }]);
     expect(requests[1]).toEqual(createExtensionHostRemoteSyncExecutePlanRequestMessage(
@@ -434,7 +440,9 @@ describe("extension host runtime broker", () => {
           kind: "create",
           target: "remote",
           relativePath: "A.md",
-          localUri: "file://C:/Notes/A.md"
+          localPresence: "present",
+          localUri: "file://C:/Notes/A.md",
+          remotePresence: "missing"
         }],
         summary: plan.summary
       },

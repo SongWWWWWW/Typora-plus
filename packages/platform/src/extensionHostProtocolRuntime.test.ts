@@ -421,7 +421,9 @@ describe("extension host protocol runtime", () => {
                 kind: "create",
                 target: "remote",
                 relativePath: resource.relativePath,
-                localUri: resource.uri
+                localPresence: "present",
+                localUri: resource.uri,
+                remotePresence: "missing"
               }],
               summary: {
                 creates: 1,
@@ -481,7 +483,9 @@ describe("extension host protocol runtime", () => {
         kind: "create" as const,
         target: "remote" as const,
         relativePath: "A.md",
-        localUri: "file://C:/Notes/A.md"
+        localPresence: "present" as const,
+        localUri: "file://C:/Notes/A.md",
+        remotePresence: "missing" as const
       }],
       summary: {
         creates: 1,
@@ -587,7 +591,9 @@ describe("extension host protocol runtime", () => {
         kind: "create" as const,
         target: "remote" as const,
         relativePath: "A.md" as const,
-        localUri: "file://C:/Notes/A.md"
+        localPresence: "present" as const,
+        localUri: "file://C:/Notes/A.md",
+        remotePresence: "missing" as const
       }],
       summary: {
         creates: 1 as const,
@@ -602,7 +608,9 @@ describe("extension host protocol runtime", () => {
         kind: "create" as const,
         target: "remote" as const,
         relativePath: "A.md" as const,
-        localUri: URI.parse("file://C:/Notes/A.md")
+        localPresence: "present" as const,
+        localUri: URI.parse("file://C:/Notes/A.md"),
+        remotePresence: "missing" as const
       }],
       summary: plan.summary
     };

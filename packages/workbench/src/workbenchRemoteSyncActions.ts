@@ -258,6 +258,12 @@ type WorkbenchRemoteSyncConflictOperationShape = "localAndRemote" | "localOnly" 
 function classifyWorkbenchRemoteSyncConflictOperation(
   operation: RemoteSyncOperation
 ): WorkbenchRemoteSyncConflictOperationShape {
+  const presenceShape = classifyWorkbenchRemoteSyncConflictPresence(operation);
+
+  if (presenceShape !== "unknown") {
+    return presenceShape;
+  }
+
   // A remoteId can be a historical manifest id, so missing-side conflicts are resolved only when explicit.
   if (operation.message === "Remote resource is missing and local resource changed") {
     return operation.localUri ? "localOnly" : "unknown";
@@ -276,6 +282,31 @@ function classifyWorkbenchRemoteSyncConflictOperation(
   }
 
   if (!operation.localUri && operation.remoteId) {
+    return "remoteOnly";
+  }
+
+  return "unknown";
+}
+
+function classifyWorkbenchRemoteSyncConflictPresence(
+  operation: RemoteSyncOperation
+): WorkbenchRemoteSyncConflictOperationShape {
+  if (!operation.localPresence && !operation.remotePresence) {
+    return "unknown";
+  }
+
+  const localPresence = operation.localPresence ?? "unknown";
+  const remotePresence = operation.remotePresence ?? "unknown";
+
+  if (localPresence === "present" && remotePresence === "present") {
+    return "localAndRemote";
+  }
+
+  if (localPresence === "present" && remotePresence === "missing") {
+    return "localOnly";
+  }
+
+  if (localPresence === "missing" && remotePresence === "present") {
     return "remoteOnly";
   }
 
