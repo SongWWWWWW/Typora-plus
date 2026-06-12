@@ -8336,3 +8336,30 @@ Review:
 Known limitations:
 
 - Direct Feishu Drive token lifecycle, folder traversal, upload-session handling, permission prompts, and Docs import remain future adapter work.
+
+## 2026-06-12 - P2 Raw Mirror Operation Retry Coverage
+
+Completed:
+
+- Added focused coverage for configured raw mirror upload, download, and delete retry progress.
+- Verified operation retry progress includes provider-neutral retry messages, bounded retry counts, and the exact operation context.
+- Kept the change test-only; configured raw mirror retry behavior and Workbench progress consumption were unchanged.
+
+Quality gate:
+
+- `npx vitest run packages/platform/src/remoteSyncConfiguredRawMirrorProvider.test.ts`: passed, 1 file / 15 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 87 files / 837 tests, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Raw mirror operation retry coverage hardcode scan for OpenAI endpoints, model ids, API keys, Feishu endpoints, OAuth/token/secret literals, and provider credentials: passed
+
+Review:
+
+- Operation-level retry regressions are now covered for every configured raw mirror remote operation path.
+- Retry progress remains owned by the configured raw mirror provider and carried through the existing `RemoteSyncProgress` callback.
+- No Feishu endpoint, OAuth scope, token name, folder id, model id, provider id, storage path, or credential literal was added.
+
+Known limitations:
+
+- Direct Feishu Drive token lifecycle, folder traversal, upload-session handling, permission prompts, and Docs import remain future adapter work.

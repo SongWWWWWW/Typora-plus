@@ -717,6 +717,196 @@ describe("configured raw mirror remote sync provider", () => {
     ]);
   });
 
+  it("reports upload retry progress with operation context", async () => {
+    const requests: RemoteSyncNativeRequestInput[] = [];
+    const progressEvents: RemoteSyncProgress[] = [];
+    const storage = createMemoryManifestStorage();
+    const workspaceUri = URI.file("C:/Notes");
+    const localResource = {
+      uri: URI.file("C:/Notes/Daily.md"),
+      relativePath: "Daily.md",
+      kind: "file" as const,
+      name: "Daily.md",
+      size: 5,
+      mtime: 100,
+      contentHash: "sha256:local"
+    };
+    const providers = createConfiguredRemoteSyncProviders([
+      configuration({ metadata: retryMetadata() })
+    ], {
+      transport: createSequenceTransport(requests, [
+        okResponse({ resources: [] }),
+        okResponse({ resources: [] }),
+        retryableResponse(),
+        okResponse({ ok: true }),
+        okResponse({ resources: [remoteResource("Daily.md", undefined, {
+          size: 5,
+          mtime: 100,
+          contentHash: "sha256:local"
+        })] })
+      ]),
+      workspaceResources: {
+        readResource: vi.fn(async () => ({
+          workspaceUri,
+          relativePath: "Daily.md",
+          value: "SGVsbG8=",
+          encoding: "base64" as const,
+          size: 5,
+          mtime: 100,
+          contentHash: "sha256:local"
+        })),
+        writeResource: vi.fn(),
+        deleteResource: vi.fn()
+      },
+      createProvider: createRemoteSyncConfiguredRawMirrorProviderFactory({ manifestStorage: storage })
+    });
+    const plan = await providers[0]!.createPlan({
+      workspaceUri,
+      resources: [localResource],
+      direction: "push",
+      dryRun: true
+    });
+
+    await expect(providers[0]!.executePlan(plan, {
+      workspaceUri,
+      resources: [localResource],
+      direction: "push",
+      dryRun: false,
+      onProgress: (progress) => progressEvents.push(progress)
+    })).resolves.toMatchObject({
+      operations: plan.operations
+    });
+
+    expect(requests.filter((request) => request.method === "PUT")).toHaveLength(2);
+    expect(progressEvents).toEqual(expect.arrayContaining([{
+      message: "Retrying remote sync upload request",
+      completed: 1,
+      total: 2,
+      operation: plan.operations[0]
+    }]));
+  });
+
+  it("reports download retry progress with operation context", async () => {
+    const requests: RemoteSyncNativeRequestInput[] = [];
+    const progressEvents: RemoteSyncProgress[] = [];
+    const storage = createMemoryManifestStorage();
+    const workspaceUri = URI.file("C:/Notes");
+    const providers = createConfiguredRemoteSyncProviders([
+      configuration({ metadata: retryMetadata() })
+    ], {
+      transport: createSequenceTransport(requests, [
+        okResponse({ resources: [remoteResource("Remote.md", "remote-1")] }),
+        okResponse({ resources: [remoteResource("Remote.md", "remote-1")] }),
+        retryableResponse(),
+        okResponse({
+          relativePath: "Remote.md",
+          value: "UmVtb3Rl",
+          encoding: "base64",
+          size: 6,
+          mtime: 200,
+          contentHash: "sha256:remote"
+        }),
+        okResponse({ resources: [remoteResource("Remote.md", "remote-1", {
+          size: 6,
+          mtime: 200,
+          contentHash: "sha256:remote"
+        })] })
+      ]),
+      workspaceResources: {
+        readResource: vi.fn(),
+        writeResource: vi.fn(async () => ({
+          workspaceUri,
+          relativePath: "Remote.md",
+          size: 6,
+          mtime: 200
+        })),
+        deleteResource: vi.fn()
+      },
+      createProvider: createRemoteSyncConfiguredRawMirrorProviderFactory({ manifestStorage: storage })
+    });
+    const plan = await providers[0]!.createPlan({
+      workspaceUri,
+      resources: [],
+      direction: "pull",
+      dryRun: true
+    });
+
+    await expect(providers[0]!.executePlan(plan, {
+      workspaceUri,
+      resources: [],
+      direction: "pull",
+      dryRun: false,
+      onProgress: (progress) => progressEvents.push(progress)
+    })).resolves.toMatchObject({
+      operations: plan.operations
+    });
+
+    expect(requests.filter((request) => request.url.includes("/download?"))).toHaveLength(2);
+    expect(progressEvents).toEqual(expect.arrayContaining([{
+      message: "Retrying remote sync download request",
+      completed: 1,
+      total: 2,
+      operation: plan.operations[0]
+    }]));
+  });
+
+  it("reports delete retry progress with operation context", async () => {
+    const requests: RemoteSyncNativeRequestInput[] = [];
+    const progressEvents: RemoteSyncProgress[] = [];
+    const operation = {
+      kind: "delete" as const,
+      target: "remote" as const,
+      relativePath: "Daily.md",
+      remoteId: "remote-1",
+      message: "Local resource is missing"
+    };
+    const providers = createConfiguredRemoteSyncProviders([
+      configuration({ metadata: retryMetadata() })
+    ], {
+      transport: createSequenceTransport(requests, [
+        okResponse({ resources: [remoteResource("Daily.md", "remote-1")] }),
+        retryableResponse(),
+        okResponse({ ok: true }),
+        okResponse({ resources: [] })
+      ]),
+      workspaceResources: {
+        readResource: vi.fn(),
+        writeResource: vi.fn(),
+        deleteResource: vi.fn()
+      },
+      createProvider: createRemoteSyncConfiguredRawMirrorProviderFactory({
+        manifestStorage: createMemoryManifestStorage()
+      })
+    });
+
+    await expect(providers[0]!.executePlan({
+      operations: [operation],
+      summary: {
+        creates: 0,
+        updates: 0,
+        deletes: 1,
+        skips: 0,
+        conflicts: 0
+      }
+    }, {
+      workspaceUri: URI.file("C:/Notes"),
+      resources: [],
+      direction: "push",
+      dryRun: false,
+      onProgress: (progress) => progressEvents.push(progress)
+    })).resolves.toMatchObject({
+      operations: [operation]
+    });
+
+    expect(requests.filter((request) => request.method === "DELETE")).toHaveLength(2);
+    expect(progressEvents).toEqual(expect.arrayContaining([{
+      message: "Retrying remote sync delete request",
+      completed: 1,
+      total: 2,
+      operation
+    }]));
+  });
+
   it("stops retrying configured gateway status codes after the configured limit", async () => {
     const requests: RemoteSyncNativeRequestInput[] = [];
     const providers = createConfiguredRemoteSyncProviders([
@@ -795,6 +985,14 @@ function configuration(
   };
 }
 
+function retryMetadata(): Readonly<Record<string, string>> {
+  return {
+    [remoteSyncConfiguredRawMirrorMetadataKeys.retryStatusCodes]: "503",
+    [remoteSyncConfiguredRawMirrorMetadataKeys.retryMaxRetries]: "2",
+    [remoteSyncConfiguredRawMirrorMetadataKeys.retryDelayMs]: "0"
+  };
+}
+
 function remoteResource(
   relativePath: string,
   remoteId?: string,
@@ -843,6 +1041,24 @@ function createStatusTransport(
     headers: {},
     body
   }));
+}
+
+function okResponse(body: unknown) {
+  return {
+    status: 200,
+    statusText: "OK",
+    headers: {},
+    body
+  };
+}
+
+function retryableResponse() {
+  return {
+    status: 503,
+    statusText: "Service Unavailable",
+    headers: {},
+    body: { retry: true }
+  };
 }
 
 function createSequenceTransport(
