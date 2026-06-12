@@ -646,6 +646,7 @@ describe("configured raw mirror remote sync provider", () => {
 
   it("retries configured gateway status codes before parsing raw mirror responses", async () => {
     const requests: RemoteSyncNativeRequestInput[] = [];
+    const progressEvents: RemoteSyncProgress[] = [];
     const providers = createConfiguredRemoteSyncProviders([
       configuration({
         metadata: {
@@ -690,7 +691,8 @@ describe("configured raw mirror remote sync provider", () => {
       workspaceUri: URI.file("C:/Notes"),
       resources: [],
       direction: "pull",
-      dryRun: true
+      dryRun: true,
+      onProgress: (progress) => progressEvents.push(progress)
     })).resolves.toMatchObject({
       operations: [],
       summary: {
@@ -702,6 +704,17 @@ describe("configured raw mirror remote sync provider", () => {
       }
     });
     expect(requests).toHaveLength(2);
+    expect(progressEvents).toEqual([
+      {
+        message: "Retrying remote sync list request",
+        completed: 1,
+        total: 2
+      },
+      {
+        message: "Listed remote sync page",
+        completed: 1
+      }
+    ]);
   });
 
   it("stops retrying configured gateway status codes after the configured limit", async () => {

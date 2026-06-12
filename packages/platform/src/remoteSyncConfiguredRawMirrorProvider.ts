@@ -118,6 +118,12 @@ interface RemoteSyncConfiguredRawMirrorRequestContext {
   readonly rawMirror: RemoteSyncConfiguredRawMirrorProfile;
 }
 
+interface RemoteSyncConfiguredRawMirrorRequestProgressContext {
+  readonly onProgress?: (progress: RemoteSyncProgress) => void;
+  readonly operation?: RemoteSyncOperation;
+  readonly retryMessage: string;
+}
+
 const configuredRawMirrorLimits = {
   maxBodyBytes: 8 * 1024 * 1024,
   maxPathLength: 512
@@ -229,14 +235,21 @@ async function listConfiguredRawMirrorResources(
       seenCursors.add(cursor);
     }
 
-    const response = await requestConfiguredRawMirror(context, {
-      path: context.rawMirror.listPath,
-      method: "GET",
-      query: createConfiguredRawMirrorListQuery(context.profile, context.rawMirror, listRequest.direction, cursor),
-      responseType: "json",
-      ...createConfiguredRawMirrorSecretRequest(context.rawMirror),
-      ...(listRequest.signal !== undefined ? { signal: listRequest.signal } : {})
-    });
+    const response = await requestConfiguredRawMirror(
+      context,
+      {
+        path: context.rawMirror.listPath,
+        method: "GET",
+        query: createConfiguredRawMirrorListQuery(context.profile, context.rawMirror, listRequest.direction, cursor),
+        responseType: "json",
+        ...createConfiguredRawMirrorSecretRequest(context.rawMirror),
+        ...(listRequest.signal !== undefined ? { signal: listRequest.signal } : {})
+      },
+      {
+        ...(listRequest.onProgress !== undefined ? { onProgress: listRequest.onProgress } : {}),
+        retryMessage: "Retrying remote sync list request"
+      }
+    );
 
     ensureConfiguredRawMirrorResponseOk(response, "list");
     const page = readConfiguredRawMirrorResourceListPage(response.body);
@@ -356,31 +369,39 @@ async function requestConfiguredRawMirrorUpload(
   resource: RemoteSyncResource,
   uploadContent: RemoteSyncRawMirrorUploadFileContent
 ): Promise<void> {
-  ensureConfiguredRawMirrorResponseOk(await requestConfiguredRawMirror(context, {
-    path: context.rawMirror.uploadPath,
-    method: "PUT",
-    query: createConfiguredRawMirrorOperationQuery(context.profile, operation),
-    headers: {
-      "Content-Type": "application/json"
+  ensureConfiguredRawMirrorResponseOk(await requestConfiguredRawMirror(
+    context,
+    {
+      path: context.rawMirror.uploadPath,
+      method: "PUT",
+      query: createConfiguredRawMirrorOperationQuery(context.profile, operation),
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: createConfiguredRawMirrorJsonBody({
+        operation: createConfiguredRawMirrorOperationPayload(operation),
+        resource: createConfiguredRawMirrorResourcePayload(resource),
+        content: {
+          value: uploadContent.content.value,
+          encoding: uploadContent.content.encoding,
+          size: uploadContent.content.size,
+          ...(uploadContent.content.mtime !== undefined ? { mtime: uploadContent.content.mtime } : {}),
+          ...(uploadContent.content.contentHash !== undefined
+            ? { contentHash: uploadContent.content.contentHash }
+            : {})
+        }
+      }),
+      bodyEncoding: "utf8",
+      responseType: "json",
+      ...createConfiguredRawMirrorSecretRequest(context.rawMirror),
+      ...(executeRequest.signal !== undefined ? { signal: executeRequest.signal } : {})
     },
-    body: createConfiguredRawMirrorJsonBody({
-      operation: createConfiguredRawMirrorOperationPayload(operation),
-      resource: createConfiguredRawMirrorResourcePayload(resource),
-      content: {
-        value: uploadContent.content.value,
-        encoding: uploadContent.content.encoding,
-        size: uploadContent.content.size,
-        ...(uploadContent.content.mtime !== undefined ? { mtime: uploadContent.content.mtime } : {}),
-        ...(uploadContent.content.contentHash !== undefined
-          ? { contentHash: uploadContent.content.contentHash }
-          : {})
-      }
-    }),
-    bodyEncoding: "utf8",
-    responseType: "json",
-    ...createConfiguredRawMirrorSecretRequest(context.rawMirror),
-    ...(executeRequest.signal !== undefined ? { signal: executeRequest.signal } : {})
-  }), "upload");
+    createConfiguredRawMirrorOperationRetryProgressContext(
+      executeRequest,
+      operation,
+      "Retrying remote sync upload request"
+    )
+  ), "upload");
 }
 
 async function requestConfiguredRawMirrorDelete(
@@ -388,14 +409,22 @@ async function requestConfiguredRawMirrorDelete(
   executeRequest: RemoteSyncRawMirrorExecuteRequest,
   operation: RemoteSyncOperation
 ): Promise<void> {
-  ensureConfiguredRawMirrorResponseOk(await requestConfiguredRawMirror(context, {
-    path: context.rawMirror.deletePath,
-    method: "DELETE",
-    query: createConfiguredRawMirrorOperationQuery(context.profile, operation),
-    responseType: "json",
-    ...createConfiguredRawMirrorSecretRequest(context.rawMirror),
-    ...(executeRequest.signal !== undefined ? { signal: executeRequest.signal } : {})
-  }), "delete");
+  ensureConfiguredRawMirrorResponseOk(await requestConfiguredRawMirror(
+    context,
+    {
+      path: context.rawMirror.deletePath,
+      method: "DELETE",
+      query: createConfiguredRawMirrorOperationQuery(context.profile, operation),
+      responseType: "json",
+      ...createConfiguredRawMirrorSecretRequest(context.rawMirror),
+      ...(executeRequest.signal !== undefined ? { signal: executeRequest.signal } : {})
+    },
+    createConfiguredRawMirrorOperationRetryProgressContext(
+      executeRequest,
+      operation,
+      "Retrying remote sync delete request"
+    )
+  ), "delete");
 }
 
 async function downloadConfiguredRawMirrorFile(
@@ -415,14 +444,22 @@ async function downloadConfiguredRawMirrorFile(
     throw new Error(`Configured raw mirror download ${operation.relativePath} only supports files`);
   }
 
-  const response = await requestConfiguredRawMirror(context, {
-    path: context.rawMirror.downloadPath,
-    method: "GET",
-    query: createConfiguredRawMirrorOperationQuery(context.profile, operation),
-    responseType: "json",
-    ...createConfiguredRawMirrorSecretRequest(context.rawMirror),
-    ...(executeRequest.signal !== undefined ? { signal: executeRequest.signal } : {})
-  });
+  const response = await requestConfiguredRawMirror(
+    context,
+    {
+      path: context.rawMirror.downloadPath,
+      method: "GET",
+      query: createConfiguredRawMirrorOperationQuery(context.profile, operation),
+      responseType: "json",
+      ...createConfiguredRawMirrorSecretRequest(context.rawMirror),
+      ...(executeRequest.signal !== undefined ? { signal: executeRequest.signal } : {})
+    },
+    createConfiguredRawMirrorOperationRetryProgressContext(
+      executeRequest,
+      operation,
+      "Retrying remote sync download request"
+    )
+  );
 
   ensureConfiguredRawMirrorResponseOk(response, "download");
   return readConfiguredRawMirrorFileContent(response.body, operation.relativePath);
@@ -447,11 +484,40 @@ function reportConfiguredRawMirrorOperationProgress(
   });
 }
 
+function createConfiguredRawMirrorOperationRetryProgressContext(
+  request: RemoteSyncRawMirrorExecuteRequest,
+  operation: RemoteSyncOperation,
+  retryMessage: string
+): RemoteSyncConfiguredRawMirrorRequestProgressContext {
+  return {
+    ...(request.onProgress !== undefined ? { onProgress: request.onProgress } : {}),
+    operation,
+    retryMessage
+  };
+}
+
 function reportConfiguredRawMirrorProgress(
   request: { readonly onProgress?: (progress: RemoteSyncProgress) => void },
   progress: RemoteSyncProgress
 ): void {
   request.onProgress?.(progress);
+}
+
+function reportConfiguredRawMirrorRetryProgress(
+  progress: RemoteSyncConfiguredRawMirrorRequestProgressContext | undefined,
+  completed: number,
+  total: number
+): void {
+  if (!progress?.onProgress) {
+    return;
+  }
+
+  progress.onProgress({
+    message: progress.retryMessage,
+    completed,
+    total,
+    ...(progress.operation !== undefined ? { operation: progress.operation } : {})
+  });
 }
 
 function createConfiguredRawMirrorBaseQuery(
@@ -508,7 +574,8 @@ function createConfiguredRawMirrorSecretRequest(
 
 async function requestConfiguredRawMirror(
   context: RemoteSyncConfiguredRawMirrorRequestContext,
-  request: RemoteSyncProfileRequestInput
+  request: RemoteSyncProfileRequestInput,
+  progress?: RemoteSyncConfiguredRawMirrorRequestProgressContext
 ): Promise<RemoteSyncNativeResponse> {
   const retry = context.rawMirror.retry;
   let retryCount = 0;
@@ -521,6 +588,7 @@ async function requestConfiguredRawMirror(
     }
 
     retryCount += 1;
+    reportConfiguredRawMirrorRetryProgress(progress, retryCount, retry.maxRetries);
     await waitConfiguredRawMirrorRetryDelay(
       readConfiguredRawMirrorRetryDelayMs(response) ?? retry.delayMs,
       request.signal
