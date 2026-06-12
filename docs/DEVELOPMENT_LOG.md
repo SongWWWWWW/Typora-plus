@@ -8195,3 +8195,31 @@ Known limitations:
 
 - Conflict resolution remains inspect-only; choose-local/choose-remote actions are still future work.
 - Direct Feishu Drive token lifecycle, folder traversal, pagination, upload-session handling, and Docs import remain future adapter work.
+
+## 2026-06-12 - P2 Raw Mirror Cursor-Paginated Listings
+
+Completed:
+
+- Added provider-neutral cursor pagination for configured raw mirror list responses.
+- Reused the existing configured list path, base query, native secret injection, retry behavior, cancellation signal, and response validation for every page.
+- Bounded pagination with a maximum page count, total resource count, cursor length validation, and repeated-cursor rejection.
+- Kept remote snapshots file-only and path-sorted after merging pages.
+- Covered normal cursor pagination and cursor-loop rejection with focused platform tests.
+
+Quality gate:
+
+- `npx vitest run packages/platform/src/remoteSyncConfiguredRawMirrorProvider.test.ts`: passed, 1 file / 11 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 87 files / 833 tests, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Raw mirror cursor pagination hardcode scan for OpenAI endpoints, model ids, API keys, Feishu endpoints, OAuth/token/secret literals, and provider credentials: passed
+
+Review:
+
+- This prepares future Feishu Drive raw file mirrors for paginated folder snapshots without adding Feishu endpoints, OAuth scope names, token fields, folder ids, provider ids, or route defaults to app code.
+- Workbench and Settings remain unaware of pagination; the provider/gateway boundary owns snapshot assembly.
+
+Known limitations:
+
+- Direct Feishu Drive token lifecycle, folder traversal, upload-session handling, and Docs import remain future adapter work.

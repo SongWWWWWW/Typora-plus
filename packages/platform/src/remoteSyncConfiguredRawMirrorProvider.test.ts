@@ -384,6 +384,85 @@ describe("configured raw mirror remote sync provider", () => {
     });
   });
 
+  it("follows configured raw mirror list cursors before planning", async () => {
+    const requests: RemoteSyncNativeRequestInput[] = [];
+    const providers = createConfiguredRemoteSyncProviders([
+      configuration()
+    ], {
+      transport: createTransport(requests, [
+        {
+          resources: [remoteResource("B.md", "remote-2")],
+          nextCursor: "page-2"
+        },
+        {
+          resources: [remoteResource("A.md", "remote-1")]
+        }
+      ]),
+      workspaceResources: {
+        readResource: vi.fn(),
+        writeResource: vi.fn(),
+        deleteResource: vi.fn()
+      },
+      createProvider: createRemoteSyncConfiguredRawMirrorProviderFactory({
+        manifestStorage: createMemoryManifestStorage()
+      })
+    });
+
+    const plan = await providers[0]!.createPlan({
+      workspaceUri: URI.file("C:/Notes"),
+      resources: [],
+      direction: "pull",
+      dryRun: true
+    });
+
+    expect(requests.map((request) => [request.method, request.url])).toEqual([
+      ["GET", "https://sync.example.test/api/mirror/list?remoteScopeId=workspace-root&direction=pull"],
+      ["GET", "https://sync.example.test/api/mirror/list?remoteScopeId=workspace-root&direction=pull&cursor=page-2"]
+    ]);
+    expect(plan.operations.map((operation) => operation.relativePath)).toEqual(["A.md", "B.md"]);
+    expect(plan.summary).toEqual({
+      creates: 2,
+      updates: 0,
+      deletes: 0,
+      skips: 0,
+      conflicts: 0
+    });
+  });
+
+  it("rejects configured raw mirror list cursor loops", async () => {
+    const requests: RemoteSyncNativeRequestInput[] = [];
+    const providers = createConfiguredRemoteSyncProviders([
+      configuration()
+    ], {
+      transport: createTransport(requests, [
+        {
+          resources: [remoteResource("A.md", "remote-1")],
+          nextCursor: "same-page"
+        },
+        {
+          resources: [remoteResource("B.md", "remote-2")],
+          nextCursor: "same-page"
+        }
+      ]),
+      workspaceResources: {
+        readResource: vi.fn(),
+        writeResource: vi.fn(),
+        deleteResource: vi.fn()
+      },
+      createProvider: createRemoteSyncConfiguredRawMirrorProviderFactory({
+        manifestStorage: createMemoryManifestStorage()
+      })
+    });
+
+    await expect(providers[0]!.createPlan({
+      workspaceUri: URI.file("C:/Notes"),
+      resources: [],
+      direction: "pull",
+      dryRun: true
+    })).rejects.toThrow("Configured raw mirror resource list response repeated a cursor");
+    expect(requests).toHaveLength(2);
+  });
+
   it("rejects failed gateway responses before parsing raw mirror payloads", async () => {
     const providers = createConfiguredRemoteSyncProviders([
       configuration()

@@ -105,6 +105,8 @@ interface RemoteSyncConfiguredRawMirrorRequestContext {
 
 const configuredRawMirrorLimits = {
   maxBodyBytes: 8 * 1024 * 1024,
+  maxCursorLength: 1024,
+  maxListPages: 200,
   maxPathLength: 512,
   maxResponseResources: 20_000
 } as const;
@@ -187,17 +189,48 @@ async function listConfiguredRawMirrorResources(
   context: RemoteSyncConfiguredRawMirrorRequestContext,
   listRequest: RemoteSyncRawMirrorListRequest
 ): Promise<readonly RemoteSyncRemoteResource[]> {
-  const response = await requestConfiguredRawMirror(context, {
-    path: context.rawMirror.listPath,
-    method: "GET",
-    query: createConfiguredRawMirrorBaseQuery(context.profile, listRequest.direction),
-    responseType: "json",
-    ...createConfiguredRawMirrorSecretRequest(context.rawMirror),
-    ...(listRequest.signal !== undefined ? { signal: listRequest.signal } : {})
-  });
+  const resources: RemoteSyncRemoteResource[] = [];
+  const seenCursors = new Set<string>();
+  let cursor: string | undefined;
 
-  ensureConfiguredRawMirrorResponseOk(response, "list");
-  return readConfiguredRawMirrorResourceList(response.body);
+  for (let pageIndex = 0; pageIndex < configuredRawMirrorLimits.maxListPages; pageIndex += 1) {
+    throwIfConfiguredRawMirrorAborted(listRequest.signal);
+
+    if (cursor !== undefined) {
+      if (seenCursors.has(cursor)) {
+        throw new Error("Configured raw mirror resource list response repeated a cursor");
+      }
+
+      seenCursors.add(cursor);
+    }
+
+    const response = await requestConfiguredRawMirror(context, {
+      path: context.rawMirror.listPath,
+      method: "GET",
+      query: createConfiguredRawMirrorListQuery(context.profile, listRequest.direction, cursor),
+      responseType: "json",
+      ...createConfiguredRawMirrorSecretRequest(context.rawMirror),
+      ...(listRequest.signal !== undefined ? { signal: listRequest.signal } : {})
+    });
+
+    ensureConfiguredRawMirrorResponseOk(response, "list");
+    const page = readConfiguredRawMirrorResourceListPage(response.body);
+    resources.push(...page.resources);
+
+    if (resources.length > configuredRawMirrorLimits.maxResponseResources) {
+      throw new Error("Configured raw mirror resource list response is too large");
+    }
+
+    if (!page.nextCursor) {
+      return resources
+        .filter((resource) => resource.kind === "file")
+        .sort((first, second) => first.relativePath.localeCompare(second.relativePath));
+    }
+
+    cursor = page.nextCursor;
+  }
+
+  throw new Error("Configured raw mirror resource list response has too many pages");
 }
 
 async function executeConfiguredRawMirrorOperations(
@@ -371,6 +404,17 @@ function createConfiguredRawMirrorBaseQuery(
   return {
     ...(profile.remoteScopeId !== undefined ? { remoteScopeId: profile.remoteScopeId } : {}),
     ...(direction !== undefined ? { direction } : {})
+  };
+}
+
+function createConfiguredRawMirrorListQuery(
+  profile: RemoteSyncProviderConfiguration,
+  direction: RemoteSyncRawMirrorListRequest["direction"],
+  cursor: string | undefined
+): Readonly<Record<string, string | undefined>> {
+  return {
+    ...createConfiguredRawMirrorBaseQuery(profile, direction),
+    ...(cursor !== undefined ? { cursor } : {})
   };
 }
 
@@ -845,7 +889,10 @@ function normalizeConfiguredRawMirrorMetadataValue(value: unknown): string | und
   return normalized || undefined;
 }
 
-function readConfiguredRawMirrorResourceList(value: unknown): readonly RemoteSyncRemoteResource[] {
+function readConfiguredRawMirrorResourceListPage(value: unknown): {
+  readonly resources: readonly RemoteSyncRemoteResource[];
+  readonly nextCursor?: string;
+} {
   const resources = Array.isArray(value)
     ? value
     : isRecord(value) && Array.isArray(value.resources)
@@ -860,9 +907,39 @@ function readConfiguredRawMirrorResourceList(value: unknown): readonly RemoteSyn
     throw new Error("Configured raw mirror resource list response is too large");
   }
 
-  return resources.map(readConfiguredRawMirrorRemoteResource)
-    .filter((resource) => resource.kind === "file")
-    .sort((first, second) => first.relativePath.localeCompare(second.relativePath));
+  const nextCursor = Array.isArray(value) || !isRecord(value)
+    ? undefined
+    : readConfiguredRawMirrorOptionalCursor(value.nextCursor);
+
+  return {
+    resources: resources.map(readConfiguredRawMirrorRemoteResource),
+    ...(nextCursor !== undefined ? { nextCursor } : {})
+  };
+}
+
+function readConfiguredRawMirrorOptionalCursor(value: unknown): string | undefined {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+
+  if (typeof value !== "string") {
+    throw new Error("Configured raw mirror resource list next cursor must be a string");
+  }
+
+  const normalized = value.trim();
+
+  if (!normalized) {
+    return undefined;
+  }
+
+  if (
+    normalized.length > configuredRawMirrorLimits.maxCursorLength ||
+    /[\u0000-\u001f]/.test(normalized)
+  ) {
+    throw new Error("Configured raw mirror resource list next cursor is invalid");
+  }
+
+  return normalized;
 }
 
 function readConfiguredRawMirrorRemoteResource(value: unknown): RemoteSyncRemoteResource {
