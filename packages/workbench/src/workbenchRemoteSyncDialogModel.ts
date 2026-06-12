@@ -28,6 +28,26 @@ export interface WorkbenchRemoteSyncDialogExecutionState {
   readonly statusMessage?: string;
 }
 
+export interface WorkbenchRemoteSyncDialogConflictResolutionState {
+  readonly canResolve: boolean;
+  readonly useLocalLabel: string;
+  readonly useRemoteLabel: string;
+}
+
+export function createWorkbenchRemoteSyncDialogConflictResolutionState(
+  plan: RemoteSyncPlan,
+  options: {
+    readonly executing: boolean;
+    readonly execution: WorkbenchRemoteSyncExecutionResult | undefined;
+  }
+): WorkbenchRemoteSyncDialogConflictResolutionState {
+  return {
+    canResolve: plan.summary.conflicts > 0 && !options.executing && !options.execution,
+    useLocalLabel: "Use Local",
+    useRemoteLabel: "Use Remote"
+  };
+}
+
 export function createWorkbenchRemoteSyncDialogExecutionState(
   plan: RemoteSyncPlan,
   options: {

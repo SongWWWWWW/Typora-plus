@@ -18,11 +18,13 @@ import type {
 } from "@typora-plus/platform";
 import {
   AlertTriangle,
+  Cloud,
   Command as CommandIcon,
   Copy,
   FileText,
   Folder,
   FolderOpen,
+  HardDrive,
   PanelLeft,
   Plus,
   RefreshCw,
@@ -53,13 +55,17 @@ import { registerWorkbenchCommands } from "./workbenchCommandRegistration";
 import { createWorkbenchCommandSurface } from "./workbenchCommandSurface";
 import { copyWorkbenchTextToClipboard } from "./workbenchClipboard";
 import {
+  resolveWorkbenchRemoteSyncPlanConflicts,
   runWorkbenchExecuteWorkspaceRemoteSyncAction,
+  workbenchRemoteSyncConflictResolutions,
+  type WorkbenchRemoteSyncConflictResolution,
   type WorkbenchRemoteSyncExecutionResult,
   type WorkbenchRemoteSyncPlanResult
 } from "./workbenchRemoteSyncActions";
 import {
   appendWorkbenchRemoteSyncProgressHistory,
   createWorkbenchRemoteSyncDialogConflictPreview,
+  createWorkbenchRemoteSyncDialogConflictResolutionState,
   createWorkbenchRemoteSyncDialogProgressPreview,
   createWorkbenchRemoteSyncDialogOperationPreview,
   createWorkbenchRemoteSyncDialogExecutionState,
@@ -539,6 +545,17 @@ export function WorkbenchApplication({ services }: WorkbenchApplicationProps) {
             setRemoteSyncProgressHistory([]);
           }}
           onCancel={() => remoteSyncExecutionAbortRef.current?.abort()}
+          onResolveConflicts={(resolution) => {
+            setRemoteSyncPlan((current) => current
+              ? {
+                ...current,
+                plan: resolveWorkbenchRemoteSyncPlanConflicts(current.plan, resolution)
+              }
+              : current
+            );
+            setRemoteSyncExecution(undefined);
+            setRemoteSyncProgressHistory([]);
+          }}
           onExecute={() => {
             if (remoteSyncExecuting) {
               return Promise.resolve(false);
@@ -1316,6 +1333,7 @@ function RemoteSyncPlanDialog({
   executing,
   onCancel,
   onExecute,
+  onResolveConflicts,
   progressEvents,
   result,
   onClose
@@ -1324,6 +1342,7 @@ function RemoteSyncPlanDialog({
   readonly executing: boolean;
   readonly onCancel: () => void;
   readonly onExecute: () => Promise<boolean>;
+  readonly onResolveConflicts: (resolution: WorkbenchRemoteSyncConflictResolution) => void;
   readonly progressEvents: readonly RemoteSyncProgress[];
   readonly result: WorkbenchRemoteSyncPlanResult;
   readonly onClose: () => void;
@@ -1354,6 +1373,10 @@ function RemoteSyncPlanDialog({
     executing,
     execution,
     progress: getWorkbenchRemoteSyncLatestProgress(progressEvents)
+  });
+  const conflictResolutionState = createWorkbenchRemoteSyncDialogConflictResolutionState(result.plan, {
+    executing,
+    execution
   });
 
   return (
@@ -1410,6 +1433,26 @@ function RemoteSyncPlanDialog({
             >
               <span>Cancel</span>
             </button>
+          ) : null}
+          {conflictResolutionState.canResolve ? (
+            <>
+              <button
+                className="tp-dialog-button"
+                type="button"
+                onClick={() => onResolveConflicts(workbenchRemoteSyncConflictResolutions.useLocal)}
+              >
+                <HardDrive size={15} />
+                <span>{conflictResolutionState.useLocalLabel}</span>
+              </button>
+              <button
+                className="tp-dialog-button"
+                type="button"
+                onClick={() => onResolveConflicts(workbenchRemoteSyncConflictResolutions.useRemote)}
+              >
+                <Cloud size={15} />
+                <span>{conflictResolutionState.useRemoteLabel}</span>
+              </button>
+            </>
           ) : null}
           <button
             className="tp-dialog-button"

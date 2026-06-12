@@ -8363,3 +8363,31 @@ Review:
 Known limitations:
 
 - Direct Feishu Drive token lifecycle, folder traversal, upload-session handling, permission prompts, and Docs import remain future adapter work.
+
+## 2026-06-12 - P2 Remote Sync Conflict Resolution Actions
+
+Completed:
+
+- Added Workbench actions for resolving eligible remote sync conflict plans with explicit local-priority or remote-priority choices.
+- Converted safely classified conflicts into provider-neutral create/update/delete operations and recomputed plan summaries before execution.
+- Left ambiguous conflicts unresolved so existing execution blocking still prevents unsafe sync.
+- Exposed conflict resolution buttons in the remote sync plan dialog without bypassing the existing provider execution path.
+
+Quality gate:
+
+- `npx vitest run packages/workbench/src/workbenchRemoteSyncActions.test.ts packages/workbench/src/workbenchRemoteSyncDialogModel.test.ts`: passed, 2 files / 24 tests
+- `npm run verify`: passed, 87 files / 841 tests, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Remote sync conflict resolution code-diff hardcode scan for OpenAI endpoints, model ids, API keys, Feishu endpoints, OAuth/token/secret literals, folder ids, and provider credentials: passed
+
+Review:
+
+- Workbench now turns user intent into explicit sync operations while keeping provider validation responsible for final executability.
+- `remoteId` is not treated as proof that the current remote resource exists; historical manifest ids remain distinct from live remote state.
+- No Feishu endpoint, OAuth scope, token name, folder id, model id, provider id, storage path, or credential literal was added.
+
+Known limitations:
+
+- Ambiguous conflict plans remain blocked until the platform contract carries explicit local/remote presence metadata or the provider can re-plan with a forced priority.
+- Direct Feishu Drive token lifecycle, folder traversal, upload-session handling, permission prompts, and Docs import remain future adapter work.

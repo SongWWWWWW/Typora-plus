@@ -3,8 +3,10 @@ import { describe, expect, it, vi } from "vitest";
 import type { WorkspaceFileTree, WorkspaceState } from "@typora-plus/platform";
 import {
   getWorkbenchRemoteSyncPlanExecutionBlockReason,
+  resolveWorkbenchRemoteSyncPlanConflicts,
   runWorkbenchExecuteWorkspaceRemoteSyncAction,
-  runWorkbenchPlanWorkspaceRemoteSyncAction
+  runWorkbenchPlanWorkspaceRemoteSyncAction,
+  workbenchRemoteSyncConflictResolutions
 } from "./workbenchRemoteSyncActions";
 import { workbenchRemoteSyncRequestActions } from "./workbenchRemoteSyncRequestModel";
 
@@ -291,6 +293,207 @@ describe("workbench remote sync actions", () => {
     expect(getWorkbenchRemoteSyncPlanExecutionBlockReason(plan)).toBeUndefined();
     expect(execution.result.summary.skips).toBe(1);
     expect(executePlan).toHaveBeenCalledWith("a.sync", plan, execution.request);
+  });
+
+  it("resolves executable conflicts by using local resources", () => {
+    const plan = {
+      operations: [
+        {
+          kind: "conflict" as const,
+          target: "both" as const,
+          relativePath: "Changed.md",
+          localUri: URI.file("C:/Notes/Changed.md"),
+          remoteId: "remote-changed",
+          message: "Resource changed on both sides"
+        },
+        {
+          kind: "conflict" as const,
+          target: "both" as const,
+          relativePath: "LocalOnly.md",
+          localUri: URI.file("C:/Notes/LocalOnly.md"),
+          remoteId: "previous-remote",
+          message: "Remote resource is missing and local resource changed"
+        },
+        {
+          kind: "conflict" as const,
+          target: "both" as const,
+          relativePath: "RemoteOnly.md",
+          remoteId: "remote-only",
+          message: "Local resource is missing and remote resource changed"
+        },
+        {
+          kind: "skip" as const,
+          target: "none" as const,
+          relativePath: "Same.md"
+        }
+      ],
+      summary: {
+        creates: 0,
+        updates: 0,
+        deletes: 0,
+        skips: 1,
+        conflicts: 3
+      }
+    };
+
+    const resolved = resolveWorkbenchRemoteSyncPlanConflicts(
+      plan,
+      workbenchRemoteSyncConflictResolutions.useLocal
+    );
+
+    expect(resolved).toEqual({
+      operations: [
+        {
+          kind: "update",
+          target: "remote",
+          relativePath: "Changed.md",
+          localUri: URI.file("C:/Notes/Changed.md"),
+          remoteId: "remote-changed",
+          message: "Resolved by using local resource"
+        },
+        {
+          kind: "create",
+          target: "remote",
+          relativePath: "LocalOnly.md",
+          localUri: URI.file("C:/Notes/LocalOnly.md"),
+          message: "Resolved by using local resource"
+        },
+        {
+          kind: "delete",
+          target: "remote",
+          relativePath: "RemoteOnly.md",
+          remoteId: "remote-only",
+          message: "Resolved by using local resource"
+        },
+        {
+          kind: "skip",
+          target: "none",
+          relativePath: "Same.md"
+        }
+      ],
+      summary: {
+        creates: 1,
+        updates: 1,
+        deletes: 1,
+        skips: 1,
+        conflicts: 0
+      }
+    });
+  });
+
+  it("resolves executable conflicts by using remote resources", () => {
+    const plan = {
+      operations: [
+        {
+          kind: "conflict" as const,
+          target: "both" as const,
+          relativePath: "Changed.md",
+          localUri: URI.file("C:/Notes/Changed.md"),
+          remoteId: "remote-changed",
+          message: "Resource changed on both sides"
+        },
+        {
+          kind: "conflict" as const,
+          target: "both" as const,
+          relativePath: "LocalOnly.md",
+          localUri: URI.file("C:/Notes/LocalOnly.md"),
+          remoteId: "previous-remote",
+          message: "Remote resource is missing and local resource changed"
+        },
+        {
+          kind: "conflict" as const,
+          target: "both" as const,
+          relativePath: "RemoteOnly.md",
+          message: "Local resource is missing and remote resource changed"
+        },
+        {
+          kind: "skip" as const,
+          target: "none" as const,
+          relativePath: "Same.md"
+        }
+      ],
+      summary: {
+        creates: 0,
+        updates: 0,
+        deletes: 0,
+        skips: 1,
+        conflicts: 3
+      }
+    };
+
+    const resolved = resolveWorkbenchRemoteSyncPlanConflicts(
+      plan,
+      workbenchRemoteSyncConflictResolutions.useRemote
+    );
+
+    expect(resolved).toEqual({
+      operations: [
+        {
+          kind: "update",
+          target: "local",
+          relativePath: "Changed.md",
+          localUri: URI.file("C:/Notes/Changed.md"),
+          remoteId: "remote-changed",
+          message: "Resolved by using remote resource"
+        },
+        {
+          kind: "delete",
+          target: "local",
+          relativePath: "LocalOnly.md",
+          localUri: URI.file("C:/Notes/LocalOnly.md"),
+          message: "Resolved by using remote resource"
+        },
+        {
+          kind: "create",
+          target: "local",
+          relativePath: "RemoteOnly.md",
+          message: "Resolved by using remote resource"
+        },
+        {
+          kind: "skip",
+          target: "none",
+          relativePath: "Same.md"
+        }
+      ],
+      summary: {
+        creates: 1,
+        updates: 1,
+        deletes: 1,
+        skips: 1,
+        conflicts: 0
+      }
+    });
+  });
+
+  it("keeps ambiguous conflicts unresolved so execution remains blocked", () => {
+    const plan = {
+      operations: [
+        {
+          kind: "conflict" as const,
+          target: "both" as const,
+          relativePath: "Unknown.md",
+          localUri: URI.file("C:/Notes/Unknown.md"),
+          remoteId: "previous-remote",
+          message: "Resource state cannot be compared"
+        }
+      ],
+      summary: {
+        creates: 0,
+        updates: 0,
+        deletes: 0,
+        skips: 0,
+        conflicts: 1
+      }
+    };
+
+    const resolved = resolveWorkbenchRemoteSyncPlanConflicts(
+      plan,
+      workbenchRemoteSyncConflictResolutions.useLocal
+    );
+
+    expect(resolved).toEqual(plan);
+    expect(getWorkbenchRemoteSyncPlanExecutionBlockReason(resolved))
+      .toBe("Resolve remote sync conflicts before execution");
   });
 });
 

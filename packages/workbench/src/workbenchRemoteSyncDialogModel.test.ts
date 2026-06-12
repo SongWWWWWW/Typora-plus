@@ -4,6 +4,7 @@ import type { RemoteSyncPlan, RemoteSyncResult } from "@typora-plus/platform";
 import {
   appendWorkbenchRemoteSyncProgressHistory,
   createWorkbenchRemoteSyncDialogConflictPreview,
+  createWorkbenchRemoteSyncDialogConflictResolutionState,
   createWorkbenchRemoteSyncDialogProgressPreview,
   createWorkbenchRemoteSyncDialogOperationPreview,
   createWorkbenchRemoteSyncDialogExecutionState,
@@ -96,6 +97,40 @@ describe("workbench remote sync dialog model", () => {
       executing: false,
       execution: undefined
     }).statusMessage).toBe("No remote sync changes to execute");
+  });
+
+  it("exposes conflict resolution only before execution starts", () => {
+    expect(createWorkbenchRemoteSyncDialogConflictResolutionState(plan("conflict"), {
+      executing: false,
+      execution: undefined
+    })).toEqual({
+      canResolve: true,
+      useLocalLabel: "Use Local",
+      useRemoteLabel: "Use Remote"
+    });
+
+    expect(createWorkbenchRemoteSyncDialogConflictResolutionState(plan("conflict"), {
+      executing: true,
+      execution: undefined
+    }).canResolve).toBe(false);
+    expect(createWorkbenchRemoteSyncDialogConflictResolutionState(plan("conflict"), {
+      executing: false,
+      execution: {
+        providerId: "sync.provider",
+        request: {
+          workspaceUri: URI.file("C:/Notes"),
+          resources: [],
+          direction: "push",
+          dryRun: false
+        },
+        plan: plan("conflict"),
+        result: result()
+      }
+    }).canResolve).toBe(false);
+    expect(createWorkbenchRemoteSyncDialogConflictResolutionState(plan("update"), {
+      executing: false,
+      execution: undefined
+    }).canResolve).toBe(false);
   });
 
   it("formats operation summaries consistently", () => {
