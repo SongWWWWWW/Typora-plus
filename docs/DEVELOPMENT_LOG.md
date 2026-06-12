@@ -8223,3 +8223,32 @@ Review:
 Known limitations:
 
 - Direct Feishu Drive token lifecycle, folder traversal, upload-session handling, and Docs import remain future adapter work.
+
+## 2026-06-12 - P2 Raw Mirror List Page Size Metadata
+
+Completed:
+
+- Added bounded `rawMirror.listPageSize` metadata for configured raw mirror providers.
+- Sent configured page size as a provider-neutral `pageSize` query value on each paginated list request.
+- Added platform diagnostics for invalid list page size values.
+- Wired the Settings raw mirror draft model and guided form to read, write, order, and validate the page-size field without React-owned metadata keys.
+- Covered provider requests, diagnostics, Settings validation, and Settings metadata draft round-tripping with focused tests.
+
+Quality gate:
+
+- `npx vitest run packages/platform/src/remoteSyncConfiguredRawMirrorProvider.test.ts packages/workbench/src/settingsModel.test.ts`: passed, 2 files / 42 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 87 files / 833 tests, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Raw mirror list page size hardcode scan for OpenAI endpoints, model ids, API keys, Feishu endpoints, OAuth/token/secret literals, and provider credentials: passed
+
+Review:
+
+- Page-size tuning is now a profile-owned hint that future raw mirror gateways can translate for paginated cloud APIs without leaking provider-specific query names into Workbench.
+- Settings remains a structured draft surface over platform-owned metadata semantics.
+- No Feishu endpoint, OAuth scope, token name, folder id, model id, provider id, storage path, or credential literal was added.
+
+Known limitations:
+
+- Direct Feishu Drive token lifecycle, folder traversal, upload-session handling, and Docs import remain future adapter work.

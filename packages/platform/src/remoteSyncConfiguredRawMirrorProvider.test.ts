@@ -7,6 +7,7 @@ import {
   type RemoteSyncNativeRequestInput,
   type RemoteSyncNativeRequestTransport,
   remoteSyncConfiguredRawMirrorAdapterName,
+  remoteSyncConfiguredRawMirrorListLimits,
   remoteSyncConfiguredRawMirrorMetadataIssueCodes,
   remoteSyncConfiguredRawMirrorMetadataKeys,
   createRemoteSyncConfiguredRawMirrorProviderFactory
@@ -275,6 +276,26 @@ describe("configured raw mirror remote sync provider", () => {
     ]);
     expect(diagnoseRemoteSyncConfiguredRawMirrorMetadata(configuration({
       metadata: {
+        [keys.listPageSize]: "0"
+      }
+    }))).toEqual([
+      {
+        code: codes.invalidListPageSize,
+        key: keys.listPageSize
+      }
+    ]);
+    expect(diagnoseRemoteSyncConfiguredRawMirrorMetadata(configuration({
+      metadata: {
+        [keys.listPageSize]: String(remoteSyncConfiguredRawMirrorListLimits.maxPageSize + 1)
+      }
+    }))).toEqual([
+      {
+        code: codes.invalidListPageSize,
+        key: keys.listPageSize
+      }
+    ]);
+    expect(diagnoseRemoteSyncConfiguredRawMirrorMetadata(configuration({
+      metadata: {
         [keys.retryMaxRetries]: "2"
       }
     }))).toEqual([
@@ -387,7 +408,11 @@ describe("configured raw mirror remote sync provider", () => {
   it("follows configured raw mirror list cursors before planning", async () => {
     const requests: RemoteSyncNativeRequestInput[] = [];
     const providers = createConfiguredRemoteSyncProviders([
-      configuration()
+      configuration({
+        metadata: {
+          [remoteSyncConfiguredRawMirrorMetadataKeys.listPageSize]: "200"
+        }
+      })
     ], {
       transport: createTransport(requests, [
         {
@@ -416,8 +441,11 @@ describe("configured raw mirror remote sync provider", () => {
     });
 
     expect(requests.map((request) => [request.method, request.url])).toEqual([
-      ["GET", "https://sync.example.test/api/mirror/list?remoteScopeId=workspace-root&direction=pull"],
-      ["GET", "https://sync.example.test/api/mirror/list?remoteScopeId=workspace-root&direction=pull&cursor=page-2"]
+      ["GET", "https://sync.example.test/api/mirror/list?remoteScopeId=workspace-root&direction=pull&pageSize=200"],
+      [
+        "GET",
+        "https://sync.example.test/api/mirror/list?remoteScopeId=workspace-root&direction=pull&pageSize=200&cursor=page-2"
+      ]
     ]);
     expect(plan.operations.map((operation) => operation.relativePath)).toEqual(["A.md", "B.md"]);
     expect(plan.summary).toEqual({

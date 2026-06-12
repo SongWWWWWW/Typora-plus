@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   remoteSyncConfiguredRawMirrorAdapterName,
+  remoteSyncConfiguredRawMirrorListLimits,
   remoteSyncConfiguredRawMirrorMetadataKeys,
   remoteSyncConfiguredRawMirrorRetryLimits
 } from "@typora-plus/platform";
@@ -561,6 +562,20 @@ describe("settings model", () => {
       createSettingsRemoteSyncProviderDraft({
         ...provider,
         metadata: createRawMirrorMetadata({
+          [remoteSyncConfiguredRawMirrorMetadataKeys.listPageSize]: "200"
+        })
+      }),
+      [],
+      undefined
+    )).toMatchObject({
+      canSave: true,
+      issues: []
+    });
+
+    expect(validateSettingsRemoteSyncProviderDraft(
+      createSettingsRemoteSyncProviderDraft({
+        ...provider,
+        metadata: createRawMirrorMetadata({
           [remoteSyncConfiguredRawMirrorMetadataKeys.retryStatusCodes]: "429, 503",
           [remoteSyncConfiguredRawMirrorMetadataKeys.retryMaxRetries]: "2",
           [remoteSyncConfiguredRawMirrorMetadataKeys.retryDelayMs]: "0"
@@ -646,6 +661,17 @@ describe("settings model", () => {
 
     expect(highRetryValidation.canSave).toBe(false);
     expect(highRetryValidation.issues).toContain("Complete raw mirror retry metadata.");
+
+    const invalidPageSizeValidation = validateSettingsRemoteSyncProviderDraft({
+      ...createSettingsRemoteSyncProviderDraft(provider),
+      metadataText: formatRawMirrorMetadataText(createRawMirrorMetadata({
+        [remoteSyncConfiguredRawMirrorMetadataKeys.listPageSize]:
+          String(remoteSyncConfiguredRawMirrorListLimits.maxPageSize + 1)
+      }))
+    }, [], undefined);
+
+    expect(invalidPageSizeValidation.canSave).toBe(false);
+    expect(invalidPageSizeValidation.issues).toContain("Complete raw mirror list metadata.");
   });
 
   it("maps raw mirror metadata through a structured Settings draft", () => {
@@ -664,6 +690,7 @@ describe("settings model", () => {
         [remoteSyncConfiguredRawMirrorMetadataKeys.headerBinding]: "access",
         [remoteSyncConfiguredRawMirrorMetadataKeys.headerName]: "Authorization",
         [remoteSyncConfiguredRawMirrorMetadataKeys.headerScheme]: "Bearer",
+        [remoteSyncConfiguredRawMirrorMetadataKeys.listPageSize]: "200",
         [remoteSyncConfiguredRawMirrorMetadataKeys.retryStatusCodes]: "429, 503",
         [remoteSyncConfiguredRawMirrorMetadataKeys.retryMaxRetries]: "2",
         [remoteSyncConfiguredRawMirrorMetadataKeys.retryDelayMs]: "0",
@@ -676,6 +703,7 @@ describe("settings model", () => {
     expect(rawMirrorDraft).toEqual({
       enabled: true,
       listPath: "mirror/list",
+      listPageSize: "200",
       uploadPath: "mirror/upload",
       downloadPath: "mirror/download",
       deletePath: "mirror/delete",
@@ -690,6 +718,7 @@ describe("settings model", () => {
     const updated = applySettingsRawMirrorMetadataDraft(draft, {
       ...rawMirrorDraft,
       uploadPath: "gateway/upload",
+      listPageSize: "300",
       headerScheme: "",
       retryMaxRetries: "3",
       retryDelayMs: "50"
@@ -699,6 +728,7 @@ describe("settings model", () => {
     expect(updated.metadataText).toBe([
       `${keys.adapter}=${remoteSyncConfiguredRawMirrorAdapterName}`,
       `${keys.listPath}=mirror/list`,
+      `${keys.listPageSize}=300`,
       `${keys.uploadPath}=gateway/upload`,
       `${keys.downloadPath}=mirror/download`,
       `${keys.deletePath}=mirror/delete`,
@@ -736,6 +766,7 @@ describe("settings model", () => {
     expect(createSettingsRawMirrorMetadataDraft(updated)).toMatchObject({
       enabled: false,
       listPath: "",
+      listPageSize: "",
       uploadPath: "",
       downloadPath: "",
       deletePath: ""
@@ -750,6 +781,7 @@ describe("settings model", () => {
     const updated = applySettingsRawMirrorMetadataDraft(draft, {
       enabled: true,
       listPath: "mirror/list",
+      listPageSize: "",
       uploadPath: "mirror/upload",
       downloadPath: "mirror/download",
       deletePath: "mirror/delete",

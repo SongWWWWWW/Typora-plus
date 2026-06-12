@@ -31,6 +31,7 @@ export const remoteSyncConfiguredRawMirrorAdapterName = "raw-mirror";
 export const remoteSyncConfiguredRawMirrorMetadataKeys = {
   adapter: "rawMirror.adapter",
   listPath: "rawMirror.listPath",
+  listPageSize: "rawMirror.listPageSize",
   uploadPath: "rawMirror.uploadPath",
   downloadPath: "rawMirror.downloadPath",
   deletePath: "rawMirror.deletePath",
@@ -50,11 +51,20 @@ export const remoteSyncConfiguredRawMirrorRetryLimits = {
   maxStatusCodes: 16
 } as const;
 
+export const remoteSyncConfiguredRawMirrorListLimits = {
+  maxCursorLength: 1024,
+  maxPages: 200,
+  maxPageSize: 1000,
+  maxResources: 20_000,
+  minPageSize: 1
+} as const;
+
 export const remoteSyncConfiguredRawMirrorMetadataIssueCodes = {
   incompleteHeader: "incomplete-header",
   incompleteRetry: "incomplete-retry",
   invalidHeaderName: "invalid-header-name",
   invalidHeaderScheme: "invalid-header-scheme",
+  invalidListPageSize: "invalid-list-page-size",
   invalidPath: "invalid-path",
   invalidRetryDelayMs: "invalid-retry-delay-ms",
   invalidRetryMaxRetries: "invalid-retry-max-retries",
@@ -82,6 +92,7 @@ export interface RemoteSyncConfiguredRawMirrorProviderFactoryOptions {
 
 interface RemoteSyncConfiguredRawMirrorProfile {
   readonly listPath: string;
+  readonly listPageSize?: number;
   readonly uploadPath: string;
   readonly downloadPath: string;
   readonly deletePath: string;
@@ -105,10 +116,7 @@ interface RemoteSyncConfiguredRawMirrorRequestContext {
 
 const configuredRawMirrorLimits = {
   maxBodyBytes: 8 * 1024 * 1024,
-  maxCursorLength: 1024,
-  maxListPages: 200,
-  maxPathLength: 512,
-  maxResponseResources: 20_000
+  maxPathLength: 512
 } as const;
 
 const configuredRawMirrorPathMetadataKeys = [
@@ -176,6 +184,12 @@ export function diagnoseRemoteSyncConfiguredRawMirrorMetadata(
     issues.push(headerIssue);
   }
 
+  const listIssue = diagnoseConfiguredRawMirrorListMetadata(metadata);
+
+  if (listIssue) {
+    issues.push(listIssue);
+  }
+
   const retryIssue = diagnoseConfiguredRawMirrorRetryMetadata(metadata);
 
   if (retryIssue) {
@@ -193,7 +207,7 @@ async function listConfiguredRawMirrorResources(
   const seenCursors = new Set<string>();
   let cursor: string | undefined;
 
-  for (let pageIndex = 0; pageIndex < configuredRawMirrorLimits.maxListPages; pageIndex += 1) {
+  for (let pageIndex = 0; pageIndex < remoteSyncConfiguredRawMirrorListLimits.maxPages; pageIndex += 1) {
     throwIfConfiguredRawMirrorAborted(listRequest.signal);
 
     if (cursor !== undefined) {
@@ -207,7 +221,7 @@ async function listConfiguredRawMirrorResources(
     const response = await requestConfiguredRawMirror(context, {
       path: context.rawMirror.listPath,
       method: "GET",
-      query: createConfiguredRawMirrorListQuery(context.profile, listRequest.direction, cursor),
+      query: createConfiguredRawMirrorListQuery(context.profile, context.rawMirror, listRequest.direction, cursor),
       responseType: "json",
       ...createConfiguredRawMirrorSecretRequest(context.rawMirror),
       ...(listRequest.signal !== undefined ? { signal: listRequest.signal } : {})
@@ -217,7 +231,7 @@ async function listConfiguredRawMirrorResources(
     const page = readConfiguredRawMirrorResourceListPage(response.body);
     resources.push(...page.resources);
 
-    if (resources.length > configuredRawMirrorLimits.maxResponseResources) {
+    if (resources.length > remoteSyncConfiguredRawMirrorListLimits.maxResources) {
       throw new Error("Configured raw mirror resource list response is too large");
     }
 
@@ -409,11 +423,13 @@ function createConfiguredRawMirrorBaseQuery(
 
 function createConfiguredRawMirrorListQuery(
   profile: RemoteSyncProviderConfiguration,
+  rawMirror: RemoteSyncConfiguredRawMirrorProfile,
   direction: RemoteSyncRawMirrorListRequest["direction"],
   cursor: string | undefined
 ): Readonly<Record<string, string | undefined>> {
   return {
     ...createConfiguredRawMirrorBaseQuery(profile, direction),
+    ...(rawMirror.listPageSize !== undefined ? { pageSize: String(rawMirror.listPageSize) } : {}),
     ...(cursor !== undefined ? { cursor } : {})
   };
 }
@@ -571,6 +587,7 @@ function readConfiguredRawMirrorProfile(
   }
 
   const listPath = readConfiguredRawMirrorMetadataPath(metadata, remoteSyncConfiguredRawMirrorMetadataKeys.listPath);
+  const listPageSize = readConfiguredRawMirrorListPageSize(metadata);
   const uploadPath = readConfiguredRawMirrorMetadataPath(metadata, remoteSyncConfiguredRawMirrorMetadataKeys.uploadPath);
   const downloadPath = readConfiguredRawMirrorMetadataPath(
     metadata,
@@ -586,6 +603,7 @@ function readConfiguredRawMirrorProfile(
 
   return {
     listPath,
+    ...(listPageSize !== undefined ? { listPageSize } : {}),
     uploadPath,
     downloadPath,
     deletePath,
@@ -668,6 +686,27 @@ function diagnoseConfiguredRawMirrorSecretHeaderMetadata(
   return undefined;
 }
 
+function diagnoseConfiguredRawMirrorListMetadata(
+  metadata: Readonly<Record<string, string>>
+): RemoteSyncConfiguredRawMirrorMetadataIssue | undefined {
+  const pageSize = normalizeConfiguredRawMirrorMetadataValue(
+    metadata[remoteSyncConfiguredRawMirrorMetadataKeys.listPageSize]
+  );
+
+  if (!pageSize) {
+    return undefined;
+  }
+
+  if (readConfiguredRawMirrorListPageSize(metadata) === undefined) {
+    return {
+      code: remoteSyncConfiguredRawMirrorMetadataIssueCodes.invalidListPageSize,
+      key: remoteSyncConfiguredRawMirrorMetadataKeys.listPageSize
+    };
+  }
+
+  return undefined;
+}
+
 function diagnoseConfiguredRawMirrorRetryMetadata(
   metadata: Readonly<Record<string, string>>
 ): RemoteSyncConfiguredRawMirrorMetadataIssue | undefined {
@@ -728,6 +767,17 @@ function diagnoseConfiguredRawMirrorRetryMetadata(
   }
 
   return undefined;
+}
+
+function readConfiguredRawMirrorListPageSize(metadata: Readonly<Record<string, string>>): number | undefined {
+  const pageSize = readConfiguredRawMirrorOptionalInteger(
+    metadata[remoteSyncConfiguredRawMirrorMetadataKeys.listPageSize],
+    0,
+    remoteSyncConfiguredRawMirrorListLimits.minPageSize,
+    remoteSyncConfiguredRawMirrorListLimits.maxPageSize
+  );
+
+  return pageSize && pageSize > 0 ? pageSize : undefined;
 }
 
 function readConfiguredRawMirrorRetryPolicy(
@@ -903,7 +953,7 @@ function readConfiguredRawMirrorResourceListPage(value: unknown): {
     throw new Error("Configured raw mirror resource list response is invalid");
   }
 
-  if (resources.length > configuredRawMirrorLimits.maxResponseResources) {
+  if (resources.length > remoteSyncConfiguredRawMirrorListLimits.maxResources) {
     throw new Error("Configured raw mirror resource list response is too large");
   }
 
@@ -933,7 +983,7 @@ function readConfiguredRawMirrorOptionalCursor(value: unknown): string | undefin
   }
 
   if (
-    normalized.length > configuredRawMirrorLimits.maxCursorLength ||
+    normalized.length > remoteSyncConfiguredRawMirrorListLimits.maxCursorLength ||
     /[\u0000-\u001f]/.test(normalized)
   ) {
     throw new Error("Configured raw mirror resource list next cursor is invalid");

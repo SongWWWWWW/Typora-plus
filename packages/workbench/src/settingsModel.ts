@@ -152,6 +152,7 @@ export interface SettingsRemoteSyncProviderDraftValidation {
 export interface SettingsRawMirrorMetadataDraft {
   readonly enabled: boolean;
   readonly listPath: string;
+  readonly listPageSize: string;
   readonly uploadPath: string;
   readonly downloadPath: string;
   readonly deletePath: string;
@@ -239,10 +240,12 @@ const settingsEntryById = new Map<SettingsEntryId, SettingsEntryDefinition>(
 const settingsRemoteSyncProviderInvalidIssue =
   "Complete provider id, title, HTTPS or loopback base URL, and valid profile bindings.";
 const settingsRawMirrorMetadataInvalidIssue = "Complete raw mirror metadata paths and header binding.";
+const settingsRawMirrorListInvalidIssue = "Complete raw mirror list metadata.";
 const settingsRawMirrorRetryInvalidIssue = "Complete raw mirror retry metadata.";
 const settingsRawMirrorMetadataKeyOrder = [
   remoteSyncConfiguredRawMirrorMetadataKeys.adapter,
   remoteSyncConfiguredRawMirrorMetadataKeys.listPath,
+  remoteSyncConfiguredRawMirrorMetadataKeys.listPageSize,
   remoteSyncConfiguredRawMirrorMetadataKeys.uploadPath,
   remoteSyncConfiguredRawMirrorMetadataKeys.downloadPath,
   remoteSyncConfiguredRawMirrorMetadataKeys.deletePath,
@@ -439,6 +442,7 @@ export function createSettingsRawMirrorMetadataDraft(
   return {
     enabled,
     listPath: metadata[remoteSyncConfiguredRawMirrorMetadataKeys.listPath] ?? "",
+    listPageSize: metadata[remoteSyncConfiguredRawMirrorMetadataKeys.listPageSize] ?? "",
     uploadPath: metadata[remoteSyncConfiguredRawMirrorMetadataKeys.uploadPath] ?? "",
     downloadPath: metadata[remoteSyncConfiguredRawMirrorMetadataKeys.downloadPath] ?? "",
     deletePath: metadata[remoteSyncConfiguredRawMirrorMetadataKeys.deletePath] ?? "",
@@ -474,6 +478,11 @@ export function applySettingsRawMirrorMetadataDraft(
       remoteSyncConfiguredRawMirrorAdapterName
     );
     applySettingsMetadataValue(metadata, remoteSyncConfiguredRawMirrorMetadataKeys.listPath, rawMirrorDraft.listPath);
+    applySettingsMetadataValue(
+      metadata,
+      remoteSyncConfiguredRawMirrorMetadataKeys.listPageSize,
+      rawMirrorDraft.listPageSize
+    );
     applySettingsMetadataValue(metadata, remoteSyncConfiguredRawMirrorMetadataKeys.uploadPath, rawMirrorDraft.uploadPath);
     applySettingsMetadataValue(
       metadata,
@@ -768,7 +777,15 @@ function getSettingsRawMirrorMetadataIssue(
     return settingsRawMirrorRetryInvalidIssue;
   }
 
+  if (issues.some((issue) => isSettingsRawMirrorListMetadataIssueCode(issue.code))) {
+    return settingsRawMirrorListInvalidIssue;
+  }
+
   return settingsRawMirrorMetadataInvalidIssue;
+}
+
+function isSettingsRawMirrorListMetadataIssueCode(code: string): boolean {
+  return code === remoteSyncConfiguredRawMirrorMetadataIssueCodes.invalidListPageSize;
 }
 
 function isSettingsRawMirrorRetryMetadataIssueCode(code: string): boolean {

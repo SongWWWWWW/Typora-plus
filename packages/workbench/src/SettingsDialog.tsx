@@ -1,4 +1,8 @@
-import { keybindingFromEvent, remoteSyncConfiguredRawMirrorRetryLimits } from "@typora-plus/platform";
+import {
+  keybindingFromEvent,
+  remoteSyncConfiguredRawMirrorListLimits,
+  remoteSyncConfiguredRawMirrorRetryLimits
+} from "@typora-plus/platform";
 import type {
   AiProviderConfiguration,
   AiTextResponse,
@@ -1453,6 +1457,18 @@ function RawMirrorSettingsFields({
               value={rawMirrorDraft.listPath}
               aria-label="Raw Mirror List Path"
               onChange={(event) => updateRawMirrorDraft({ listPath: event.target.value })}
+            />
+          </SettingsField>
+          <SettingsField label="Page Size">
+            <input
+              className="tp-settings-number-input"
+              type="number"
+              min={remoteSyncConfiguredRawMirrorListLimits.minPageSize}
+              max={remoteSyncConfiguredRawMirrorListLimits.maxPageSize}
+              step={1}
+              value={rawMirrorDraft.listPageSize}
+              aria-label="Raw Mirror Page Size"
+              onChange={(event) => updateRawMirrorDraft({ listPageSize: event.target.value })}
             />
           </SettingsField>
           <SettingsField label="Upload Path">
