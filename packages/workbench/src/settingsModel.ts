@@ -153,6 +153,7 @@ export interface SettingsRawMirrorMetadataDraft {
   readonly enabled: boolean;
   readonly listPath: string;
   readonly listPageSize: string;
+  readonly deleteMissing: boolean;
   readonly uploadPath: string;
   readonly downloadPath: string;
   readonly deletePath: string;
@@ -240,6 +241,7 @@ const settingsEntryById = new Map<SettingsEntryId, SettingsEntryDefinition>(
 const settingsRemoteSyncProviderInvalidIssue =
   "Complete provider id, title, HTTPS or loopback base URL, and valid profile bindings.";
 const settingsRawMirrorMetadataInvalidIssue = "Complete raw mirror metadata paths and header binding.";
+const settingsRawMirrorDeleteInvalidIssue = "Complete raw mirror delete metadata.";
 const settingsRawMirrorListInvalidIssue = "Complete raw mirror list metadata.";
 const settingsRawMirrorRetryInvalidIssue = "Complete raw mirror retry metadata.";
 const settingsRawMirrorMetadataKeyOrder = [
@@ -249,6 +251,7 @@ const settingsRawMirrorMetadataKeyOrder = [
   remoteSyncConfiguredRawMirrorMetadataKeys.uploadPath,
   remoteSyncConfiguredRawMirrorMetadataKeys.downloadPath,
   remoteSyncConfiguredRawMirrorMetadataKeys.deletePath,
+  remoteSyncConfiguredRawMirrorMetadataKeys.deleteMissing,
   remoteSyncConfiguredRawMirrorMetadataKeys.headerBinding,
   remoteSyncConfiguredRawMirrorMetadataKeys.headerName,
   remoteSyncConfiguredRawMirrorMetadataKeys.headerScheme,
@@ -443,6 +446,7 @@ export function createSettingsRawMirrorMetadataDraft(
     enabled,
     listPath: metadata[remoteSyncConfiguredRawMirrorMetadataKeys.listPath] ?? "",
     listPageSize: metadata[remoteSyncConfiguredRawMirrorMetadataKeys.listPageSize] ?? "",
+    deleteMissing: metadata[remoteSyncConfiguredRawMirrorMetadataKeys.deleteMissing]?.toLowerCase() === "true",
     uploadPath: metadata[remoteSyncConfiguredRawMirrorMetadataKeys.uploadPath] ?? "",
     downloadPath: metadata[remoteSyncConfiguredRawMirrorMetadataKeys.downloadPath] ?? "",
     deletePath: metadata[remoteSyncConfiguredRawMirrorMetadataKeys.deletePath] ?? "",
@@ -490,6 +494,9 @@ export function applySettingsRawMirrorMetadataDraft(
       rawMirrorDraft.downloadPath
     );
     applySettingsMetadataValue(metadata, remoteSyncConfiguredRawMirrorMetadataKeys.deletePath, rawMirrorDraft.deletePath);
+    if (rawMirrorDraft.deleteMissing) {
+      applySettingsMetadataValue(metadata, remoteSyncConfiguredRawMirrorMetadataKeys.deleteMissing, "true");
+    }
     applySettingsMetadataValue(
       metadata,
       remoteSyncConfiguredRawMirrorMetadataKeys.headerBinding,
@@ -781,7 +788,15 @@ function getSettingsRawMirrorMetadataIssue(
     return settingsRawMirrorListInvalidIssue;
   }
 
+  if (issues.some((issue) => isSettingsRawMirrorDeleteMetadataIssueCode(issue.code))) {
+    return settingsRawMirrorDeleteInvalidIssue;
+  }
+
   return settingsRawMirrorMetadataInvalidIssue;
+}
+
+function isSettingsRawMirrorDeleteMetadataIssueCode(code: string): boolean {
+  return code === remoteSyncConfiguredRawMirrorMetadataIssueCodes.invalidDeleteMissing;
 }
 
 function isSettingsRawMirrorListMetadataIssueCode(code: string): boolean {

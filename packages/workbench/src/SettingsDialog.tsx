@@ -1498,6 +1498,13 @@ function RawMirrorSettingsFields({
               onChange={(event) => updateRawMirrorDraft({ deletePath: event.target.value })}
             />
           </SettingsField>
+          <SettingsField label="Delete Missing">
+            <ToggleControl
+              checked={rawMirrorDraft.deleteMissing}
+              label="Raw Mirror Delete Missing"
+              onChange={(deleteMissing) => updateRawMirrorDraft({ deleteMissing })}
+            />
+          </SettingsField>
           <SettingsField label="Header Binding">
             <input
               className="tp-settings-text-input"

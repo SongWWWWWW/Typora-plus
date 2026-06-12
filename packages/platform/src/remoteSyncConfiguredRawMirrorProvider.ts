@@ -32,6 +32,7 @@ export const remoteSyncConfiguredRawMirrorMetadataKeys = {
   adapter: "rawMirror.adapter",
   listPath: "rawMirror.listPath",
   listPageSize: "rawMirror.listPageSize",
+  deleteMissing: "rawMirror.deleteMissing",
   uploadPath: "rawMirror.uploadPath",
   downloadPath: "rawMirror.downloadPath",
   deletePath: "rawMirror.deletePath",
@@ -64,6 +65,7 @@ export const remoteSyncConfiguredRawMirrorMetadataIssueCodes = {
   incompleteRetry: "incomplete-retry",
   invalidHeaderName: "invalid-header-name",
   invalidHeaderScheme: "invalid-header-scheme",
+  invalidDeleteMissing: "invalid-delete-missing",
   invalidListPageSize: "invalid-list-page-size",
   invalidPath: "invalid-path",
   invalidRetryDelayMs: "invalid-retry-delay-ms",
@@ -93,6 +95,7 @@ export interface RemoteSyncConfiguredRawMirrorProviderFactoryOptions {
 interface RemoteSyncConfiguredRawMirrorProfile {
   readonly listPath: string;
   readonly listPageSize?: number;
+  readonly deleteMissing?: boolean;
   readonly uploadPath: string;
   readonly downloadPath: string;
   readonly deletePath: string;
@@ -146,6 +149,7 @@ export function createRemoteSyncConfiguredRawMirrorProviderFactory(
     return createRemoteSyncRawMirrorProvider({
       id: profile.id,
       title: profile.title,
+      deleteMissing: rawMirror.deleteMissing === true,
       manifestStore: new RemoteSyncManifestStore({ storage: manifestStorage }),
       adapter: {
         listResources: (listRequest) => listConfiguredRawMirrorResources(context, listRequest),
@@ -188,6 +192,12 @@ export function diagnoseRemoteSyncConfiguredRawMirrorMetadata(
 
   if (listIssue) {
     issues.push(listIssue);
+  }
+
+  const deleteIssue = diagnoseConfiguredRawMirrorDeleteMetadata(metadata);
+
+  if (deleteIssue) {
+    issues.push(deleteIssue);
   }
 
   const retryIssue = diagnoseConfiguredRawMirrorRetryMetadata(metadata);
@@ -588,6 +598,7 @@ function readConfiguredRawMirrorProfile(
 
   const listPath = readConfiguredRawMirrorMetadataPath(metadata, remoteSyncConfiguredRawMirrorMetadataKeys.listPath);
   const listPageSize = readConfiguredRawMirrorListPageSize(metadata);
+  const deleteMissing = readConfiguredRawMirrorBoolean(metadata[remoteSyncConfiguredRawMirrorMetadataKeys.deleteMissing]);
   const uploadPath = readConfiguredRawMirrorMetadataPath(metadata, remoteSyncConfiguredRawMirrorMetadataKeys.uploadPath);
   const downloadPath = readConfiguredRawMirrorMetadataPath(
     metadata,
@@ -604,6 +615,7 @@ function readConfiguredRawMirrorProfile(
   return {
     listPath,
     ...(listPageSize !== undefined ? { listPageSize } : {}),
+    ...(deleteMissing !== undefined ? { deleteMissing } : {}),
     uploadPath,
     downloadPath,
     deletePath,
@@ -707,6 +719,27 @@ function diagnoseConfiguredRawMirrorListMetadata(
   return undefined;
 }
 
+function diagnoseConfiguredRawMirrorDeleteMetadata(
+  metadata: Readonly<Record<string, string>>
+): RemoteSyncConfiguredRawMirrorMetadataIssue | undefined {
+  const deleteMissing = normalizeConfiguredRawMirrorMetadataValue(
+    metadata[remoteSyncConfiguredRawMirrorMetadataKeys.deleteMissing]
+  );
+
+  if (!deleteMissing) {
+    return undefined;
+  }
+
+  if (readConfiguredRawMirrorBoolean(deleteMissing) === undefined) {
+    return {
+      code: remoteSyncConfiguredRawMirrorMetadataIssueCodes.invalidDeleteMissing,
+      key: remoteSyncConfiguredRawMirrorMetadataKeys.deleteMissing
+    };
+  }
+
+  return undefined;
+}
+
 function diagnoseConfiguredRawMirrorRetryMetadata(
   metadata: Readonly<Record<string, string>>
 ): RemoteSyncConfiguredRawMirrorMetadataIssue | undefined {
@@ -778,6 +811,24 @@ function readConfiguredRawMirrorListPageSize(metadata: Readonly<Record<string, s
   );
 
   return pageSize && pageSize > 0 ? pageSize : undefined;
+}
+
+function readConfiguredRawMirrorBoolean(value: unknown): boolean | undefined {
+  const normalized = normalizeConfiguredRawMirrorMetadataValue(value)?.toLowerCase();
+
+  if (!normalized) {
+    return undefined;
+  }
+
+  if (normalized === "true") {
+    return true;
+  }
+
+  if (normalized === "false") {
+    return false;
+  }
+
+  return undefined;
 }
 
 function readConfiguredRawMirrorRetryPolicy(

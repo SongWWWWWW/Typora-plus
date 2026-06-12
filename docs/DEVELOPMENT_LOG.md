@@ -8224,6 +8224,35 @@ Known limitations:
 
 - Direct Feishu Drive token lifecycle, folder traversal, upload-session handling, and Docs import remain future adapter work.
 
+## 2026-06-12 - P2 Raw Mirror Delete-Missing Opt-In
+
+Completed:
+
+- Added optional `rawMirror.deleteMissing` metadata for configured raw mirror providers.
+- Kept missing-resource deletion off by default; only `rawMirror.deleteMissing=true` passes delete-missing intent into the manifest-backed raw mirror planner.
+- Added platform diagnostics for malformed delete-missing metadata.
+- Wired the Settings raw mirror draft model and guided form to expose delete-missing as a structured toggle.
+- Covered manifest-backed remote delete planning/execution, diagnostics, Settings validation, and metadata round-tripping with focused tests.
+
+Quality gate:
+
+- `npx vitest run packages/platform/src/remoteSyncConfiguredRawMirrorProvider.test.ts packages/workbench/src/settingsModel.test.ts`: passed, 2 files / 43 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 87 files / 834 tests, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Raw mirror delete-missing hardcode scan for OpenAI endpoints, model ids, API keys, Feishu endpoints, OAuth/token/secret literals, and provider credentials: passed
+
+Review:
+
+- Deletion remains an explicit profile choice rather than an implicit side effect of enabling sync.
+- This prepares future raw cloud mirrors for real deletion propagation while preserving the safer skip-by-default baseline.
+- No Feishu endpoint, OAuth scope, token name, folder id, model id, provider id, storage path, or credential literal was added.
+
+Known limitations:
+
+- Direct Feishu Drive token lifecycle, folder traversal, upload-session handling, permission prompts, and Docs import remain future adapter work.
+
 ## 2026-06-12 - P2 Raw Mirror List Page Size Metadata
 
 Completed:

@@ -198,6 +198,105 @@ describe("configured raw mirror remote sync provider", () => {
     });
   });
 
+  it("opts into manifest-backed delete plans with explicit delete-missing metadata", async () => {
+    const requests: RemoteSyncNativeRequestInput[] = [];
+    const storage = createMemoryManifestStorage();
+    const workspaceResources = {
+      readResource: vi.fn(async () => ({
+        workspaceUri: URI.file("C:/Notes"),
+        relativePath: "Daily.md",
+        value: "SGVsbG8=",
+        encoding: "base64" as const,
+        size: 5,
+        mtime: 100,
+        contentHash: "sha256:local"
+      })),
+      writeResource: vi.fn(),
+      deleteResource: vi.fn()
+    };
+    const syncedRemote = remoteResource("Daily.md", "remote-1", {
+      size: 5,
+      mtime: 100,
+      contentHash: "sha256:local"
+    });
+    const providers = createConfiguredRemoteSyncProviders([
+      configuration({
+        metadata: {
+          [remoteSyncConfiguredRawMirrorMetadataKeys.deleteMissing]: "true"
+        }
+      })
+    ], {
+      transport: createTransport(requests, [
+        { resources: [] },
+        { resources: [] },
+        { ok: true },
+        { resources: [syncedRemote] },
+        { resources: [syncedRemote] },
+        { resources: [syncedRemote] },
+        { ok: true },
+        { resources: [] }
+      ]),
+      workspaceResources,
+      createProvider: createRemoteSyncConfiguredRawMirrorProviderFactory({ manifestStorage: storage })
+    });
+    const workspaceUri = URI.file("C:/Notes");
+    const localResource = {
+      uri: URI.file("C:/Notes/Daily.md"),
+      relativePath: "Daily.md",
+      kind: "file" as const,
+      name: "Daily.md",
+      size: 5,
+      mtime: 100,
+      contentHash: "sha256:local"
+    };
+    const createPlan = await providers[0]!.createPlan({
+      workspaceUri,
+      resources: [localResource],
+      direction: "push",
+      dryRun: true
+    });
+
+    await providers[0]!.executePlan(createPlan, {
+      workspaceUri,
+      resources: [localResource],
+      direction: "push",
+      dryRun: false
+    });
+
+    const deletePlan = await providers[0]!.createPlan({
+      workspaceUri,
+      resources: [],
+      direction: "bidirectional",
+      dryRun: true
+    });
+
+    expect(deletePlan.operations).toEqual([{
+      kind: "delete",
+      target: "remote",
+      relativePath: "Daily.md",
+      remoteId: "remote-1",
+      message: "Local resource is missing"
+    }]);
+    await expect(providers[0]!.executePlan(deletePlan, {
+      workspaceUri,
+      resources: [],
+      direction: "bidirectional",
+      dryRun: false
+    })).resolves.toMatchObject({
+      summary: {
+        creates: 0,
+        updates: 0,
+        deletes: 1,
+        skips: 0,
+        conflicts: 0
+      }
+    });
+    expect(requests.map((request) => [request.method, request.url])).toContainEqual([
+      "DELETE",
+      "https://sync.example.test/api/mirror/delete?remoteScopeId=workspace-root&path=Daily.md&remoteId=remote-1"
+    ]);
+  });
+
   it("skips native-request profiles that do not opt into the raw mirror adapter", () => {
     const providers = createConfiguredRemoteSyncProviders([
       {
@@ -292,6 +391,16 @@ describe("configured raw mirror remote sync provider", () => {
       {
         code: codes.invalidListPageSize,
         key: keys.listPageSize
+      }
+    ]);
+    expect(diagnoseRemoteSyncConfiguredRawMirrorMetadata(configuration({
+      metadata: {
+        [keys.deleteMissing]: "yes"
+      }
+    }))).toEqual([
+      {
+        code: codes.invalidDeleteMissing,
+        key: keys.deleteMissing
       }
     ]);
     expect(diagnoseRemoteSyncConfiguredRawMirrorMetadata(configuration({

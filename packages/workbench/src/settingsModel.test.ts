@@ -672,6 +672,16 @@ describe("settings model", () => {
 
     expect(invalidPageSizeValidation.canSave).toBe(false);
     expect(invalidPageSizeValidation.issues).toContain("Complete raw mirror list metadata.");
+
+    const invalidDeleteMissingValidation = validateSettingsRemoteSyncProviderDraft({
+      ...createSettingsRemoteSyncProviderDraft(provider),
+      metadataText: formatRawMirrorMetadataText(createRawMirrorMetadata({
+        [remoteSyncConfiguredRawMirrorMetadataKeys.deleteMissing]: "yes"
+      }))
+    }, [], undefined);
+
+    expect(invalidDeleteMissingValidation.canSave).toBe(false);
+    expect(invalidDeleteMissingValidation.issues).toContain("Complete raw mirror delete metadata.");
   });
 
   it("maps raw mirror metadata through a structured Settings draft", () => {
@@ -691,6 +701,7 @@ describe("settings model", () => {
         [remoteSyncConfiguredRawMirrorMetadataKeys.headerName]: "Authorization",
         [remoteSyncConfiguredRawMirrorMetadataKeys.headerScheme]: "Bearer",
         [remoteSyncConfiguredRawMirrorMetadataKeys.listPageSize]: "200",
+        [remoteSyncConfiguredRawMirrorMetadataKeys.deleteMissing]: "true",
         [remoteSyncConfiguredRawMirrorMetadataKeys.retryStatusCodes]: "429, 503",
         [remoteSyncConfiguredRawMirrorMetadataKeys.retryMaxRetries]: "2",
         [remoteSyncConfiguredRawMirrorMetadataKeys.retryDelayMs]: "0",
@@ -704,6 +715,7 @@ describe("settings model", () => {
       enabled: true,
       listPath: "mirror/list",
       listPageSize: "200",
+      deleteMissing: true,
       uploadPath: "mirror/upload",
       downloadPath: "mirror/download",
       deletePath: "mirror/delete",
@@ -719,6 +731,7 @@ describe("settings model", () => {
       ...rawMirrorDraft,
       uploadPath: "gateway/upload",
       listPageSize: "300",
+      deleteMissing: true,
       headerScheme: "",
       retryMaxRetries: "3",
       retryDelayMs: "50"
@@ -732,6 +745,7 @@ describe("settings model", () => {
       `${keys.uploadPath}=gateway/upload`,
       `${keys.downloadPath}=mirror/download`,
       `${keys.deletePath}=mirror/delete`,
+      `${keys.deleteMissing}=true`,
       `${keys.headerBinding}=access`,
       `${keys.headerName}=Authorization`,
       `${keys.retryStatusCodes}=429, 503`,
@@ -767,6 +781,7 @@ describe("settings model", () => {
       enabled: false,
       listPath: "",
       listPageSize: "",
+      deleteMissing: false,
       uploadPath: "",
       downloadPath: "",
       deletePath: ""
@@ -782,6 +797,7 @@ describe("settings model", () => {
       enabled: true,
       listPath: "mirror/list",
       listPageSize: "",
+      deleteMissing: false,
       uploadPath: "mirror/upload",
       downloadPath: "mirror/download",
       deletePath: "mirror/delete",
