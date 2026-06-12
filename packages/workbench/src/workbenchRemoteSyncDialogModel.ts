@@ -4,7 +4,10 @@ import type {
   RemoteSyncProgress
 } from "@typora-plus/platform";
 import type { WorkbenchRemoteSyncExecutionResult } from "./workbenchRemoteSyncActions";
-import { getWorkbenchRemoteSyncPlanExecutionBlockReason } from "./workbenchRemoteSyncActions";
+import {
+  getWorkbenchRemoteSyncPlanExecutionBlockReason,
+  isWorkbenchRemoteSyncBaselineRefreshPlan
+} from "./workbenchRemoteSyncActions";
 
 export interface WorkbenchRemoteSyncDialogOperationPreview {
   readonly emptyMessage: string;
@@ -67,7 +70,7 @@ export function createWorkbenchRemoteSyncDialogExecutionState(
   return {
     canCancel: false,
     canExecute: true,
-    executeLabel: "Execute"
+    executeLabel: isWorkbenchRemoteSyncBaselineRefreshPlan(plan) ? "Refresh Baseline" : "Execute"
   };
 }
 

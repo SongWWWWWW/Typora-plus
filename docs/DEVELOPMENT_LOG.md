@@ -8165,3 +8165,33 @@ Review:
 Known limitations:
 
 - Direct Feishu Drive token lifecycle, folder traversal, pagination, upload-session handling, and Docs import remain future adapter work.
+
+## 2026-06-12 - P2 Workbench Baseline Refresh Execution
+
+Completed:
+
+- Allowed Workbench action execution for remote sync plans that contain only `skip` operations, so verified raw mirror no-op manifest refresh can be reached from the UI.
+- Kept conflict plans blocked before provider execution.
+- Kept truly empty plans blocked as no-work plans.
+- Labeled skip-only idle dialog execution as `Refresh Baseline` while preserving ordinary `Execute` labels for create/update/delete plans.
+- Covered action-runner execution and dialog-state behavior with focused Workbench tests.
+
+Quality gate:
+
+- `npx vitest run packages/workbench/src/workbenchRemoteSyncActions.test.ts packages/workbench/src/workbenchRemoteSyncDialogModel.test.ts`: passed, 2 files / 20 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 87 files / 831 tests, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Workbench baseline refresh hardcode scan for OpenAI endpoints, model ids, API keys, Feishu endpoints, OAuth/token/secret literals, and provider credentials: passed
+
+Review:
+
+- Workbench still only classifies plan shape; platform and provider code remain responsible for proving whether skip operations are synchronized enough to refresh the manifest baseline.
+- The UI no longer hides a safe provider-owned baseline refresh behind a generic no-op block.
+- No Feishu endpoint, OAuth scope, token name, folder id, model id, provider id, storage path, or credential literal was added.
+
+Known limitations:
+
+- Conflict resolution remains inspect-only; choose-local/choose-remote actions are still future work.
+- Direct Feishu Drive token lifecycle, folder traversal, pagination, upload-session handling, and Docs import remain future adapter work.

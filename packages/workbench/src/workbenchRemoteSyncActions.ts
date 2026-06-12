@@ -132,13 +132,15 @@ export function getWorkbenchRemoteSyncPlanExecutionBlockReason(plan: RemoteSyncP
     return "Resolve remote sync conflicts before execution";
   }
 
-  if (!plan.operations.some((operation) =>
-    operation.kind === "create" || operation.kind === "update" || operation.kind === "delete"
-  )) {
+  if (plan.operations.length === 0) {
     return "No remote sync changes to execute";
   }
 
   return undefined;
+}
+
+export function isWorkbenchRemoteSyncBaselineRefreshPlan(plan: RemoteSyncPlan): boolean {
+  return plan.operations.length > 0 && plan.operations.every((operation) => operation.kind === "skip");
 }
 
 function createWorkbenchRemoteSyncExecutionRequest(

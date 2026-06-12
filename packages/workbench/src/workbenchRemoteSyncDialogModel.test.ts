@@ -23,6 +23,15 @@ describe("workbench remote sync dialog model", () => {
       canExecute: true,
       executeLabel: "Execute"
     });
+
+    expect(createWorkbenchRemoteSyncDialogExecutionState(plan("skip"), {
+      executing: false,
+      execution: undefined
+    })).toEqual({
+      canCancel: false,
+      canExecute: true,
+      executeLabel: "Refresh Baseline"
+    });
   });
 
   it("exposes cancellable running state while execution is pending", () => {
@@ -77,13 +86,13 @@ describe("workbench remote sync dialog model", () => {
     });
   });
 
-  it("reports conflict and no-op block reasons", () => {
+  it("reports conflict and empty plan block reasons", () => {
     expect(createWorkbenchRemoteSyncDialogExecutionState(plan("conflict"), {
       executing: false,
       execution: undefined
     }).statusMessage).toBe("Resolve remote sync conflicts before execution");
 
-    expect(createWorkbenchRemoteSyncDialogExecutionState(plan("skip"), {
+    expect(createWorkbenchRemoteSyncDialogExecutionState(emptyPlan(), {
       executing: false,
       execution: undefined
     }).statusMessage).toBe("No remote sync changes to execute");
@@ -219,6 +228,19 @@ function plan(kind: RemoteSyncPlan["operations"][number]["kind"]): RemoteSyncPla
       deletes: kind === "delete" ? 1 : 0,
       skips: kind === "skip" ? 1 : 0,
       conflicts: kind === "conflict" ? 1 : 0
+    }
+  };
+}
+
+function emptyPlan(): RemoteSyncPlan {
+  return {
+    operations: [],
+    summary: {
+      creates: 0,
+      updates: 0,
+      deletes: 0,
+      skips: 0,
+      conflicts: 0
     }
   };
 }

@@ -215,7 +215,7 @@ describe("workbench remote sync actions", () => {
     expect(execution.result.completedAt).toBe(123);
   });
 
-  it("blocks conflict and no-op plans before provider execution", async () => {
+  it("blocks conflict and empty plans before provider execution", async () => {
     const executePlan = vi.fn();
     const services = {
       remoteSyncService: {
@@ -244,9 +244,23 @@ describe("workbench remote sync actions", () => {
     })).rejects.toThrow("Resolve remote sync conflicts");
 
     expect(getWorkbenchRemoteSyncPlanExecutionBlockReason({
+      operations: [],
+      summary: {
+        creates: 0,
+        updates: 0,
+        deletes: 0,
+        skips: 0,
+        conflicts: 0
+      }
+    })).toBe("No remote sync changes to execute");
+    expect(executePlan).not.toHaveBeenCalled();
+  });
+
+  it("executes skip-only plans so providers can refresh baselines", async () => {
+    const plan = {
       operations: [{
-        kind: "skip",
-        target: "none",
+        kind: "skip" as const,
+        target: "none" as const,
         relativePath: "A.md"
       }],
       summary: {
@@ -256,8 +270,27 @@ describe("workbench remote sync actions", () => {
         skips: 1,
         conflicts: 0
       }
-    })).toBe("No remote sync changes to execute");
-    expect(executePlan).not.toHaveBeenCalled();
+    };
+    const executePlan = vi.fn(async () => ({
+      operations: plan.operations,
+      summary: plan.summary,
+      completedAt: 123
+    }));
+    const services = {
+      remoteSyncService: {
+        executePlan
+      }
+    };
+
+    const execution = await runWorkbenchExecuteWorkspaceRemoteSyncAction(services, {
+      providerId: "a.sync",
+      request: request(),
+      plan
+    });
+
+    expect(getWorkbenchRemoteSyncPlanExecutionBlockReason(plan)).toBeUndefined();
+    expect(execution.result.summary.skips).toBe(1);
+    expect(executePlan).toHaveBeenCalledWith("a.sync", plan, execution.request);
   });
 });
 

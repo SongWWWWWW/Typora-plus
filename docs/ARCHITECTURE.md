@@ -182,6 +182,8 @@ Raw mirror local application is also provider-neutral. `applyRemoteSyncRawMirror
 
 Manifest refresh uses post-execution snapshots when an adapter can provide them. `createRemoteSyncRawMirrorExecutedLocalResources()` merges refreshed upload reads, local apply results, and existing local resources into a sorted local resource snapshot, and `createRemoteSyncRawMirrorProvider()` prefers adapter-returned local resources over the pre-execution request resources when writing the last-sync manifest. This lets future pull/download adapters record the local state that actually landed on disk without moving provider-specific remote I/O into the platform layer.
 
+Workbench execution gating treats only an empty `operations` set as a no-op block. Plans that contain only `skip` operations stay executable and are labeled as baseline refreshes, leaving the platform/provider manifest-refresh proof to decide whether synchronized local and remote resources can update the last-sync baseline without content mutation.
+
 ## Stage Review Rules
 
 At the end of every stage:

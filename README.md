@@ -63,7 +63,7 @@ P2 main progress is implemented:
 - configured raw mirror gateways can opt into bounded retry for selected HTTP status codes through non-sensitive metadata, with Settings validation for retry status, retry count, and delay values.
 - Settings includes structured raw mirror metadata draft helpers and guided raw mirror profile fields that preserve unknown profile metadata while editing raw mirror route, header, and retry metadata.
 - configured raw mirror metadata diagnostics are platform-owned and consumed by Settings, keeping provider registration and profile-edit validation aligned for future cloud adapters.
-- manifest refresh can safely bootstrap or update last-sync baselines for no-op raw mirror executions when local and remote skip operations are proven synchronized, preserving cloud remote ids without mutating either side.
+- manifest refresh can safely bootstrap or update last-sync baselines for no-op raw mirror executions when local and remote skip operations are proven synchronized, preserving cloud remote ids without mutating either side; Workbench allows skip-only plans as explicit baseline refreshes while empty plans and conflicts remain blocked.
 
 ## Commands
 
