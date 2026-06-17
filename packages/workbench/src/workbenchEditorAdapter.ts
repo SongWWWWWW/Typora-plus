@@ -17,6 +17,7 @@ import {
   createMarkdownCodeFenceRenderer,
   createMarkdownInlineRenderer
 } from "./markdownRendererPreview";
+import { createWorkbenchEditorLabels } from "./workbenchI18n";
 
 export interface WorkbenchEditorAdapterServices {
   readonly attachmentService: Pick<IAttachmentService, "isAvailable" | "saveImage">;
@@ -35,7 +36,7 @@ export interface WorkbenchEditorAdapter {
 }
 
 export function createWorkbenchEditorAdapter(
-  configuration: Pick<TyporaPlusConfiguration, "editor">,
+  configuration: Pick<TyporaPlusConfiguration, "appearance" | "editor">,
   services: WorkbenchEditorAdapterServices,
   model: Pick<TextFileModel, "uri">
 ): WorkbenchEditorAdapter {
@@ -49,13 +50,14 @@ export function createWorkbenchEditorAdapter(
 }
 
 export function createWorkbenchEditorConfiguration(
-  configuration: Pick<TyporaPlusConfiguration, "editor">
+  configuration: Pick<TyporaPlusConfiguration, "appearance" | "editor">
 ): MarkdownEditorConfiguration {
   return {
     fontSize: configuration.editor.fontSize,
     lineHeight: configuration.editor.lineHeight,
     maxWidth: configuration.editor.maxWidth,
     focusMode: configuration.editor.focusMode,
+    labels: createWorkbenchEditorLabels(configuration.appearance.locale),
     typewriterMode: configuration.editor.typewriterMode
   };
 }

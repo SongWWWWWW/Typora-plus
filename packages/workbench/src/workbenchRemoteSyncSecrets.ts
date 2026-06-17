@@ -4,12 +4,27 @@ import {
 } from "@typora-plus/platform";
 import {
   runWorkbenchAction,
+  type WorkbenchActionRunnerMessages,
   type WorkbenchOperationErrorSetter
 } from "./workbenchActionRunner";
 
 export interface WorkbenchRemoteSyncSecretCallbacks {
+  readonly actionRunnerMessages?: WorkbenchActionRunnerMessages;
+  readonly messages?: WorkbenchRemoteSyncSecretMessages;
   readonly setOperationError: WorkbenchOperationErrorSetter;
 }
+
+export interface WorkbenchRemoteSyncSecretMessages {
+  readonly referenceInvalid: string;
+  readonly storageUnavailable: string;
+  readonly valueEmpty: string;
+}
+
+export const defaultWorkbenchRemoteSyncSecretMessages: WorkbenchRemoteSyncSecretMessages = {
+  referenceInvalid: "Remote sync secret reference is invalid",
+  storageUnavailable: "Remote sync secret storage is unavailable",
+  valueEmpty: "Remote sync secret value must not be empty"
+};
 
 export interface WorkbenchRemoteSyncSecretBridge {
   readonly isAvailable: boolean;
@@ -28,12 +43,16 @@ export function createWorkbenchRemoteSyncSecretActions(
   return {
     isAvailable: !!bridge?.isAvailable,
     setSecret: (secretRef, value) => runWorkbenchAction(
-      () => setWorkbenchRemoteSyncSecret(bridge, secretRef, value).then(() => true),
-      callbacks.setOperationError
+      () => setWorkbenchRemoteSyncSecret(bridge, secretRef, value, callbacks.messages).then(() => true),
+      callbacks.setOperationError,
+      undefined,
+      callbacks.actionRunnerMessages
     ).then(Boolean),
     deleteSecret: (secretRef) => runWorkbenchAction(
-      () => deleteWorkbenchRemoteSyncSecret(bridge, secretRef).then(() => true),
-      callbacks.setOperationError
+      () => deleteWorkbenchRemoteSyncSecret(bridge, secretRef, callbacks.messages).then(() => true),
+      callbacks.setOperationError,
+      undefined,
+      callbacks.actionRunnerMessages
     ).then(Boolean)
   };
 }
@@ -41,20 +60,22 @@ export function createWorkbenchRemoteSyncSecretActions(
 export async function setWorkbenchRemoteSyncSecret(
   bridge: WorkbenchRemoteSyncSecretBridge | undefined,
   secretRef: string,
-  value: string
+  value: string,
+  messages: WorkbenchRemoteSyncSecretMessages = defaultWorkbenchRemoteSyncSecretMessages
 ): Promise<void> {
-  const availableBridge = requireWorkbenchRemoteSyncSecretBridge(bridge);
-  const normalizedSecretRef = normalizeWorkbenchRemoteSyncSecretRef(secretRef);
-  const normalizedValue = normalizeWorkbenchRemoteSyncSecretValue(value);
+  const availableBridge = requireWorkbenchRemoteSyncSecretBridge(bridge, messages);
+  const normalizedSecretRef = normalizeWorkbenchRemoteSyncSecretRef(secretRef, messages);
+  const normalizedValue = normalizeWorkbenchRemoteSyncSecretValue(value, messages);
   await availableBridge.setSecret(normalizedSecretRef, normalizedValue);
 }
 
 export async function deleteWorkbenchRemoteSyncSecret(
   bridge: WorkbenchRemoteSyncSecretBridge | undefined,
-  secretRef: string
+  secretRef: string,
+  messages: WorkbenchRemoteSyncSecretMessages = defaultWorkbenchRemoteSyncSecretMessages
 ): Promise<void> {
-  const availableBridge = requireWorkbenchRemoteSyncSecretBridge(bridge);
-  await availableBridge.deleteSecret(normalizeWorkbenchRemoteSyncSecretRef(secretRef));
+  const availableBridge = requireWorkbenchRemoteSyncSecretBridge(bridge, messages);
+  await availableBridge.deleteSecret(normalizeWorkbenchRemoteSyncSecretRef(secretRef, messages));
 }
 
 export function createNativeWorkbenchRemoteSyncSecretBridge(): WorkbenchRemoteSyncSecretBridge | undefined {
@@ -77,16 +98,20 @@ export function createNativeWorkbenchRemoteSyncSecretBridge(): WorkbenchRemoteSy
 }
 
 function requireWorkbenchRemoteSyncSecretBridge(
-  bridge: WorkbenchRemoteSyncSecretBridge | undefined
+  bridge: WorkbenchRemoteSyncSecretBridge | undefined,
+  messages: WorkbenchRemoteSyncSecretMessages
 ): WorkbenchRemoteSyncSecretBridge {
   if (!bridge?.isAvailable) {
-    throw new Error("Remote sync secret storage is unavailable");
+    throw new Error(messages.storageUnavailable);
   }
 
   return bridge;
 }
 
-function normalizeWorkbenchRemoteSyncSecretRef(value: string): string {
+function normalizeWorkbenchRemoteSyncSecretRef(
+  value: string,
+  messages: WorkbenchRemoteSyncSecretMessages
+): string {
   const normalized = value.trim();
 
   if (
@@ -94,17 +119,20 @@ function normalizeWorkbenchRemoteSyncSecretRef(value: string): string {
     normalized.length > remoteSyncMaxSecretRefLength ||
     !/^[A-Za-z0-9][A-Za-z0-9_.:-]*$/.test(normalized)
   ) {
-    throw new Error("Remote sync secret reference is invalid");
+    throw new Error(messages.referenceInvalid);
   }
 
   return normalized;
 }
 
-function normalizeWorkbenchRemoteSyncSecretValue(value: string): string {
+function normalizeWorkbenchRemoteSyncSecretValue(
+  value: string,
+  messages: WorkbenchRemoteSyncSecretMessages
+): string {
   const normalized = value.trim();
 
   if (!normalized) {
-    throw new Error("Remote sync secret value must not be empty");
+    throw new Error(messages.valueEmpty);
   }
 
   return normalized;

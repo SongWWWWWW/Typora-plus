@@ -1,8 +1,12 @@
 import { Emitter, type Event } from "@typora-plus/base";
+import { aiProviderRegistrationLimits } from "./ai";
 import { createServiceIdentifier } from "./instantiation";
 import type { UserKeybindingRule } from "./keybindings";
 
 export type ColorSchemePreference = "light" | "dark" | "system";
+export const typoraPlusLocales = ["en", "zh-CN"] as const;
+export type TyporaPlusLocale = typeof typoraPlusLocales[number];
+export const defaultTyporaPlusLocale: TyporaPlusLocale = typoraPlusLocales[0];
 export type AiProviderConfigurationKind = "responses";
 export type AiProviderReasoningEffort = "none" | "minimal" | "low" | "medium" | "high" | "xhigh";
 export type AiProviderTextVerbosity = "low" | "medium" | "high";
@@ -50,10 +54,23 @@ export interface RemoteSyncProviderConfiguration {
   readonly metadata?: Readonly<Record<string, string>>;
 }
 
+export interface RemoteSyncFolderBindingConfiguration {
+  readonly id: string;
+  readonly localUri: string;
+  readonly localRelativePath: string;
+  readonly localName: string;
+  readonly providerId: string;
+  readonly remoteScopeId: string;
+  readonly remoteName?: string;
+  readonly remoteUrl?: string;
+  readonly lastSyncedAt?: number;
+}
+
 export interface TyporaPlusConfiguration {
   readonly appearance: {
     readonly colorScheme: ColorSchemePreference;
     readonly density: "comfortable" | "compact";
+    readonly locale: TyporaPlusLocale;
     readonly themeId?: string;
   };
   readonly ai: {
@@ -63,6 +80,7 @@ export interface TyporaPlusConfiguration {
   };
   readonly remoteSync: {
     readonly providers: readonly RemoteSyncProviderConfiguration[];
+    readonly folderBindings: readonly RemoteSyncFolderBindingConfiguration[];
   };
   readonly editor: {
     readonly fontSize: number;
@@ -137,9 +155,12 @@ export const defaultConfigurationServiceOptions: ConfigurationServiceOptions = {
 };
 
 export const configurationBytesPerMegabyte = 1024 * 1024;
+export const configurationStorageKeyLimits = {
+  storageKeyLength: 240
+} as const;
 export const configurationMaxAiProviders = 20;
-export const configurationMaxAiProviderIdLength = 256;
-export const configurationMaxAiProviderTitleLength = 160;
+export const configurationMaxAiProviderIdLength = aiProviderRegistrationLimits.idLength;
+export const configurationMaxAiProviderTitleLength = aiProviderRegistrationLimits.titleLength;
 export const configurationMaxAiProviderEndpointUrlLength = 2000;
 export const configurationMaxAiProviderModelLength = 120;
 export const configurationMaxAiProviderSecretRefLength = 256;
@@ -154,6 +175,10 @@ export const configurationMaxRemoteSyncProviderSecretRefLength = 256;
 export const configurationMaxRemoteSyncProviderMetadataEntries = 32;
 export const configurationMaxRemoteSyncProviderMetadataKeyLength = 64;
 export const configurationMaxRemoteSyncProviderMetadataValueLength = 512;
+export const configurationMaxRemoteSyncFolderBindings = 100;
+export const configurationMaxRemoteSyncFolderBindingIdLength = 256;
+export const configurationMaxRemoteSyncFolderBindingNameLength = 255;
+export const configurationMaxRemoteSyncFolderBindingUriLength = 2000;
 export const configurationMaxMarkdownStatusBadges = 50;
 export const configurationMaxMarkdownStatusBadgeAliases = 30;
 export const configurationMaxMarkdownStatusBadgeTextLength = 64;
@@ -218,7 +243,8 @@ export const defaultMarkdownStatusBadges = [
 export const defaultConfiguration: TyporaPlusConfiguration = {
   appearance: {
     colorScheme: "system",
-    density: "comfortable"
+    density: "comfortable",
+    locale: defaultTyporaPlusLocale
   },
   ai: {
     providers: [],
@@ -226,7 +252,8 @@ export const defaultConfiguration: TyporaPlusConfiguration = {
     workspaceContextMaxResults: 5
   },
   remoteSync: {
-    providers: []
+    providers: [],
+    folderBindings: []
   },
   editor: {
     fontSize: 17,
@@ -259,11 +286,13 @@ export const defaultConfiguration: TyporaPlusConfiguration = {
 export class ConfigurationService implements IConfigurationService {
   private readonly emitter = new Emitter<TyporaPlusConfiguration>();
   private readonly storage: ConfigurationStorage;
+  private readonly storageKey: string;
   private value: TyporaPlusConfiguration;
 
   readonly onDidChangeConfiguration = this.emitter.event;
 
-  constructor(private readonly options: ConfigurationServiceOptions = defaultConfigurationServiceOptions) {
+  constructor(options: ConfigurationServiceOptions = defaultConfigurationServiceOptions) {
+    this.storageKey = normalizeConfigurationStorageKey(options.storageKey);
     this.storage = options.storage ?? createBrowserConfigurationStorage();
     this.value = this.readConfiguration();
   }
@@ -279,7 +308,7 @@ export class ConfigurationService implements IConfigurationService {
   }
 
   private readConfiguration(): TyporaPlusConfiguration {
-    const rawValue = this.storage.read(this.options.storageKey);
+    const rawValue = this.storage.read(this.storageKey);
 
     if (!rawValue) {
       return defaultConfiguration;
@@ -288,13 +317,13 @@ export class ConfigurationService implements IConfigurationService {
     try {
       return mergeConfiguration(defaultConfiguration, sanitizePartialConfiguration(JSON.parse(rawValue)));
     } catch {
-      this.storage.write(this.options.storageKey, JSON.stringify(defaultConfiguration));
+      this.storage.write(this.storageKey, JSON.stringify(defaultConfiguration));
       return defaultConfiguration;
     }
   }
 
   private persist(): void {
-    this.storage.write(this.options.storageKey, JSON.stringify(this.value));
+    this.storage.write(this.storageKey, JSON.stringify(this.value));
   }
 }
 
@@ -346,6 +375,7 @@ function mergeAppearanceConfiguration(
   const next: {
     colorScheme: ColorSchemePreference;
     density: "comfortable" | "compact";
+    locale: TyporaPlusLocale;
     themeId?: string;
   } = {
     ...base
@@ -357,6 +387,10 @@ function mergeAppearanceConfiguration(
 
   if (value.density) {
     next.density = value.density;
+  }
+
+  if (value.locale) {
+    next.locale = value.locale;
   }
 
   if ("themeId" in value) {
@@ -391,10 +425,12 @@ function sanitizeAppearanceConfiguration(value: Record<string, unknown>): Partia
   const appearance: {
     colorScheme?: ColorSchemePreference;
     density?: "comfortable" | "compact";
+    locale?: TyporaPlusLocale;
     themeId?: string | undefined;
   } = {
     ...(isColorSchemePreference(value.colorScheme) ? { colorScheme: value.colorScheme } : {}),
-    ...(value.density === "comfortable" || value.density === "compact" ? { density: value.density } : {})
+    ...(value.density === "comfortable" || value.density === "compact" ? { density: value.density } : {}),
+    ...(isTyporaPlusLocale(value.locale) ? { locale: value.locale } : {})
   };
 
   if ("themeId" in value) {
@@ -426,9 +462,11 @@ function sanitizeRemoteSyncConfiguration(
   value: Record<string, unknown>
 ): Partial<TyporaPlusConfiguration["remoteSync"]> {
   const providers = sanitizeRemoteSyncProviderConfigurations(value.providers);
+  const folderBindings = sanitizeRemoteSyncFolderBindingConfigurations(value.folderBindings);
 
   return {
-    ...(providers !== undefined ? { providers } : {})
+    ...(providers !== undefined ? { providers } : {}),
+    ...(folderBindings !== undefined ? { folderBindings } : {})
   };
 }
 
@@ -574,6 +612,80 @@ export function normalizeRemoteSyncProviderConfiguration(
   };
 }
 
+function sanitizeRemoteSyncFolderBindingConfigurations(
+  value: unknown
+): readonly RemoteSyncFolderBindingConfiguration[] | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+
+  const bindings: RemoteSyncFolderBindingConfiguration[] = [];
+  const seenIds = new Set<string>();
+  const seenLocalUris = new Set<string>();
+
+  for (const candidate of value.slice(0, configurationMaxRemoteSyncFolderBindings)) {
+    const binding = normalizeRemoteSyncFolderBindingConfiguration(candidate);
+
+    if (!binding || seenIds.has(binding.id) || seenLocalUris.has(binding.localUri)) {
+      continue;
+    }
+
+    seenIds.add(binding.id);
+    seenLocalUris.add(binding.localUri);
+    bindings.push(binding);
+  }
+
+  if (bindings.length === 0 && value.length > 0) {
+    return undefined;
+  }
+
+  return bindings;
+}
+
+export function normalizeRemoteSyncFolderBindingConfiguration(
+  value: unknown
+): RemoteSyncFolderBindingConfiguration | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+
+  const id = normalizeConfigurationText(value.id, configurationMaxRemoteSyncFolderBindingIdLength);
+  const localUri = normalizeConfigurationText(value.localUri, configurationMaxRemoteSyncFolderBindingUriLength);
+  const localRelativePath = normalizeConfigurationText(
+    value.localRelativePath,
+    configurationMaxRemoteSyncFolderBindingUriLength
+  ) ?? "";
+  const localName = normalizeConfigurationText(value.localName, configurationMaxRemoteSyncFolderBindingNameLength);
+  const providerId = normalizeRemoteSyncProviderConfigurationId(value.providerId);
+  const remoteScopeId = normalizeConfigurationTextAllowEmpty(
+    value.remoteScopeId,
+    configurationMaxRemoteSyncProviderRemoteScopeIdLength
+  );
+  const remoteName = normalizeConfigurationText(value.remoteName, configurationMaxRemoteSyncFolderBindingNameLength);
+  const remoteUrl = normalizeProviderHttpsOrLoopbackUrl(value.remoteUrl, configurationMaxRemoteSyncProviderBaseUrlLength);
+  const lastSyncedAt = normalizeOptionalTimestamp(value.lastSyncedAt);
+
+  if (!id || !localUri || !localName || !providerId || remoteScopeId === undefined) {
+    return undefined;
+  }
+
+  return {
+    id,
+    localUri,
+    localRelativePath,
+    localName,
+    providerId,
+    remoteScopeId,
+    ...(remoteName ? { remoteName } : {}),
+    ...(remoteUrl ? { remoteUrl } : {}),
+    ...(lastSyncedAt !== undefined ? { lastSyncedAt } : {})
+  };
+}
+
 function sanitizeWorkspaceConfiguration(value: Record<string, unknown>): Partial<TyporaPlusConfiguration["workspace"]> {
   return {
     ...(isNonEmptyString(value.defaultAssetFolder) ? { defaultAssetFolder: value.defaultAssetFolder } : {}),
@@ -693,6 +805,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function isColorSchemePreference(value: unknown): value is ColorSchemePreference {
   return value === "light" || value === "dark" || value === "system";
+}
+
+function isTyporaPlusLocale(value: unknown): value is TyporaPlusLocale {
+  return typeof value === "string" && typoraPlusLocales.includes(value as TyporaPlusLocale);
 }
 
 function isMarkdownStatusBadgeTone(value: unknown): value is MarkdownStatusBadgeTone {
@@ -948,6 +1064,33 @@ function normalizeConfigurationText(value: unknown, maxLength: number): string |
   return normalized;
 }
 
+function normalizeConfigurationTextAllowEmpty(value: unknown, maxLength: number): string | undefined {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+
+  const normalized = value.trim();
+
+  if (normalized.length > maxLength) {
+    return undefined;
+  }
+
+  return normalized;
+}
+
+function normalizeOptionalTimestamp(value: unknown): number | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  return typeof value === "number" &&
+    Number.isFinite(value) &&
+    value >= 0 &&
+    value <= 10_000_000_000_000
+    ? Math.trunc(value)
+    : undefined;
+}
+
 function normalizeMarkdownStatusBadgeKey(value: unknown): string | undefined {
   if (typeof value !== "string") {
     return undefined;
@@ -975,6 +1118,30 @@ function normalizeMarkdownStatusBadgeText(value: unknown): string | undefined {
 
   if (!normalized || normalized.length > configurationMaxMarkdownStatusBadgeTextLength) {
     return undefined;
+  }
+
+  return normalized;
+}
+
+function normalizeConfigurationStorageKey(value: unknown): string {
+  if (typeof value !== "string") {
+    throw new Error("Configuration storage key must be a string");
+  }
+
+  const normalized = value.trim();
+
+  if (!normalized) {
+    throw new Error("Configuration storage key must not be empty");
+  }
+
+  if (normalized.length > configurationStorageKeyLimits.storageKeyLength) {
+    throw new Error(
+      `Configuration storage key must be at most ${configurationStorageKeyLimits.storageKeyLength} characters`
+    );
+  }
+
+  if (!/^[A-Za-z0-9][A-Za-z0-9.-]*$/.test(normalized)) {
+    throw new Error(`Configuration storage key is invalid: ${normalized}`);
   }
 
   return normalized;

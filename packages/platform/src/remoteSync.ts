@@ -1,5 +1,9 @@
 import { Emitter, toDisposable, type Event, type IDisposable, type URI as URIType } from "@typora-plus/base";
-import { configurationBytesPerMegabyte } from "./configuration";
+import {
+  configurationBytesPerMegabyte,
+  configurationMaxRemoteSyncProviderIdLength,
+  configurationMaxRemoteSyncProviderTitleLength
+} from "./configuration";
 import { createServiceIdentifier } from "./instantiation";
 import type { FileKind, FileTreeEntry, WorkspaceFileTree } from "./files";
 
@@ -148,6 +152,25 @@ export interface NativeRemoteSyncSecretBridge {
 }
 
 export const remoteSyncMaxSecretRefLength = 256;
+export const remoteSyncRequestMetadataLimits = {
+  entries: 100,
+  keyLength: 120,
+  valueLength: 4000
+} as const;
+export const remoteSyncPayloadLimits = {
+  completedAtMax: 10_000_000_000_000,
+  manifestScopeLength: 4000,
+  messageLength: 4000,
+  operationCount: 10_000,
+  relativePathLength: 1000,
+  remoteIdLength: 512,
+  resourceCount: 10_000,
+  uriLength: 2000
+} as const;
+export const remoteSyncManifestStorageKeyLimits = {
+  baseKeyLength: 240,
+  storageKeyLength: 260
+} as const;
 
 export interface RemoteSyncManifestStoreOptions {
   readonly storage: RemoteSyncManifestStorage;
@@ -188,7 +211,9 @@ export class RemoteSyncManifestStore {
 
   constructor(options: RemoteSyncManifestStoreOptions) {
     this.storage = options.storage;
-    this.baseStorageKey = options.storageKey ?? defaultRemoteSyncManifestStoreOptions.storageKey;
+    this.baseStorageKey = normalizeRemoteSyncManifestStorageBaseKey(
+      options.storageKey ?? defaultRemoteSyncManifestStoreOptions.storageKey
+    );
     this.storageKey = this.baseStorageKey;
     this.maxSnapshotBytes = options.maxSnapshotBytes ?? defaultRemoteSyncManifestStoreOptions.maxSnapshotBytes;
   }
@@ -250,13 +275,16 @@ export function createRemoteSyncManifestStorageKey(
   baseKey: string,
   scope: RemoteSyncManifestStoreScope | string | undefined
 ): string {
+  const normalizedBaseKey = normalizeRemoteSyncManifestStorageBaseKey(baseKey);
   const normalizedScope = normalizeRemoteSyncManifestStoreScope(scope).scope;
 
   if (!normalizedScope) {
-    return baseKey;
+    return normalizedBaseKey;
   }
 
-  return `${baseKey}.${hashRemoteSyncManifestScope(normalizedScope)}`;
+  return normalizeRemoteSyncManifestStorageKey(
+    `${normalizedBaseKey}.${hashRemoteSyncManifestScope(normalizedScope)}`
+  );
 }
 
 export function createDefaultRemoteSyncManifestStorage(): RemoteSyncManifestStorage | undefined {
@@ -270,10 +298,10 @@ export function createBrowserRemoteSyncManifestStorage(): RemoteSyncManifestStor
 
   return {
     read(key) {
-      return window.localStorage.getItem(key) ?? undefined;
+      return window.localStorage.getItem(normalizeRemoteSyncManifestStorageKey(key)) ?? undefined;
     },
     write(key, value) {
-      window.localStorage.setItem(key, value);
+      window.localStorage.setItem(normalizeRemoteSyncManifestStorageKey(key), value);
     }
   };
 }
@@ -291,8 +319,8 @@ function createNativeRemoteSyncManifestStorage(): RemoteSyncManifestStorage | un
   }
 
   return {
-    read: (key) => bridge.read(key),
-    write: (key, value) => bridge.write(key, value)
+    read: (key) => bridge.read(normalizeRemoteSyncManifestStorageKey(key)),
+    write: (key, value) => bridge.write(normalizeRemoteSyncManifestStorageKey(key), value)
   };
 }
 
@@ -334,6 +362,10 @@ export function createRemoteSyncPlanFromManifest(input: RemoteSyncManifestPlanIn
   const record = expectRecord(input, "Remote sync manifest plan input");
   const direction = normalizeRemoteSyncDirection(record.direction);
 
+  if (direction === "push") {
+    return createRemoteSyncPushPlanFromManifest(input);
+  }
+
   if (direction !== "bidirectional") {
     return createRemoteSyncPlanFromDiff(input);
   }
@@ -349,6 +381,33 @@ export function createRemoteSyncPlanFromManifest(input: RemoteSyncManifestPlanIn
 
   for (const relativePath of sortRemoteSyncPaths(localByPath, remoteByPath, manifestByPath)) {
     operations.push(createRemoteSyncManifestOperation(
+      relativePath,
+      deleteMissing,
+      localByPath.get(relativePath),
+      remoteByPath.get(relativePath),
+      manifestByPath.get(relativePath)
+    ));
+  }
+
+  return normalizeRemoteSyncPlan({
+    operations,
+    summary: summarizeRemoteSyncOperations(operations)
+  });
+}
+
+function createRemoteSyncPushPlanFromManifest(input: RemoteSyncManifestPlanInput): RemoteSyncPlan {
+  const record = expectRecord(input, "Remote sync push manifest plan input");
+  const deleteMissing = record.deleteMissing === true;
+  const localResources = normalizeRemoteSyncResources(record.localResources);
+  const remoteResources = normalizeRemoteSyncRemoteResources(record.remoteResources);
+  const manifestResources = normalizeRemoteSyncManifestResources(record.manifestResources);
+  const localByPath = mapRemoteSyncResources(localResources, "local");
+  const remoteByPath = mapRemoteSyncResources(remoteResources, "remote");
+  const manifestByPath = mapRemoteSyncResources(manifestResources, "manifest");
+  const operations: RemoteSyncOperation[] = [];
+
+  for (const relativePath of sortRemoteSyncPaths(localByPath, remoteByPath, manifestByPath)) {
+    operations.push(createRemoteSyncPushManifestOperation(
       relativePath,
       deleteMissing,
       localByPath.get(relativePath),
@@ -461,7 +520,7 @@ export class RemoteSyncService implements IRemoteSyncService {
   }
 
   private getProvider(providerId: RemoteSyncProviderId): RemoteSyncProvider {
-    const normalizedProviderId = readRequiredString(providerId, "Remote sync provider id");
+    const normalizedProviderId = normalizeRemoteSyncProviderId(providerId, "Remote sync provider id");
     const provider = this.providers.get(normalizedProviderId);
 
     if (!provider) {
@@ -573,6 +632,76 @@ function createRemoteSyncManifestOperation(
     ...(manifest?.remoteId ? { remoteId: manifest.remoteId } : {}),
     message: "Resource is missing locally and remotely"
   });
+}
+
+function createRemoteSyncPushManifestOperation(
+  relativePath: string,
+  deleteMissing: boolean,
+  local: RemoteSyncResource | undefined,
+  remote: RemoteSyncRemoteResource | undefined,
+  manifest: RemoteSyncManifestResource | undefined
+): RemoteSyncOperation {
+  if (local && remote) {
+    return createRemoteSyncPushManifestPresentOperation(relativePath, local, remote, manifest);
+  }
+
+  if (local && !remote) {
+    return createRemoteSyncOperation("create", "remote", relativePath, { localUri: local.uri });
+  }
+
+  if (!local && remote) {
+    return deleteMissing
+      ? createRemoteSyncOperation("delete", "remote", relativePath, {
+        remoteId: remote.remoteId,
+        message: "Local resource is missing"
+      })
+      : createRemoteSyncOperation("skip", "none", relativePath, {
+        remoteId: remote.remoteId,
+        message: "Local resource is missing"
+      });
+  }
+
+  return createRemoteSyncOperation("skip", "none", relativePath, {
+    ...(manifest?.remoteId ? { remoteId: manifest.remoteId } : {}),
+    message: "Resource is missing locally and remotely"
+  });
+}
+
+function createRemoteSyncPushManifestPresentOperation(
+  relativePath: string,
+  local: RemoteSyncResource,
+  remote: RemoteSyncRemoteResource,
+  manifest: RemoteSyncManifestResource | undefined
+): RemoteSyncOperation {
+  if (local.kind !== remote.kind) {
+    return createRemoteSyncOperation("conflict", "both", relativePath, {
+      localPresence: "present",
+      localUri: local.uri,
+      remotePresence: "present",
+      remoteId: remote.remoteId,
+      message: "Resource kind differs"
+    });
+  }
+
+  if (manifest && manifest.kind === local.kind) {
+    const localState = compareRemoteSyncResourceToManifest(local, manifest);
+
+    if (localState === "same") {
+      return createRemoteSyncOperation("skip", "none", relativePath, {
+        localUri: local.uri,
+        remoteId: remote.remoteId
+      });
+    }
+
+    if (localState === "changed") {
+      return createRemoteSyncOperation("update", "remote", relativePath, {
+        localUri: local.uri,
+        remoteId: remote.remoteId
+      });
+    }
+  }
+
+  return createRemoteSyncDiffOperation(relativePath, "push", false, local, remote);
 }
 
 function createRemoteSyncManifestPresentOperation(
@@ -746,21 +875,24 @@ function createRemoteSyncManifestResourceFromExecutedOperation(
     throw new Error(`Remote sync manifest update ${operation.relativePath} resource kind differs`);
   }
 
-  const comparison = compareRemoteSyncResources(local, remote);
-
-  if (comparison !== "same") {
+  if (hasRemoteSyncExecutedResourceMismatch(local, remote)) {
     throw new Error(
-      comparison === "unknown"
-        ? `Remote sync manifest update ${operation.relativePath} resource state cannot be compared`
-        : `Remote sync manifest update ${operation.relativePath} resources are not synchronized`
+      `Remote sync manifest update ${operation.relativePath} resources are not synchronized`
     );
   }
 
-  return createRemoteSyncManifestResourceFromSyncedResources(
+  const resource = createRemoteSyncManifestResourceFromExecutedResources(
+    operation,
     local,
     remote,
     operation.remoteId ?? remote.remoteId
   );
+
+  if (!hasRemoteSyncComparableResource(resource)) {
+    throw new Error(`Remote sync manifest update ${operation.relativePath} resource state cannot be compared`);
+  }
+
+  return resource;
 }
 
 function createRemoteSyncManifestResourceFromExecutedSkip(
@@ -775,6 +907,16 @@ function createRemoteSyncManifestResourceFromExecutedSkip(
   const comparison = compareRemoteSyncResources(local, remote);
 
   if (comparison !== "same") {
+    const fallback = createRemoteSyncManifestResourceFromSyncedResources(
+      local,
+      remote,
+      operation.remoteId ?? remote.remoteId
+    );
+
+    if (comparison === "unknown" && hasRemoteSyncComparableResource(fallback)) {
+      return fallback;
+    }
+
     throw new Error(
       comparison === "unknown"
         ? `Remote sync manifest update ${operation.relativePath} resource state cannot be compared`
@@ -808,6 +950,53 @@ function createRemoteSyncManifestResourceFromSyncedResources(
   };
 }
 
+function createRemoteSyncManifestResourceFromExecutedResources(
+  operation: RemoteSyncOperation,
+  local: RemoteSyncResource,
+  remote: RemoteSyncRemoteResource,
+  remoteId: string | undefined
+): RemoteSyncManifestResource {
+  const source = operation.target === "remote" ? local : remote;
+  const target = operation.target === "remote" ? remote : local;
+  const contentHash = source.contentHash ?? target.contentHash;
+  const size = source.size ?? target.size;
+  const mtime = contentHash
+    ? target.mtime ?? source.mtime
+    : local.mtime !== undefined && local.mtime === remote.mtime
+      ? local.mtime
+      : undefined;
+
+  return {
+    relativePath: local.relativePath,
+    kind: local.kind,
+    ...(remoteId ? { remoteId } : {}),
+    ...(size !== undefined ? { size } : {}),
+    ...(mtime !== undefined ? { mtime } : {}),
+    ...(contentHash ? { contentHash } : {})
+  };
+}
+
+function hasRemoteSyncExecutedResourceMismatch(
+  local: RemoteSyncResource,
+  remote: RemoteSyncRemoteResource
+): boolean {
+  if (local.contentHash && remote.contentHash && local.contentHash !== remote.contentHash) {
+    return true;
+  }
+
+  return local.size !== undefined && remote.size !== undefined && local.size !== remote.size;
+}
+
+function hasRemoteSyncComparableResource(
+  resource: Pick<RemoteSyncManifestResource, "contentHash" | "kind" | "mtime" | "size">
+): boolean {
+  if (resource.kind === "directory") {
+    return true;
+  }
+
+  return !!resource.contentHash || (resource.size !== undefined && resource.mtime !== undefined);
+}
+
 function createRemoteSyncOperation(
   kind: RemoteSyncOperationKind,
   target: RemoteSyncOperationTarget,
@@ -836,6 +1025,10 @@ function compareRemoteSyncResources(
   local: RemoteSyncResource,
   remote: RemoteSyncRemoteResource
 ): "same" | "changed" | "unknown" {
+  if (local.kind === "directory" && remote.kind === "directory") {
+    return "same";
+  }
+
   return compareRemoteSyncResourceMetadata(local, remote);
 }
 
@@ -845,6 +1038,10 @@ function compareRemoteSyncResourceToManifest(
 ): "same" | "changed" | "unknown" {
   if (resource.kind !== manifest.kind) {
     return "changed";
+  }
+
+  if (resource.kind === "directory") {
+    return "same";
   }
 
   return compareRemoteSyncResourceMetadata(resource, manifest);
@@ -925,8 +1122,12 @@ function normalizeRemoteSyncManifestStoreScope(
 
   const record = expectRecord(scope, "Remote sync manifest store scope");
   const workspaceUri = readOptionalUriString(record.workspaceUri, "Remote sync manifest workspace URI");
-  const providerId = readOptionalString(record.providerId, "Remote sync manifest provider id");
-  const remoteScopeId = readOptionalString(record.remoteScopeId, "Remote sync manifest remote scope id");
+  const providerId = normalizeOptionalRemoteSyncProviderId(record.providerId, "Remote sync manifest provider id");
+  const remoteScopeId = readOptionalString(
+    record.remoteScopeId,
+    "Remote sync manifest remote scope id",
+    remoteSyncPayloadLimits.remoteIdLength
+  );
   const normalizedScope = createRemoteSyncManifestScopeValue({
     ...(workspaceUri ? { workspaceUri } : {}),
     ...(providerId ? { providerId } : {}),
@@ -949,11 +1150,55 @@ function createRemoteSyncManifestScopeValue(scope: {
     return undefined;
   }
 
-  return JSON.stringify(scope);
+  const scopeValue = JSON.stringify(scope);
+
+  if (scopeValue.length > remoteSyncPayloadLimits.manifestScopeLength) {
+    throw new Error(`Remote sync manifest scope must be at most ${remoteSyncPayloadLimits.manifestScopeLength} characters`);
+  }
+
+  return scopeValue;
 }
 
 function normalizeRemoteSyncManifestScopeValue(value: string): string | undefined {
-  return value.trim() || undefined;
+  const normalized = value.trim();
+
+  if (!normalized) {
+    return undefined;
+  }
+
+  if (normalized.length > remoteSyncPayloadLimits.manifestScopeLength) {
+    throw new Error(`Remote sync manifest scope must be at most ${remoteSyncPayloadLimits.manifestScopeLength} characters`);
+  }
+
+  return normalized;
+}
+
+function normalizeRemoteSyncManifestStorageBaseKey(value: unknown): string {
+  const normalized = readTrimmedRequiredString(
+    value,
+    "Remote sync manifest storage key",
+    remoteSyncManifestStorageKeyLimits.baseKeyLength
+  );
+
+  return validateRemoteSyncManifestStorageKey(normalized);
+}
+
+function normalizeRemoteSyncManifestStorageKey(value: unknown): string {
+  const normalized = readTrimmedRequiredString(
+    value,
+    "Remote sync manifest storage key",
+    remoteSyncManifestStorageKeyLimits.storageKeyLength
+  );
+
+  return validateRemoteSyncManifestStorageKey(normalized);
+}
+
+function validateRemoteSyncManifestStorageKey(normalized: string): string {
+  if (!/^[A-Za-z0-9][A-Za-z0-9.-]*$/.test(normalized)) {
+    throw new Error(`Remote sync manifest storage key is invalid: ${normalized}`);
+  }
+
+  return normalized;
 }
 
 function createRemoteSyncManifestSnapshot(
@@ -989,11 +1234,19 @@ function sanitizeRemoteSyncManifestSnapshot(value: unknown): RemoteSyncManifestS
       return undefined;
     }
 
-    const scope = readOptionalString(record.scope, "Remote sync manifest snapshot scope");
-    const providerId = readOptionalString(record.providerId, "Remote sync manifest snapshot provider id");
+    const scope = readOptionalString(
+      record.scope,
+      "Remote sync manifest snapshot scope",
+      remoteSyncPayloadLimits.manifestScopeLength
+    );
+    const providerId = normalizeOptionalRemoteSyncProviderId(
+      record.providerId,
+      "Remote sync manifest snapshot provider id"
+    );
     const remoteScopeId = readOptionalString(
       record.remoteScopeId,
-      "Remote sync manifest snapshot remote scope id"
+      "Remote sync manifest snapshot remote scope id",
+      remoteSyncPayloadLimits.remoteIdLength
     );
 
     return {
@@ -1042,8 +1295,12 @@ function flattenWorkspaceSyncEntries(entries: readonly FileTreeEntry[]): readonl
 
 function normalizeRemoteSyncProvider(provider: RemoteSyncProvider): RemoteSyncProvider {
   const record = expectRecord(provider, "Remote sync provider");
-  const id = readRequiredString(record.id, "Remote sync provider id");
-  const title = readRequiredString(record.title, `Remote sync provider title for ${id}`);
+  const id = normalizeRemoteSyncProviderId(record.id, "Remote sync provider id");
+  const title = readTrimmedRequiredString(
+    record.title,
+    `Remote sync provider title for ${id}`,
+    configurationMaxRemoteSyncProviderTitleLength
+  );
 
   if (typeof provider.createPlan !== "function") {
     throw new Error(`Remote sync provider for ${id} must provide createPlan`);
@@ -1065,7 +1322,11 @@ function normalizeRemoteSyncPlanRequest(request: RemoteSyncPlanRequest): RemoteS
   const record = expectRecord(request, "Remote sync plan request");
   const resources = normalizeRemoteSyncResources(record.resources);
   const direction = normalizeRemoteSyncDirection(record.direction);
-  const remoteScopeId = readOptionalString(record.remoteScopeId, "Remote sync scope id");
+  const remoteScopeId = readOptionalStringAllowEmpty(
+    record.remoteScopeId,
+    "Remote sync scope id",
+    remoteSyncPayloadLimits.remoteIdLength
+  );
   const metadata = normalizeRemoteSyncMetadata(record.metadata);
   const onProgress = readOptionalRemoteSyncProgressCallback(record.onProgress);
 
@@ -1073,7 +1334,7 @@ function normalizeRemoteSyncPlanRequest(request: RemoteSyncPlanRequest): RemoteS
     workspaceUri: readRequiredUri(record.workspaceUri, "Remote sync workspace URI"),
     resources,
     direction,
-    ...(remoteScopeId ? { remoteScopeId } : {}),
+    ...(remoteScopeId !== undefined ? { remoteScopeId } : {}),
     ...(typeof record.dryRun === "boolean" ? { dryRun: record.dryRun } : {}),
     ...(metadata !== undefined ? { metadata } : {}),
     ...(onProgress ? { onProgress } : {}),
@@ -1086,11 +1347,23 @@ function normalizeRemoteSyncResources(value: unknown): readonly RemoteSyncResour
     throw new Error("Remote sync resources must be an array");
   }
 
+  if (value.length > remoteSyncPayloadLimits.resourceCount) {
+    throw new Error(`Remote sync resources must contain at most ${remoteSyncPayloadLimits.resourceCount} items`);
+  }
+
   return value.map((resource, index) => {
     const record = expectRecord(resource, `Remote sync resource ${index}`);
     const relativePath = normalizeRelativePath(record.relativePath, `Remote sync resource ${index} relative path`);
-    const name = readOptionalString(record.name, `Remote sync resource ${index} name`);
-    const contentHash = readOptionalString(record.contentHash, `Remote sync resource ${index} content hash`);
+    const name = readOptionalString(
+      record.name,
+      `Remote sync resource ${index} name`,
+      remoteSyncPayloadLimits.relativePathLength
+    );
+    const contentHash = readOptionalString(
+      record.contentHash,
+      `Remote sync resource ${index} content hash`,
+      remoteSyncPayloadLimits.remoteIdLength
+    );
 
     return {
       uri: readRequiredUri(record.uri, `Remote sync resource ${index} URI`),
@@ -1109,10 +1382,22 @@ function normalizeRemoteSyncRemoteResources(value: unknown): readonly RemoteSync
     throw new Error("Remote sync remote resources must be an array");
   }
 
+  if (value.length > remoteSyncPayloadLimits.resourceCount) {
+    throw new Error(`Remote sync remote resources must contain at most ${remoteSyncPayloadLimits.resourceCount} items`);
+  }
+
   return value.map((resource, index) => {
     const record = expectRecord(resource, `Remote sync remote resource ${index}`);
-    const remoteId = readOptionalString(record.remoteId, `Remote sync remote resource ${index} remote id`);
-    const contentHash = readOptionalString(record.contentHash, `Remote sync remote resource ${index} content hash`);
+    const remoteId = readOptionalString(
+      record.remoteId,
+      `Remote sync remote resource ${index} remote id`,
+      remoteSyncPayloadLimits.remoteIdLength
+    );
+    const contentHash = readOptionalString(
+      record.contentHash,
+      `Remote sync remote resource ${index} content hash`,
+      remoteSyncPayloadLimits.remoteIdLength
+    );
 
     return {
       relativePath: normalizeRelativePath(record.relativePath, `Remote sync remote resource ${index} relative path`),
@@ -1130,10 +1415,22 @@ function normalizeRemoteSyncManifestResources(value: unknown): readonly RemoteSy
     throw new Error("Remote sync manifest resources must be an array");
   }
 
+  if (value.length > remoteSyncPayloadLimits.resourceCount) {
+    throw new Error(`Remote sync manifest resources must contain at most ${remoteSyncPayloadLimits.resourceCount} items`);
+  }
+
   return value.map((resource, index) => {
     const record = expectRecord(resource, `Remote sync manifest resource ${index}`);
-    const remoteId = readOptionalString(record.remoteId, `Remote sync manifest resource ${index} remote id`);
-    const contentHash = readOptionalString(record.contentHash, `Remote sync manifest resource ${index} content hash`);
+    const remoteId = readOptionalString(
+      record.remoteId,
+      `Remote sync manifest resource ${index} remote id`,
+      remoteSyncPayloadLimits.remoteIdLength
+    );
+    const contentHash = readOptionalString(
+      record.contentHash,
+      `Remote sync manifest resource ${index} content hash`,
+      remoteSyncPayloadLimits.remoteIdLength
+    );
 
     return {
       relativePath: normalizeRelativePath(record.relativePath, `Remote sync manifest resource ${index} relative path`),
@@ -1161,7 +1458,11 @@ function normalizeRemoteSyncPlan(plan: RemoteSyncPlan): RemoteSyncPlan {
 
 function normalizeRemoteSyncResult(result: RemoteSyncResult): RemoteSyncResult {
   const record = expectRecord(result, "Remote sync result");
-  const completedAt = readOptionalFiniteNumber(record.completedAt, "Remote sync completed timestamp");
+  const completedAt = readOptionalBoundedNumber(
+    record.completedAt,
+    "Remote sync completed timestamp",
+    remoteSyncPayloadLimits.completedAtMax
+  );
   const operations = normalizeRemoteSyncOperations(record.operations);
   const summary = normalizeRemoteSyncSummary(record.summary);
 
@@ -1193,6 +1494,10 @@ function normalizeRemoteSyncOperations(value: unknown): readonly RemoteSyncOpera
     throw new Error("Remote sync operations must be an array");
   }
 
+  if (value.length > remoteSyncPayloadLimits.operationCount) {
+    throw new Error(`Remote sync operations must contain at most ${remoteSyncPayloadLimits.operationCount} items`);
+  }
+
   return value.map((operation, index) => normalizeRemoteSyncOperation(operation, index));
 }
 
@@ -1206,8 +1511,16 @@ function normalizeRemoteSyncOperation(value: unknown, index: number): RemoteSync
     record.remotePresence,
     `Remote sync operation ${index} remote presence`
   );
-  const remoteId = readOptionalString(record.remoteId, `Remote sync operation ${index} remote id`);
-  const message = readOptionalString(record.message, `Remote sync operation ${index} message`);
+  const remoteId = readOptionalString(
+    record.remoteId,
+    `Remote sync operation ${index} remote id`,
+    remoteSyncPayloadLimits.remoteIdLength
+  );
+  const message = readOptionalString(
+    record.message,
+    `Remote sync operation ${index} message`,
+    remoteSyncPayloadLimits.messageLength
+  );
 
   return {
     kind: normalizeRemoteSyncOperationKind(record.kind),
@@ -1225,7 +1538,11 @@ function normalizeRemoteSyncOperation(value: unknown, index: number): RemoteSync
 
 function normalizeRemoteSyncProgress(value: unknown): RemoteSyncProgress {
   const record = expectRecord(value, "Remote sync progress");
-  const message = readRequiredString(record.message, "Remote sync progress message");
+  const message = readRequiredString(
+    record.message,
+    "Remote sync progress message",
+    remoteSyncPayloadLimits.messageLength
+  );
   const completed = readOptionalRemoteSyncProgressCount(record.completed, "Remote sync progress completed");
   const total = readOptionalRemoteSyncProgressCount(record.total, "Remote sync progress total");
 
@@ -1270,17 +1587,42 @@ function normalizeRemoteSyncMetadata(value: unknown): Readonly<Record<string, st
     return undefined;
   }
 
-  const record = expectRecord(value, "Remote sync metadata");
+  const record = expectRecord(value, "Remote sync request metadata");
+  const entries = Object.entries(record);
   const metadata: Record<string, string> = {};
 
-  for (const [key, metadataValue] of Object.entries(record)) {
+  if (entries.length > remoteSyncRequestMetadataLimits.entries) {
+    throw new Error(
+      `Remote sync request metadata must contain at most ${remoteSyncRequestMetadataLimits.entries} entries`
+    );
+  }
+
+  for (const [key, metadataValue] of entries) {
     const normalizedKey = key.trim();
 
     if (!normalizedKey) {
-      throw new Error("Remote sync metadata keys must not be empty");
+      throw new Error("Remote sync request metadata keys must not be empty");
     }
 
-    metadata[normalizedKey] = readString(metadataValue, `Remote sync metadata ${normalizedKey}`);
+    if (normalizedKey.length > remoteSyncRequestMetadataLimits.keyLength) {
+      throw new Error(
+        `Remote sync request metadata key must be at most ${remoteSyncRequestMetadataLimits.keyLength} characters`
+      );
+    }
+
+    if (Object.hasOwn(metadata, normalizedKey)) {
+      throw new Error(`Remote sync request metadata must not contain duplicate key: ${normalizedKey}`);
+    }
+
+    const normalizedValue = readString(metadataValue, `Remote sync request metadata ${normalizedKey}`);
+
+    if (normalizedValue.length > remoteSyncRequestMetadataLimits.valueLength) {
+      throw new Error(
+        `Remote sync request metadata value for ${normalizedKey} must be at most ${remoteSyncRequestMetadataLimits.valueLength} characters`
+      );
+    }
+
+    metadata[normalizedKey] = normalizedValue;
   }
 
   return metadata;
@@ -1334,7 +1676,7 @@ function normalizeFileKind(value: unknown, label: string): FileKind {
 }
 
 function normalizeRelativePath(value: unknown, label: string): string {
-  const normalized = readRequiredString(value, label).replaceAll("\\", "/");
+  const normalized = readRequiredString(value, label, remoteSyncPayloadLimits.relativePathLength).replaceAll("\\", "/");
 
   if (normalized.startsWith("/") || /^[a-z][a-z0-9+.-]*:/i.test(normalized)) {
     throw new Error(`${label} must be workspace-relative`);
@@ -1366,6 +1708,12 @@ function normalizeRelativePath(value: unknown, label: string): string {
 function readRequiredUri(value: unknown, label: string): URIType {
   if (typeof value !== "object" || value === null || typeof (value as { toString?: unknown }).toString !== "function") {
     throw new Error(`${label} must be a URI`);
+  }
+
+  const uriText = (value as { toString(): string }).toString();
+
+  if (uriText.length > remoteSyncPayloadLimits.uriLength) {
+    throw new Error(`${label} must be at most ${remoteSyncPayloadLimits.uriLength} characters`);
   }
 
   return value as URIType;
@@ -1401,9 +1749,27 @@ function readOptionalFiniteNumber(value: unknown, label: string): number | undef
   return value;
 }
 
+function readOptionalBoundedNumber(value: unknown, label: string, maxValue: number): number | undefined {
+  const normalizedValue = readOptionalFiniteNumber(value, label);
+
+  if (normalizedValue === undefined) {
+    return undefined;
+  }
+
+  if (normalizedValue < 0 || normalizedValue > maxValue) {
+    throw new Error(`${label} must be between 0 and ${maxValue}`);
+  }
+
+  return normalizedValue;
+}
+
 function readSummaryCount(value: unknown, key: keyof RemoteSyncSummary): number {
   if (typeof value !== "number" || !Number.isInteger(value) || value < 0) {
     throw new Error(`Remote sync summary ${key} must be a non-negative integer`);
+  }
+
+  if (value > remoteSyncPayloadLimits.operationCount) {
+    throw new Error(`Remote sync summary ${key} must be at most ${remoteSyncPayloadLimits.operationCount}`);
   }
 
   return value;
@@ -1418,6 +1784,10 @@ function readOptionalRemoteSyncProgressCount(value: unknown, label: string): num
     throw new Error(`${label} must be a non-negative integer`);
   }
 
+  if (value > remoteSyncPayloadLimits.operationCount) {
+    throw new Error(`${label} must be at most ${remoteSyncPayloadLimits.operationCount}`);
+  }
+
   return value;
 }
 
@@ -1429,8 +1799,8 @@ function expectRecord(value: unknown, label: string): Record<string, unknown> {
   return value as Record<string, unknown>;
 }
 
-function readRequiredString(value: unknown, label: string): string {
-  const normalized = readString(value, label).trim();
+function readRequiredString(value: unknown, label: string, maxLength?: number): string {
+  const normalized = readString(value, label, maxLength).trim();
 
   if (!normalized) {
     throw new Error(`${label} must not be empty`);
@@ -1439,20 +1809,60 @@ function readRequiredString(value: unknown, label: string): string {
   return normalized;
 }
 
-function readString(value: unknown, label: string): string {
+function normalizeRemoteSyncProviderId(value: unknown, label: string): string {
+  const id = readTrimmedRequiredString(value, label, configurationMaxRemoteSyncProviderIdLength);
+
+  if (!/^[A-Za-z0-9][A-Za-z0-9_.:-]*$/.test(id)) {
+    throw new Error(`${label} is invalid: ${id}`);
+  }
+
+  return id;
+}
+
+function normalizeOptionalRemoteSyncProviderId(value: unknown, label: string): string | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  return normalizeRemoteSyncProviderId(value, label);
+}
+
+function readTrimmedRequiredString(value: unknown, label: string, maxLength: number): string {
+  const normalized = readRequiredString(value, label);
+
+  if (normalized.length > maxLength) {
+    throw new Error(`${label} must be at most ${maxLength} characters`);
+  }
+
+  return normalized;
+}
+
+function readString(value: unknown, label: string, maxLength?: number): string {
   if (typeof value !== "string") {
     throw new Error(`${label} must be a string`);
+  }
+
+  if (maxLength !== undefined && value.length > maxLength) {
+    throw new Error(`${label} must be at most ${maxLength} characters`);
   }
 
   return value;
 }
 
-function readOptionalString(value: unknown, label: string): string | undefined {
+function readOptionalString(value: unknown, label: string, maxLength?: number): string | undefined {
   if (value === undefined) {
     return undefined;
   }
 
-  return readString(value, label).trim() || undefined;
+  return readString(value, label, maxLength).trim() || undefined;
+}
+
+function readOptionalStringAllowEmpty(value: unknown, label: string, maxLength?: number): string | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  return readString(value, label, maxLength).trim();
 }
 
 function readOptionalUriString(value: unknown, label: string): string | undefined {
@@ -1461,14 +1871,32 @@ function readOptionalUriString(value: unknown, label: string): string | undefine
   }
 
   if (typeof value === "string") {
-    return normalizeRemoteSyncManifestScopeValue(value);
+    return normalizeOptionalLengthBoundedString(value, label, remoteSyncPayloadLimits.uriLength);
   }
 
   if (typeof value !== "object" || value === null || typeof (value as { toString?: unknown }).toString !== "function") {
     throw new Error(`${label} must be a URI or string`);
   }
 
-  return normalizeRemoteSyncManifestScopeValue((value as { toString(): string }).toString());
+  return normalizeOptionalLengthBoundedString(
+    (value as { toString(): string }).toString(),
+    label,
+    remoteSyncPayloadLimits.uriLength
+  );
+}
+
+function normalizeOptionalLengthBoundedString(value: string, label: string, maxLength: number): string | undefined {
+  const normalized = value.trim();
+
+  if (!normalized) {
+    return undefined;
+  }
+
+  if (normalized.length > maxLength) {
+    throw new Error(`${label} must be at most ${maxLength} characters`);
+  }
+
+  return normalized;
 }
 
 function hashRemoteSyncManifestScope(scope: string): string {

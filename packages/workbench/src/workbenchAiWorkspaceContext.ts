@@ -12,6 +12,13 @@ export interface WorkbenchAiWorkspaceContextServices {
 export interface WorkbenchAiWorkspaceContextOptions {
   readonly maxPreviewLength: number;
   readonly maxResults: number;
+  readonly messages?: WorkbenchAiWorkspaceContextMessages;
+}
+
+export interface WorkbenchAiWorkspaceContextMessages {
+  readonly detailList: (details: readonly string[]) => string;
+  readonly line: (line: number) => string;
+  readonly path: (relativePath: string) => string;
 }
 
 export function createWorkbenchWorkspaceAiContext(
@@ -26,6 +33,7 @@ export function createWorkbenchWorkspaceAiContext(
   }
 
   const maxPreviewLength = normalizePositiveInteger(options.maxPreviewLength);
+  const messages = options.messages ?? defaultWorkbenchAiWorkspaceContextMessages;
   const seenResults = new Set<string>();
   const context: AiTextContextItem[] = [];
 
@@ -45,7 +53,7 @@ export function createWorkbenchWorkspaceAiContext(
       }
 
       seenResults.add(key);
-      context.push(toWorkspaceSearchContextItem(result));
+      context.push(toWorkspaceSearchContextItem(result, messages));
 
       if (context.length >= maxResults) {
         return context;
@@ -92,16 +100,25 @@ export function createWorkbenchWorkspaceAiContextQueries(
   return queries;
 }
 
-function toWorkspaceSearchContextItem(result: WorkspaceSearchResult): AiTextContextItem {
+export const defaultWorkbenchAiWorkspaceContextMessages: WorkbenchAiWorkspaceContextMessages = {
+  detailList: (details) => details.join("\n"),
+  line: (line) => `Line: ${line}`,
+  path: (relativePath) => `Path: ${relativePath}`
+};
+
+function toWorkspaceSearchContextItem(
+  result: WorkspaceSearchResult,
+  messages: WorkbenchAiWorkspaceContextMessages
+): AiTextContextItem {
   return {
     kind: "workspace-search",
     title: `${result.relativePath}:${result.line}`,
     uri: result.uri,
-    value: [
-      `Path: ${result.relativePath}`,
-      `Line: ${result.line}`,
+    value: messages.detailList([
+      messages.path(result.relativePath),
+      messages.line(result.line),
       result.preview
-    ].join("\n")
+    ])
   };
 }
 

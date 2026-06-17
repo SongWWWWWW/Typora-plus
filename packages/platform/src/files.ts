@@ -30,6 +30,26 @@ export interface SaveFileOptions {
   readonly overwrite?: boolean;
 }
 
+export interface CreateWorkspaceEntryRequest {
+  readonly parentUri: URIType;
+  readonly name: string;
+}
+
+export interface RenameWorkspaceEntryRequest {
+  readonly uri: URIType;
+  readonly name: string;
+}
+
+export interface CreatedWorkspaceFile {
+  readonly entry: FileTreeEntry;
+  readonly workspace: WorkspaceFileTree;
+}
+
+export interface RenamedWorkspaceEntry {
+  readonly entry: FileTreeEntry;
+  readonly workspace: WorkspaceFileTree;
+}
+
 export interface FileSaveConflict {
   readonly uri: URIType;
   readonly expectedMtime?: number;
@@ -51,6 +71,10 @@ export interface NativeFileSystemHost {
   openWorkspace(): Promise<WorkspaceFileTree | undefined>;
   openRecentWorkspace(uri: string): Promise<WorkspaceFileTree | undefined>;
   refreshWorkspace(): Promise<WorkspaceFileTree | undefined>;
+  createDirectory(request: CreateWorkspaceEntryRequest): Promise<WorkspaceFileTree>;
+  createFile(request: CreateWorkspaceEntryRequest): Promise<CreatedWorkspaceFile>;
+  renameEntry(request: RenameWorkspaceEntryRequest): Promise<RenamedWorkspaceEntry>;
+  deleteEntry(uri: URIType): Promise<WorkspaceFileTree>;
   readFile(uri: string): Promise<TextFileContent>;
   writeFile(uri: string, value: string, options?: SaveFileOptions): Promise<TextFileContent>;
   saveFileAs(defaultName: string, value: string): Promise<TextFileContent | undefined>;
@@ -83,6 +107,26 @@ export interface SerializedSaveFileOptions {
   readonly overwrite?: boolean;
 }
 
+export interface SerializedCreateWorkspaceEntryRequest {
+  readonly parentUri: string;
+  readonly name: string;
+}
+
+export interface SerializedRenameWorkspaceEntryRequest {
+  readonly uri: string;
+  readonly name: string;
+}
+
+export interface SerializedCreatedWorkspaceFile {
+  readonly entry: SerializedFileTreeEntry;
+  readonly workspace: SerializedWorkspaceFileTree;
+}
+
+export interface SerializedRenamedWorkspaceEntry {
+  readonly entry: SerializedFileTreeEntry;
+  readonly workspace: SerializedWorkspaceFileTree;
+}
+
 export interface SerializedFileSaveConflict {
   readonly uri: string;
   readonly expectedMtime?: number;
@@ -99,6 +143,10 @@ export interface NativeFileSystemBridge {
   openWorkspace(): Promise<SerializedWorkspaceFileTree | undefined>;
   openRecentWorkspace(uri: string): Promise<SerializedWorkspaceFileTree | undefined>;
   refreshWorkspace(): Promise<SerializedWorkspaceFileTree | undefined>;
+  createDirectory(request: SerializedCreateWorkspaceEntryRequest): Promise<SerializedWorkspaceFileTree>;
+  createFile(request: SerializedCreateWorkspaceEntryRequest): Promise<SerializedCreatedWorkspaceFile>;
+  renameEntry(request: SerializedRenameWorkspaceEntryRequest): Promise<SerializedRenamedWorkspaceEntry>;
+  deleteEntry(uri: string): Promise<SerializedWorkspaceFileTree>;
   readFile(uri: string): Promise<SerializedTextFileContent>;
   writeFile(uri: string, value: string, options?: SerializedSaveFileOptions): Promise<SerializedWriteFileResult>;
   saveFileAs(defaultName: string, value: string): Promise<SerializedTextFileContent | undefined>;
@@ -111,6 +159,10 @@ export interface IFileService {
   openWorkspace(): Promise<WorkspaceFileTree | undefined>;
   openRecentWorkspace(uri: URIType): Promise<WorkspaceFileTree | undefined>;
   refreshWorkspace(): Promise<WorkspaceFileTree | undefined>;
+  createDirectory(request: CreateWorkspaceEntryRequest): Promise<WorkspaceFileTree>;
+  createFile(request: CreateWorkspaceEntryRequest): Promise<CreatedWorkspaceFile>;
+  renameEntry(request: RenameWorkspaceEntryRequest): Promise<RenamedWorkspaceEntry>;
+  deleteEntry(uri: URIType): Promise<WorkspaceFileTree>;
   openFile(uri: URIType): Promise<TextFileContent>;
   saveFile(uri: URIType, value: string, options?: SaveFileOptions): Promise<TextFileContent>;
   saveFileAs(defaultName: string, value: string): Promise<TextFileContent | undefined>;
@@ -166,6 +218,48 @@ export class NativeFileService implements IFileService {
     }
 
     this.workspaceFiles = await this.host.refreshWorkspace();
+    this.emitter.fire(this.workspaceFiles);
+    return this.workspaceFiles;
+  }
+
+  async createDirectory(request: CreateWorkspaceEntryRequest): Promise<WorkspaceFileTree> {
+    if (!this.host?.isAvailable) {
+      throw new Error("Native file system host is not available");
+    }
+
+    this.workspaceFiles = await this.host.createDirectory(request);
+    this.emitter.fire(this.workspaceFiles);
+    return this.workspaceFiles;
+  }
+
+  async createFile(request: CreateWorkspaceEntryRequest): Promise<CreatedWorkspaceFile> {
+    if (!this.host?.isAvailable) {
+      throw new Error("Native file system host is not available");
+    }
+
+    const result = await this.host.createFile(request);
+    this.workspaceFiles = result.workspace;
+    this.emitter.fire(this.workspaceFiles);
+    return result;
+  }
+
+  async renameEntry(request: RenameWorkspaceEntryRequest): Promise<RenamedWorkspaceEntry> {
+    if (!this.host?.isAvailable) {
+      throw new Error("Native file system host is not available");
+    }
+
+    const result = await this.host.renameEntry(request);
+    this.workspaceFiles = result.workspace;
+    this.emitter.fire(this.workspaceFiles);
+    return result;
+  }
+
+  async deleteEntry(uri: URIType): Promise<WorkspaceFileTree> {
+    if (!this.host?.isAvailable) {
+      throw new Error("Native file system host is not available");
+    }
+
+    this.workspaceFiles = await this.host.deleteEntry(uri);
     this.emitter.fire(this.workspaceFiles);
     return this.workspaceFiles;
   }
@@ -243,6 +337,37 @@ export function createNativeFileSystemHost(): NativeFileSystemHost | undefined {
     async refreshWorkspace() {
       const workspace = await bridge.refreshWorkspace();
       return workspace ? reviveWorkspaceFileTree(workspace) : undefined;
+    },
+    async createDirectory(request) {
+      return reviveWorkspaceFileTree(await bridge.createDirectory({
+        parentUri: request.parentUri.toString(),
+        name: request.name
+      }));
+    },
+    async createFile(request) {
+      const result = await bridge.createFile({
+        parentUri: request.parentUri.toString(),
+        name: request.name
+      });
+
+      return {
+        entry: reviveFileTreeEntry(result.entry),
+        workspace: reviveWorkspaceFileTree(result.workspace)
+      };
+    },
+    async renameEntry(request) {
+      const result = await bridge.renameEntry({
+        uri: request.uri.toString(),
+        name: request.name
+      });
+
+      return {
+        entry: reviveFileTreeEntry(result.entry),
+        workspace: reviveWorkspaceFileTree(result.workspace)
+      };
+    },
+    async deleteEntry(uri) {
+      return reviveWorkspaceFileTree(await bridge.deleteEntry(uri.toString()));
     },
     async readFile(uri) {
       return reviveTextFileContent(await bridge.readFile(uri));

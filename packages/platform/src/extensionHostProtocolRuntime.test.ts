@@ -220,7 +220,7 @@ describe("extension host protocol runtime", () => {
           id: "notes.remote.ai",
           title: "Remote AI",
           requestText: (input) => ({
-            value: `${input.instruction}: ${input.context?.[0]?.uri?.path ?? ""}: ${input.input}`,
+            value: `${input.instruction}: ${input.outputFormat?.kind ?? "text"}: ${input.context?.[0]?.uri?.path ?? ""}: ${input.input}`,
             model: "remote-test-model",
             usage: {
               inputTokens: 1,
@@ -274,7 +274,10 @@ describe("extension host protocol runtime", () => {
             uri: "file://C:/Notes/A.md",
             value: "Context"
           }
-        ]
+        ],
+        outputFormat: {
+          kind: "json"
+        }
       }
     ));
     transport.receive(createExtensionHostExportDocumentRequestMessage(
@@ -304,7 +307,7 @@ describe("extension host protocol runtime", () => {
         value: "alpha"
       }),
       createExtensionHostAiTextResultMessage("main-ai-1", "notes.remote", "notes.remote.ai", {
-        value: "Summarize: C:/Notes/A.md: # A",
+        value: "Summarize: json: C:/Notes/A.md: # A",
         model: "remote-test-model",
         usage: {
           inputTokens: 1,

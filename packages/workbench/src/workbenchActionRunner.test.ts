@@ -4,7 +4,8 @@ import { describe, expect, it, vi } from "vitest";
 import {
   createWorkbenchCommandExecutor,
   executeWorkbenchCommand,
-  runWorkbenchAction
+  runWorkbenchAction,
+  type WorkbenchActionRunnerMessages
 } from "./workbenchActionRunner";
 
 describe("workbench action runner", () => {
@@ -45,6 +46,21 @@ describe("workbench action runner", () => {
     expect(operationErrors).toEqual([undefined, "Operation failed"]);
   });
 
+  it("uses injected action runner messages for non-Error failures", async () => {
+    const operationErrors: Array<string | undefined> = [];
+
+    await expect(runWorkbenchAction(
+      () => {
+        throw "failed";
+      },
+      (value) => operationErrors.push(value),
+      undefined,
+      zhActionRunnerMessages
+    )).resolves.toBeUndefined();
+
+    expect(operationErrors).toEqual([undefined, "操作失败"]);
+  });
+
   it("captures save conflicts separately from operation errors", async () => {
     const conflict = {
       uri: URI.file("/workspace/note.md"),
@@ -64,6 +80,26 @@ describe("workbench action runner", () => {
 
     expect(operationErrors).toEqual([undefined, "File changed on disk"]);
     expect(saveConflicts).toEqual([conflict]);
+  });
+
+  it("uses injected action runner messages for save conflicts", async () => {
+    const conflict = {
+      uri: URI.file("/workspace/note.md"),
+      expectedMtime: 1,
+      diskMtime: 2
+    };
+    const operationErrors: Array<string | undefined> = [];
+
+    await expect(runWorkbenchAction(
+      () => {
+        throw new FileSaveConflictError(conflict);
+      },
+      (value) => operationErrors.push(value),
+      undefined,
+      zhActionRunnerMessages
+    )).resolves.toBeUndefined();
+
+    expect(operationErrors).toEqual([undefined, "磁盘上的文件已变更"]);
   });
 
   it("dispatches commands through the same action error boundary", async () => {
@@ -132,4 +168,36 @@ describe("workbench action runner", () => {
     expect(operationErrors).toEqual([undefined, undefined, "File changed on disk"]);
     expect(saveConflicts).toEqual([conflict]);
   });
+
+  it("passes injected action runner messages through the command executor", async () => {
+    const operationErrors: Array<string | undefined> = [];
+    const executeCommand = vi.fn(async (_command: string) => {
+      throw "failed";
+    });
+    const runCommand = createWorkbenchCommandExecutor(
+      {
+        commandService: {
+          async executeCommand<T = unknown>(command: string): Promise<T> {
+            await executeCommand(command);
+            return undefined as T;
+          }
+        }
+      },
+      {
+        messages: zhActionRunnerMessages,
+        setOperationError: (value) => operationErrors.push(value)
+      }
+    );
+
+    runCommand("file.save");
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(operationErrors).toEqual([undefined, "操作失败"]);
+  });
 });
+
+const zhActionRunnerMessages: WorkbenchActionRunnerMessages = {
+  fileChangedOnDisk: "磁盘上的文件已变更",
+  operationFailed: "操作失败"
+};

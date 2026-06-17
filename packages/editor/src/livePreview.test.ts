@@ -1932,9 +1932,7 @@ describe("findInactiveMarkdownSyntaxMarkers", () => {
       { from: 5, to: 6 },
       { from: 16, to: 17 },
       { from: 22, to: 23 },
-      { from: 25, to: 26 },
-      { from: 26, to: 27 },
-      { from: 28, to: 29 }
+      { from: 25, to: 29 }
     ]);
     expect(findInactiveMarkdownSyntaxMarkers("Name a_b_c", false)).toEqual([]);
   });
@@ -1942,32 +1940,23 @@ describe("findInactiveMarkdownSyntaxMarkers", () => {
   it("marks link and image punctuation", () => {
     expect(findInactiveMarkdownSyntaxMarkers("See [Guide](notes/guide.md)", false)).toEqual([
       { from: 4, to: 5 },
-      { from: 10, to: 11 },
-      { from: 11, to: 12 },
-      { from: 26, to: 27 }
+      { from: 10, to: 27 }
     ]);
-    expect(findInactiveMarkdownSyntaxMarkers("![Alt](image.png)", false)[0]).toEqual({ from: 0, to: 1 });
+    expect(findInactiveMarkdownSyntaxMarkers("![Alt](image.png)", false)[0]).toEqual({ from: 0, to: 2 });
   });
 
   it("marks reference-style link and image punctuation", () => {
     expect(findInactiveMarkdownSyntaxMarkers("See [Guide][docs]", false)).toEqual([
       { from: 4, to: 5 },
-      { from: 10, to: 11 },
-      { from: 11, to: 12 },
-      { from: 16, to: 17 }
+      { from: 10, to: 17 }
     ]);
     expect(findInactiveMarkdownSyntaxMarkers("See [Guide][]", false)).toEqual([
       { from: 4, to: 5 },
-      { from: 10, to: 11 },
-      { from: 11, to: 12 },
-      { from: 12, to: 13 }
+      { from: 10, to: 13 }
     ]);
     expect(findInactiveMarkdownSyntaxMarkers("![Alt][image]", false)).toEqual([
-      { from: 0, to: 1 },
-      { from: 1, to: 2 },
-      { from: 5, to: 6 },
-      { from: 6, to: 7 },
-      { from: 12, to: 13 }
+      { from: 0, to: 2 },
+      { from: 5, to: 13 }
     ]);
   });
 
@@ -2412,7 +2401,52 @@ describe("removeMarkdownTaskListMarkersAtSelection", () => {
   });
 });
 
-describe("task list live preview widgets", () => {
+describe("live preview widgets", () => {
+  it("applies custom live preview labels to code block tools", () => {
+    withDom(() => {
+      const parent = document.createElement("div");
+      document.body.append(parent);
+      const view = new EditorView({
+        parent,
+        state: EditorState.create({
+          doc: "```\nconst value = 1;\n```\n\nNext",
+          selection: { anchor: "```\nconst value = 1;\n```\n\nNext".length },
+          extensions: [
+            livePreviewExtension({
+              focusMode: false,
+              fontSize: 16,
+              labels: {
+                code: "代码",
+                codeBlockTools: "代码块工具",
+                codeCopied: "代码已复制",
+                copied: "已复制",
+                copy: "复制",
+                copyCode: "复制代码"
+              },
+              lineHeight: 1.5,
+              maxWidth: 720,
+              typewriterMode: false
+            })
+          ]
+        })
+      });
+
+      try {
+        const toolbar = parent.querySelector<HTMLElement>(".tp-editor-code-toolbar");
+        const language = parent.querySelector<HTMLElement>(".tp-editor-code-language");
+        const copyButton = parent.querySelector<HTMLButtonElement>(".tp-editor-code-copy");
+
+        expect(toolbar?.getAttribute("aria-label")).toBe("代码块工具");
+        expect(language?.textContent).toBe("代码");
+        expect(copyButton?.textContent).toBe("复制");
+        expect(copyButton?.title).toBe("复制代码");
+        expect(copyButton?.getAttribute("aria-label")).toBe("复制代码");
+      } finally {
+        view.destroy();
+      }
+    });
+  });
+
   it("toggles inactive task markers through source-backed checkboxes", () => {
     withDom(() => {
       const parent = document.createElement("div");
@@ -2442,6 +2476,42 @@ describe("task list live preview widgets", () => {
         checkbox?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
 
         expect(view.state.doc.toString()).toBe("- [x] Todo\n\nNext");
+      } finally {
+        view.destroy();
+      }
+    });
+  });
+
+  it("applies custom live preview labels to task marker checkboxes", () => {
+    withDom(() => {
+      const parent = document.createElement("div");
+      document.body.append(parent);
+      const view = new EditorView({
+        parent,
+        state: EditorState.create({
+          doc: "- [ ] Todo\n\nNext",
+          selection: { anchor: "- [ ] Todo\n\nNext".length },
+          extensions: [
+            livePreviewExtension({
+              focusMode: false,
+              fontSize: 16,
+              labels: {
+                markComplete: "标记完成",
+                markTaskComplete: "将任务标记为完成"
+              },
+              lineHeight: 1.5,
+              maxWidth: 720,
+              typewriterMode: false
+            })
+          ]
+        })
+      });
+
+      try {
+        const checkbox = parent.querySelector<HTMLInputElement>(".tp-editor-task-checkbox");
+
+        expect(checkbox?.getAttribute("aria-label")).toBe("将任务标记为完成");
+        expect(checkbox?.title).toBe("标记完成");
       } finally {
         view.destroy();
       }

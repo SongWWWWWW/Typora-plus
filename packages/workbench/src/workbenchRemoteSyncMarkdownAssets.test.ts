@@ -1,7 +1,10 @@
 import { URI } from "@typora-plus/base";
 import { describe, expect, it, vi } from "vitest";
 import type { RemoteSyncResource } from "@typora-plus/platform";
-import { createWorkbenchRemoteSyncResourcesWithMarkdownAssets } from "./workbenchRemoteSyncMarkdownAssets";
+import {
+  createWorkbenchRemoteSyncResourcesWithMarkdownAssets,
+  type WorkbenchRemoteSyncMarkdownAssetMessages
+} from "./workbenchRemoteSyncMarkdownAssets";
 
 describe("workbench remote sync Markdown assets", () => {
   it("adds existing Markdown-linked local resources with native metadata", async () => {
@@ -119,10 +122,37 @@ describe("workbench remote sync Markdown assets", () => {
     await expect(createWorkbenchRemoteSyncResourcesWithMarkdownAssets({
       workspaceUri: URI.file("C:/Notes"),
       resources: [syncResource("A.md")],
+      messages: localizedMarkdownAssetMessages,
       resourceService: { readResource },
       signal: controller.signal
-    })).rejects.toThrow("Remote sync Markdown asset discovery was aborted");
+    })).rejects.toThrow("Localized asset discovery aborted");
     expect(readResource).not.toHaveBeenCalled();
+  });
+
+  it("uses injected messages for invalid Markdown content reads", async () => {
+    await expect(createWorkbenchRemoteSyncResourcesWithMarkdownAssets({
+      workspaceUri: URI.file("C:/Notes"),
+      resources: [syncResource("A.md")],
+      messages: localizedMarkdownAssetMessages,
+      resourceService: {
+        readResource: vi.fn(async () => ({
+          ...resourceContent("A.md", "", 10, 1, "sha256:note"),
+          value: "!!!!"
+        }))
+      }
+    })).rejects.toThrow("Localized valid base64 required");
+
+    await expect(createWorkbenchRemoteSyncResourcesWithMarkdownAssets({
+      workspaceUri: URI.file("C:/Notes"),
+      resources: [syncResource("A.md")],
+      messages: localizedMarkdownAssetMessages,
+      resourceService: {
+        readResource: vi.fn(async () => ({
+          ...resourceContent("A.md", "", 10, 1, "sha256:note"),
+          encoding: "utf8" as never
+        }))
+      }
+    })).rejects.toThrow("Localized base64 required");
   });
 });
 
@@ -152,3 +182,9 @@ function resourceContent(
     contentHash
   };
 }
+
+const localizedMarkdownAssetMessages: WorkbenchRemoteSyncMarkdownAssetMessages = {
+  aborted: "Localized asset discovery aborted",
+  contentEncodingInvalid: "Localized valid base64 required",
+  contentEncodingRequired: "Localized base64 required"
+};

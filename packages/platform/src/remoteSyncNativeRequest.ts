@@ -69,13 +69,53 @@ export type RemoteSyncNativeRequestTransport =
 let nextNativeRemoteSyncRequestId = 0;
 
 export function createNativeRemoteSyncRequestTransport(
-  bridge: NativeRemoteSyncRequestBridge | undefined = createNativeRemoteSyncRequestBridge()
+  bridge?: NativeRemoteSyncRequestBridge
 ): RemoteSyncNativeRequestTransport | undefined {
-  if (!bridge?.isAvailable) {
+  const resolvedBridge = arguments.length === 0 ? createNativeRemoteSyncRequestBridge() : bridge;
+
+  if (resolvedBridge?.isAvailable) {
+    return (request) => requestNativeRemoteSyncWithBridge(resolvedBridge, request);
+  }
+
+  return arguments.length === 0 ? createBrowserRemoteSyncRequestTransport() : undefined;
+}
+
+function createBrowserRemoteSyncRequestTransport(): RemoteSyncNativeRequestTransport | undefined {
+  if (typeof fetch !== "function") {
     return undefined;
   }
 
-  return (request) => requestNativeRemoteSyncWithBridge(bridge, request);
+  return requestNativeRemoteSyncWithFetch;
+}
+
+async function requestNativeRemoteSyncWithFetch(
+  request: RemoteSyncNativeRequestInput
+): Promise<RemoteSyncNativeResponse> {
+  if (request.signal?.aborted) {
+    throw new Error("Remote sync native request was aborted");
+  }
+
+  if (request.secretHeaders || request.secretJsonFields) {
+    throw new Error("Remote sync browser request cannot resolve secret bindings");
+  }
+
+  if (request.multipart) {
+    throw new Error("Remote sync browser request cannot send multipart bodies");
+  }
+
+  const response = await fetch(request.url, {
+    method: request.method,
+    ...(request.headers !== undefined ? { headers: request.headers } : {}),
+    ...(request.body !== undefined ? { body: createBrowserRequestBody(request.body, request.bodyEncoding) } : {}),
+    ...(request.signal !== undefined ? { signal: request.signal } : {})
+  });
+
+  return {
+    status: response.status,
+    statusText: response.statusText,
+    headers: readBrowserResponseHeaders(response.headers),
+    body: await readBrowserResponseBody(response, request.responseType ?? "text")
+  };
 }
 
 async function requestNativeRemoteSyncWithBridge(
@@ -124,6 +164,67 @@ async function requestNativeRemoteSyncWithBridge(
 function createNativeRemoteSyncRequestId(): string {
   nextNativeRemoteSyncRequestId += 1;
   return `remote-sync:${nextNativeRemoteSyncRequestId}`;
+}
+
+function createBrowserRequestBody(
+  body: string,
+  encoding: RemoteSyncNativeRequestBodyEncoding | undefined
+): BodyInit {
+  if (encoding === "base64") {
+    return new Blob([copyBytesToArrayBuffer(decodeBase64Body(body))]);
+  }
+
+  return body;
+}
+
+function decodeBase64Body(value: string): Uint8Array {
+  const binary = atob(value);
+  const bytes = new Uint8Array(binary.length);
+
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+
+  return bytes;
+}
+
+function copyBytesToArrayBuffer(bytes: Uint8Array): ArrayBuffer {
+  const buffer = new ArrayBuffer(bytes.byteLength);
+  new Uint8Array(buffer).set(bytes);
+  return buffer;
+}
+
+async function readBrowserResponseBody(
+  response: Response,
+  responseType: RemoteSyncNativeResponseType
+): Promise<unknown> {
+  if (responseType === "json") {
+    return response.json();
+  }
+
+  if (responseType === "base64") {
+    return encodeBase64Body(new Uint8Array(await response.arrayBuffer()));
+  }
+
+  return response.text();
+}
+
+function encodeBase64Body(bytes: Uint8Array): string {
+  let binary = "";
+
+  for (const byte of bytes) {
+    binary += String.fromCharCode(byte);
+  }
+
+  return btoa(binary);
+}
+
+function readBrowserResponseHeaders(headers: Headers): Readonly<Record<string, string>> {
+  const result: Record<string, string> = {};
+  headers.forEach((value, key) => {
+    result[key] = value;
+  });
+  return result;
 }
 
 function createNativeRemoteSyncRequestBridge(): NativeRemoteSyncRequestBridge | undefined {

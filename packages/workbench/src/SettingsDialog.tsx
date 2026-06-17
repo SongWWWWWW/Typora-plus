@@ -14,7 +14,19 @@ import type {
   RemoteSyncProviderSecretConfiguration,
   TyporaPlusConfiguration
 } from "@typora-plus/platform";
-import { KeyRound, Plus, RefreshCw, Save, Search, Settings as SettingsIcon, Trash2, X } from "lucide-react";
+import {
+  Check,
+  FolderOpen,
+  FolderPlus,
+  KeyRound,
+  Plus,
+  RefreshCw,
+  Save,
+  Search,
+  Settings as SettingsIcon,
+  Trash2,
+  X
+} from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import {
@@ -28,6 +40,7 @@ import {
   canAddSettingsAiProvider,
   canAddSettingsRemoteSyncProvider,
   createSettingsAiProviderDraft,
+  createSettingsLarkRawMirrorProviderDraft,
   applySettingsRawMirrorMetadataDraft,
   createSettingsRawMirrorMetadataDraft,
   createSettingsRemoteSyncProviderDraft,
@@ -38,6 +51,7 @@ import {
   getSettingsEntryLabel,
   getSettingsSectionTitle,
   isSettingsEntryVisible,
+  isSettingsLarkRawMirrorProviderDraft,
   isSettingsSectionVisible,
   megabytesToBytes,
   removeSettingsAiProvider,
@@ -47,11 +61,7 @@ import {
   resolveSettingsAssetFolderCommit,
   resolveSettingsNumberInput,
   resolveVisibleSettingsSection,
-  settingsAiReasoningEffortOptions,
-  settingsAiTextVerbosityOptions,
   settingSectionAnchorId,
-  settingsColorSchemeOptions,
-  settingsDensityOptions,
   settingsEntryIds,
   settingsNumberConstraints,
   settingsSectionIds,
@@ -60,13 +70,29 @@ import {
   validateSettingsAiProviderDraft,
   validateSettingsRemoteSyncProviderDraft,
   type SettingsAiProviderDraft,
+  type SettingsEntryId,
   type SettingsRawMirrorMetadataDraft,
   type SettingsRemoteSyncProviderDraft,
+  type SettingsValidationIssueCode,
   type SettingsSectionId,
   type NumberSettingConstraint
 } from "./settingsModel";
+import {
+  formatRemoteSyncSecretAriaLabel,
+  formatSettingsValidationIssue,
+  settingsNumberUnitIds,
+  type SettingsNumberUnitId,
+  type WorkbenchMessages
+} from "./workbenchI18n";
+import { formatWorkbenchAiTokenUsage } from "./workbenchAiResponseModel";
 import type { WorkbenchAiProviderDiagnosticActions } from "./workbenchAiProviderDiagnostics";
 import type { WorkbenchAiSecretBridge } from "./workbenchAiSecrets";
+import type {
+  WorkbenchRemoteSyncLarkAuthActions,
+  WorkbenchRemoteSyncLarkFolder,
+  WorkbenchRemoteSyncLarkAuthStart,
+  WorkbenchRemoteSyncLarkAuthStatus
+} from "./workbenchRemoteSyncLarkAuth";
 import type { WorkbenchRemoteSyncSecretBridge } from "./workbenchRemoteSyncSecrets";
 
 export function SettingsDialog({
@@ -74,8 +100,10 @@ export function SettingsDialog({
   configuration,
   commands,
   themes,
+  messages,
   aiDiagnosticActions,
   aiSecretActions,
+  remoteSyncLarkAuthActions,
   remoteSyncSecretActions,
   getCommandForKeybinding,
   getKeybindingLabel,
@@ -87,12 +115,14 @@ export function SettingsDialog({
   readonly configuration: TyporaPlusConfiguration;
   readonly commands: readonly CommandMetadata[];
   readonly themes: readonly RegisteredTheme[];
+  readonly messages: WorkbenchMessages;
   readonly aiDiagnosticActions?: WorkbenchAiProviderDiagnosticActions;
   readonly aiSecretActions?: {
     readonly isAvailable: boolean;
     readonly setSecret: WorkbenchAiSecretBridge["setSecret"];
     readonly deleteSecret: WorkbenchAiSecretBridge["deleteSecret"];
   };
+  readonly remoteSyncLarkAuthActions?: WorkbenchRemoteSyncLarkAuthActions;
   readonly remoteSyncSecretActions?: {
     readonly isAvailable: boolean;
     readonly setSecret: WorkbenchRemoteSyncSecretBridge["setSecret"];
@@ -122,6 +152,9 @@ export function SettingsDialog({
   const [aiSecretStates, setAiSecretStates] = useState<Record<string, SecretState>>({});
   const [remoteSyncSecretDrafts, setRemoteSyncSecretDrafts] = useState<Record<string, string>>({});
   const [remoteSyncSecretStates, setRemoteSyncSecretStates] = useState<Record<string, SecretState>>({});
+  const [remoteSyncLarkAuthStates, setRemoteSyncLarkAuthStates] = useState<Record<string, LarkAuthState>>({});
+  const [remoteSyncLarkFolderStates, setRemoteSyncLarkFolderStates] = useState<Record<string, LarkFolderState>>({});
+  const [remoteSyncLarkFolderNameDrafts, setRemoteSyncLarkFolderNameDrafts] = useState<Record<string, string>>({});
   const [activeSettingsSection, setActiveSettingsSection] = useState<SettingsSectionId>(defaultSettingsSectionId);
   const settingsContentRef = useRef<HTMLDivElement | null>(null);
   const nextAiProviderDraftIdRef = useRef(0);
@@ -131,12 +164,19 @@ export function SettingsDialog({
   const hasUnsavedAiProviderDraft = aiProviderDrafts.some((draft) => !draft.originalId);
   const hasUnsavedRemoteSyncProviderDraft = remoteSyncProviderDrafts.some((draft) => !draft.originalId);
   const selectedThemeId = resolveSelectedSettingsThemeId(configuration.appearance.themeId, themes);
-  const themeOptions = useMemo(() => createSettingsThemeOptions(themes), [themes]);
+  const settingsLocalization = messages.settings.localization;
+  const entryLabel = (entryId: SettingsEntryId) => getSettingsEntryLabel(entryId, settingsLocalization);
+  const themeOptions = useMemo(() => createSettingsThemeOptions(themes).map((option) =>
+    option.value ? option : { ...option, label: messages.settings.reasoningOptions[0]?.label ?? "Default" }
+  ), [messages, themes]);
   const searchMaxFileSizeMegabytes = bytesToMegabytes(configuration.workspace.searchMaxFileSizeBytes);
-  const settingsSearchResult = useMemo(() => createSettingsSearchResult(settingsQuery), [settingsQuery]);
+  const settingsSearchResult = useMemo(
+    () => createSettingsSearchResult(settingsQuery, settingsLocalization),
+    [settingsLocalization, settingsQuery]
+  );
   const settingsVisibility = useMemo(
-    () => createSettingsVisibilityState(settingsSearchResult),
-    [settingsSearchResult]
+    () => createSettingsVisibilityState(settingsSearchResult, settingsLocalization),
+    [settingsLocalization, settingsSearchResult]
   );
   const filteredKeybindingCommands = useMemo(
     () => filterKeybindingCommands(commands, keybindingQuery, {
@@ -163,6 +203,9 @@ export function SettingsDialog({
       setAiSecretStates({});
       setRemoteSyncSecretDrafts({});
       setRemoteSyncSecretStates({});
+      setRemoteSyncLarkAuthStates({});
+      setRemoteSyncLarkFolderStates({});
+      setRemoteSyncLarkFolderNameDrafts({});
       setActiveSettingsSection(defaultSettingsSectionId);
     }
   }, [configuration.ai.providers, configuration.remoteSync.providers, configuration.workspace.defaultAssetFolder, open]);
@@ -336,6 +379,19 @@ export function SettingsDialog({
     }]);
   };
 
+  const addLarkRemoteSyncProviderDraft = () => {
+    const key = `new:${nextRemoteSyncProviderDraftIdRef.current++}`;
+    const usedIds = [
+      ...configuration.remoteSync.providers.map((provider) => provider.id),
+      ...remoteSyncProviderDrafts.map((draft) => draft.id)
+    ];
+
+    setRemoteSyncProviderDrafts((drafts) => [...drafts, {
+      key,
+      ...createSettingsLarkRawMirrorProviderDraft(usedIds)
+    }]);
+  };
+
   const updateRemoteSyncProviderDraft = (
     key: string,
     value: Partial<SettingsRemoteSyncProviderDraft>
@@ -343,6 +399,8 @@ export function SettingsDialog({
     setRemoteSyncProviderDrafts((drafts) => drafts.map((draft) =>
       draft.key === key ? { ...draft, ...value } : draft
     ));
+    setRemoteSyncLarkAuthStates((states) => ({ ...states, [key]: { status: "idle" } }));
+    setRemoteSyncLarkFolderStates((states) => ({ ...states, [key]: { status: "idle" } }));
   };
 
   const saveRemoteSyncProviderDraft = (draft: RemoteSyncProviderDraftState) => {
@@ -384,6 +442,18 @@ export function SettingsDialog({
     }
 
     setRemoteSyncProviderDrafts((drafts) => drafts.filter((candidate) => candidate.key !== draft.key));
+    setRemoteSyncLarkAuthStates((states) => {
+      const { [draft.key]: _removed, ...remaining } = states;
+      return remaining;
+    });
+    setRemoteSyncLarkFolderStates((states) => {
+      const { [draft.key]: _removed, ...remaining } = states;
+      return remaining;
+    });
+    setRemoteSyncLarkFolderNameDrafts((drafts) => {
+      const { [draft.key]: _removed, ...remaining } = drafts;
+      return remaining;
+    });
   };
 
   const updateAiSecretDraft = (key: string, value: string) => {
@@ -435,6 +505,226 @@ export function SettingsDialog({
     });
   };
 
+  const checkLarkAuthorization = (draft: RemoteSyncProviderDraftState, provider: RemoteSyncProviderConfiguration) => {
+    if (!remoteSyncLarkAuthActions?.isAvailable) {
+      return;
+    }
+
+    setRemoteSyncLarkAuthState(draft.key, { status: "checking" });
+    void remoteSyncLarkAuthActions.checkAuthorization(provider).then((result) => {
+      setRemoteSyncLarkAuthState(draft.key, result
+        ? createLarkAuthStatusState(result)
+        : { status: "failed" });
+    });
+  };
+
+  const startLarkAuthorization = (draft: RemoteSyncProviderDraftState, provider: RemoteSyncProviderConfiguration) => {
+    if (!remoteSyncLarkAuthActions?.isAvailable) {
+      return;
+    }
+
+    setRemoteSyncLarkAuthState(draft.key, { status: "starting" });
+    void remoteSyncLarkAuthActions.startAuthorization(provider).then((result) => {
+      if (!result) {
+        setRemoteSyncLarkAuthState(draft.key, { status: "failed" });
+        return;
+      }
+
+      openLarkVerificationUrl(result);
+      setRemoteSyncLarkAuthState(draft.key, createLarkAuthStartState(result));
+    });
+  };
+
+  const completeLarkAuthorization = (
+    draft: RemoteSyncProviderDraftState,
+    provider: RemoteSyncProviderConfiguration,
+    deviceCode: string | undefined
+  ) => {
+    if (!remoteSyncLarkAuthActions?.isAvailable || !deviceCode) {
+      return;
+    }
+
+    setRemoteSyncLarkAuthState(draft.key, (state) => ({
+      ...state,
+      status: "completing"
+    }));
+    void remoteSyncLarkAuthActions.completeAuthorization(provider, deviceCode).then((result) => {
+      setRemoteSyncLarkAuthState(draft.key, result
+        ? createLarkAuthStatusState(result)
+        : { status: "failed" });
+    });
+  };
+
+  const listLarkFolders = (
+    draft: RemoteSyncProviderDraftState,
+    provider: RemoteSyncProviderConfiguration,
+    parentToken = draft.remoteScopeId,
+    path?: readonly LarkFolderPathEntry[]
+  ) => {
+    if (!remoteSyncLarkAuthActions?.isAvailable) {
+      return;
+    }
+
+    const currentToken = parentToken ?? "";
+    const currentPath = path ?? createLarkFolderPath(currentToken, messages);
+
+    setRemoteSyncLarkFolderState(draft.key, {
+      status: "loading",
+      currentToken,
+      path: currentPath
+    });
+    void remoteSyncLarkAuthActions.listFolders(provider, currentToken).then((folders) => {
+      setRemoteSyncLarkFolderState(draft.key, folders
+        ? {
+            status: "ready",
+            currentToken,
+            folders,
+            path: currentPath
+          }
+        : {
+            status: "failed",
+            currentToken,
+            path: currentPath,
+            folders: []
+          });
+    });
+  };
+
+  const openLarkFolder = (
+    draft: RemoteSyncProviderDraftState,
+    provider: RemoteSyncProviderConfiguration,
+    folder: WorkbenchRemoteSyncLarkFolder
+  ) => {
+    const state = remoteSyncLarkFolderStates[draft.key];
+    const currentPath = state?.path ?? createLarkFolderPath(state?.currentToken ?? draft.remoteScopeId ?? "", messages);
+    listLarkFolders(draft, provider, folder.token, appendLarkFolderPath(currentPath, folder));
+  };
+
+  const createLarkFolder = (draft: RemoteSyncProviderDraftState, provider: RemoteSyncProviderConfiguration) => {
+    if (!remoteSyncLarkAuthActions?.isAvailable) {
+      return;
+    }
+
+    const normalizedName = getRemoteSyncLarkFolderNameDraft(draft.key).trim();
+
+    if (!normalizedName) {
+      setRemoteSyncLarkFolderState(draft.key, {
+        status: "failed",
+        folders: remoteSyncLarkFolderStates[draft.key]?.folders ?? [],
+        message: messages.settings.larkFolderCreatePrompt
+      });
+      return;
+    }
+
+    const state = remoteSyncLarkFolderStates[draft.key];
+    const parentToken = state?.currentToken ?? draft.remoteScopeId;
+    const parentPath = state?.path ?? createLarkFolderPath(parentToken ?? "", messages);
+
+    setRemoteSyncLarkFolderState(draft.key, {
+      status: "creating",
+      currentToken: parentToken ?? "",
+      folders: state?.folders ?? [],
+      path: parentPath
+    });
+    void remoteSyncLarkAuthActions.createFolder(provider, {
+      name: normalizedName,
+      parentToken
+    }).then((folder) => {
+      if (!folder) {
+        setRemoteSyncLarkFolderState(draft.key, { status: "failed", folders: [] });
+        return;
+      }
+
+      applyRemoteSyncProviderDraftRemoteScope(draft, folder.token);
+      const folderPath = appendLarkFolderPath(parentPath, folder);
+      setRemoteSyncLarkFolderState(draft.key, {
+        status: "selected",
+        currentToken: folder.token,
+        folders: [folder],
+        path: folderPath,
+        message: messages.settings.larkFolderCreated
+      });
+      setRemoteSyncLarkFolderNameDraft(draft.key, "");
+    });
+  };
+
+  const chooseLarkFolder = (
+    draft: RemoteSyncProviderDraftState,
+    token: string,
+    path?: readonly LarkFolderPathEntry[]
+  ) => {
+    applyRemoteSyncProviderDraftRemoteScope(draft, token);
+    setRemoteSyncLarkFolderState(draft.key, (state) => ({
+      ...state,
+      status: "selected",
+      currentToken: token,
+      folders: state.currentToken === token ? (state.folders ?? []) : [],
+      path: path ?? state.path ?? createLarkFolderPath(token, messages),
+      message: token ? messages.settings.larkFolderSelected : messages.settings.larkFolderRoot
+    }));
+  };
+
+  const applyRemoteSyncProviderDraftRemoteScope = (draft: RemoteSyncProviderDraftState, remoteScopeId: string) => {
+    const nextDraft = {
+      ...draft,
+      remoteScopeId
+    };
+
+    setRemoteSyncProviderDrafts((drafts) => drafts.map((candidate) =>
+      candidate.key === draft.key ? nextDraft : candidate
+    ));
+
+    if (!draft.originalId) {
+      return;
+    }
+
+    const nextProviders = upsertSettingsRemoteSyncProvider(
+      configuration.remoteSync.providers,
+      nextDraft,
+      draft.originalId
+    );
+
+    if (nextProviders !== configuration.remoteSync.providers) {
+      onUpdate({ remoteSync: { providers: nextProviders } });
+    }
+  };
+
+  const setRemoteSyncLarkAuthState = (
+    key: string,
+    value: LarkAuthState | ((state: LarkAuthState) => LarkAuthState)
+  ) => {
+    setRemoteSyncLarkAuthStates((states) => {
+      const currentState = states[key] ?? { status: "idle" as const };
+      return {
+        ...states,
+        [key]: typeof value === "function" ? value(currentState) : value
+      };
+    });
+  };
+
+  const setRemoteSyncLarkFolderState = (
+    key: string,
+    value: LarkFolderState | ((state: LarkFolderState) => LarkFolderState)
+  ) => {
+    setRemoteSyncLarkFolderStates((states) => {
+      const currentState = states[key] ?? { status: "idle" as const, folders: [] };
+      return {
+        ...states,
+        [key]: typeof value === "function" ? value(currentState) : value
+      };
+    });
+  };
+
+  const getRemoteSyncLarkFolderNameDraft = (key: string): string =>
+    remoteSyncLarkFolderNameDrafts[key] ?? "Typora Plus";
+
+  const setRemoteSyncLarkFolderNameDraft = (key: string, value: string) => {
+    setRemoteSyncLarkFolderNameDrafts((drafts) => ({
+      ...drafts,
+      [key]: value
+    }));
+  };
+
   const resetAiProviderDiagnostic = (key: string) => {
     markAiDiagnosticRequest(key);
     setAiDiagnosticStates((states) => ({ ...states, [key]: "idle" }));
@@ -456,9 +746,9 @@ export function SettingsDialog({
       }
 
       setAiDiagnosticStates((states) => ({ ...states, [draft.key]: response ? "passed" : "failed" }));
-      setAiDiagnosticMessages((messages) => ({
-        ...messages,
-        [draft.key]: response ? formatAiDiagnosticResponseMessage(response) : ""
+      setAiDiagnosticMessages((currentMessages) => ({
+        ...currentMessages,
+        [draft.key]: response ? formatAiDiagnosticResponseMessage(response, messages) : ""
       }));
     });
   };
@@ -504,16 +794,16 @@ export function SettingsDialog({
       <section
         className="tp-dialog tp-settings-dialog"
         role="dialog"
-        aria-label="Settings"
+        aria-label={messages.settings.title}
         aria-modal="true"
         onMouseDown={(event) => event.stopPropagation()}
       >
         <div className="tp-dialog-header">
           <div className="tp-dialog-title tp-settings-title">
             <SettingsIcon size={18} />
-            <span>Settings</span>
+            <span>{messages.settings.title}</span>
           </div>
-          <SettingsIconButton title="Close" onClick={onClose}>
+          <SettingsIconButton title={messages.common.close} onClick={onClose}>
             <X size={16} />
           </SettingsIconButton>
         </div>
@@ -524,20 +814,20 @@ export function SettingsDialog({
               <input
                 type="search"
                 value={settingsQuery}
-                aria-label="Search Settings"
+                aria-label={messages.settings.searchSettings}
                 onChange={(event) => setSettingsQuery(event.target.value)}
               />
               {settingsQuery ? (
                 <button
                   type="button"
-                  aria-label="Clear Settings Search"
+                  aria-label={messages.settings.clearSettingsSearch}
                   onClick={() => setSettingsQuery("")}
                 >
                   <X size={14} />
                 </button>
               ) : <span aria-hidden="true" />}
             </div>
-            <nav className="tp-settings-nav" aria-label="Settings Sections">
+            <nav className="tp-settings-nav" aria-label={messages.settings.settingsSections}>
               {settingsVisibility.visibleSections.map((section) => (
                 <button
                   className={activeSettingsSection === section.id ? "tp-settings-nav-button tp-settings-nav-button-active" : "tp-settings-nav-button"}
@@ -554,26 +844,26 @@ export function SettingsDialog({
           </aside>
           <div className="tp-settings-content" ref={settingsContentRef} onScroll={syncActiveSettingsSection}>
             {!settingsVisibility.hasResults ? (
-              <div className="tp-settings-empty-row">No matching settings</div>
+              <div className="tp-settings-empty-row">{messages.settings.noMatchingSettings}</div>
             ) : null}
             {isSettingsSectionVisible(settingsVisibility, settingsSectionIds.appearance) ? (
-              <SettingsSection sectionId={settingsSectionIds.appearance}>
+              <SettingsSection localization={settingsLocalization} sectionId={settingsSectionIds.appearance}>
                 {isSettingsEntryVisible(settingsVisibility, settingsEntryIds.appearance.theme) ? (
-                  <SettingsField label={getSettingsEntryLabel(settingsEntryIds.appearance.theme)}>
+                  <SettingsField label={entryLabel(settingsEntryIds.appearance.theme)}>
                     <SegmentedControl
-                      ariaLabel={getSettingsEntryLabel(settingsEntryIds.appearance.theme)}
+                      ariaLabel={entryLabel(settingsEntryIds.appearance.theme)}
                       value={configuration.appearance.colorScheme}
-                      options={settingsColorSchemeOptions}
+                      options={messages.settings.colorSchemeOptions}
                       onChange={(colorScheme) => onUpdate({ appearance: { colorScheme } })}
                     />
                   </SettingsField>
                 ) : null}
                 {isSettingsEntryVisible(settingsVisibility, settingsEntryIds.appearance.customTheme) ? (
-                  <SettingsField label={getSettingsEntryLabel(settingsEntryIds.appearance.customTheme)}>
+                  <SettingsField label={entryLabel(settingsEntryIds.appearance.customTheme)}>
                     <select
                       className="tp-settings-select"
                       value={selectedThemeId}
-                      aria-label={getSettingsEntryLabel(settingsEntryIds.appearance.customTheme)}
+                      aria-label={entryLabel(settingsEntryIds.appearance.customTheme)}
                       onChange={(event) => onUpdate({
                         appearance: {
                           themeId: event.target.value || undefined
@@ -589,12 +879,22 @@ export function SettingsDialog({
                   </SettingsField>
                 ) : null}
                 {isSettingsEntryVisible(settingsVisibility, settingsEntryIds.appearance.density) ? (
-                  <SettingsField label={getSettingsEntryLabel(settingsEntryIds.appearance.density)}>
+                  <SettingsField label={entryLabel(settingsEntryIds.appearance.density)}>
                     <SegmentedControl
-                      ariaLabel={getSettingsEntryLabel(settingsEntryIds.appearance.density)}
+                      ariaLabel={entryLabel(settingsEntryIds.appearance.density)}
                       value={configuration.appearance.density}
-                      options={settingsDensityOptions}
+                      options={messages.settings.densityOptions}
                       onChange={(density) => onUpdate({ appearance: { density } })}
+                    />
+                  </SettingsField>
+                ) : null}
+                {isSettingsEntryVisible(settingsVisibility, settingsEntryIds.appearance.language) ? (
+                  <SettingsField label={entryLabel(settingsEntryIds.appearance.language)}>
+                    <SegmentedControl
+                      ariaLabel={entryLabel(settingsEntryIds.appearance.language)}
+                      value={configuration.appearance.locale}
+                      options={messages.settings.localeOptions}
+                      onChange={(locale) => onUpdate({ appearance: { locale } })}
                     />
                   </SettingsField>
                 ) : null}
@@ -602,75 +902,83 @@ export function SettingsDialog({
             ) : null}
 
             {isSettingsSectionVisible(settingsVisibility, settingsSectionIds.editor) ? (
-              <SettingsSection sectionId={settingsSectionIds.editor}>
+              <SettingsSection localization={settingsLocalization} sectionId={settingsSectionIds.editor}>
                 {isSettingsEntryVisible(settingsVisibility, settingsEntryIds.editor.autoSave) ? (
-                  <SettingsField label={getSettingsEntryLabel(settingsEntryIds.editor.autoSave)}>
+                  <SettingsField label={entryLabel(settingsEntryIds.editor.autoSave)}>
                     <ToggleControl
                       checked={configuration.editor.autoSave}
-                      label={getSettingsEntryLabel(settingsEntryIds.editor.autoSave)}
+                      label={entryLabel(settingsEntryIds.editor.autoSave)}
+                      messages={messages}
                       onChange={(autoSave) => onUpdate({ editor: { autoSave } })}
                     />
                   </SettingsField>
                 ) : null}
                 {isSettingsEntryVisible(settingsVisibility, settingsEntryIds.editor.autoSaveDelay) ? (
                   <NumberSetting
-                    label={getSettingsEntryLabel(settingsEntryIds.editor.autoSaveDelay)}
+                    label={entryLabel(settingsEntryIds.editor.autoSaveDelay)}
                     value={configuration.editor.autoSaveDelayMs}
                     constraint={settingsNumberConstraints.editorAutoSaveDelayMs}
-                    unit="ms"
+                    messages={messages}
+                    unit={settingsNumberUnitIds.milliseconds}
                     onChange={(autoSaveDelayMs) => onUpdate({ editor: { autoSaveDelayMs } })}
                   />
                 ) : null}
                 {isSettingsEntryVisible(settingsVisibility, settingsEntryIds.editor.focusMode) ? (
-                  <SettingsField label={getSettingsEntryLabel(settingsEntryIds.editor.focusMode)}>
+                  <SettingsField label={entryLabel(settingsEntryIds.editor.focusMode)}>
                     <ToggleControl
                       checked={configuration.editor.focusMode}
-                      label={getSettingsEntryLabel(settingsEntryIds.editor.focusMode)}
+                      label={entryLabel(settingsEntryIds.editor.focusMode)}
+                      messages={messages}
                       onChange={(focusMode) => onUpdate({ editor: { focusMode } })}
                     />
                   </SettingsField>
                 ) : null}
                 {isSettingsEntryVisible(settingsVisibility, settingsEntryIds.editor.typewriterMode) ? (
-                  <SettingsField label={getSettingsEntryLabel(settingsEntryIds.editor.typewriterMode)}>
+                  <SettingsField label={entryLabel(settingsEntryIds.editor.typewriterMode)}>
                     <ToggleControl
                       checked={configuration.editor.typewriterMode}
-                      label={getSettingsEntryLabel(settingsEntryIds.editor.typewriterMode)}
+                      label={entryLabel(settingsEntryIds.editor.typewriterMode)}
+                      messages={messages}
                       onChange={(typewriterMode) => onUpdate({ editor: { typewriterMode } })}
                     />
                   </SettingsField>
                 ) : null}
                 {isSettingsEntryVisible(settingsVisibility, settingsEntryIds.editor.fontSize) ? (
                   <NumberSetting
-                    label={getSettingsEntryLabel(settingsEntryIds.editor.fontSize)}
+                    label={entryLabel(settingsEntryIds.editor.fontSize)}
                     value={configuration.editor.fontSize}
                     constraint={settingsNumberConstraints.editorFontSize}
-                    unit="px"
+                    messages={messages}
+                    unit={settingsNumberUnitIds.pixels}
                     onChange={(fontSize) => onUpdate({ editor: { fontSize } })}
                   />
                 ) : null}
                 {isSettingsEntryVisible(settingsVisibility, settingsEntryIds.editor.lineHeight) ? (
                   <NumberSetting
-                    label={getSettingsEntryLabel(settingsEntryIds.editor.lineHeight)}
+                    label={entryLabel(settingsEntryIds.editor.lineHeight)}
                     value={configuration.editor.lineHeight}
                     constraint={settingsNumberConstraints.editorLineHeight}
+                    messages={messages}
                     onChange={(lineHeight) => onUpdate({ editor: { lineHeight } })}
                   />
                 ) : null}
                 {isSettingsEntryVisible(settingsVisibility, settingsEntryIds.editor.maxWidth) ? (
                   <NumberSetting
-                    label={getSettingsEntryLabel(settingsEntryIds.editor.maxWidth)}
+                    label={entryLabel(settingsEntryIds.editor.maxWidth)}
                     value={configuration.editor.maxWidth}
                     constraint={settingsNumberConstraints.editorMaxWidth}
-                    unit="px"
+                    messages={messages}
+                    unit={settingsNumberUnitIds.pixels}
                     onChange={(maxWidth) => onUpdate({ editor: { maxWidth } })}
                   />
                 ) : null}
                 {isSettingsEntryVisible(settingsVisibility, settingsEntryIds.editor.rendererPreviewCacheEntries) ? (
                   <NumberSetting
-                    label={getSettingsEntryLabel(settingsEntryIds.editor.rendererPreviewCacheEntries)}
+                    label={entryLabel(settingsEntryIds.editor.rendererPreviewCacheEntries)}
                     value={configuration.editor.rendererPreviewCacheEntries}
                     constraint={settingsNumberConstraints.editorRendererPreviewCacheEntries}
-                    unit="entries"
+                    messages={messages}
+                    unit={settingsNumberUnitIds.entries}
                     onChange={(rendererPreviewCacheEntries) => onUpdate({ editor: { rendererPreviewCacheEntries } })}
                   />
                 ) : null}
@@ -678,7 +986,7 @@ export function SettingsDialog({
             ) : null}
 
             {isSettingsSectionVisible(settingsVisibility, settingsSectionIds.ai) ? (
-              <SettingsSection sectionId={settingsSectionIds.ai}>
+              <SettingsSection localization={settingsLocalization} sectionId={settingsSectionIds.ai}>
                 {isSettingsEntryVisible(settingsVisibility, settingsEntryIds.ai.providers) ? (
                   <>
                     <div className="tp-settings-provider-toolbar">
@@ -689,7 +997,7 @@ export function SettingsDialog({
                         onClick={addAiProviderDraft}
                       >
                         <Plus size={13} />
-                        <span>Add Provider</span>
+                        <span>{messages.settings.addProvider}</span>
                       </button>
                     </div>
                     <div className="tp-settings-provider-list">
@@ -714,7 +1022,7 @@ export function SettingsDialog({
                         return (
                           <section className="tp-settings-provider-card" key={draft.key}>
                             <div className="tp-settings-provider-card-header">
-                              <span>{draft.title || draft.id || "AI Provider"}</span>
+                              <span>{draft.title || draft.id || messages.settings.aiProviderFallback}</span>
                               <div className="tp-settings-provider-card-actions">
                                 <button
                                   className="tp-settings-small-button"
@@ -723,7 +1031,7 @@ export function SettingsDialog({
                                   onClick={() => testAiProvider(draft)}
                                 >
                                   <RefreshCw size={13} />
-                                  <span>{formatAiDiagnosticButtonLabel(diagnosticState)}</span>
+                                  <span>{formatAiDiagnosticButtonLabel(diagnosticState, messages)}</span>
                                 </button>
                                 <button
                                   className="tp-settings-small-button"
@@ -732,7 +1040,7 @@ export function SettingsDialog({
                                   onClick={() => saveAiProviderDraft(draft)}
                                 >
                                   <Save size={13} />
-                                  <span>Save</span>
+                                  <span>{messages.common.save}</span>
                                 </button>
                                 <button
                                   className="tp-settings-small-button"
@@ -740,63 +1048,63 @@ export function SettingsDialog({
                                   onClick={() => removeAiProviderDraft(draft)}
                                 >
                                   <Trash2 size={13} />
-                                  <span>Remove</span>
+                                  <span>{messages.common.remove}</span>
                                 </button>
                               </div>
                             </div>
-                            <SettingsField label="Provider ID">
+                            <SettingsField label={messages.settings.providerId}>
                               <input
                                 className="tp-settings-text-input"
                                 type="text"
                                 value={draft.id}
-                                aria-label="AI Provider ID"
+                                aria-label={messages.settings.providerId}
                                 onChange={(event) => updateAiProviderDraft(draft.key, { id: event.target.value })}
                               />
                             </SettingsField>
-                            <SettingsField label="Title">
+                            <SettingsField label={messages.settings.titleField}>
                               <input
                                 className="tp-settings-text-input"
                                 type="text"
                                 value={draft.title}
-                                aria-label="AI Provider Title"
+                                aria-label={messages.settings.titleField}
                                 onChange={(event) => updateAiProviderDraft(draft.key, { title: event.target.value })}
                               />
                             </SettingsField>
-                            <SettingsField label="Endpoint">
+                            <SettingsField label={messages.settings.endpoint}>
                               <input
                                 className="tp-settings-text-input"
                                 type="url"
                                 value={draft.endpointUrl}
-                                aria-label="AI Provider Endpoint"
+                                aria-label={messages.settings.endpoint}
                                 onChange={(event) => updateAiProviderDraft(draft.key, { endpointUrl: event.target.value })}
                               />
                             </SettingsField>
-                            <SettingsField label="Model">
+                            <SettingsField label={messages.settings.model}>
                               <input
                                 className="tp-settings-text-input"
                                 type="text"
                                 value={draft.model}
-                                aria-label="AI Provider Model"
+                                aria-label={messages.settings.model}
                                 onChange={(event) => updateAiProviderDraft(draft.key, { model: event.target.value })}
                               />
                             </SettingsField>
-                            <SettingsField label="Reasoning">
+                            <SettingsField label={messages.settings.reasoning}>
                               <SegmentedControl
-                                ariaLabel="AI Provider Reasoning"
+                                ariaLabel={messages.settings.reasoning}
                                 value={draft.reasoningEffort}
-                                options={settingsAiReasoningEffortOptions}
+                                options={messages.settings.reasoningOptions}
                                 onChange={(reasoningEffort) => updateAiProviderDraft(draft.key, { reasoningEffort })}
                               />
                             </SettingsField>
-                            <SettingsField label="Verbosity">
+                            <SettingsField label={messages.settings.verbosity}>
                               <SegmentedControl
-                                ariaLabel="AI Provider Verbosity"
+                                ariaLabel={messages.settings.verbosity}
                                 value={draft.textVerbosity}
-                                options={settingsAiTextVerbosityOptions}
+                                options={messages.settings.textVerbosityOptions}
                                 onChange={(textVerbosity) => updateAiProviderDraft(draft.key, { textVerbosity })}
                               />
                             </SettingsField>
-                            <SettingsField label="Max Output">
+                            <SettingsField label={messages.settings.maxOutput}>
                               <input
                                 className="tp-settings-text-input"
                                 type="number"
@@ -804,35 +1112,36 @@ export function SettingsDialog({
                                 max={settingsNumberConstraints.aiProviderMaxOutputTokens.max}
                                 step={settingsNumberConstraints.aiProviderMaxOutputTokens.step}
                                 value={draft.maxOutputTokens}
-                                aria-label="AI Provider Max Output Tokens"
+                                aria-label={messages.settings.maxOutput}
                                 onChange={(event) => updateAiProviderDraft(draft.key, {
                                   maxOutputTokens: event.target.value
                                 })}
                               />
                             </SettingsField>
-                            <SettingsField label="Secret Ref">
+                            <SettingsField label={messages.settings.secretRef}>
                               <input
                                 className="tp-settings-text-input"
                                 type="text"
                                 value={draft.secretRef}
-                                aria-label="AI Provider Secret Reference"
+                                aria-label={messages.settings.secretRef}
                                 onChange={(event) => updateAiProviderDraft(draft.key, { secretRef: event.target.value })}
                               />
                             </SettingsField>
-                            <SettingsField label="Store Response">
+                            <SettingsField label={messages.settings.storeResponse}>
                               <ToggleControl
                                 checked={draft.store}
-                                label="AI Provider Store Response"
+                                label={messages.settings.storeResponse}
+                                messages={messages}
                                 onChange={(store) => updateAiProviderDraft(draft.key, { store })}
                               />
                             </SettingsField>
-                            <SettingsField label="API Key">
+                            <SettingsField label={messages.settings.apiKey}>
                               <span className="tp-settings-secret-control">
                                 <input
                                   className="tp-settings-text-input"
                                   type="password"
                                   value={secretValue}
-                                  aria-label="AI Provider API Key"
+                                  aria-label={messages.settings.apiKey}
                                   disabled={!aiSecretActions?.isAvailable}
                                   onChange={(event) => updateAiSecretDraft(draft.key, event.target.value)}
                                 />
@@ -843,7 +1152,7 @@ export function SettingsDialog({
                                   onClick={() => saveAiSecret(draft)}
                                 >
                                   <KeyRound size={13} />
-                                  <span>{formatSecretSaveLabel(secretState)}</span>
+                                  <span>{formatSecretSaveLabel(secretState, messages)}</span>
                                 </button>
                                 <button
                                   className="tp-settings-small-button"
@@ -852,41 +1161,45 @@ export function SettingsDialog({
                                   onClick={() => deleteAiSecret(draft)}
                                 >
                                   <Trash2 size={13} />
-                                  <span>{formatSecretDeleteLabel(secretState)}</span>
+                                  <span>{formatSecretDeleteLabel(secretState, messages)}</span>
                                 </button>
                               </span>
                             </SettingsField>
                             {validation.issues.length > 0 ? (
-                              <div className="tp-settings-validation-row">{validation.issues[0]}</div>
+                              <div className="tp-settings-validation-row">
+                                {formatFirstSettingsValidationIssue(validation.issues, messages)}
+                              </div>
                             ) : null}
                             {diagnosticState !== "idle" ? (
                               <div className={`tp-settings-diagnostic-row tp-settings-diagnostic-row-${diagnosticState}`}>
-                                {formatAiDiagnosticStatusMessage(diagnosticState, diagnosticMessage)}
+                                {formatAiDiagnosticStatusMessage(diagnosticState, diagnosticMessage, messages)}
                               </div>
                             ) : null}
                           </section>
                         );
                       })}
                       {aiProviderDrafts.length === 0 ? (
-                        <div className="tp-settings-empty-row">No AI providers configured</div>
+                        <div className="tp-settings-empty-row">{messages.settings.noAiProviders}</div>
                       ) : null}
                     </div>
                   </>
                 ) : null}
                 {isSettingsEntryVisible(settingsVisibility, settingsEntryIds.ai.workspaceContextMaxResults) ? (
                   <NumberSetting
-                    label={getSettingsEntryLabel(settingsEntryIds.ai.workspaceContextMaxResults)}
+                    label={entryLabel(settingsEntryIds.ai.workspaceContextMaxResults)}
                     value={configuration.ai.workspaceContextMaxResults}
                     constraint={settingsNumberConstraints.aiWorkspaceContextMaxResults}
+                    messages={messages}
                     onChange={(workspaceContextMaxResults) => onUpdate({ ai: { workspaceContextMaxResults } })}
                   />
                 ) : null}
                 {isSettingsEntryVisible(settingsVisibility, settingsEntryIds.ai.workspaceContextMaxPreviewLength) ? (
                   <NumberSetting
-                    label={getSettingsEntryLabel(settingsEntryIds.ai.workspaceContextMaxPreviewLength)}
+                    label={entryLabel(settingsEntryIds.ai.workspaceContextMaxPreviewLength)}
                     value={configuration.ai.workspaceContextMaxPreviewLength}
                     constraint={settingsNumberConstraints.aiWorkspaceContextMaxPreviewLength}
-                    unit="chars"
+                    messages={messages}
+                    unit={settingsNumberUnitIds.characters}
                     onChange={(workspaceContextMaxPreviewLength) => onUpdate({ ai: { workspaceContextMaxPreviewLength } })}
                   />
                 ) : null}
@@ -894,7 +1207,7 @@ export function SettingsDialog({
             ) : null}
 
             {isSettingsSectionVisible(settingsVisibility, settingsSectionIds.remoteSync) ? (
-              <SettingsSection sectionId={settingsSectionIds.remoteSync}>
+              <SettingsSection localization={settingsLocalization} sectionId={settingsSectionIds.remoteSync}>
                 {isSettingsEntryVisible(settingsVisibility, settingsEntryIds.remoteSync.providers) ? (
                   <>
                     <div className="tp-settings-provider-toolbar">
@@ -908,7 +1221,19 @@ export function SettingsDialog({
                         onClick={addRemoteSyncProviderDraft}
                       >
                         <Plus size={13} />
-                        <span>Add Profile</span>
+                        <span>{messages.settings.addProfile}</span>
+                      </button>
+                      <button
+                        className="tp-settings-small-button"
+                        type="button"
+                        disabled={
+                          !canAddSettingsRemoteSyncProvider(configuration.remoteSync.providers) ||
+                          hasUnsavedRemoteSyncProviderDraft
+                        }
+                        onClick={addLarkRemoteSyncProviderDraft}
+                      >
+                        <Plus size={13} />
+                        <span>{messages.settings.addLarkProfile}</span>
                       </button>
                     </div>
                     <div className="tp-settings-provider-list">
@@ -919,11 +1244,21 @@ export function SettingsDialog({
                           draft.originalId
                         );
                         const secretBindings = validation.provider?.secrets ?? [];
+                        const larkAuthState = remoteSyncLarkAuthStates[draft.key] ?? { status: "idle" as const };
+                        const larkFolderState = remoteSyncLarkFolderStates[draft.key] ?? { status: "idle" as const, folders: [] };
+                        const showLarkAuthorization = isSettingsLarkRawMirrorProviderDraft(draft);
+                        const canUseLarkAuthorization = !!validation.provider && !!remoteSyncLarkAuthActions?.isAvailable;
+                        const larkFolderNameDraft = getRemoteSyncLarkFolderNameDraft(draft.key);
+                        const larkAuthStatusMessage = formatLarkAuthStatusMessage(larkAuthState, messages);
+                        const larkFolderStatusMessage = formatLarkFolderStatusMessage(larkFolderState, messages);
+                        const larkFolderCurrentToken = larkFolderState.currentToken ?? draft.remoteScopeId ?? "";
+                        const larkFolderPath = larkFolderState.path ??
+                          createLarkFolderPath(larkFolderCurrentToken, messages);
 
                         return (
                           <section className="tp-settings-provider-card" key={draft.key}>
                             <div className="tp-settings-provider-card-header">
-                              <span>{draft.title || draft.id || "Remote Sync Profile"}</span>
+                              <span>{draft.title || draft.id || messages.settings.remoteSyncProfileFallback}</span>
                               <div className="tp-settings-provider-card-actions">
                                 <button
                                   className="tp-settings-small-button"
@@ -932,7 +1267,7 @@ export function SettingsDialog({
                                   onClick={() => saveRemoteSyncProviderDraft(draft)}
                                 >
                                   <Save size={13} />
-                                  <span>Save</span>
+                                  <span>{messages.common.save}</span>
                                 </button>
                                 <button
                                   className="tp-settings-small-button"
@@ -940,64 +1275,225 @@ export function SettingsDialog({
                                   onClick={() => removeRemoteSyncProviderDraft(draft)}
                                 >
                                   <Trash2 size={13} />
-                                  <span>Remove</span>
+                                  <span>{messages.common.remove}</span>
                                 </button>
                               </div>
                             </div>
-                            <SettingsField label="Provider ID">
+                            <SettingsField label={messages.settings.providerId}>
                               <input
                                 className="tp-settings-text-input"
                                 type="text"
                                 value={draft.id}
-                                aria-label="Remote Sync Provider ID"
+                                aria-label={messages.settings.providerId}
                                 onChange={(event) => updateRemoteSyncProviderDraft(draft.key, { id: event.target.value })}
                               />
                             </SettingsField>
-                            <SettingsField label="Title">
+                            <SettingsField label={messages.settings.titleField}>
                               <input
                                 className="tp-settings-text-input"
                                 type="text"
                                 value={draft.title}
-                                aria-label="Remote Sync Provider Title"
+                                aria-label={messages.settings.titleField}
                                 onChange={(event) => updateRemoteSyncProviderDraft(draft.key, { title: event.target.value })}
                               />
                             </SettingsField>
-                            <SettingsField label="Base URL">
+                            <SettingsField label={messages.settings.baseUrl}>
                               <input
                                 className="tp-settings-text-input"
                                 type="url"
                                 value={draft.baseUrl}
-                                aria-label="Remote Sync Provider Base URL"
+                                aria-label={messages.settings.baseUrl}
                                 onChange={(event) => updateRemoteSyncProviderDraft(draft.key, { baseUrl: event.target.value })}
                               />
                             </SettingsField>
-                            <SettingsField label="Remote Scope">
+                            <SettingsField label={messages.settings.remoteScope}>
                               <input
                                 className="tp-settings-text-input"
                                 type="text"
                                 value={draft.remoteScopeId}
-                                aria-label="Remote Sync Provider Scope"
+                                aria-label={messages.settings.remoteScope}
                                 onChange={(event) => updateRemoteSyncProviderDraft(draft.key, { remoteScopeId: event.target.value })}
                               />
                             </SettingsField>
                             <RawMirrorSettingsFields
                               draft={draft}
+                              messages={messages}
                               onChange={(updatedDraft) =>
                                 updateRemoteSyncProviderDraft(draft.key, { metadataText: updatedDraft.metadataText })}
                             />
-                            <SettingsField label="Secret Bindings">
+                            {showLarkAuthorization ? (
+                              <SettingsField label={messages.settings.larkAuthorization}>
+                                <span className="tp-settings-lark-auth-control">
+                                  <span className="tp-settings-lark-auth-actions">
+                                    <button
+                                      className="tp-settings-small-button"
+                                      type="button"
+                                      disabled={!canUseLarkAuthorization}
+                                      onClick={() => validation.provider && checkLarkAuthorization(draft, validation.provider)}
+                                    >
+                                      <RefreshCw size={13} />
+                                      <span>{messages.settings.larkAuthCheck}</span>
+                                    </button>
+                                    <button
+                                      className="tp-settings-small-button"
+                                      type="button"
+                                      disabled={!canUseLarkAuthorization || larkAuthState.status === "starting"}
+                                      onClick={() => validation.provider && startLarkAuthorization(draft, validation.provider)}
+                                    >
+                                      <KeyRound size={13} />
+                                      <span>{messages.settings.larkAuthStart}</span>
+                                    </button>
+                                    <button
+                                      className="tp-settings-small-button"
+                                      type="button"
+                                      disabled={
+                                        !canUseLarkAuthorization ||
+                                        !larkAuthState.deviceCode ||
+                                        larkAuthState.status === "completing"
+                                      }
+                                      onClick={() => validation.provider &&
+                                        completeLarkAuthorization(draft, validation.provider, larkAuthState.deviceCode)}
+                                    >
+                                      <Save size={13} />
+                                      <span>{messages.settings.larkAuthComplete}</span>
+                                    </button>
+                                  </span>
+                                  {larkAuthStatusMessage ? (
+                                    <span className={`tp-settings-lark-auth-status tp-settings-lark-auth-status-${larkAuthState.status}`}>
+                                      {larkAuthStatusMessage}
+                                    </span>
+                                  ) : null}
+                                  {larkAuthState.userCode ? (
+                                    <span className="tp-settings-lark-auth-detail">
+                                      <small>{messages.settings.larkAuthDeviceCode}</small>
+                                      <code>{larkAuthState.userCode}</code>
+                                    </span>
+                                  ) : null}
+                                  {larkAuthState.verificationUrl ? (
+                                    <a
+                                      className="tp-settings-lark-auth-link"
+                                      href={larkAuthState.verificationUrl}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                    >
+                                      {messages.settings.larkAuthUrl}
+                                    </a>
+                                  ) : null}
+                                </span>
+                              </SettingsField>
+                            ) : null}
+                            {showLarkAuthorization ? (
+                              <SettingsField label={messages.settings.larkFolderTools}>
+                                <span className="tp-settings-lark-folder-control">
+                                  <input
+                                    className="tp-settings-text-input tp-settings-lark-folder-name-input"
+                                    type="text"
+                                    value={larkFolderNameDraft}
+                                    aria-label={messages.settings.larkFolderCreatePrompt}
+                                    placeholder={messages.settings.larkFolderCreatePrompt}
+                                    disabled={!canUseLarkAuthorization || larkFolderState.status === "creating"}
+                                    onChange={(event) =>
+                                      setRemoteSyncLarkFolderNameDraft(draft.key, event.target.value)}
+                                  />
+                                  <span className="tp-settings-lark-auth-actions">
+                                    <button
+                                      className="tp-settings-small-button"
+                                      type="button"
+                                      disabled={!canUseLarkAuthorization || larkFolderState.status === "loading"}
+                                      onClick={() => validation.provider &&
+                                        listLarkFolders(draft, validation.provider, larkFolderCurrentToken, larkFolderPath)}
+                                    >
+                                      <FolderOpen size={13} />
+                                      <span>{messages.settings.larkFolderList}</span>
+                                    </button>
+                                    <button
+                                      className="tp-settings-small-button"
+                                      type="button"
+                                      disabled={
+                                        !canUseLarkAuthorization ||
+                                        larkFolderState.status === "creating" ||
+                                        !larkFolderNameDraft.trim()
+                                      }
+                                      onClick={() => validation.provider && createLarkFolder(draft, validation.provider)}
+                                    >
+                                      <FolderPlus size={13} />
+                                      <span>{messages.settings.larkFolderCreate}</span>
+                                    </button>
+                                    <button
+                                      className="tp-settings-small-button"
+                                      type="button"
+                                      disabled={!canUseLarkAuthorization}
+                                      onClick={() => chooseLarkFolder(draft, "", createLarkFolderPath("", messages))}
+                                    >
+                                      <RefreshCw size={13} />
+                                      <span>{messages.settings.larkFolderRoot}</span>
+                                    </button>
+                                  </span>
+                                  <span className="tp-settings-lark-folder-current">
+                                    <small>{messages.settings.larkFolderCurrent}</small>
+                                    <span>{larkFolderPath.map((entry) => entry.name).join(" / ")}</span>
+                                    <button
+                                      className="tp-settings-small-button"
+                                      type="button"
+                                      disabled={!canUseLarkAuthorization}
+                                      onClick={() => chooseLarkFolder(draft, larkFolderCurrentToken, larkFolderPath)}
+                                    >
+                                      <Check size={13} />
+                                      <span>{messages.settings.larkFolderSelectCurrent}</span>
+                                    </button>
+                                  </span>
+                                  {(larkFolderState.folders?.length ?? 0) > 0 ? (
+                                    <span className="tp-settings-lark-folder-list" aria-label={messages.settings.larkFolderSelect}>
+                                      {larkFolderState.folders?.map((folder) => {
+                                        const folderPath = appendLarkFolderPath(larkFolderPath, folder);
+
+                                        return (
+                                          <span className="tp-settings-lark-folder-row" key={folder.token}>
+                                            <button
+                                              className="tp-settings-lark-folder-name"
+                                              type="button"
+                                              disabled={!canUseLarkAuthorization}
+                                              onClick={() => validation.provider &&
+                                                openLarkFolder(draft, validation.provider, folder)}
+                                            >
+                                              <FolderOpen size={13} />
+                                              <span>{folder.name}</span>
+                                            </button>
+                                            <button
+                                              className="tp-settings-small-button"
+                                              type="button"
+                                              disabled={!canUseLarkAuthorization}
+                                              onClick={() => chooseLarkFolder(draft, folder.token, folderPath)}
+                                            >
+                                              <Check size={13} />
+                                              <span>{messages.settings.larkFolderSelect}</span>
+                                            </button>
+                                          </span>
+                                        );
+                                      })}
+                                    </span>
+                                  ) : null}
+                                  {larkFolderStatusMessage ? (
+                                    <span className={`tp-settings-lark-auth-status tp-settings-lark-auth-status-${larkFolderState.status === "failed" ? "failed" : "authorized"}`}>
+                                      {larkFolderStatusMessage}
+                                    </span>
+                                  ) : null}
+                                </span>
+                              </SettingsField>
+                            ) : null}
+                            <SettingsField label={messages.settings.secretBindings}>
                               <textarea
                                 className="tp-settings-textarea"
                                 value={draft.secretsText}
-                                aria-label="Remote Sync Provider Secret Bindings"
+                                aria-label={messages.settings.secretBindings}
                                 onChange={(event) => updateRemoteSyncProviderDraft(draft.key, { secretsText: event.target.value })}
                               />
                             </SettingsField>
-                            <SettingsField label="Metadata">
+                            <SettingsField label={messages.settings.metadata}>
                               <textarea
                                 className="tp-settings-textarea"
                                 value={draft.metadataText}
-                                aria-label="Remote Sync Provider Metadata"
+                                aria-label={messages.settings.metadata}
                                 onChange={(event) => updateRemoteSyncProviderDraft(draft.key, { metadataText: event.target.value })}
                               />
                             </SettingsField>
@@ -1019,7 +1515,7 @@ export function SettingsDialog({
                                           className="tp-settings-text-input"
                                           type="password"
                                           value={secretValue}
-                                          aria-label={`Remote Sync Secret ${secret.name}`}
+                                          aria-label={formatRemoteSyncSecretAriaLabel(secret.name, messages)}
                                           disabled={!remoteSyncSecretActions?.isAvailable}
                                           onChange={(event) => updateRemoteSyncSecretDraft(secretKey, event.target.value)}
                                         />
@@ -1030,7 +1526,7 @@ export function SettingsDialog({
                                           onClick={() => saveRemoteSyncSecret(secretKey, secret.secretRef)}
                                         >
                                           <KeyRound size={13} />
-                                          <span>{formatSecretSaveLabel(secretState)}</span>
+                                          <span>{formatSecretSaveLabel(secretState, messages)}</span>
                                         </button>
                                         <button
                                           className="tp-settings-small-button"
@@ -1039,7 +1535,7 @@ export function SettingsDialog({
                                           onClick={() => deleteRemoteSyncSecret(secretKey, secret.secretRef)}
                                         >
                                           <Trash2 size={13} />
-                                          <span>{formatSecretDeleteLabel(secretState)}</span>
+                                          <span>{formatSecretDeleteLabel(secretState, messages)}</span>
                                         </button>
                                       </span>
                                     </SettingsField>
@@ -1048,13 +1544,15 @@ export function SettingsDialog({
                               </div>
                             ) : null}
                             {validation.issues.length > 0 ? (
-                              <div className="tp-settings-validation-row">{validation.issues[0]}</div>
+                              <div className="tp-settings-validation-row">
+                                {formatFirstSettingsValidationIssue(validation.issues, messages)}
+                              </div>
                             ) : null}
                           </section>
                         );
                       })}
                       {remoteSyncProviderDrafts.length === 0 ? (
-                        <div className="tp-settings-empty-row">No remote sync profiles configured</div>
+                        <div className="tp-settings-empty-row">{messages.settings.noRemoteSyncProfiles}</div>
                       ) : null}
                     </div>
                   </>
@@ -1063,14 +1561,14 @@ export function SettingsDialog({
             ) : null}
 
             {isSettingsSectionVisible(settingsVisibility, settingsSectionIds.workspace) ? (
-              <SettingsSection sectionId={settingsSectionIds.workspace}>
+              <SettingsSection localization={settingsLocalization} sectionId={settingsSectionIds.workspace}>
                 {isSettingsEntryVisible(settingsVisibility, settingsEntryIds.workspace.defaultAssetFolder) ? (
-                  <SettingsField label={getSettingsEntryLabel(settingsEntryIds.workspace.defaultAssetFolder)}>
+                  <SettingsField label={entryLabel(settingsEntryIds.workspace.defaultAssetFolder)}>
                     <input
                       className="tp-settings-text-input"
                       type="text"
                       value={assetFolderDraft}
-                      aria-label={getSettingsEntryLabel(settingsEntryIds.workspace.defaultAssetFolder)}
+                      aria-label={entryLabel(settingsEntryIds.workspace.defaultAssetFolder)}
                       onChange={(event) => setAssetFolderDraft(event.target.value)}
                       onBlur={commitAssetFolder}
                       onKeyDown={(event) => {
@@ -1083,10 +1581,11 @@ export function SettingsDialog({
                 ) : null}
                 {isSettingsEntryVisible(settingsVisibility, settingsEntryIds.workspace.searchMaxFileSize) ? (
                   <NumberSetting
-                    label={getSettingsEntryLabel(settingsEntryIds.workspace.searchMaxFileSize)}
+                    label={entryLabel(settingsEntryIds.workspace.searchMaxFileSize)}
                     value={searchMaxFileSizeMegabytes}
                     constraint={settingsNumberConstraints.workspaceSearchMaxFileSizeMegabytes}
-                    unit="MB"
+                    messages={messages}
+                    unit={settingsNumberUnitIds.megabytes}
                     onChange={(value) => onUpdate({
                       workspace: {
                         searchMaxFileSizeBytes: megabytesToBytes(value)
@@ -1096,17 +1595,19 @@ export function SettingsDialog({
                 ) : null}
                 {isSettingsEntryVisible(settingsVisibility, settingsEntryIds.workspace.quickOpenMaxResults) ? (
                   <NumberSetting
-                    label={getSettingsEntryLabel(settingsEntryIds.workspace.quickOpenMaxResults)}
+                    label={entryLabel(settingsEntryIds.workspace.quickOpenMaxResults)}
                     value={configuration.workspace.quickOpenMaxResults}
                     constraint={settingsNumberConstraints.workspaceQuickOpenMaxResults}
+                    messages={messages}
                     onChange={(quickOpenMaxResults) => onUpdate({ workspace: { quickOpenMaxResults } })}
                   />
                 ) : null}
                 {isSettingsEntryVisible(settingsVisibility, settingsEntryIds.workspace.searchMaxResults) ? (
                   <NumberSetting
-                    label={getSettingsEntryLabel(settingsEntryIds.workspace.searchMaxResults)}
+                    label={entryLabel(settingsEntryIds.workspace.searchMaxResults)}
                     value={configuration.workspace.searchMaxResults}
                     constraint={settingsNumberConstraints.workspaceSearchMaxResults}
+                    messages={messages}
                     onChange={(searchMaxResults) => onUpdate({ workspace: { searchMaxResults } })}
                   />
                 ) : null}
@@ -1114,19 +1615,19 @@ export function SettingsDialog({
             ) : null}
 
             {isSettingsSectionVisible(settingsVisibility, settingsSectionIds.keybindings) ? (
-              <SettingsSection sectionId={settingsSectionIds.keybindings}>
+              <SettingsSection localization={settingsLocalization} sectionId={settingsSectionIds.keybindings}>
                 <div className="tp-settings-keybinding-search">
                   <Search size={15} />
                   <input
                     type="search"
                     value={keybindingQuery}
-                    aria-label="Search Keybindings"
+                    aria-label={messages.settings.keybindingsSearch}
                     onChange={(event) => setKeybindingQuery(event.target.value)}
                   />
                   {keybindingQuery ? (
                     <button
                       type="button"
-                      aria-label="Clear Keybinding Search"
+                      aria-label={messages.settings.clearKeybindingSearch}
                       onClick={() => setKeybindingQuery("")}
                     >
                       <X size={14} />
@@ -1138,10 +1639,10 @@ export function SettingsDialog({
                     <input
                       type="checkbox"
                       checked={modifiedKeybindingsOnly}
-                      aria-label="Modified Keybindings"
+                      aria-label={messages.settings.modifiedKeybindings}
                       onChange={(event) => setModifiedKeybindingsOnly(event.target.checked)}
                     />
-                    <span>Modified</span>
+                    <span>{messages.settings.modified}</span>
                   </label>
                   <button
                     className="tp-settings-small-button"
@@ -1156,7 +1657,7 @@ export function SettingsDialog({
                       });
                     }}
                   >
-                    Reset All
+                    {messages.settings.resetAll}
                   </button>
                 </div>
                 <div className="tp-settings-keybinding-list">
@@ -1171,7 +1672,7 @@ export function SettingsDialog({
                           {command.category ? <small>{command.category}</small> : null}
                         </span>
                         <kbd className={recording ? "tp-settings-keybinding-value tp-settings-keybinding-value-recording" : "tp-settings-keybinding-value"}>
-                          {recording ? "Press keys" : getKeybindingLabel(command.id) ?? "Unassigned"}
+                          {recording ? messages.settings.pressKeys : getKeybindingLabel(command.id) ?? messages.settings.unassigned}
                         </kbd>
                         <button
                           className="tp-settings-small-button"
@@ -1181,7 +1682,7 @@ export function SettingsDialog({
                             setRecordingCommand(command.id);
                           }}
                         >
-                          Record
+                          {messages.settings.record}
                         </button>
                         <button
                           className="tp-settings-small-button"
@@ -1193,12 +1694,15 @@ export function SettingsDialog({
                             }
                           })}
                         >
-                          Reset
+                          {messages.common.reset}
                         </button>
                         {pendingKeybinding?.command === command.id ? (
                           <div className="tp-settings-keybinding-conflict">
                             <span>
-                              {pendingKeybinding.label} is used by {commandTitle(commands, pendingKeybinding.conflictCommand)}.
+                              {messages.settings.keybindingConflict(
+                                pendingKeybinding.label,
+                                commandTitle(commands, pendingKeybinding.conflictCommand)
+                              )}
                             </span>
                             <button
                               className="tp-settings-small-button"
@@ -1208,14 +1712,14 @@ export function SettingsDialog({
                                 setPendingKeybinding(undefined);
                               }}
                             >
-                              Replace
+                              {messages.settings.replace}
                             </button>
                             <button
                               className="tp-settings-small-button"
                               type="button"
                               onClick={() => setPendingKeybinding(undefined)}
                             >
-                              Cancel
+                              {messages.common.cancel}
                             </button>
                           </div>
                         ) : null}
@@ -1224,7 +1728,9 @@ export function SettingsDialog({
                   })}
                   {filteredKeybindingCommands.length === 0 ? (
                     <div className="tp-settings-empty-row">
-                      {modifiedKeybindingsOnly && !hasKeybindingOverrides ? "No modified shortcuts" : "No matching commands"}
+                      {modifiedKeybindingsOnly && !hasKeybindingOverrides
+                        ? messages.settings.noModifiedShortcuts
+                        : messages.settings.noMatchingCommands}
                     </div>
                   ) : null}
                 </div>
@@ -1246,6 +1752,28 @@ interface PendingKeybindingOverride {
 
 type SecretState = "idle" | "saved" | "deleted" | "failed";
 type AiDiagnosticState = "idle" | "testing" | "passed" | "failed";
+type LarkAuthStatusState = "authorized" | "checking" | "completing" | "failed" | "idle" | "ready" | "starting";
+type LarkFolderStatusState = "creating" | "failed" | "idle" | "loading" | "ready" | "selected";
+
+interface LarkAuthState {
+  readonly status: LarkAuthStatusState;
+  readonly deviceCode?: string;
+  readonly userCode?: string;
+  readonly verificationUrl?: string;
+}
+
+interface LarkFolderState {
+  readonly status: LarkFolderStatusState;
+  readonly currentToken?: string;
+  readonly folders?: readonly WorkbenchRemoteSyncLarkFolder[];
+  readonly message?: string;
+  readonly path?: readonly LarkFolderPathEntry[];
+}
+
+interface LarkFolderPathEntry {
+  readonly name: string;
+  readonly token: string;
+}
 
 interface AiProviderDraftState extends SettingsAiProviderDraft {
   readonly key: string;
@@ -1277,6 +1805,58 @@ function createRemoteSyncProviderDraftStates(
   }));
 }
 
+function createLarkAuthStartState(result: WorkbenchRemoteSyncLarkAuthStart): LarkAuthState {
+  return {
+    status: "ready",
+    deviceCode: result.deviceCode,
+    ...(result.userCode ? { userCode: result.userCode } : {}),
+    ...(result.verificationUrl ? { verificationUrl: result.verificationUrl } : {})
+  };
+}
+
+function createLarkAuthStatusState(result: WorkbenchRemoteSyncLarkAuthStatus): LarkAuthState {
+  return {
+    status: result.authorized ? "authorized" : "failed"
+  };
+}
+
+function createLarkFolderPath(
+  token: string,
+  messages: WorkbenchMessages
+): readonly LarkFolderPathEntry[] {
+  return [{
+    name: token ? messages.settings.larkFolderCurrent : messages.settings.larkFolderRoot,
+    token
+  }];
+}
+
+function appendLarkFolderPath(
+  path: readonly LarkFolderPathEntry[],
+  folder: WorkbenchRemoteSyncLarkFolder
+): readonly LarkFolderPathEntry[] {
+  const existingIndex = path.findIndex((entry) => entry.token === folder.token);
+
+  if (existingIndex >= 0) {
+    return path.slice(0, existingIndex + 1);
+  }
+
+  return [
+    ...path,
+    {
+      name: folder.name,
+      token: folder.token
+    }
+  ];
+}
+
+function openLarkVerificationUrl(result: WorkbenchRemoteSyncLarkAuthStart): void {
+  if (!result.verificationUrl || typeof window === "undefined") {
+    return;
+  }
+
+  window.open(result.verificationUrl, "_blank", "noopener,noreferrer");
+}
+
 function remoteSyncSecretStateKey(
   draftKey: string,
   secret: RemoteSyncProviderSecretConfiguration
@@ -1284,66 +1864,99 @@ function remoteSyncSecretStateKey(
   return `${draftKey}:${secret.name}:${secret.secretRef}`;
 }
 
-function formatSecretSaveLabel(state: SecretState): string {
+function formatSecretSaveLabel(state: SecretState, messages: WorkbenchMessages): string {
   switch (state) {
     case "saved":
-      return "Saved";
+      return messages.common.saved;
     case "failed":
-      return "Failed";
+      return messages.common.failed;
     case "deleted":
     case "idle":
-      return "Save Key";
+      return messages.settings.saveKey;
   }
 }
 
-function formatSecretDeleteLabel(state: SecretState): string {
+function formatFirstSettingsValidationIssue(
+  issues: readonly SettingsValidationIssueCode[],
+  messages: WorkbenchMessages
+): string | undefined {
+  const firstIssue = issues[0];
+  return firstIssue ? formatSettingsValidationIssue(firstIssue, messages) : undefined;
+}
+
+function formatSecretDeleteLabel(state: SecretState, messages: WorkbenchMessages): string {
   switch (state) {
     case "deleted":
-      return "Deleted";
+      return messages.common.deleted;
     case "failed":
-      return "Failed";
+      return messages.common.failed;
     case "saved":
     case "idle":
-      return "Delete";
+      return messages.common.delete;
   }
 }
 
-function formatAiDiagnosticButtonLabel(state: AiDiagnosticState): string {
-  return state === "testing" ? "Testing" : "Test";
+function formatAiDiagnosticButtonLabel(state: AiDiagnosticState, messages: WorkbenchMessages): string {
+  return state === "testing" ? messages.common.testing : messages.common.test;
 }
 
-function formatAiDiagnosticStatusMessage(state: AiDiagnosticState, message: string): string {
+function formatAiDiagnosticStatusMessage(
+  state: AiDiagnosticState,
+  message: string,
+  messages: WorkbenchMessages
+): string {
   switch (state) {
     case "testing":
-      return "Testing provider";
+      return messages.settings.diagnosticTestingProvider;
     case "passed":
-      return message ? `Connection OK: ${message}` : "Connection OK";
+      return message
+        ? messages.settings.diagnosticConnectionOkWithMessage(message)
+        : messages.settings.diagnosticConnectionOk;
     case "failed":
-      return "Connection failed";
+      return messages.settings.diagnosticConnectionFailed;
     case "idle":
       return "";
   }
 }
 
-function formatAiDiagnosticResponseMessage(response: AiTextResponse): string {
-  return [
+function formatAiDiagnosticResponseMessage(response: AiTextResponse, messages: WorkbenchMessages): string {
+  return messages.settings.diagnosticResponseMetadata([
     response.model,
-    formatAiDiagnosticTokenUsage(response.usage)
-  ].filter((part): part is string => !!part).join(", ");
+    formatWorkbenchAiTokenUsage(response.usage, messages.dialogs.aiResponse.tokenUsage)
+  ].filter((part): part is string => !!part));
 }
 
-function formatAiDiagnosticTokenUsage(usage: AiTextResponse["usage"]): string | undefined {
-  if (!usage) {
-    return undefined;
+function formatLarkAuthStatusMessage(state: LarkAuthState, messages: WorkbenchMessages): string {
+  switch (state.status) {
+    case "checking":
+    case "starting":
+    case "completing":
+      return messages.common.testing;
+    case "ready":
+      return messages.settings.larkAuthReady;
+    case "authorized":
+      return messages.settings.larkAuthAuthorized;
+    case "failed":
+      return messages.settings.larkAuthFailed;
+    case "idle":
+      return "";
   }
+}
 
-  const tokens = [
-    usage.inputTokens !== undefined ? `${usage.inputTokens} in` : undefined,
-    usage.outputTokens !== undefined ? `${usage.outputTokens} out` : undefined,
-    usage.totalTokens !== undefined ? `${usage.totalTokens} total` : undefined
-  ].filter((part): part is string => !!part);
-
-  return tokens.length > 0 ? tokens.join(" / ") : undefined;
+function formatLarkFolderStatusMessage(state: LarkFolderState, messages: WorkbenchMessages): string {
+  switch (state.status) {
+    case "creating":
+    case "loading":
+      return messages.common.testing;
+    case "ready":
+      return state.folders && state.folders.length > 0 ? "" : messages.settings.larkFolderNone;
+    case "selected":
+      return state.message ?? messages.settings.larkFolderSelected;
+    case "failed":
+      return messages.settings.larkFolderListFailed;
+    case "idle":
+      return "";
+  }
 }
 
 function isSavedAiProviderDraft(
@@ -1394,12 +2007,14 @@ function commandTitle(commands: readonly CommandMetadata[], id: string): string 
 
 function SettingsSection({
   sectionId,
+  localization,
   children
 }: {
   readonly sectionId: SettingsSectionId;
+  readonly localization: Parameters<typeof getSettingsSectionTitle>[1];
   readonly children: ReactNode;
 }) {
-  const title = getSettingsSectionTitle(sectionId);
+  const title = getSettingsSectionTitle(sectionId, localization);
 
   return (
     <section className="tp-settings-section" id={settingSectionAnchorId(sectionId)}>
@@ -1426,9 +2041,11 @@ function SettingsField({
 
 function RawMirrorSettingsFields({
   draft,
+  messages,
   onChange
 }: {
   readonly draft: SettingsRemoteSyncProviderDraft;
+  readonly messages: WorkbenchMessages;
   readonly onChange: (draft: SettingsRemoteSyncProviderDraft) => void;
 }) {
   const rawMirrorDraft = createSettingsRawMirrorMetadataDraft(draft);
@@ -1441,25 +2058,26 @@ function RawMirrorSettingsFields({
 
   return (
     <>
-      <SettingsField label="Raw Mirror">
+      <SettingsField label={messages.settings.rawMirror}>
         <ToggleControl
           checked={rawMirrorDraft.enabled}
-          label="Raw Mirror"
+          label={messages.settings.rawMirror}
+          messages={messages}
           onChange={(enabled) => updateRawMirrorDraft({ enabled })}
         />
       </SettingsField>
       {rawMirrorDraft.enabled ? (
         <>
-          <SettingsField label="List Path">
+          <SettingsField label={messages.settings.listPath}>
             <input
               className="tp-settings-text-input"
               type="text"
               value={rawMirrorDraft.listPath}
-              aria-label="Raw Mirror List Path"
+              aria-label={messages.settings.listPath}
               onChange={(event) => updateRawMirrorDraft({ listPath: event.target.value })}
             />
           </SettingsField>
-          <SettingsField label="Page Size">
+          <SettingsField label={messages.settings.pageSize}>
             <input
               className="tp-settings-number-input"
               type="number"
@@ -1467,81 +2085,82 @@ function RawMirrorSettingsFields({
               max={remoteSyncConfiguredRawMirrorListLimits.maxPageSize}
               step={1}
               value={rawMirrorDraft.listPageSize}
-              aria-label="Raw Mirror Page Size"
+              aria-label={messages.settings.pageSize}
               onChange={(event) => updateRawMirrorDraft({ listPageSize: event.target.value })}
             />
           </SettingsField>
-          <SettingsField label="Upload Path">
+          <SettingsField label={messages.settings.uploadPath}>
             <input
               className="tp-settings-text-input"
               type="text"
               value={rawMirrorDraft.uploadPath}
-              aria-label="Raw Mirror Upload Path"
+              aria-label={messages.settings.uploadPath}
               onChange={(event) => updateRawMirrorDraft({ uploadPath: event.target.value })}
             />
           </SettingsField>
-          <SettingsField label="Download Path">
+          <SettingsField label={messages.settings.downloadPath}>
             <input
               className="tp-settings-text-input"
               type="text"
               value={rawMirrorDraft.downloadPath}
-              aria-label="Raw Mirror Download Path"
+              aria-label={messages.settings.downloadPath}
               onChange={(event) => updateRawMirrorDraft({ downloadPath: event.target.value })}
             />
           </SettingsField>
-          <SettingsField label="Delete Path">
+          <SettingsField label={messages.settings.deletePath}>
             <input
               className="tp-settings-text-input"
               type="text"
               value={rawMirrorDraft.deletePath}
-              aria-label="Raw Mirror Delete Path"
+              aria-label={messages.settings.deletePath}
               onChange={(event) => updateRawMirrorDraft({ deletePath: event.target.value })}
             />
           </SettingsField>
-          <SettingsField label="Delete Missing">
+          <SettingsField label={messages.settings.deleteMissing}>
             <ToggleControl
               checked={rawMirrorDraft.deleteMissing}
-              label="Raw Mirror Delete Missing"
+              label={messages.settings.deleteMissing}
+              messages={messages}
               onChange={(deleteMissing) => updateRawMirrorDraft({ deleteMissing })}
             />
           </SettingsField>
-          <SettingsField label="Header Binding">
+          <SettingsField label={messages.settings.headerBinding}>
             <input
               className="tp-settings-text-input"
               type="text"
               value={rawMirrorDraft.headerBinding}
-              aria-label="Raw Mirror Header Binding"
+              aria-label={messages.settings.headerBinding}
               onChange={(event) => updateRawMirrorDraft({ headerBinding: event.target.value })}
             />
           </SettingsField>
-          <SettingsField label="Header Name">
+          <SettingsField label={messages.settings.headerName}>
             <input
               className="tp-settings-text-input"
               type="text"
               value={rawMirrorDraft.headerName}
-              aria-label="Raw Mirror Header Name"
+              aria-label={messages.settings.headerName}
               onChange={(event) => updateRawMirrorDraft({ headerName: event.target.value })}
             />
           </SettingsField>
-          <SettingsField label="Header Scheme">
+          <SettingsField label={messages.settings.headerScheme}>
             <input
               className="tp-settings-text-input"
               type="text"
               value={rawMirrorDraft.headerScheme}
-              aria-label="Raw Mirror Header Scheme"
+              aria-label={messages.settings.headerScheme}
               onChange={(event) => updateRawMirrorDraft({ headerScheme: event.target.value })}
             />
           </SettingsField>
-          <SettingsField label="Retry Status">
+          <SettingsField label={messages.settings.retryStatus}>
             <input
               className="tp-settings-text-input"
               type="text"
               value={rawMirrorDraft.retryStatusCodes}
-              aria-label="Raw Mirror Retry Status"
+              aria-label={messages.settings.retryStatus}
               onChange={(event) => updateRawMirrorDraft({ retryStatusCodes: event.target.value })}
             />
           </SettingsField>
-          <SettingsField label="Retry Count">
+          <SettingsField label={messages.settings.retryCount}>
             <input
               className="tp-settings-number-input"
               type="number"
@@ -1549,11 +2168,11 @@ function RawMirrorSettingsFields({
               max={remoteSyncConfiguredRawMirrorRetryLimits.maxRetries}
               step={1}
               value={rawMirrorDraft.retryMaxRetries}
-              aria-label="Raw Mirror Retry Count"
+              aria-label={messages.settings.retryCount}
               onChange={(event) => updateRawMirrorDraft({ retryMaxRetries: event.target.value })}
             />
           </SettingsField>
-          <SettingsField label="Retry Delay">
+          <SettingsField label={messages.settings.retryDelay}>
             <input
               className="tp-settings-number-input"
               type="number"
@@ -1561,7 +2180,7 @@ function RawMirrorSettingsFields({
               max={remoteSyncConfiguredRawMirrorRetryLimits.maxDelayMs}
               step={1}
               value={rawMirrorDraft.retryDelayMs}
-              aria-label="Raw Mirror Retry Delay"
+              aria-label={messages.settings.retryDelay}
               onChange={(event) => updateRawMirrorDraft({ retryDelayMs: event.target.value })}
             />
           </SettingsField>
@@ -1602,10 +2221,12 @@ function SegmentedControl<TValue extends string>({
 function ToggleControl({
   checked,
   label,
+  messages,
   onChange
 }: {
   readonly checked: boolean;
   readonly label: string;
+  readonly messages: WorkbenchMessages;
   readonly onChange: (value: boolean) => void;
 }) {
   return (
@@ -1616,7 +2237,7 @@ function ToggleControl({
         aria-label={label}
         onChange={(event) => onChange(event.target.checked)}
       />
-      <span>{checked ? "On" : "Off"}</span>
+      <span>{checked ? messages.common.on : messages.common.off}</span>
     </label>
   );
 }
@@ -1625,13 +2246,15 @@ function NumberSetting({
   label,
   value,
   constraint,
+  messages,
   unit,
   onChange
 }: {
   readonly label: string;
   readonly value: number;
   readonly constraint: NumberSettingConstraint;
-  readonly unit?: string;
+  readonly messages: WorkbenchMessages;
+  readonly unit?: SettingsNumberUnitId;
   readonly onChange: (value: number) => void;
 }) {
   const updateValue = (rawValue: string) => {
@@ -1664,11 +2287,11 @@ function NumberSetting({
           max={constraint.max}
           step={constraint.step}
           value={value}
-          aria-label={`${label} Value`}
+          aria-label={messages.settings.numberValueAriaLabel(label)}
           onChange={(event) => updateValue(event.target.value)}
           onBlur={(event) => updateValue(event.target.value)}
         />
-        {unit ? <span className="tp-settings-unit">{unit}</span> : null}
+        {unit ? <span className="tp-settings-unit">{messages.settings.units[unit]}</span> : null}
       </span>
     </SettingsField>
   );

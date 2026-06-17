@@ -1,5 +1,10 @@
 import { toDisposable } from "@typora-plus/base";
 import { describe, expect, it } from "vitest";
+import { aiProviderRegistrationLimits, aiTextRequestLimits } from "./ai";
+import {
+  configurationMaxRemoteSyncProviderIdLength,
+  configurationMaxRemoteSyncProviderTitleLength
+} from "./configuration";
 import type { ExtensionActivationRequest, ExtensionContext, RegisteredExtension } from "./extensions";
 import {
   createExtensionHostActivationErrorMessage,
@@ -43,6 +48,7 @@ import {
   readExtensionHostProtocolMessage,
   serializeExtensionHostProtocolMessage
 } from "./extensionHostProtocol";
+import { remoteSyncPayloadLimits, remoteSyncRequestMetadataLimits } from "./remoteSync";
 
 describe("extension host protocol", () => {
   it("serializes activation requests without runtime context functions", () => {
@@ -266,6 +272,10 @@ describe("extension host protocol", () => {
   });
 
   it("serializes AI provider broker messages", () => {
+    expect(extensionHostProtocolLimits.aiProviderIdLength).toBe(aiProviderRegistrationLimits.idLength);
+    expect(extensionHostProtocolLimits.aiProviderTitleLength).toBe(aiProviderRegistrationLimits.titleLength);
+    expect(extensionHostProtocolLimits.aiOutputFormatKindLength).toBe(aiTextRequestLimits.outputFormatKindLength);
+
     const register = createExtensionHostAiProviderRegisterRequestMessage("request-ai-1", "notes.main", {
       id: " notes.main.ai ",
       title: " Notes AI "
@@ -283,6 +293,21 @@ describe("extension host protocol", () => {
       ],
       metadata: {
         surface: "command"
+      },
+      outputFormat: {
+        kind: "jsonSchema",
+        name: "summary_result",
+        schema: {
+          type: "object",
+          properties: {
+            summary: {
+              type: "string"
+            }
+          },
+          required: ["summary"],
+          additionalProperties: false
+        },
+        strict: true
       }
     });
     const result = createExtensionHostAiTextResultMessage("request-ai-3", "notes.main", "notes.main.ai", {
@@ -332,6 +357,21 @@ describe("extension host protocol", () => {
         ],
         metadata: {
           surface: "command"
+        },
+        outputFormat: {
+          kind: "jsonSchema",
+          name: "summary_result",
+          schema: {
+            type: "object",
+            properties: {
+              summary: {
+                type: "string"
+              }
+            },
+            required: ["summary"],
+            additionalProperties: false
+          },
+          strict: true
         }
       }
     });
@@ -379,6 +419,25 @@ describe("extension host protocol", () => {
         value: "Context"
       })
     })).toThrow("must contain at most");
+    expect(() => createExtensionHostAiTextRequestMessage("request-ai-6b", "notes.main", "notes.main.ai", {
+      instruction: "Summarize",
+      input: "# A",
+      outputFormat: {
+        kind: "jsonSchema",
+        name: "bad",
+        schema: [],
+        strict: true
+      } as never
+    })).toThrow("schema must be a JSON object");
+    expect(() => createExtensionHostAiTextRequestMessage("request-ai-6c", "notes.main", "notes.main.ai", {
+      instruction: "Summarize",
+      input: "# A",
+      outputFormat: {
+        kind: "x".repeat(extensionHostProtocolLimits.aiOutputFormatKindLength + 1)
+      } as never
+    })).toThrow(
+      `Extension host AI text request output format kind must be at most ${extensionHostProtocolLimits.aiOutputFormatKindLength} characters`
+    );
     expect(() => createExtensionHostAiTextResultMessage("request-ai-7", "notes.main", "notes.main.ai", {
       value: "Summary",
       usage: {
@@ -390,6 +449,31 @@ describe("extension host protocol", () => {
   });
 
   it("serializes remote sync provider broker messages", () => {
+    expect(extensionHostProtocolLimits.remoteSyncProviderIdLength)
+      .toBe(configurationMaxRemoteSyncProviderIdLength);
+    expect(extensionHostProtocolLimits.remoteSyncProviderTitleLength)
+      .toBe(configurationMaxRemoteSyncProviderTitleLength);
+    expect(extensionHostProtocolLimits.remoteSyncMetadataEntries)
+      .toBe(remoteSyncRequestMetadataLimits.entries);
+    expect(extensionHostProtocolLimits.remoteSyncMetadataKeyLength)
+      .toBe(remoteSyncRequestMetadataLimits.keyLength);
+    expect(extensionHostProtocolLimits.remoteSyncMetadataValueLength)
+      .toBe(remoteSyncRequestMetadataLimits.valueLength);
+    expect(extensionHostProtocolLimits.remoteSyncCompletedAtMax)
+      .toBe(remoteSyncPayloadLimits.completedAtMax);
+    expect(extensionHostProtocolLimits.remoteSyncMessageLength)
+      .toBe(remoteSyncPayloadLimits.messageLength);
+    expect(extensionHostProtocolLimits.remoteSyncOperationCount)
+      .toBe(remoteSyncPayloadLimits.operationCount);
+    expect(extensionHostProtocolLimits.remoteSyncRelativePathLength)
+      .toBe(remoteSyncPayloadLimits.relativePathLength);
+    expect(extensionHostProtocolLimits.remoteSyncRemoteIdLength)
+      .toBe(remoteSyncPayloadLimits.remoteIdLength);
+    expect(extensionHostProtocolLimits.remoteSyncResourceCount)
+      .toBe(remoteSyncPayloadLimits.resourceCount);
+    expect(extensionHostProtocolLimits.remoteSyncUriLength)
+      .toBe(remoteSyncPayloadLimits.uriLength);
+
     const register = createExtensionHostRemoteSyncProviderRegisterRequestMessage("request-sync-1", "notes.main", {
       id: " notes.main.sync ",
       title: " Notes Sync "

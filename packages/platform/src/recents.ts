@@ -39,15 +39,21 @@ export const defaultRecentServiceOptions: RecentServiceOptions = {
   maxEntries: 20
 };
 
+export const recentStorageKeyLimits = {
+  storageKeyLength: 240
+} as const;
+
 export class RecentService implements IRecentService {
   private readonly emitter = new Emitter<readonly RecentResource[]>();
   private readonly now: () => number;
   private readonly storage: RecentStorage;
+  private readonly storageKey: string;
   private recents: RecentResource[];
 
   readonly onDidChangeRecents = this.emitter.event;
 
   constructor(private readonly options: RecentServiceOptions = defaultRecentServiceOptions) {
+    this.storageKey = normalizeRecentStorageKey(options.storageKey);
     this.now = options.now ?? (() => Date.now());
     this.storage = options.storage ?? createBrowserRecentStorage();
     this.recents = this.readRecents();
@@ -101,7 +107,7 @@ export class RecentService implements IRecentService {
   }
 
   private readRecents(): RecentResource[] {
-    const rawValue = this.storage.read(this.options.storageKey);
+    const rawValue = this.storage.read(this.storageKey);
 
     if (!rawValue) {
       return [];
@@ -120,7 +126,7 @@ export class RecentService implements IRecentService {
         .sort((first, second) => second.lastOpenedAt - first.lastOpenedAt)
         .slice(0, this.options.maxEntries);
     } catch {
-      this.storage.write(this.options.storageKey, "[]");
+      this.storage.write(this.storageKey, "[]");
       return [];
     }
   }
@@ -132,7 +138,7 @@ export class RecentService implements IRecentService {
       kind: recent.kind,
       lastOpenedAt: recent.lastOpenedAt
     }));
-    this.storage.write(this.options.storageKey, JSON.stringify(serialized));
+    this.storage.write(this.storageKey, JSON.stringify(serialized));
   }
 }
 
@@ -169,6 +175,28 @@ function createBrowserRecentStorage(): RecentStorage {
       window.localStorage.setItem(key, value);
     }
   };
+}
+
+function normalizeRecentStorageKey(value: unknown): string {
+  if (typeof value !== "string") {
+    throw new Error("Recent storage key must be a string");
+  }
+
+  const normalized = value.trim();
+
+  if (!normalized) {
+    throw new Error("Recent storage key must not be empty");
+  }
+
+  if (normalized.length > recentStorageKeyLimits.storageKeyLength) {
+    throw new Error(`Recent storage key must be at most ${recentStorageKeyLimits.storageKeyLength} characters`);
+  }
+
+  if (!/^[A-Za-z0-9][A-Za-z0-9.-]*$/.test(normalized)) {
+    throw new Error(`Recent storage key is invalid: ${normalized}`);
+  }
+
+  return normalized;
 }
 
 function hasLocalStorage(): boolean {

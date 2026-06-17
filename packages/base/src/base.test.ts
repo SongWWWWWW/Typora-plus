@@ -32,4 +32,13 @@ describe("uri", () => {
   it("normalizes windows paths", () => {
     expect(URI.file("C:\\Notes\\a.md").toString()).toBe("file://C:/Notes/a.md");
   });
+
+  it("percent-encodes file URI path segments and decodes them when parsing", () => {
+    const uri = URI.file("C:\\Users\\wcc\\OneDrive\\文档\\Typora Plus\\a#b.md");
+
+    expect(uri.toString()).toBe("file://C:/Users/wcc/OneDrive/%E6%96%87%E6%A1%A3/Typora%20Plus/a%23b.md");
+    expect(URI.parse(uri.toString()).path).toBe("C:/Users/wcc/OneDrive/文档/Typora Plus/a#b.md");
+    expect(URI.parse("file:///C:/Users/wcc/OneDrive/%E6%96%87%E6%A1%A3/a.md").toString())
+      .toBe("file://C:/Users/wcc/OneDrive/%E6%96%87%E6%A1%A3/a.md");
+  });
 });

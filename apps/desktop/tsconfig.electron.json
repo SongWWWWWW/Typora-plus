@@ -9,5 +9,6 @@
     "tsBuildInfoFile": "dist-electron/.tsbuildinfo",
     "types": ["node", "electron"]
   },
-  "include": ["electron"]
+  "include": ["electron"],
+  "exclude": ["electron/**/*.test.ts"]
 }

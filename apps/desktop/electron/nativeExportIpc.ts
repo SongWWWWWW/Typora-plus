@@ -1,6 +1,13 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { BrowserWindow, dialog, ipcMain, type SaveDialogOptions } from "electron";
+import {
+  createNativeExportDefaultPath,
+  isNativeExportBase64Value,
+  isSafeNativeExportAssetMimeType,
+  isSafeNativeExportAssetPath,
+  resolveNativeExportAssetPath
+} from "./nativeExportValidation.js";
 
 export const nativeExportIpcChannels = {
   saveDocument: "typora-plus:export:saveDocument"
@@ -56,7 +63,7 @@ async function saveExportedDocument(
 
   validateExportAssets(config, document.assets ?? []);
 
-  const defaultPath = createExportDefaultPath(document.defaultFileName, format.extensions[0] ?? "txt");
+  const defaultPath = createNativeExportDefaultPath(document.defaultFileName, format.extensions[0] ?? "txt");
   const options: SaveDialogOptions = {
     title: "Export Note",
     defaultPath,
@@ -87,15 +94,15 @@ function validateExportAssets(
   }
 
   for (const asset of assets) {
-    if (!isSafeExportAssetPath(asset.relativePath)) {
+    if (!isSafeNativeExportAssetPath(asset.relativePath)) {
       throw new Error("Exported asset path is invalid");
     }
 
-    if (!isSafeExportAssetMimeType(asset.mimeType)) {
+    if (!isSafeNativeExportAssetMimeType(asset.mimeType)) {
       throw new Error("Exported asset type is invalid");
     }
 
-    if (!isBase64Value(asset.base64)) {
+    if (!isNativeExportBase64Value(asset.base64)) {
       throw new Error("Exported asset content is invalid");
     }
 
@@ -117,7 +124,7 @@ async function writeExportAssets(
   const exportDirectory = path.dirname(exportFilePath);
 
   for (const asset of assets) {
-    const assetPath = resolveExportAssetPath(exportDirectory, asset.relativePath);
+    const assetPath = resolveNativeExportAssetPath(exportDirectory, asset.relativePath);
     const assetBuffer = Buffer.from(asset.base64, "base64");
 
     if (assetBuffer.byteLength > config.maxAssetBytes) {
@@ -127,48 +134,4 @@ async function writeExportAssets(
     await fs.mkdir(path.dirname(assetPath), { recursive: true });
     await fs.writeFile(assetPath, assetBuffer);
   }
-}
-
-function resolveExportAssetPath(exportDirectory: string, relativePath: string): string {
-  const assetPath = path.resolve(exportDirectory, relativePath);
-  const relativeToExportDirectory = path.relative(exportDirectory, assetPath);
-
-  if (relativeToExportDirectory === "" || relativeToExportDirectory.startsWith("..") || path.isAbsolute(relativeToExportDirectory)) {
-    throw new Error("Exported asset path is outside the export directory");
-  }
-
-  return assetPath;
-}
-
-function isSafeExportAssetPath(value: string): boolean {
-  const normalized = value.trim().replaceAll("\\", "/");
-
-  return normalized.length > 0
-    && !normalized.startsWith("/")
-    && !normalized.split("/").some((segment) => !segment || segment === "." || segment === "..")
-    && !/^[a-z][a-z0-9+.-]*:/i.test(normalized)
-    && !/[<>:"|?*\u0000-\u001f]/.test(normalized);
-}
-
-function isSafeExportAssetMimeType(value: string): boolean {
-  return /^image\/[a-z0-9+.-]+$/i.test(value.trim());
-}
-
-function isBase64Value(value: string): boolean {
-  return value.trim().length > 0 && /^(?:[a-z0-9+/]{4})*(?:[a-z0-9+/]{2}==|[a-z0-9+/]{3}=)?$/i.test(value.trim());
-}
-
-function createExportDefaultPath(fileName: string, fallbackExtension: string): string {
-  const baseName = path.basename(fileName).replace(/[<>:"/\\|?*\u0000-\u001f]/g, "-").trim() || "Untitled";
-  const extension = fallbackExtension.replace(/^\./, "");
-
-  if (new RegExp(`\\.${escapeRegExp(extension)}$`, "i").test(baseName)) {
-    return baseName;
-  }
-
-  return `${baseName}.${extension}`;
-}
-
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }

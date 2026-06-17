@@ -2,6 +2,7 @@ import { URI } from "@typora-plus/base";
 import { describe, expect, it } from "vitest";
 import type { WorkspaceFileTree, WorkspaceState } from "@typora-plus/platform";
 import {
+  createWorkbenchFolderRemoteSyncPlanRequest,
   createWorkbenchWorkspaceRemoteSyncPlanRequest,
   workbenchRemoteSyncRequestActions
 } from "./workbenchRemoteSyncRequestModel";
@@ -60,6 +61,112 @@ describe("workbench remote sync request model", () => {
       name: "Typora Plus"
     })).toThrow("No workspace is open");
   });
+
+  it("builds folder plan requests with paths relative to the selected local directory", () => {
+    const workspace = createFolderSyncWorkspace();
+    const localFolder = workspace.files!.root.children![0]!;
+    const request = createWorkbenchFolderRemoteSyncPlanRequest(workspace, {
+      localFolder,
+      providerId: "notes.raw",
+      remoteScopeId: "remote-projects"
+    });
+
+    expect(request.workspaceUri).toEqual(URI.file("C:/Notes/projects"));
+    expect(request.remoteScopeId).toBe("remote-projects");
+    expect(request.metadata).toMatchObject({
+      source: "folder",
+      providerId: "notes.raw",
+      localFolderName: "projects",
+      localFolderPath: "projects"
+    });
+    expect(request.resources.map((resource) => ({
+      relativePath: resource.relativePath,
+      uri: resource.uri
+    }))).toEqual([
+      {
+        relativePath: "a.md",
+        uri: URI.file("C:/Notes/projects/a.md")
+      },
+      {
+        relativePath: "sub/b.md",
+        uri: URI.file("C:/Notes/projects/sub/b.md")
+      }
+    ]);
+  });
+
+  it("can include folder resources relative to the selected local directory", () => {
+    const workspace = createFolderSyncWorkspace();
+    const localFolder = workspace.files!.root.children![0]!;
+    const request = createWorkbenchFolderRemoteSyncPlanRequest(workspace, {
+      includeDirectories: true,
+      localFolder,
+      providerId: "notes.raw",
+      remoteScopeId: "remote-projects"
+    });
+
+    expect(request.resources.map((resource) => ({
+      relativePath: resource.relativePath,
+      kind: resource.kind
+    }))).toEqual([
+      {
+        relativePath: "a.md",
+        kind: "file"
+      },
+      {
+        relativePath: "sub",
+        kind: "directory"
+      },
+      {
+        relativePath: "sub/b.md",
+        kind: "file"
+      }
+    ]);
+  });
+
+  it("builds root folder binding requests without prefixing the local root name", () => {
+    const workspace = createFolderSyncWorkspace();
+    const localFolder = workspace.files!.root;
+    const request = createWorkbenchFolderRemoteSyncPlanRequest(workspace, {
+      includeDirectories: true,
+      localFolder,
+      providerId: "notes.raw",
+      remoteScopeId: "remote-typora-plus"
+    });
+
+    expect(request.workspaceUri).toEqual(URI.file("C:/Notes"));
+    expect(request.remoteScopeId).toBe("remote-typora-plus");
+    expect(request.resources.map((resource) => ({
+      relativePath: resource.relativePath,
+      kind: resource.kind
+    }))).toEqual([
+      {
+        relativePath: "projects",
+        kind: "directory"
+      },
+      {
+        relativePath: "projects/a.md",
+        kind: "file"
+      },
+      {
+        relativePath: "projects/sub",
+        kind: "directory"
+      },
+      {
+        relativePath: "projects/sub/b.md",
+        kind: "file"
+      }
+    ]);
+  });
+
+  it("uses injected messages for missing workspace errors", () => {
+    expect(() => createWorkbenchWorkspaceRemoteSyncPlanRequest({
+      name: "Typora Plus"
+    }, {
+      messages: {
+        noWorkspaceOpen: "Localized missing workspace"
+      }
+    })).toThrow("Localized missing workspace");
+  });
 });
 
 function createWorkspace(): WorkspaceState {
@@ -102,5 +209,64 @@ function createWorkspaceFileTree(): WorkspaceFileTree {
       size: 10,
       mtime: 20
     }]
+  };
+}
+
+function createFolderSyncWorkspace(): WorkspaceState {
+  return {
+    name: "Notes",
+    rootUri: URI.file("C:/Notes"),
+    files: {
+      root: {
+        uri: URI.file("C:/Notes"),
+        name: "Notes",
+        relativePath: ".",
+        kind: "directory",
+        children: [
+          {
+            uri: URI.file("C:/Notes/projects"),
+            name: "projects",
+            relativePath: "projects",
+            kind: "directory",
+            children: [
+              {
+                uri: URI.file("C:/Notes/projects/a.md"),
+                name: "a.md",
+                relativePath: "projects/a.md",
+                kind: "file"
+              },
+              {
+                uri: URI.file("C:/Notes/projects/sub"),
+                name: "sub",
+                relativePath: "projects/sub",
+                kind: "directory",
+                children: [
+                  {
+                    uri: URI.file("C:/Notes/projects/sub/b.md"),
+                    name: "b.md",
+                    relativePath: "projects/sub/b.md",
+                    kind: "file"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      files: [
+        {
+          uri: URI.file("C:/Notes/projects/a.md"),
+          name: "a.md",
+          relativePath: "projects/a.md",
+          kind: "file"
+        },
+        {
+          uri: URI.file("C:/Notes/projects/sub/b.md"),
+          name: "b.md",
+          relativePath: "projects/sub/b.md",
+          kind: "file"
+        }
+      ]
+    }
   };
 }

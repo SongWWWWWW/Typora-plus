@@ -8421,3 +8421,2806 @@ Known limitations:
 
 - Providers that omit presence metadata still rely on the legacy conservative fallback and may leave ambiguous conflicts blocked.
 - Direct Feishu Drive token lifecycle, folder traversal, upload-session handling, permission prompts, and Docs import remain future adapter work.
+
+## 2026-06-12 - P2 AI Structured Output Contract
+
+Completed:
+
+- Added provider-neutral AI output format hints for plain text, JSON object, and JSON-schema structured output requests.
+- Mapped those hints inside the Responses adapter to OpenAI `text.format` without exposing provider-specific fields to Workbench callers.
+- Preserved output format hints across extension-host AI text request protocol messages and runtime broker callbacks.
+- Added explicit Responses refusal handling so structured-output refusals report a distinct provider error instead of a generic missing-output failure.
+- Kept Workbench AI actions unchanged; current writing commands can opt into structured output later through the platform request contract.
+
+Quality gate:
+
+- `npx vitest run packages/platform/src/ai.test.ts packages/platform/src/responsesAiProvider.test.ts packages/platform/src/extensionHostProtocol.test.ts packages/platform/src/extensionHostRuntimeBroker.test.ts packages/platform/src/extensionHostProtocolRuntime.test.ts`: passed, 5 files / 58 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 87 files / 844 tests, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- AI structured output code-diff hardcode scan for OpenAI endpoints, model ids, API keys, Feishu/Lark endpoints, folder ids, and provider credentials: passed
+
+Review:
+
+- Structured output remains a platform capability, not a Workbench UI concern or a Responses-specific request field.
+- The Responses adapter is the only layer that translates provider-neutral output hints to OpenAI `text.format`.
+- Extension-host providers stay aligned with in-process providers because the same output format contract is serialized on AI text requests.
+- No provider id, endpoint URL, model id, API key, Feishu scope, token name, folder id, storage path, or credential literal was added.
+
+Known limitations:
+
+- Workbench writing actions still return plain text/Markdown until specific features opt into JSON or JSON-schema output.
+- Streaming, tool calls, and Codex-style repository automation remain future AI-provider surfaces.
+
+## 2026-06-12 - P2 Structured Task Extraction
+
+Completed:
+
+- Updated the active-note task extraction command to request provider-neutral JSON-schema output instead of free-form Markdown.
+- Used a strict structured-output schema with nullable owner, due date, blocker, and topic fields so providers can represent missing source facts without inventing values.
+- Added Workbench response-model parsing that converts structured task extraction JSON into bounded Markdown task-list output before the dialog displays, copies, or appends it.
+- Escaped Markdown inline control characters from structured task fields before formatting them into headings, task titles, or task details.
+- Added command-level regression coverage so malformed structured task extraction output reports an operation error instead of opening an AI response dialog with invalid content.
+- Centralized AI response metadata formatting in the Workbench AI response model, reused token usage formatting for Settings diagnostics, and surfaced provider-returned usage in the AI response dialog metadata row.
+- Kept UI components, provider selection, credentials, model ids, endpoints, and native bridges unchanged.
+
+Quality gate:
+
+- `npx vitest run packages/workbench/src/workbenchAiRequestModel.test.ts packages/workbench/src/workbenchAiResponseModel.test.ts packages/workbench/src/workbenchAiActions.test.ts packages/workbench/src/workbenchCommandRegistration.test.ts`: passed, 4 files / 28 tests
+- `npx vitest run packages/workbench/src/workbenchAiResponseModel.test.ts packages/workbench/src/settingsModel.test.ts packages/workbench/src/workbenchConfiguredAiProviders.test.ts`: passed, 3 files / 42 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 87 files / 852 tests, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+
+Review:
+
+- Task extraction is now the first Workbench feature consuming the platform `outputFormat` contract end to end.
+- Structured JSON parsing lives in the focused response model, while command registration and React dialog code continue to consume user-visible Markdown.
+- Structured task fields are treated as plain text and escaped at the Markdown formatting boundary, so model output cannot accidentally introduce links, images, emphasis, or table syntax.
+- Provider-returned token usage remains optional metadata; response dialogs and provider diagnostics render it through shared Workbench model helpers, and React renders precomputed metadata chips with stable field identities.
+- Schema shape follows the structured-output strict-mode constraints documented by OpenAI: object fields are required, nullable fields use `["string", "null"]`, and nested objects set `additionalProperties: false`.
+- No provider id, endpoint URL, model id, API key, Feishu scope, token name, folder id, storage path, or credential literal was added.
+
+Known limitations:
+
+- The response parser currently supports only the task extraction schema; future structured AI actions should add their own focused parsers instead of making one generic JSON renderer.
+- The dialog still renders AI Markdown in the existing text block surface rather than a rich checklist preview.
+
+## 2026-06-12 - P2 AI Metadata Boundary Hardening
+
+Completed:
+
+- Added platform-owned AI request metadata limits for entry count, key length, value length, and trim-colliding keys.
+- Reused those limits in extension-host protocol AI text request normalization so in-process and future out-of-process callers share the same metadata contract.
+- Replaced naked Responses metadata mapping numbers with adapter-local limits and filtered invalid metadata keys before consuming the provider-specific metadata slot budget.
+- Covered platform metadata rejection and Responses metadata mapping behavior with focused tests.
+
+Quality gate:
+
+- `npx vitest run packages/platform/src/ai.test.ts packages/platform/src/responsesAiProvider.test.ts packages/platform/src/extensionHostProtocol.test.ts`: passed, 3 files / 37 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 87 files / 854 tests, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- AI metadata boundary hardcode scan for OpenAI endpoints, model ids, API keys, Feishu/Lark endpoints, folder ids, and provider credentials: passed
+
+Review:
+
+- AI request metadata is now rejected before provider execution when it exceeds platform limits, so providers do not receive silently overwritten trim-colliding keys or unbounded metadata payloads.
+- Responses-specific metadata slot, key, and value limits stay inside the Responses adapter rather than leaking OpenAI request constraints into the provider-neutral AI service.
+- No provider id, endpoint URL, model id, API key, Feishu scope, token name, folder id, storage path, or credential literal was added.
+
+Known limitations:
+
+- AI provider id/title length and pattern limits remain enforced by configuration and extension-host surfaces; direct in-process provider registration still preserves the existing trim-only registration semantics.
+
+## 2026-06-12 - P2 AI Text Boundary Limits
+
+Completed:
+
+- Added platform-owned AI text request limits for instruction length, input length, context count, context field lengths, and output-format label lengths.
+- Added platform-owned AI text provider result limits for response text length, model name length, and token usage maximums.
+- Reused those request/result limits in extension-host protocol AI text normalization so direct providers and future out-of-process providers share the same bounded contract.
+- Covered request, context, output-format, response text, model, and token usage rejection with focused platform tests.
+
+Quality gate:
+
+- `npx vitest run packages/platform/src/ai.test.ts packages/platform/src/extensionHostProtocol.test.ts packages/platform/src/responsesAiProvider.test.ts packages/platform/src/extensionHostRuntimeBroker.test.ts packages/platform/src/extensionHostProtocolRuntime.test.ts`: passed, 5 files / 62 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 87 files / 856 tests, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- AI text boundary hardcode scan for OpenAI endpoints, model ids, API keys, Feishu/Lark endpoints, folder ids, and provider credentials: passed
+
+Review:
+
+- `IAiService` now rejects oversized request and result payloads before provider/caller boundaries, closing the gap where only extension-host protocol paths were bounded.
+- Extension-host protocol AI limits now read from the platform AI contract for text requests, text results, and metadata instead of maintaining parallel numeric constants.
+- No provider id, endpoint URL, model id, API key, Feishu scope, token name, folder id, storage path, or credential literal was added.
+
+Known limitations:
+
+- Direct in-process AI provider id/title registration still preserves trim-only semantics; stricter id/title limits remain enforced by configuration and extension-host surfaces.
+
+## 2026-06-12 - P2 AI Protocol Limit Alignment
+
+Completed:
+
+- Added an extension-host protocol `aiOutputFormatKindLength` limit that reuses the platform AI text request output-format kind length.
+- Switched protocol AI output-format kind normalization away from the context-kind limit so future context and output-format tuning cannot drift semantically.
+- Covered the protocol constant reuse and oversized output-format kind rejection with a focused protocol regression test.
+
+Quality gate:
+
+- `npx vitest run packages/platform/src/extensionHostProtocol.test.ts`: passed, 1 file / 16 tests
+- `npm run verify`: passed, 87 files / 856 tests, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- AI protocol hardcode scan for OpenAI endpoints, model ids, API keys, Feishu/Lark endpoints, folder ids, and provider credentials: passed
+
+Review:
+
+- The protocol boundary now names output-format kind limits independently from context item kind limits while still sourcing both from the platform AI contract.
+- This is a maintainability hardening pass only; no provider id, endpoint URL, model id, API key, Feishu scope, token name, folder id, storage path, or credential literal was added.
+
+## 2026-06-12 - P2 AI Provider Identity Boundary
+
+Completed:
+
+- Added platform-owned AI provider registration limits for provider id and title length.
+- Applied provider id pattern validation and trim-first bounded title normalization directly in `IAiService.registerProvider()`.
+- Reused the same provider id/title limits from AI configuration and extension-host protocol constants so configured, in-process, and future out-of-process providers share one identity contract.
+- Covered maximum-length provider identity, invalid id characters, overlong provider id/title, and invalid request lookup ids with focused AI service tests.
+
+Quality gate:
+
+- `npx vitest run packages/platform/src/ai.test.ts packages/platform/src/configurationAi.test.ts packages/platform/src/extensionHostProtocol.test.ts packages/platform/src/extensions.test.ts packages/platform/src/extensionHostRuntimeBroker.test.ts`: passed, 4 files / 41 tests
+- `npm run verify`: passed, 87 files / 857 tests, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- AI provider identity hardcode scan for OpenAI endpoints, model ids, API keys, Feishu/Lark endpoints, folder ids, and provider credentials: passed
+
+Review:
+
+- This closes the previous direct in-process provider id/title registration gap without adding any default provider, endpoint, model, API key, Feishu scope, token name, folder id, storage path, or credential literal.
+- Provider ids still use the existing configuration and protocol-safe character set: an alphanumeric first character followed by alphanumeric, underscore, dot, colon, or hyphen characters.
+
+## 2026-06-12 - P2 Remote Sync Provider Identity Boundary
+
+Completed:
+
+- Applied provider id pattern validation and trim-first bounded title normalization directly in `IRemoteSyncService.registerProvider()`.
+- Reused the remote sync provider id/title configuration limits from extension-host protocol constants so configured, in-process, and future out-of-process providers share one identity contract.
+- Covered maximum-length provider identity, invalid id characters, overlong provider id/title, trimmed lookup ids, and invalid request lookup ids with focused remote sync service tests.
+- Documented the shared remote sync provider identity boundary in the architecture notes.
+
+Quality gate:
+
+- `npx vitest run packages/platform/src/remoteSync.test.ts packages/platform/src/configuration.test.ts packages/platform/src/extensionHostProtocol.test.ts packages/platform/src/extensions.test.ts packages/platform/src/extensionHostRuntimeBroker.test.ts`: passed, 3 files / 53 tests
+- `npm run verify`: passed, 87 files / 858 tests, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Remote sync provider identity hardcode scan for OpenAI endpoints, model ids, API keys, Feishu/Lark endpoints, folder ids, and provider credentials: passed
+
+Review:
+
+- This closes the previous direct in-process remote sync provider id/title registration gap without adding any default provider, endpoint, model, API key, Feishu scope, token name, folder id, storage path, or credential literal.
+- Remote sync provider ids still use the existing configuration and protocol-safe character set: an alphanumeric first character followed by alphanumeric, underscore, dot, colon, or hyphen characters.
+
+## 2026-06-12 - P2 Remote Sync Metadata Boundary
+
+Completed:
+
+- Added platform-owned remote sync request metadata limits for entry count, key length, value length, and trim-colliding keys.
+- Applied those limits in `IRemoteSyncService.createPlan()` and `executePlan()` before provider callbacks receive request metadata.
+- Reused the same metadata limits from extension-host protocol constants so in-process and future out-of-process remote sync providers share one bounded contract.
+- Covered maximum metadata payloads, over-limit entries, overlong keys/values, and duplicate trimmed keys with focused remote sync service tests.
+
+Quality gate:
+
+- `npx vitest run packages/platform/src/remoteSync.test.ts packages/platform/src/extensionHostProtocol.test.ts packages/platform/src/extensionHostRuntimeBroker.test.ts packages/platform/src/extensionHostProtocolRuntime.test.ts`: passed, 4 files / 68 tests
+- `npm run verify`: passed, 87 files / 859 tests, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Remote sync metadata hardcode scan for OpenAI endpoints, model ids, API keys, Feishu/Lark endpoints, folder ids, and provider credentials: passed
+
+Review:
+
+- Remote sync request metadata is now rejected before provider execution when it exceeds platform limits, so providers do not receive silently overwritten trim-colliding keys or unbounded metadata payloads.
+- No provider id, endpoint URL, model id, API key, Feishu scope, token name, folder id, storage path, or credential literal was added.
+
+## 2026-06-12 - P2 Remote Sync Payload Boundary
+
+Completed:
+
+- Added platform-owned remote sync payload limits for resource count, operation count, workspace-relative path length, remote id length, URI length, provider messages, progress counts, and completion timestamps.
+- Applied those limits in `IRemoteSyncService` request, plan, result, and progress normalization so direct in-process providers share the same bounded contract as protocol-backed providers.
+- Reused the same payload limits from extension-host protocol constants for remote sync resources, operations, summaries, progress, remote ids, paths, URIs, messages, and completed timestamps.
+- Covered maximum payload values and over-limit resources, operations, paths, remote ids, progress messages, and completion timestamps with focused platform tests.
+
+Quality gate:
+
+- `npx vitest run packages/platform/src/remoteSync.test.ts packages/platform/src/extensionHostProtocol.test.ts packages/platform/src/extensionHostRuntimeBroker.test.ts packages/platform/src/extensionHostProtocolRuntime.test.ts`: passed, 4 files / 69 tests
+- `npm run verify`: passed, 87 files / 860 tests, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Remote sync payload hardcode scan for OpenAI endpoints, model ids, API keys, Feishu/Lark endpoints, folder ids, and provider credentials: passed
+
+Review:
+
+- Remote sync provider payloads are now bounded before crossing service or protocol boundaries, reducing the chance that a future cloud adapter can return unbounded messages, paths, operation lists, or progress counters into Workbench.
+- No provider id, endpoint URL, model id, API key, Feishu scope, token name, folder id, storage path, or credential literal was added.
+
+## 2026-06-12 - P2 Remote Sync Manifest Scope Boundary
+
+Completed:
+
+- Added a platform-owned manifest scope length limit and applied it before deriving persisted remote sync manifest storage keys.
+- Reused remote sync provider id validation for manifest store scopes and persisted manifest snapshots.
+- Bounded manifest workspace URI strings and remote scope ids so workspace/provider/remote-scope manifest identity cannot grow unbounded.
+- Rejected malformed persisted snapshots with invalid provider ids or overlong remote scope ids by falling back to an empty manifest.
+- Documented manifest scope strings as part of the remote sync payload boundary and kept scoped storage keys identity-validated.
+
+Quality gate:
+
+- `npx vitest run packages/platform/src/remoteSync.test.ts packages/platform/src/remoteSyncConfiguredRawMirrorProvider.test.ts`: passed, 2 files / 46 tests
+- `npm run verify`: passed, 87 files / 861 tests, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Remote sync manifest scope hardcode scan for OpenAI endpoints, model ids, API keys, Feishu/Lark endpoints, folder ids, and provider credentials: passed
+
+Review:
+
+- Manifest storage keys now reject overlong or invalid workspace/provider/remote-scope identity before hashing, which keeps local persisted sync state bounded and aligned with provider identity rules.
+- No provider id, endpoint URL, model id, API key, Feishu scope, token name, folder id, storage path, or credential literal was added.
+
+## 2026-06-12 - P2 Remote Sync Manifest Storage Key Boundary
+
+Completed:
+
+- Added a platform-owned remote sync manifest base storage key limit.
+- Normalized injected manifest base storage keys in `RemoteSyncManifestStore` and `createRemoteSyncManifestStorageKey()` before reads, writes, or scoped key derivation.
+- Aligned platform storage-key validation with the Electron manifest bridge by accepting only bounded alphanumeric, dot, and hyphen keys.
+- Covered maximum-length storage keys, trimmed storage keys, scoped key derivation, empty keys, invalid key characters, and overlong keys with focused manifest tests.
+- Corrected the architecture notes so provider-facing extension-host payload limits are described separately from local manifest persistence limits.
+
+Quality gate:
+
+- `npx vitest run packages/platform/src/remoteSync.test.ts packages/platform/src/remoteSyncConfiguredRawMirrorProvider.test.ts`: passed, 2 files / 47 tests
+- `npm run verify`: passed, 87 files / 862 tests, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Remote sync manifest storage key hardcode scan for OpenAI endpoints, model ids, API keys, Feishu/Lark endpoints, folder ids, and provider credentials: passed
+
+Review:
+
+- Manifest persistence now validates both the caller-supplied base key and the derived scope suffix path before any storage backend sees it, keeping browser and Electron-backed stores aligned.
+- No provider id, endpoint URL, model id, API key, Feishu scope, token name, folder id, storage path, or credential literal was added.
+
+## 2026-06-12 - P2 Remote Sync Manifest Storage Wrapper Boundary
+
+Completed:
+
+- Applied the remote sync manifest storage key validator to the native/browser storage wrapper returned by `createDefaultRemoteSyncManifestStorage()`.
+- Added a separate complete storage-key length limit for derived scoped keys while keeping the tighter base-key limit for caller-supplied base keys.
+- Ensured direct low-level manifest storage reads and writes trim valid keys and reject invalid or overlong keys before reaching local storage or the native manifest bridge.
+- Extended platform tests for the native remote sync manifest bridge path so invalid direct storage calls do not forward to the bridge.
+- Updated architecture notes to document that direct storage wrapper calls are bounded in addition to `RemoteSyncManifestStore` calls.
+
+Quality gate:
+
+- `npx vitest run packages/platform/src/platform.test.ts packages/platform/src/remoteSync.test.ts packages/platform/src/remoteSyncConfiguredRawMirrorProvider.test.ts`: passed, 3 files / 152 tests
+- `npm run verify`: passed, 87 files / 862 tests, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Remote sync manifest storage wrapper hardcode scan for OpenAI endpoints, model ids, API keys, Feishu/Lark endpoints, folder ids, and provider credentials: passed
+
+Review:
+
+- Manifest storage now validates keys both at the manifest store boundary and at the lower storage wrapper boundary, so future callers cannot accidentally bypass scoped-key validation by using the raw storage object.
+- No provider id, endpoint URL, model id, API key, Feishu scope, token name, folder id, storage path, or credential literal was added.
+
+## 2026-06-12 - P2 Configuration Storage Key Boundary
+
+Completed:
+
+- Added a platform-owned configuration storage key length limit.
+- Normalized injected `ConfigurationService` storage keys before any configuration storage read or write.
+- Rejected empty, invalid, and overlong configuration storage keys at construction time so invalid callers cannot reach browser or Electron-backed storage.
+- Aligned configuration persistence with the native/browser storage-key boundary used by the surrounding platform storage bridges.
+- Covered trimmed maximum-length keys, invalid keys, overlong keys, and no-forwarding behavior with focused platform tests.
+- Updated architecture notes to record the configuration storage-key boundary without adding new documentation surfaces.
+
+Quality gate:
+
+- `npx vitest run packages/platform/src/platform.test.ts packages/platform/src/configurationAi.test.ts`: passed, 2 files / 112 tests
+- `npm run verify`: passed, 87 files / 863 tests, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Configuration storage key hardcode scan for OpenAI endpoints, model ids, API keys, Feishu/Lark endpoints, folder ids, and provider credentials: passed
+
+Review:
+
+- Configuration persistence now validates caller-supplied storage identity before touching storage, which keeps preference storage aligned with the same bounded-key rule applied to native/browser bridge paths.
+- No provider id, endpoint URL, model id, API key, Feishu scope, token name, folder id, storage path, or credential literal was added.
+
+## 2026-06-12 - P2 Text File Draft Storage Key Boundary
+
+Completed:
+
+- Added a platform-owned text-file draft storage key length limit.
+- Normalized injected `BrowserTextFileService` and `WorkspaceTextFileService` draft storage keys before any draft read or write.
+- Rejected empty, invalid, and overlong draft storage keys at construction time so invalid callers cannot reach browser storage.
+- Covered trimmed maximum-length browser draft reads/writes, invalid Workspace service keys, overlong Browser service keys, and no-forwarding behavior with focused platform tests.
+- Updated architecture notes to record that local draft persistence shares the platform storage-key boundary.
+
+Quality gate:
+
+- `npx vitest run packages/platform/src/platform.test.ts`: passed, 1 file / 107 tests
+- `npx tsc -p packages/platform/tsconfig.json --noEmit`: passed
+- `npm run verify`: passed, 87 files / 864 tests, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Text file draft storage key hardcode scan for OpenAI endpoints, model ids, API keys, Feishu/Lark endpoints, folder ids, and provider credentials: passed
+
+Review:
+
+- Draft persistence now validates caller-supplied storage identity before touching browser storage, closing the same class of injected-key gap as configuration and manifest persistence.
+- No provider id, endpoint URL, model id, API key, Feishu scope, token name, folder id, storage path, or credential literal was added.
+
+## 2026-06-12 - P2 Recent Storage Key Boundary
+
+Completed:
+
+- Added a platform-owned recent-resource storage key length limit.
+- Normalized injected `RecentService` storage keys before reading or writing the persisted recent-resource list.
+- Rejected empty, invalid, and overlong recent storage keys at construction time so invalid callers cannot reach injected or browser storage.
+- Covered trimmed maximum-length storage keys, invalid keys, overlong keys, and no-forwarding behavior with focused platform tests.
+- Updated architecture notes to record that recent-resource persistence owns the storage-key boundary rather than Workbench navigation surfaces.
+
+Quality gate:
+
+- `npx vitest run packages/platform/src/platform.test.ts`: passed, 1 file / 108 tests
+- `npx tsc -p packages/platform/tsconfig.json --noEmit`: passed
+- `npm run verify`: passed, 87 files / 865 tests, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Recent storage key hardcode scan for OpenAI endpoints, model ids, API keys, Feishu/Lark endpoints, folder ids, and provider credentials: passed
+
+Review:
+
+- Recent resource persistence now validates caller-supplied storage identity before touching storage, keeping navigation history storage aligned with the configuration, draft, and manifest storage-key boundaries.
+- No provider id, endpoint URL, model id, API key, Feishu scope, token name, folder id, storage path, or credential literal was added.
+
+## 2026-06-12 - P2 Workspace Index Snapshot Storage Key Boundary
+
+Completed:
+
+- Added platform-owned workspace index snapshot base and complete storage-key length limits.
+- Normalized injected `PersistedWorkspaceIndexProvider` base storage keys before snapshot restore or persistence.
+- Applied the same storage-key boundary to direct native/browser index snapshot storage wrapper reads and writes before forwarding to local storage or Electron.
+- Covered trimmed maximum-length base keys, scoped key derivation, invalid and overlong keys, and no-forwarding behavior with focused platform tests.
+- Updated architecture notes to record that workspace index snapshot persistence owns its storage-key boundary.
+
+Quality gate:
+
+- `npx vitest run packages/platform/src/platform.test.ts`: passed, 1 file / 109 tests
+- `npx tsc -p packages/platform/tsconfig.json --noEmit`: passed
+- `npm run verify`: passed, 87 files / 866 tests, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Workspace index snapshot storage key hardcode scan for OpenAI endpoints, model ids, API keys, Feishu/Lark endpoints, folder ids, and provider credentials: passed
+
+Review:
+
+- Workspace index snapshot persistence now validates caller-supplied storage identity before touching storage, keeping index snapshots aligned with the configuration, draft, recent-resource, and manifest storage-key boundaries.
+- No provider id, endpoint URL, model id, API key, Feishu scope, token name, folder id, storage path, or credential literal was added.
+
+## 2026-06-12 - P2 Native Storage Key Boundary
+
+Completed:
+
+- Added a pure Electron main-process native storage-key helper for configuration and snapshot-style persisted storage keys.
+- Routed native configuration, workspace index snapshot, and remote sync manifest IPC storage key checks through that shared helper.
+- Tightened native storage keys to the same bounded platform shape: alphanumeric first character, then alphanumeric, dot, or hyphen.
+- Added app-side Vitest coverage for maximum-length configuration keys, maximum-length snapshot keys, and invalid path-like keys.
+- Included `apps/**/*.test.ts` in the standard Vitest suite while excluding Electron test files from the emitted Electron build.
+
+Quality gate:
+
+- `npx vitest run apps/desktop/electron/nativeStorageKeys.test.ts`: passed, 1 file / 3 tests
+- `npx tsc -p apps/desktop/tsconfig.electron.json --noEmit`: passed
+- `npm run verify`: passed, 88 files / 869 tests, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Native storage key hardcode scan for OpenAI endpoints, model ids, API keys, Feishu/Lark endpoints, folder ids, and provider credentials: passed
+
+Review:
+
+- Electron app-data storage bridges now validate caller-supplied storage identity in the main process even if a future caller bypasses the platform/browser wrapper.
+- No provider id, endpoint URL, model id, API key, Feishu scope, token name, folder id, storage path, or credential literal was added.
+
+## 2026-06-12 - P2 Native Secret Reference Boundary
+
+Completed:
+
+- Added a pure Electron main-process native secret-reference helper with the shared 256-character limit.
+- Changed native secret storage to trim and validate secret references before encrypted reads, writes, or deletes.
+- Kept persisted secret-store entries strict by accepting only already-normalized secret reference keys from disk.
+- Re-exported the shared helper through the existing native secret store boundary so AI and remote sync request bridges keep their current import path.
+- Added app-side Vitest coverage for trimmed maximum-length references, invalid path-like references, and stored-key strictness.
+
+Quality gate:
+
+- `npx vitest run apps/desktop/electron/nativeSecretRefs.test.ts`: passed, 1 file / 3 tests
+- `npx tsc -p apps/desktop/tsconfig.electron.json --noEmit`: passed
+- `npm run verify`: passed, 89 files / 872 tests, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Native secret reference hardcode scan for OpenAI endpoints, model ids, API keys, Feishu/Lark endpoints, folder ids, and provider credentials: passed
+
+Review:
+
+- Native secret handoff now matches the Workbench/configuration trim-first secretRef boundary while still keeping raw secret values encrypted and owned by Electron main.
+- No provider id, endpoint URL, model id, API key, Feishu scope, token name, folder id, storage path, or credential literal was added.
+
+## 2026-06-12 - P2 Native Export Asset Boundary
+
+Completed:
+
+- Extracted native export asset path, MIME type, base64 payload, default filename, and resolved asset path checks into a pure Electron main-process helper.
+- Routed native HTML export sibling asset writes through that helper before any export asset path is resolved or written.
+- Tightened export asset paths to normalized forward-slash relative paths so providers cannot rely on path trimming, Windows separators, URI schemes, absolute paths, or traversal segments.
+- Added app-side Vitest coverage for valid nested assets, invalid path forms, image MIME validation, base64 validation, default filename sanitization, and export-directory containment.
+
+Quality gate:
+
+- `npx vitest run apps/desktop/electron/nativeExportValidation.test.ts`: passed, 1 file / 7 tests
+- `npx tsc -p apps/desktop/tsconfig.electron.json --noEmit`: passed
+- `npm run verify`: passed, 90 files / 879 tests, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Native export asset hardcode scan for OpenAI endpoints, model ids, API keys, Feishu/Lark endpoints, folder ids, and provider credentials: passed
+
+Review:
+
+- Native export writes now have focused pure tests without importing the Electron IPC module, keeping the save-dialog boundary separate from path validation.
+- No provider id, endpoint URL, model id, API key, Feishu scope, token name, folder id, storage path, or credential literal was added.
+
+## 2026-06-12 - P2 Local Provider Smoke Strategy
+
+Completed:
+
+- Added an optional environment-gated Responses AI provider smoke test for local Codex/Responses-compatible endpoints.
+- Required endpoint URL, API key, and model values to come from local environment variables so normal verification never stores or assumes provider credentials.
+- Documented that Feishu/Lark functional validation should use the external Lark CLI for authorization and provider-specific operations while keeping Typora Plus on provider-neutral sync contracts.
+- Confirmed local environment currently has the `codex` CLI available, no Codex/OpenAI smoke environment variables set, and no `lark` CLI on PATH.
+
+Quality gate:
+
+- `npx vitest run packages/platform/src/responsesAiProvider.smoke.test.ts`: passed with 1 skipped test because local smoke environment variables are not set
+- `npx tsc -p packages/platform/tsconfig.json --noEmit`: passed
+- `npm run verify`: passed, 90 files / 879 tests passed and 1 file / 1 test skipped, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Local provider smoke hardcode scan for OpenAI endpoints, model ids, API keys, Feishu/Lark endpoints, folder ids, and provider credentials: passed
+
+Review:
+
+- This creates a real functional-test path without changing application defaults or hard-coding provider ids, endpoints, model names, API keys, Feishu folder ids, or tenant-specific values.
+
+## 2026-06-12 - P2 Workbench Locale Switch
+
+Completed:
+
+- Added a validated `appearance.locale` configuration value with English as the default and Simplified Chinese as a selectable locale.
+- Added a centralized Workbench i18n model for command, menu, side view, statusbar, dialog, and Settings copy.
+- Wired titlebar/activitybar tooltips, Sidebar labels, statusbar text, Command Palette, Quick Open, common dialogs, and Settings to the active locale.
+- Added a Language setting under Appearance and kept Settings search aligned with localized labels plus English keywords.
+- Covered locale persistence/sanitization, Settings language metadata, command/menu localization, localized Settings search, and AI dialog label formatting with focused tests.
+
+Quality gate:
+
+- `npx vitest run packages/platform/src/platform.test.ts`: passed, 1 file / 109 tests
+- `npx vitest run packages/workbench/src/settingsModel.test.ts packages/workbench/src/workbenchI18n.test.ts`: passed, 2 files / 35 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 91 files passed / 1 skipped, 883 tests passed / 1 skipped, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Workbench locale hardcode scan for provider endpoints, model ids, API keys, Feishu/Lark endpoints, folder ids, and provider credentials under `packages` and `apps`: passed
+- Browser verification: passed at `http://127.0.0.1:5173`; Settings exposes Language, switching to Chinese updates Settings, Sidebar, statusbar, and command/menu tooltips, and searching `语言` narrows Settings to the language entry.
+
+Review:
+
+- Locale is a user preference, not a renderer-local flag; it persists through the platform configuration boundary.
+- Contribution ids and command ids remain stable English identifiers, while display copy is localized at render surfaces.
+- No provider id, endpoint URL, model id, API key, Feishu scope, token name, folder id, storage path, or credential literal was added.
+
+## 2026-06-12 - P2 Editor Live Preview Locale Labels
+
+Completed:
+
+- Added a `MarkdownEditorLabels` contract plus default English labels inside the editor package for live-preview controls.
+- Routed code-fence, external renderer, table, math, task checkbox, inline math, and inline renderer aria/title/button/loading/error copy through that label contract.
+- Added Workbench Chinese editor labels in the centralized Workbench i18n model and mapped `appearance.locale` to editor labels through the Workbench editor adapter.
+- Added `configuration.appearance.locale` to the editor adapter memo dependencies so switching language recreates the CodeMirror preview extension with the active labels.
+- Covered editor DOM label overrides, Workbench locale-to-editor-label mapping, and Workbench i18n editor label formatting with focused tests.
+- Updated architecture notes to document that the editor exposes a label contract while Workbench owns locale selection.
+
+Quality gate:
+
+- `npx vitest run packages/editor/src/livePreview.test.ts`: passed, 1 file / 191 tests
+- `npx vitest run packages/workbench/src/workbenchEditorAdapter.test.ts packages/workbench/src/workbenchI18n.test.ts`: passed, 2 files / 12 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 91 files passed / 1 skipped, 887 tests passed / 1 skipped, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Editor live-preview locale hardcode scan for provider endpoints, model ids, API keys, Feishu/Lark endpoints, folder ids, and provider credentials under `packages` and `apps`: passed
+- Browser verification: passed at `http://127.0.0.1:5173`; after restarting the correct desktop Vite server, Chinese locale shows editor preview copy controls as `复制` / `复制代码` and preview loading text as `正在渲染预览...`.
+
+Review:
+
+- The editor remains independent of Workbench locale and configuration services; it only consumes an injected label object.
+- Built-in renderer labels such as Mermaid remain renderer contribution metadata, while editor-owned generic controls are localized through the adapter.
+- No provider id, endpoint URL, model id, API key, Feishu scope, token name, folder id, storage path, or credential literal was added.
+
+## 2026-06-12 - P2 Settings Validation Issue Localization
+
+Completed:
+
+- Changed Settings AI and remote sync provider draft validation from user-facing English strings to stable issue codes.
+- Added localized English and Simplified Chinese Settings validation messages in the centralized Workbench i18n model.
+- Updated SettingsDialog to format validation issue codes at render time and localized the remote sync secret input aria label.
+- Covered issue-code validation behavior and localized issue formatting with focused Settings model and Workbench i18n tests.
+- Updated architecture notes to record that Settings draft validation returns issue codes while Workbench i18n owns display copy.
+
+Quality gate:
+
+- `npx vitest run packages/workbench/src/settingsModel.test.ts packages/workbench/src/workbenchI18n.test.ts`: passed, 2 files / 37 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 91 files passed / 1 skipped, 888 tests passed / 1 skipped, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Settings validation localization hardcode scan for provider endpoints, model ids, API keys, Feishu/Lark endpoints, folder ids, and provider credentials under `packages` and `apps`: passed
+- Browser verification: passed at `http://127.0.0.1:5173`; in Chinese locale, adding an empty AI provider draft displays the localized validation message `请补全服务商 ID、标题、HTTPS 或本地端点、模型、密钥引用，并确认请求设置有效。`.
+
+Review:
+
+- Settings model validation now reports machine-readable issue codes, preserving model/test stability while keeping display language in Workbench i18n.
+- Platform-owned raw mirror diagnostics still stay provider-neutral; Settings only maps their categories into user-facing issue codes and localized copy.
+- No provider id, endpoint URL, model id, API key, Feishu scope, token name, folder id, storage path, or credential literal was added.
+
+## 2026-06-12 - P2 Settings Number Unit Localization
+
+Completed:
+
+- Added stable Settings number unit ids for characters, entries, megabytes, milliseconds, and pixels in the centralized Workbench i18n model.
+- Updated Settings numeric controls to render units through locale messages instead of passing user-facing unit strings from `SettingsDialog`.
+- Covered Simplified Chinese unit formatting in focused Workbench i18n tests.
+- Updated architecture notes to record that Settings numeric unit display is localized through stable unit ids while numeric semantics stay platform-owned.
+
+Quality gate:
+
+- `npm run verify`: passed, 91 files passed / 1 skipped, 889 tests passed / 1 skipped, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Settings unit localization hardcode scan for provider endpoints, model ids, API keys, Feishu/Lark endpoints, folder ids, and provider credentials under `packages` and `apps`: passed
+- Browser verification: passed at `http://127.0.0.1:5173`; Chinese Settings shows `毫秒`, `像素`, `项`, and `字符` on numeric controls, leaves `MB` unchanged, and emitted no console errors.
+
+Review:
+
+- Settings still passes platform constraints and raw numeric values into the shared control; only the unit display string comes from Workbench i18n.
+- Unit ids stay stable across locales, so future translated unit labels do not change Settings model or configuration contracts.
+- No provider id, endpoint URL, model id, API key, Feishu scope, token name, folder id, storage path, or credential literal was added.
+
+## 2026-06-12 - P2 Remote Sync Dialog Display Localization
+
+Completed:
+
+- Added a lightweight remote sync dialog localization contract for directions, operation kinds, operation targets, summaries, progress fragments, conflict actions, execution labels, and execution-block reasons.
+- Changed the remote sync dialog model to consume injected display messages instead of hardcoding English UI strings or rendering protocol enum values directly.
+- Added stable execution-block reason codes while preserving the existing English error-message helper used by the execution guard.
+- Updated Application remote sync dialog rendering to format direction, operation kind, operation detail, summary, execution state, and progress through the active locale.
+- Covered English dialog behavior, Simplified Chinese display formatting, stable execution-block reason codes, and Workbench i18n remote sync labels with focused tests.
+- Updated architecture notes to document the remote sync dialog i18n boundary.
+
+Quality gate:
+
+- `npx vitest run packages/workbench/src/workbenchRemoteSyncDialogModel.test.ts packages/workbench/src/workbenchI18n.test.ts packages/workbench/src/workbenchRemoteSyncActions.test.ts`: passed, 3 files / 34 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 91 files passed / 1 skipped, 891 tests passed / 1 skipped, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Remote sync dialog localization hardcode scan for provider endpoints, model ids, API keys, Feishu/Lark endpoints, folder ids, and provider credentials under `packages` and `apps`: passed
+- Browser smoke verification: passed at `http://127.0.0.1:5173`; Workbench loaded after refresh and emitted no console errors
+
+Review:
+
+- Remote sync protocol values remain stable provider-neutral enums; only the Workbench dialog display layer maps them into localized copy.
+- Provider-supplied progress messages remain provider data, while Workbench-owned counts, operation labels, and status framing are localized.
+- No provider id, endpoint URL, model id, API key, Feishu scope, token name, folder id, storage path, or credential literal was added.
+
+## 2026-06-12 - P2 AI Extracted Task Output Localization
+
+Completed:
+
+- Added a focused extracted-task response message contract for task detail labels, detail formatting, detail-list punctuation, and empty-result text.
+- Updated the AI response model to keep its default English behavior while accepting injected extracted-task messages for localized Markdown output.
+- Wired Workbench command registration to pass the active locale's extracted-task messages when creating AI responses.
+- Added Simplified Chinese extracted-task messages to the centralized Workbench i18n model.
+- Covered default English behavior, localized Chinese Markdown formatting, empty-result localization, command-registration injection, and Workbench i18n labels with focused tests.
+- Updated architecture notes to document that provider-facing task extraction JSON stays stable while display Markdown is localized at the Workbench boundary.
+
+Quality gate:
+
+- `npx vitest run packages/workbench/src/workbenchAiResponseModel.test.ts packages/workbench/src/workbenchCommandRegistration.test.ts packages/workbench/src/workbenchI18n.test.ts`: passed, 3 files / 25 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 91 files passed / 1 skipped, 893 tests passed / 1 skipped, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- AI extracted-task output localization hardcode scan for provider endpoints, model ids, API keys, Feishu/Lark endpoints, folder ids, and provider credentials under `packages` and `apps`: passed
+- Browser smoke verification: passed at `http://127.0.0.1:5173`; Workbench loaded after refresh and emitted no console errors
+
+Review:
+
+- AI task extraction still requests the same provider-neutral structured JSON; only the Workbench response formatting layer localizes Markdown labels and empty output.
+- The command-registration boundary now receives current locale response-formatting messages from the shell instead of importing global UI state.
+- No provider id, endpoint URL, model id, API key, Feishu scope, token name, folder id, storage path, or credential literal was added.
+
+## 2026-06-12 - P2 AI Token Usage Metadata Localization
+
+Completed:
+
+- Added a focused AI token usage message contract for input, output, total, and part joining.
+- Updated AI response metadata formatting to keep default English behavior while accepting injected token-usage messages.
+- Wired AI response dialogs and Settings AI provider diagnostics to format token usage through the active locale.
+- Added Simplified Chinese token usage labels in the centralized Workbench i18n model.
+- Covered default English token usage, localized Chinese token usage, localized metadata chips, and Workbench i18n token labels with focused tests.
+- Updated architecture notes to document that token usage labels are localized without changing provider result contracts.
+
+Quality gate:
+
+- `npx vitest run packages/workbench/src/workbenchAiResponseModel.test.ts packages/workbench/src/workbenchI18n.test.ts`: passed, 2 files / 17 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 91 files passed / 1 skipped, 893 tests passed / 1 skipped, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- AI token usage localization hardcode scan for provider endpoints, model ids, API keys, Feishu/Lark endpoints, folder ids, and provider credentials under `packages` and `apps`: passed
+- Browser smoke verification: passed at `http://127.0.0.1:5173`; Workbench loaded after refresh and emitted no console errors
+
+Review:
+
+- Provider responses still carry numeric token usage fields; only Workbench display surfaces choose localized labels.
+- Settings diagnostics and AI response dialogs now share the same token usage formatter from Workbench i18n.
+- No provider id, endpoint URL, model id, API key, Feishu scope, token name, folder id, storage path, or credential literal was added.
+
+## 2026-06-12 - P2 Settings AI Diagnostic Formatting Localization
+
+Completed:
+
+- Added Settings i18n formatters for AI diagnostic successful-status framing and diagnostic response metadata joining.
+- Updated Settings AI provider diagnostics to use those formatters instead of hardcoded colon and comma punctuation.
+- Kept AI provider diagnostic data provider-neutral: response model names and token usage stay as response metadata, while Workbench owns locale-sensitive framing.
+- Covered Simplified Chinese diagnostic framing and response metadata joining in focused Workbench i18n tests.
+- Updated architecture notes to document that Settings AI diagnostics localize punctuation and status framing through Workbench i18n.
+
+Quality gate:
+
+- `npx vitest run packages/workbench/src/workbenchI18n.test.ts`: passed, 1 file / 8 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 91 files passed / 1 skipped, 893 tests passed / 1 skipped, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Settings AI diagnostic formatting hardcode scan for provider endpoints, model ids, API keys, Feishu/Lark endpoints, folder ids, and provider credentials under `packages` and `apps`: passed
+- Browser smoke verification: passed at `http://127.0.0.1:5173`; Workbench loaded after refresh and emitted no console errors
+
+Review:
+
+- Settings remains a renderer of diagnostic state; the diagnostic provider call path and provider result contract did not change.
+- Locale-sensitive punctuation now lives beside the rest of Settings copy in Workbench i18n.
+- No provider id, endpoint URL, model id, API key, Feishu scope, token name, folder id, storage path, or credential literal was added.
+
+## 2026-06-12 - P2 Remote Sync Secret Aria Label Localization
+
+Completed:
+
+- Added a Settings i18n formatter for remote sync secret input aria labels.
+- Updated the remote sync secret aria-label helper to use the formatter instead of hardcoded colon punctuation.
+- Covered Simplified Chinese full-width punctuation in the focused Workbench i18n tests.
+- Updated architecture notes to record that Settings helper and aria labels use i18n formatters for locale-sensitive punctuation.
+
+Quality gate:
+
+- `npx vitest run packages/workbench/src/workbenchI18n.test.ts`: passed, 1 file / 8 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 91 files passed / 1 skipped, 893 tests passed / 1 skipped, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Remote sync secret aria-label localization hardcode scan for provider endpoints, model ids, API keys, Feishu/Lark endpoints, folder ids, and provider credentials under `packages` and `apps`: passed
+- Browser smoke verification: passed at `http://127.0.0.1:5173`; Workbench rendered Chinese UI content and emitted no console errors
+
+Review:
+
+- Remote sync secret metadata and storage boundaries did not change; only the user-facing accessibility label formatting moved into Workbench i18n.
+- No provider id, endpoint URL, model id, API key, Feishu scope, token name, folder id, storage path, or credential literal was added.
+
+## 2026-06-12 - P2 Settings Number Value Aria Label Localization
+
+Completed:
+
+- Added a Settings i18n formatter for number-input value aria labels.
+- Updated Settings numeric controls to use the formatter instead of composing label and suffix text inside React.
+- Covered Simplified Chinese number-value label word order in focused Workbench i18n tests.
+- Updated architecture notes to record that Settings number-value aria labels use i18n formatters.
+
+Quality gate:
+
+- `npx vitest run packages/workbench/src/workbenchI18n.test.ts`: passed, 1 file / 8 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 91 files passed / 1 skipped, 893 tests passed / 1 skipped, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Settings number value aria-label localization hardcode scan for provider endpoints, model ids, API keys, Feishu/Lark endpoints, folder ids, and provider credentials under `packages` and `apps`: passed
+- Browser smoke verification: passed at `http://127.0.0.1:5173`; Workbench rendered Chinese UI content and emitted no console errors
+
+Review:
+
+- Numeric configuration constraints, stored values, and unit labels did not change; only the accessibility label composition moved into Workbench i18n.
+- No provider id, endpoint URL, model id, API key, Feishu scope, token name, folder id, storage path, or credential literal was added.
+
+## 2026-06-12 - P2 AI Workspace Context Label Localization
+
+Completed:
+
+- Added a focused AI workspace context message contract for path labels, line labels, and detail joining.
+- Kept the default English context formatting unchanged while allowing Workbench i18n to inject locale-aware labels.
+- Wired command registration to pass the active locale's workspace context formatter into AI requests.
+- Covered default context behavior, Simplified Chinese context formatting, command-path injection, and Workbench i18n labels with focused tests.
+- Updated architecture notes to document that AI workspace search context labels localize without changing provider request contracts.
+
+Quality gate:
+
+- `npx vitest run packages/workbench/src/workbenchAiWorkspaceContext.test.ts packages/workbench/src/workbenchCommandRegistration.test.ts packages/workbench/src/workbenchI18n.test.ts`: passed, 3 files / 22 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 91 files passed / 1 skipped, 896 tests passed / 1 skipped, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- AI workspace context label localization hardcode scan for provider endpoints, model ids, API keys, Feishu/Lark endpoints, folder ids, and provider credentials under `packages` and `apps`: passed
+- Browser smoke verification: passed at `http://127.0.0.1:5173`; Workbench rendered Chinese UI content and emitted no console errors
+
+Review:
+
+- AI provider ids, request metadata, workspace search result shape, and context item kind stayed stable; only the provider-facing context detail labels became injectable.
+- No provider id, endpoint URL, model id, API key, Feishu scope, token name, folder id, storage path, or credential literal was added.
+
+## 2026-06-12 - P2 Responses Prompt Framing Boundary
+
+Completed:
+
+- Added a Responses adapter-local prompt message contract for context section headings, context item headings, and URI lines.
+- Kept default Responses request input formatting unchanged while allowing adapter tests and future provider factories to inject alternate framing.
+- Moved Responses context prompt framing out of inline request body construction.
+- Covered custom prompt framing with a focused Responses provider test.
+- Updated architecture notes to document that provider-specific prompt layout stays inside the Responses adapter boundary.
+
+Quality gate:
+
+- `npx vitest run packages/platform/src/responsesAiProvider.test.ts`: passed, 1 file / 15 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 91 files passed / 1 skipped, 897 tests passed / 1 skipped, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Responses prompt framing hardcode scan for provider endpoints, model ids, API keys, Feishu/Lark endpoints, folder ids, and provider credentials under `packages` and `apps`: passed
+- Browser smoke verification: passed at `http://127.0.0.1:5173`; Workbench rendered Chinese UI content and emitted no console errors
+
+Review:
+
+- Provider ids, endpoint URLs, model names, secret references, request metadata, and OpenAI Responses request fields did not change.
+- Workbench still sends provider-neutral `AiTextContextItem` data; only the Responses adapter chooses how that context is rendered into its provider-specific input string.
+- No provider id, endpoint URL, model id, API key, Feishu scope, token name, folder id, storage path, or credential literal was added.
+
+## 2026-06-12 - P2 Active Note AI Request Instruction Localization
+
+Completed:
+
+- Added a focused active-note AI request message contract for action-specific writing instructions.
+- Kept default English active-note instructions in the request model while allowing Workbench i18n to inject locale-specific prompt copy.
+- Wired Workbench AI command registration and action execution to pass the active locale's request messages into provider-neutral AI requests.
+- Added Simplified Chinese instructions for summarize, rewrite, continue, and task extraction without changing the task extraction JSON schema.
+- Covered request-model injection, action-runner forwarding, command-path injection, and Workbench i18n messages with focused tests.
+- Updated architecture notes to document that active-note AI request instructions are localized through Workbench i18n while structured output contracts stay stable.
+
+Quality gate:
+
+- `npx vitest run packages/workbench/src/workbenchAiRequestModel.test.ts packages/workbench/src/workbenchAiActions.test.ts packages/workbench/src/workbenchCommandRegistration.test.ts packages/workbench/src/workbenchI18n.test.ts`: passed, 4 files / 35 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 91 files passed / 1 skipped, 901 tests passed / 1 skipped, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Active-note AI request localization hardcode scan for provider endpoints, model ids, API keys, Feishu/Lark endpoints, folder ids, and provider credentials under `packages` and `apps`: passed
+- Browser smoke verification: passed at `http://127.0.0.1:5173`; Workbench rendered after refresh and emitted no console errors
+
+Review:
+
+- Active-note AI request metadata, provider ids, endpoint URLs, model names, secret references, workspace context items, and structured output format hints did not change.
+- No provider id, endpoint URL, model id, API key, Feishu scope, token name, folder id, storage path, or credential literal was added.
+
+## 2026-06-12 - P2 AI Provider Diagnostic Request Localization
+
+Completed:
+
+- Added a focused AI provider diagnostic message contract for the diagnostic request instruction, diagnostic input, and missing-provider-id error.
+- Kept default English diagnostic behavior in the helper while allowing Workbench i18n to inject locale-specific diagnostic prompt copy.
+- Wired Application to pass the active locale's diagnostic messages into Settings AI provider test actions.
+- Added Simplified Chinese diagnostic request messages without changing provider ids, metadata, or the provider-neutral `AiTextRequest` shape.
+- Covered default diagnostic behavior, direct injected messages, action-handler forwarding, and Workbench i18n messages with focused tests.
+- Updated architecture notes to document that Settings AI diagnostics use the same prompt-copy localization boundary as active-note AI requests.
+
+Quality gate:
+
+- `npx vitest run packages/workbench/src/workbenchAiProviderDiagnostics.test.ts packages/workbench/src/workbenchI18n.test.ts`: passed, 2 files / 16 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 91 files passed / 1 skipped, 904 tests passed / 1 skipped, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- AI provider diagnostic localization hardcode scan for provider endpoints, model ids, API keys, Feishu/Lark endpoints, folder ids, and provider credentials under `packages` and `apps`: passed
+- Browser smoke verification: passed at `http://127.0.0.1:5173`; Workbench rendered after refresh and emitted no console errors
+
+Review:
+
+- AI diagnostic request metadata, provider ids, endpoint URLs, model names, secret references, and result contracts did not change.
+- No provider id, endpoint URL, model id, API key, Feishu scope, token name, folder id, storage path, or credential literal was added.
+
+## 2026-06-12 - P2 Workbench Action Runner Error Localization
+
+Completed:
+
+- Added a focused Workbench action runner message contract for save-conflict and generic non-`Error` operation fallback text.
+- Kept default English action-runner behavior while allowing Workbench i18n to inject locale-specific fallback messages.
+- Wired Application command execution, direct dialog actions, and command registration to pass the active locale's action-runner messages.
+- Replaced repeated command-registration `runWorkbenchAction` calls with one local command action boundary helper.
+- Covered default behavior, injected action-runner fallbacks, command-executor forwarding, command-registration forwarding, and Workbench i18n messages with focused tests.
+- Updated architecture notes to document that the shared action runner owns operation-error fallback mapping while display text comes from Workbench i18n.
+
+Quality gate:
+
+- `npx vitest run packages/workbench/src/workbenchActionRunner.test.ts packages/workbench/src/workbenchCommandRegistration.test.ts packages/workbench/src/workbenchI18n.test.ts`: passed, 3 files / 31 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 91 files passed / 1 skipped, 908 tests passed / 1 skipped, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Workbench action-runner localization hardcode scan for provider endpoints, model ids, API keys, Feishu/Lark endpoints, folder ids, and provider credentials under `packages` and `apps`: passed
+- Browser smoke verification: passed at `http://127.0.0.1:5173`; Workbench rendered after refresh and emitted no console errors
+
+Review:
+
+- Command ids, command handler registration, save-conflict payloads, service errors, and provider contracts did not change.
+- No provider id, endpoint URL, model id, API key, Feishu scope, token name, folder id, storage path, or credential literal was added.
+
+## 2026-06-12 - P2 Secret Action Error Localization
+
+Completed:
+
+- Added focused AI and remote sync secret message contracts for unavailable storage, invalid secret references, and empty secret values.
+- Kept default English secret validation behavior while allowing Workbench i18n to inject locale-specific secret operation errors.
+- Wired Application secret action creation to pass the active locale's AI/remote sync secret messages and shared action-runner fallback messages.
+- Covered default behavior, direct injected validation errors, action-handler forwarding, and Workbench i18n messages with focused tests.
+- Updated architecture notes to document that secret validation and native bridge availability checks stay in focused helpers while display text comes from Workbench i18n.
+
+Quality gate:
+
+- `npx vitest run packages/workbench/src/workbenchAiSecrets.test.ts packages/workbench/src/workbenchRemoteSyncSecrets.test.ts packages/workbench/src/workbenchI18n.test.ts`: passed, 3 files / 24 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 91 files passed / 1 skipped, 913 tests passed / 1 skipped, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Secret action localization hardcode scan for provider endpoints, model ids, API keys, Feishu/Lark endpoints, folder ids, and provider credentials under `packages` and `apps`: passed
+- Browser smoke verification: passed at `http://127.0.0.1:5173`; Workbench rendered after refresh and emitted no console errors
+
+Review:
+
+- Secret reference normalization, bridge availability checks, native secret storage, provider configuration, and decrypted credential handling did not change.
+- No provider id, endpoint URL, model id, API key, Feishu scope, token name, folder id, storage path, or credential literal was added.
+
+## 2026-06-13 - P2 Active Note AI Action Error Localization
+
+Completed:
+
+- Added a focused active-note AI action message contract for action titles and missing-provider operation errors.
+- Kept default English no-provider behavior while allowing Workbench i18n to inject localized action titles and error formatting.
+- Wired Application and command registration to pass active-locale AI action messages into active-note AI command execution.
+- Covered direct action-helper injection, command-registration forwarding when a provider disappears between registration and execution, and Workbench i18n messages with focused tests.
+- Updated architecture notes to document that active-note AI action errors localize through Workbench i18n without changing provider selection or request construction.
+
+Quality gate:
+
+- `npx vitest run packages/workbench/src/workbenchAiActions.test.ts packages/workbench/src/workbenchCommandRegistration.test.ts packages/workbench/src/workbenchI18n.test.ts`: passed, 3 files / 36 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 91 files passed / 1 skipped, 916 tests passed / 1 skipped, production build completed
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Active-note AI action localization hardcode scan for provider endpoints, model ids, API keys, Feishu/Lark endpoints, folder ids, and provider credentials under `packages` and `apps`: passed
+- Browser smoke verification: passed at `http://127.0.0.1:5173`; Workbench mounted under `#root`, title was `Typora Plus`, and refresh emitted no console errors
+
+Review:
+
+- AI provider selection, command metadata, request metadata, prompt instructions, response parsing, and provider contracts did not change.
+- No provider id, endpoint URL, model id, API key, Feishu scope, token name, folder id, storage path, or credential literal was added.
+
+## 2026-06-13 - P2 Build Toolchain Audit Remediation
+
+Completed:
+
+- Upgraded Vite from the vulnerable 7.x dependency line to `vite@8.0.16` after `npm audit --audit-level=moderate` reported high-severity esbuild advisories through Vite.
+- Upgraded `@vitejs/plugin-react` to `6.0.2` to match Vite 8 peer requirements.
+- Tightened the root Node engine to `>=22.12.0`, matching the Vite 8 and plugin React runtime baseline.
+- Refreshed `package-lock.json` through `npm install` and confirmed the installed dependency tree resolves Vite through `vite@8.0.16`.
+
+Quality gate:
+
+- `npm ls vite esbuild @vitejs/plugin-react`: passed, dependency tree resolves `vite@8.0.16`, `@vitejs/plugin-react@6.0.2`, and Vite 8-compatible `esbuild`
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 91 files passed / 1 skipped, 916 tests passed / 1 skipped, production build completed with Vite 8
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Build toolchain remediation hardcode scan for provider endpoints, model ids, API keys, Feishu/Lark endpoints, folder ids, and provider credentials under `packages` and `apps`: passed
+- Browser smoke verification: passed at `http://127.0.0.1:5173`; Workbench mounted under `#root`, title was `Typora Plus`, and refresh emitted no console errors
+
+Review:
+
+- Application runtime code, provider configuration, credentials, AI/remote sync contracts, and build chunking policy did not change.
+- No provider id, endpoint URL, model id, API key, Feishu scope, token name, folder id, storage path, or credential literal was added.
+
+## 2026-06-13 - P2 Remote Sync Action Error Localization
+
+Completed:
+
+- Added focused remote sync action and request message contracts for missing provider, missing workspace, execution block reasons, and conflict-resolution operation messages.
+- Kept default English behavior in the helper modules while allowing Workbench i18n to inject localized Simplified Chinese messages.
+- Wired Application and command registration to pass active-locale remote sync action/request messages into planning, execution, and conflict-resolution flows.
+- Covered direct helper injection, command-registration forwarding when a provider disappears between registration and execution, localized missing-workspace errors, and Workbench i18n messages with focused tests.
+- Updated architecture notes to document that remote sync operation-error localization stays in Workbench message contracts without changing provider ids, request shapes, operation shapes, or dialog reason codes.
+
+Quality gate:
+
+- `npx vitest run packages/workbench/src/workbenchRemoteSyncActions.test.ts packages/workbench/src/workbenchRemoteSyncRequestModel.test.ts packages/workbench/src/workbenchCommandRegistration.test.ts packages/workbench/src/workbenchI18n.test.ts`: passed, 4 files / 45 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 91 files passed / 1 skipped, 922 tests passed / 1 skipped, production build completed with Vite 8
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Remote sync action/request localization hardcode scan for provider endpoints, model ids, API keys, Feishu/Lark endpoints, folder ids, and provider credentials under `packages` and `apps`: passed
+- Browser smoke verification: passed at `http://127.0.0.1:5173`; Workbench mounted under `#root`, title was `Typora Plus`, and refresh emitted no console errors
+
+Review:
+
+- Remote sync provider selection, workspace resource normalization, plan/result contracts, provider ids, remote scope metadata, secret references, and execution progress contracts did not change.
+- No provider id, endpoint URL, model id, API key, Feishu scope, token name, folder id, storage path, or credential literal was added.
+
+## 2026-06-13 - P2 Remote Sync Markdown Asset Error Localization
+
+Completed:
+
+- Added a focused Markdown asset discovery message contract for aborted discovery, non-base64 native content reads, and invalid base64 content reads.
+- Kept default English behavior in the asset discovery helper while allowing Workbench i18n to inject localized Simplified Chinese errors.
+- Wired remote sync planning actions and command registration to pass active-locale Markdown asset messages into workspace planning when the native resource bridge is available.
+- Covered direct asset-helper injection, action-path propagation, command-path propagation, and Workbench i18n messages with focused tests.
+- Updated architecture notes to document that Markdown asset discovery error text localizes without moving Markdown parsing knowledge, native resource access, provider ids, or cloud-specific behavior into React surfaces.
+
+Quality gate:
+
+- `npx vitest run packages/workbench/src/workbenchRemoteSyncMarkdownAssets.test.ts packages/workbench/src/workbenchRemoteSyncActions.test.ts packages/workbench/src/workbenchCommandRegistration.test.ts packages/workbench/src/workbenchI18n.test.ts`: passed, 4 files / 47 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 91 files passed / 1 skipped, 925 tests passed / 1 skipped, production build completed with Vite 8
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Remote sync Markdown asset error localization hardcode scan for provider endpoints, model ids, API keys, Feishu/Lark endpoints, folder ids, and provider credentials under `packages` and `apps`: passed
+- Browser smoke verification: passed at `http://127.0.0.1:5173`; Workbench mounted under `#root`, title was `Typora Plus`, and refresh emitted no console errors
+
+Review:
+
+- Markdown reference parsing, workspace-relative resource normalization, native resource reads, plan creation, provider selection, and provider contracts did not change.
+- No provider id, endpoint URL, model id, API key, Feishu scope, token name, folder id, storage path, or credential literal was added.
+
+## 2026-06-13 - P2 AI Task Extraction Validation Localization
+
+Completed:
+
+- Added a focused extracted-task validation message contract for malformed JSON, record/array/string/boolean type errors, and bounded array/string length errors.
+- Kept default English validation output unchanged while allowing Workbench i18n to inject localized Simplified Chinese labels and error formatting.
+- Wired existing AI response message injection through command registration so malformed structured task extraction responses surface localized operation errors.
+- Covered direct response-model injection, command-path propagation, and Workbench i18n messages with focused tests.
+- Updated architecture notes to document that structured task extraction validation text localizes without changing provider result contracts, task extraction schema hints, or Markdown task-list formatting.
+
+Quality gate:
+
+- `npx vitest run packages/workbench/src/workbenchAiResponseModel.test.ts packages/workbench/src/workbenchCommandRegistration.test.ts packages/workbench/src/workbenchI18n.test.ts`: passed, 3 files / 40 tests
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 91 files passed / 1 skipped, 928 tests passed / 1 skipped, production build completed with Vite 8
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- AI task extraction validation localization hardcode scan for provider endpoints, model ids, API keys, Feishu/Lark endpoints, folder ids, and provider credentials under `packages` and `apps`: passed
+- Browser smoke verification: passed at `http://127.0.0.1:5173`; Workbench mounted under `#root`, title was `Typora Plus`, and refresh emitted no console errors
+
+Review:
+
+- AI provider selection, active-note request construction, structured output schema hints, response metadata, task-list Markdown formatting, and provider contracts did not change.
+- No provider id, endpoint URL, model id, API key, Feishu scope, token name, folder id, storage path, or credential literal was added.
+
+## 2026-06-13 - P2 Sensitive Hardcode Quality Gate
+
+Completed:
+
+- Added `scripts/check-sensitive-hardcodes.mjs` to scan source roots for provider endpoint URLs, OpenAI-style API keys, Slack tokens, provider secret names, and configured model defaults.
+- Wired `npm run scan:hardcode` into `npm run verify` before typecheck, tests, and production build.
+- Scoped the scan to `apps` and `packages`, skipped generated/vendor output directories, and allowed test-fixture model literals plus localized UI labels that are not provider defaults.
+- Updated quality-gate documentation so future stages run the automated scan instead of relying only on manual review.
+
+Quality gate:
+
+- `npm run scan:hardcode`: passed
+- `npm run typecheck`: passed
+- `npm run verify`: passed, 91 files passed / 1 skipped, 928 tests passed / 1 skipped, production build completed with Vite 8
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Browser smoke verification: passed at `http://127.0.0.1:5173`; Workbench mounted under `#root`, title was `Typora Plus`, and refresh emitted no console errors
+
+Review:
+
+- Application runtime behavior, provider configuration, AI/remote sync contracts, request adapters, and credentials did not change.
+- No provider id, endpoint URL, model id, API key, Feishu scope, token name, folder id, storage path, or credential literal was added.
+
+## 2026-06-13 - P2 Sensitive Hardcode Scanner Test Coverage
+
+Completed:
+
+- Refactored `scripts/check-sensitive-hardcodes.mjs` into a testable module while preserving the existing CLI command behavior.
+- Exported scanner functions for text matching, workspace scanning, file filtering, location calculation, and CLI finding formatting.
+- Added script-level Vitest coverage for sensitive pattern detection, test-fixture model exclusions, localized UI model-label exclusions, generated-directory skips, file extension filtering, position calculation, and finding formatting.
+- Included `scripts/**/*.test.mjs` in the normal Vitest test suite so future scanner rule drift is caught by `npm test` and `npm run verify`.
+- Updated quality-gate documentation to make script-level scanner tests part of the maintained process.
+
+Quality gate:
+
+- `npx vitest run scripts/check-sensitive-hardcodes.test.mjs`: passed, 1 file / 4 tests
+- `npm run scan:hardcode`: passed
+- `npm run verify`: passed, 92 files passed / 1 skipped, 932 tests passed / 1 skipped, production build completed with Vite 8
+- `npm audit --audit-level=moderate`: passed with 0 vulnerabilities
+- `git diff --check`: passed with line-ending warnings only
+- Browser smoke verification: passed at `http://127.0.0.1:5173`; Workbench mounted under `#root`, title was `Typora Plus`, and refresh emitted no console errors
+
+Review:
+
+- The scanner policy, source roots, skipped directories, and CLI command name did not change.
+- Application runtime behavior, provider configuration, AI/remote sync contracts, request adapters, and credentials did not change.
+- No provider id, endpoint URL, model id, API key, Feishu scope, token name, folder id, storage path, or credential literal was added.
+
+## 2026-06-13 - P2 Stage Verification Script
+
+Completed:
+
+- Added `npm run verify:stage` as the explicit full stage gate for handoff checks.
+- Kept the existing fast `npm run verify` path focused on hardcode scan, typecheck, tests, and production build.
+- Included dependency audit and `git diff --check` in the stage gate so the documented stage-review workflow is executable as one command.
+- Updated README and architecture notes to point stage reviews at the full gate command.
+
+Quality gate:
+
+- `npm run verify:stage`: passed, including sensitive hardcode scan, typecheck, 92 files passed / 1 skipped, 932 tests passed / 1 skipped, production build, dependency audit with 0 vulnerabilities, and `git diff --check` with line-ending warnings only
+- Browser smoke verification: passed at `http://127.0.0.1:5173`; Workbench mounted under `#root`, title was `Typora Plus`, and refresh emitted no console errors
+
+Review:
+
+- Runtime behavior, provider configuration, AI/remote sync contracts, request adapters, and credentials did not change.
+- No provider id, endpoint URL, model id, API key, Feishu scope, token name, folder id, storage path, or credential literal was added.
+
+## 2026-06-13 - P2 Deterministic Hardcode Scan Output
+
+Completed:
+
+- Sorted sensitive hardcode findings by file, line, column, rule id, and matched text before returning or printing scanner output.
+- Added scanner tests that prove workspace scans produce deterministic cross-file output and that the standalone sorting helper keeps finding order stable.
+- Updated the README command list so `scan:hardcode` and `verify:stage` are visible alongside the existing development commands.
+
+Quality gate:
+
+- `npx vitest run scripts/check-sensitive-hardcodes.test.mjs`: passed, 1 file / 5 tests
+- `npm run scan:hardcode`: passed
+- `npm run verify:stage`: passed, including sensitive hardcode scan, typecheck, 92 files passed / 1 skipped, 933 tests passed / 1 skipped, production build, dependency audit with 0 vulnerabilities, and `git diff --check` with line-ending warnings only
+- Browser smoke verification: passed at `http://127.0.0.1:5173`; Workbench mounted under `#root`, title was `Typora Plus`, and refresh emitted no console errors
+
+Review:
+
+- The scanner policy, source roots, skipped directories, and CLI command name did not change.
+- Runtime behavior, provider configuration, AI/remote sync contracts, request adapters, and credentials did not change.
+- No provider id, endpoint URL, model id, API key, Feishu scope, token name, folder id, storage path, or credential literal was added.
+
+## 2026-06-13 - P2 Hardcode Scanner CLI Test Boundary
+
+Completed:
+
+- Extracted the sensitive hardcode scanner CLI flow into an injectable `runSensitiveHardcodeScanCli()` function while preserving the existing command-line entrypoint.
+- Kept CLI success and failure messages behind injected output/error callbacks so tests can verify behavior without spawning a child process.
+- Added scanner tests for successful CLI output, failing CLI exit code, and sorted failure messages.
+- Updated quality-gate documentation to call out scanner CLI drift as part of the script-level test coverage.
+
+Quality gate:
+
+- `npx vitest run scripts/check-sensitive-hardcodes.test.mjs`: passed, 1 file / 7 tests
+- `npm run scan:hardcode`: passed
+- `npm run verify:stage`: passed, including sensitive hardcode scan, typecheck, 92 files passed / 1 skipped, 935 tests passed / 1 skipped, production build, dependency audit with 0 vulnerabilities, and `git diff --check` with line-ending warnings only
+- Browser smoke verification: passed at `http://127.0.0.1:5173`; Workbench mounted under `#root`, title was `Typora Plus`, and refresh emitted no console errors
+
+Review:
+
+- The scanner policy, source roots, skipped directories, output wording, and CLI command name did not change.
+- Runtime behavior, provider configuration, AI/remote sync contracts, request adapters, and credentials did not change.
+- No provider id, endpoint URL, model id, API key, Feishu scope, token name, folder id, storage path, or credential literal was added.
+
+## 2026-06-13 - P2 Node Runtime Version Gate
+
+Completed:
+
+- Added `scripts/check-node-version.mjs` to read `package.json#engines.node` and fail early when the local Node runtime does not satisfy the declared project engine.
+- Wired `npm run check:node` into `npm run verify` before hardcode scan, typecheck, tests, and build.
+- Kept the version policy source of truth in `package.json`; the checker only supports the current `>=x.y.z` engine form and fails explicitly for unsupported range syntax.
+- Added script-level tests for engine-range reading, version parsing, version comparison, compatibility checks, CLI success output, CLI failure output, and unsupported range handling.
+- Updated README and architecture stage-review notes so contributors run the Node version gate as part of normal verification.
+
+Quality gate:
+
+- `npx vitest run scripts/check-node-version.test.mjs scripts/check-sensitive-hardcodes.test.mjs`: passed, 2 files / 14 tests
+- `npm run check:node`: passed with Node `v24.11.0` satisfying `engines.node >=22.12.0`
+- `npm run verify:stage`: passed, including Node version check, sensitive hardcode scan, typecheck, 93 files passed / 1 skipped, 942 tests passed / 1 skipped, production build, dependency audit with 0 vulnerabilities, and `git diff --check` with line-ending warnings only
+- Browser smoke verification: passed at `http://127.0.0.1:5173`; Workbench mounted under `#root`, title was `Typora Plus`, and refresh emitted no console errors
+
+Review:
+
+- Runtime behavior, provider configuration, AI/remote sync contracts, request adapters, credentials, and engine policy did not change.
+- No provider id, endpoint URL, model id, API key, Feishu scope, token name, folder id, storage path, or credential literal was added.
+
+## 2026-06-13 - P2 Package Lock Synchronization Gate
+
+Completed:
+
+- Added `scripts/check-package-lock.mjs` to compare lockfile root package metadata against `package.json`.
+- Covered workspace, dependency, optional dependency, peer dependency, and engine metadata without duplicating specific dependency versions in code.
+- Wired `npm run check:lockfile` into `npm run verify` after the Node runtime check and before hardcode scan, typecheck, tests, and build.
+- Added script-level tests for stable JSON comparison, matching metadata, mismatched metadata, missing lockfile root metadata, and CLI success/failure output.
+- Updated README and architecture stage-review notes so package-lock synchronization is part of the maintained quality gate.
+
+Quality gate:
+
+- `npx vitest run scripts/check-package-lock.test.mjs scripts/check-node-version.test.mjs scripts/check-sensitive-hardcodes.test.mjs`: passed, 3 files / 20 tests
+- `npm run check:lockfile`: passed
+- `npm run verify:stage`: passed, including Node version check, package-lock sync check, sensitive hardcode scan, typecheck, 94 files passed / 1 skipped, 948 tests passed / 1 skipped, production build, dependency audit with 0 vulnerabilities, and `git diff --check` with line-ending warnings only
+- Browser smoke verification: passed at `http://127.0.0.1:5173`; Workbench mounted under `#root`, title was `Typora Plus`, and refresh emitted no console errors
+
+Review:
+
+- Runtime behavior, provider configuration, AI/remote sync contracts, request adapters, credentials, engine policy, and dependency versions did not change.
+- No provider id, endpoint URL, model id, API key, Feishu scope, token name, folder id, storage path, or credential literal was added.
+
+## 2026-06-13 - P2 Workspace Package Lock Synchronization Gate
+
+Completed:
+
+- Extended `scripts/check-package-lock.mjs` so lockfile synchronization covers workspace package entries discovered from the root `workspaces` declaration, not only root metadata.
+- Compared each workspace package's name, version, dependency, optional dependency, peer dependency, and engine metadata against `package-lock.json#packages[workspacePath]`.
+- Kept workspace discovery deterministic and sourced from package files instead of hard-coded package lists or dependency versions.
+- Added script-level tests for workspace discovery ordering, matching workspace metadata, mismatched workspace metadata, missing workspace lockfile metadata, and CLI mismatch reporting.
+- Updated README and architecture stage-review notes so the maintained quality gate describes root and workspace package-lock synchronization.
+
+Quality gate:
+
+- `npx vitest run scripts/check-package-lock.test.mjs`: passed, 1 file / 9 tests
+- `npm run check:lockfile`: passed
+- `npm run verify:stage`: passed, including Node version check, root/workspace package-lock sync check, sensitive hardcode scan, typecheck, 94 files passed / 1 skipped, 951 tests passed / 1 skipped, production build, dependency audit with 0 vulnerabilities, and `git diff --check` with line-ending warnings only
+
+Review:
+
+- Runtime behavior, provider configuration, AI/remote sync contracts, request adapters, credentials, engine policy, and dependency versions did not change.
+- No package list, dependency version, provider id, endpoint URL, model id, API key, Feishu scope, token name, folder id, storage path, or credential literal was added.
+
+## 2026-06-13 - Docs Gate Generated Directory Alignment
+
+Completed:
+
+- Aligned `scripts/check-maintained-docs.mjs` generated-directory exclusions with the other quality scanners by skipping `.vite`, `coverage`, and `out` in addition to existing Git, dependency, and build output directories.
+- Updated docs gate CLI wording to report a maintained documentation presence/scope check, matching the current behavior.
+- Added script-level coverage proving generated-directory Markdown files are ignored and CLI output/error messages use the presence/scope wording.
+- Updated README and architecture stage-review notes so generated output and dependency directories are explicitly excluded from the maintained-docs check.
+
+Quality gate:
+
+- `npx vitest run scripts/check-maintained-docs.test.mjs`: passed, 1 file / 9 tests
+- `npm run check:docs`: passed
+- `npm run verify:stage`: passed, including Node version check, top-level/root identity and workspace package-lock sync check, maintained-docs presence/scope check with generated-directory exclusions, sensitive hardcode scan across app/package/script source roots, typecheck, 95 files passed / 1 skipped, 963 tests passed / 1 skipped, production build, dependency audit with 0 vulnerabilities, and `git diff --check` with the same already-dirty-file line-ending warnings only
+
+Review:
+
+- Runtime behavior, provider configuration, AI/remote sync contracts, request adapters, credentials, engine policy, and dependency versions did not change.
+- No package list, dependency version, provider id, endpoint URL, model id, API key, Feishu scope, token name, folder id, storage path, or credential literal was added.
+
+## 2026-06-13 - Script Source Hardcode Scan Coverage
+
+Completed:
+
+- Extended `scripts/check-sensitive-hardcodes.mjs` so the default sensitive hardcode scan covers `scripts` in addition to `apps` and `packages`.
+- Added an explicit file-level skip for the scanner implementation and its fixture test so detector patterns and deliberately fake fixture secrets do not mask ordinary script scanning.
+- Added script-level coverage proving non-fixture script sources are scanned while scanner fixtures are skipped.
+- Updated README and architecture stage-review notes so the hardcode gate describes application, package, and quality-gate script source roots.
+
+Quality gate:
+
+- `npx vitest run scripts/check-sensitive-hardcodes.test.mjs`: passed, 1 file / 8 tests
+- `npm run scan:hardcode`: passed
+- `npm run verify:stage`: passed, including Node version check, top-level/root identity and workspace package-lock sync check, maintained-docs presence/scope check, sensitive hardcode scan across app/package/script source roots, typecheck, 95 files passed / 1 skipped, 962 tests passed / 1 skipped, production build, dependency audit with 0 vulnerabilities, and `git diff --check` with the same already-dirty-file line-ending warnings only
+
+Review:
+
+- Runtime behavior, provider configuration, AI/remote sync contracts, request adapters, credentials, engine policy, and dependency versions did not change.
+- No package list, dependency version, provider id, endpoint URL, model id, API key, Feishu scope, token name, folder id, storage path, or credential literal was added.
+
+## 2026-06-13 - Top-Level Package Lock Identity Gate
+
+Completed:
+
+- Extended `scripts/check-package-lock.mjs` so package-lock synchronization compares top-level `package-lock.json` `name` and `version` against `package.json`.
+- Kept top-level lockfile identity checks separate from `packages[""]` root package entry checks so failures point at the drifted lockfile surface.
+- Added script-level coverage for top-level lockfile identity drift.
+- Updated README and architecture stage-review notes so the lockfile gate describes top-level identity, root package identity, and workspace metadata.
+
+Quality gate:
+
+- `npx vitest run scripts/check-package-lock.test.mjs`: passed, 1 file / 11 tests
+- `npm run check:lockfile`: passed
+- `npm run verify:stage`: passed, including Node version check, top-level/root identity and workspace package-lock sync check, maintained-docs presence/scope check, sensitive hardcode scan, typecheck, 95 files passed / 1 skipped, 961 tests passed / 1 skipped, production build, dependency audit with 0 vulnerabilities, and `git diff --check` with the same already-dirty-file line-ending warnings only
+
+Review:
+
+- Runtime behavior, provider configuration, AI/remote sync contracts, request adapters, credentials, engine policy, and dependency versions did not change.
+- No package list, dependency version, provider id, endpoint URL, model id, API key, Feishu scope, token name, folder id, storage path, or credential literal was added.
+
+## 2026-06-13 - Maintained Documentation Presence Gate
+
+Completed:
+
+- Extended `scripts/check-maintained-docs.mjs` so the docs gate fails when any maintained document is missing, not only when extra Markdown or MDX files appear.
+- Kept failure output deterministic by reporting missing maintained docs before unexpected docs.
+- Added script-level coverage for missing `docs/DEVELOPMENT_LOG.md` combined with an unexpected documentation file.
+- Updated README and architecture stage-review notes so the docs gate is described as both a presence and scope check.
+
+Quality gate:
+
+- `npx vitest run scripts/check-maintained-docs.test.mjs`: passed, 1 file / 8 tests
+- `npm run check:docs`: passed
+- `npm run verify:stage`: passed, including Node version check, root identity/workspace package-lock sync check, maintained-docs presence/scope check, sensitive hardcode scan, typecheck, 95 files passed / 1 skipped, 960 tests passed / 1 skipped, production build, dependency audit with 0 vulnerabilities, and `git diff --check` with the same already-dirty-file line-ending warnings only
+
+Review:
+
+- Runtime behavior, provider configuration, AI/remote sync contracts, request adapters, credentials, engine policy, and dependency versions did not change.
+- No package list, dependency version, provider id, endpoint URL, model id, API key, Feishu scope, token name, folder id, storage path, or credential literal was added.
+
+## 2026-06-13 - Root Package Lock Identity Gate
+
+Completed:
+
+- Extended `scripts/check-package-lock.mjs` so root package-lock synchronization includes root `name` and `version`, not only workspace, dependency, peer dependency, optional dependency, and engine metadata.
+- Added script-level coverage for root package identity drift so package rename or version changes require a refreshed lockfile.
+- Updated README and architecture stage-review notes so the lockfile gate describes root identity as part of the reproducibility contract.
+
+Quality gate:
+
+- `npx vitest run scripts/check-package-lock.test.mjs`: passed, 1 file / 10 tests
+- `npm run check:lockfile`: passed
+- `npm run verify:stage`: passed, including Node version check, root identity/workspace package-lock sync check, maintained-docs scope check, sensitive hardcode scan, typecheck, 95 files passed / 1 skipped, 959 tests passed / 1 skipped, production build, dependency audit with 0 vulnerabilities, and `git diff --check` with the same already-dirty-file line-ending warnings only
+
+Review:
+
+- Runtime behavior, provider configuration, AI/remote sync contracts, request adapters, credentials, engine policy, and dependency versions did not change.
+- No package list, dependency version, provider id, endpoint URL, model id, API key, Feishu scope, token name, folder id, storage path, or credential literal was added.
+
+## 2026-06-13 - Maintained Documentation Scope Gate
+
+Completed:
+
+- Added `scripts/check-maintained-docs.mjs` to discover Markdown and MDX documentation files while skipping generated, dependency, build, and Git internals directories.
+- Kept maintained documentation limited to `README.md`, `docs/ARCHITECTURE.md`, and `docs/DEVELOPMENT_LOG.md`, matching the project process instead of relying on manual review.
+- Wired `npm run check:docs` into `npm run verify` before typecheck, tests, and production build.
+- Added script-level tests for Markdown extension detection, skipped directories, deterministic recursive discovery, allowed docs, unexpected docs, and CLI success/failure output.
+- Updated README and architecture stage-review notes so the docs scope policy is visible in the maintained documentation set.
+
+Quality gate:
+
+- `npx vitest run scripts/check-maintained-docs.test.mjs`: passed, 1 file / 7 tests
+- `node scripts/check-maintained-docs.mjs`: passed
+- `npm run verify:stage`: passed, including Node version check, root/workspace package-lock sync check, maintained-docs scope check, sensitive hardcode scan, typecheck, 95 files passed / 1 skipped, 958 tests passed / 1 skipped, production build, dependency audit with 0 vulnerabilities, and `git diff --check` with the same already-dirty-file line-ending warnings only
+
+Review:
+
+- Runtime behavior, provider configuration, AI/remote sync contracts, request adapters, credentials, engine policy, and dependency versions did not change.
+- No package list, dependency version, provider id, endpoint URL, model id, API key, Feishu scope, token name, folder id, storage path, or credential literal was added.
+
+## 2026-06-13 - Repository Text Formatting Policy
+
+Completed:
+
+- Added `.gitattributes` so repository text files have an explicit LF line-ending policy independent of each contributor's Git `core.autocrlf` setting.
+- Marked common raster image formats as binary so Git does not attempt text normalization on image assets.
+- Added `.editorconfig` with UTF-8, LF, two-space indentation, final newline, and trailing-whitespace defaults, with Markdown trailing spaces preserved for authoring compatibility.
+- Updated README and architecture stage-review notes so formatting policy is part of the maintained engineering process.
+
+Quality gate:
+
+- `git diff --check`: passed, with remaining line-ending warnings limited to already-dirty files that Git will normalize the next time it writes them
+- `npm run verify:stage`: passed, including Node version check, root/workspace package-lock sync check, sensitive hardcode scan, typecheck, 94 files passed / 1 skipped, 951 tests passed / 1 skipped, production build, dependency audit with 0 vulnerabilities, and `git diff --check` with the same already-dirty-file line-ending warnings only
+
+Review:
+
+- Runtime behavior, provider configuration, AI/remote sync contracts, request adapters, credentials, engine policy, and dependency versions did not change.
+- No package list, dependency version, provider id, endpoint URL, model id, API key, Feishu scope, token name, folder id, storage path, or credential literal was added.
+
+## 2026-06-13 - Stale Workspace Lock Entry Gate
+
+Completed:
+
+- Extended `scripts/check-package-lock.mjs` so the lockfile gate rejects stale workspace package entries that still match the current root workspace patterns but no longer have a discovered workspace package.
+- Kept stale-entry detection sourced from `package.json#workspaces` instead of hard-coded package directories, while ignoring `node_modules` package entries and workspace-local dependency entries.
+- Added script-level coverage for stale workspace lock metadata and for valid workspace plus dependency lockfile entries.
+- Updated README and architecture stage-review notes so the lockfile gate describes stale workspace lock-entry checks.
+
+Quality gate:
+
+- `npx vitest run scripts/check-package-lock.test.mjs`: passed, 1 file / 13 tests
+- `npm run check:lockfile`: passed
+- `npm run verify:stage`: passed, including Node version check, top-level/root identity and workspace package-lock sync plus stale workspace lock-entry check, maintained-docs presence/scope check, sensitive hardcode scan, typecheck, 95 files passed / 1 skipped, 965 tests passed / 1 skipped, production build, dependency audit with 0 vulnerabilities, and `git diff --check` with the same already-dirty-file line-ending warnings only
+
+Review:
+
+- Runtime behavior, provider configuration, AI/remote sync contracts, request adapters, credentials, engine policy, and dependency versions did not change.
+- No package list, dependency version, provider id, endpoint URL, model id, API key, Feishu scope, token name, folder id, storage path, or credential literal was added.
+
+## 2026-06-13 - OpenAI Key Shape Hardcode Scan Coverage
+
+Completed:
+
+- Extended the sensitive hardcode scanner so OpenAI key-shaped literals with hyphenated or underscored key bodies are rejected, not only simple alphanumeric `sk-...` values.
+- Added script-level coverage for hyphenated and underscored key-body findings while keeping the existing finding id and CLI output shape stable.
+- Updated README and architecture stage-review notes so the hardcode gate describes token-shaped credential detection.
+
+Quality gate:
+
+- `npx vitest run scripts/check-sensitive-hardcodes.test.mjs`: passed, 1 file / 9 tests
+- `npm run scan:hardcode`: passed
+- `npm run verify:stage`: passed, including Node version check, top-level/root identity and workspace package-lock sync plus stale workspace lock-entry check, maintained-docs presence/scope check, sensitive hardcode scan with expanded OpenAI key-shape coverage, typecheck, 95 files passed / 1 skipped, 966 tests passed / 1 skipped, production build, dependency audit with 0 vulnerabilities, and `git diff --check` with the same already-dirty-file line-ending warnings only
+
+Review:
+
+- Runtime behavior, provider configuration, AI/remote sync contracts, request adapters, credentials, engine policy, and dependency versions did not change.
+- No provider id, endpoint URL, model id, API key, Feishu scope, token name, folder id, storage path, or credential literal was added.
+
+## 2026-06-13 - Provider URL Hardcode Scan Normalization
+
+Completed:
+
+- Made provider endpoint URL scanning case-insensitive for OpenAI, Feishu, and Lark provider-name segments.
+- Fixed provider endpoint findings so the scanner reports the full URL literal instead of stopping at the provider-name segment.
+- Added script-level coverage for mixed-case provider endpoint URLs and the full matched URL output.
+- Updated README and architecture stage-review notes so the hardcode gate describes full provider endpoint URL detection.
+
+Quality gate:
+
+- `npx vitest run scripts/check-sensitive-hardcodes.test.mjs`: passed, 1 file / 10 tests
+- `npm run scan:hardcode`: passed
+- `npm run verify:stage`: passed, including Node version check, top-level/root identity and workspace package-lock sync plus stale workspace lock-entry check, maintained-docs presence/scope check, sensitive hardcode scan with normalized full provider endpoint URL matching, typecheck, 95 files passed / 1 skipped, 967 tests passed / 1 skipped, production build, dependency audit with 0 vulnerabilities, and `git diff --check` with the same already-dirty-file line-ending warnings only
+
+Review:
+
+- Runtime behavior, provider configuration, AI/remote sync contracts, request adapters, credentials, engine policy, and dependency versions did not change.
+- No provider id, endpoint URL, model id, API key, Feishu scope, token name, folder id, storage path, or credential literal was added.
+
+## 2026-06-13 - Provider Secret Name Hardcode Scan Normalization
+
+Completed:
+
+- Made provider secret-name scanning case-insensitive for `app_secret`, `tenant_access_token`, and `folder_token` literals.
+- Added script-level coverage for uppercase and mixed-case provider secret-name literals while keeping the finding id and output shape stable.
+- Updated README and architecture stage-review notes so the hardcode gate describes case-normalized secret-name detection.
+
+Quality gate:
+
+- `npx vitest run scripts/check-sensitive-hardcodes.test.mjs`: passed, 1 file / 11 tests
+- `npm run scan:hardcode`: passed
+- `npm run verify:stage`: passed, including Node version check, top-level/root identity and workspace package-lock sync plus stale workspace lock-entry check, maintained-docs presence/scope check, sensitive hardcode scan with case-normalized provider secret-name matching, typecheck, 95 files passed / 1 skipped, 968 tests passed / 1 skipped, production build, dependency audit with 0 vulnerabilities, and `git diff --check` with the same already-dirty-file line-ending warnings only
+
+Review:
+
+- Runtime behavior, provider configuration, AI/remote sync contracts, request adapters, credentials, engine policy, and dependency versions did not change.
+- No provider id, endpoint URL, model id, API key, Feishu scope, token name, folder id, storage path, or credential literal was added.
+
+## 2026-06-13 - Model Field Hardcode Scan Coverage
+
+Completed:
+
+- Replaced the model-default scanner's loose `model` substring match with an explicit model field set covering `model`, `modelId`, `model_id`, `defaultModel`, and `default_model`.
+- Kept localized Settings labels excluded by value so UI copy such as `Model` and `模型` does not fail the source scan.
+- Added script-level coverage for all supported model field names and the localized-label exclusion path.
+- Updated README and architecture stage-review notes so the hardcode gate describes model-field default detection.
+
+Quality gate:
+
+- `npx vitest run scripts/check-sensitive-hardcodes.test.mjs`: passed, 1 file / 12 tests
+- `npm run scan:hardcode`: passed
+- `npm run verify:stage`: passed, including Node version check, top-level/root identity and workspace package-lock sync plus stale workspace lock-entry check, maintained-docs presence/scope check, sensitive hardcode scan with explicit model-field default coverage, typecheck, 95 files passed / 1 skipped, 969 tests passed / 1 skipped, production build, dependency audit with 0 vulnerabilities, and `git diff --check` with the same already-dirty-file line-ending warnings only
+
+Review:
+
+- Runtime behavior, provider configuration, AI/remote sync contracts, request adapters, credentials, engine policy, and dependency versions did not change.
+- No provider id, endpoint URL, model id, API key, Feishu scope, token name, folder id, storage path, or credential literal was added.
+
+## 2026-06-13 - Provider Identifier Hardcode Scan Coverage
+
+Completed:
+
+- Added sensitive hardcode scanner coverage for direct provider app, client, folder, tenant id, and tenant key string literals.
+- Kept the rule scoped to field assignment shapes so protocol field-name strings such as `client_id` can still be used without becoming provider-specific configuration values.
+- Added script-level coverage for camelCase and snake_case provider identifier fields plus the non-reporting protocol field-name case.
+- Updated README and architecture stage-review notes so the hardcode gate describes provider identifier literal detection.
+
+Quality gate:
+
+- `npx vitest run scripts/check-sensitive-hardcodes.test.mjs`: passed, 1 file / 13 tests
+- `npm run scan:hardcode`: passed
+- `npm run verify:stage`: passed, including Node version check, top-level/root identity and workspace package-lock sync plus stale workspace lock-entry check, maintained-docs presence/scope check, sensitive hardcode scan with provider identifier literal coverage, typecheck, 95 files passed / 1 skipped, 970 tests passed / 1 skipped, production build, dependency audit with 0 vulnerabilities, and `git diff --check` with the same already-dirty-file line-ending warnings only
+
+Review:
+
+- Runtime behavior, provider configuration, AI/remote sync contracts, request adapters, credentials, engine policy, and dependency versions did not change.
+- No provider id, endpoint URL, model id, API key, Feishu scope, token name, folder id, storage path, or credential literal was added.
+
+## 2026-06-13 - PEM Private Key Hardcode Scan Coverage
+
+Completed:
+
+- Added sensitive hardcode scanner coverage for PEM private-key headers, including generic, RSA, OpenSSH, and encrypted private-key block starts.
+- Kept the rule focused on private-key headers so ordinary public-key fixtures and protocol labels are not rejected.
+- Added script-level coverage for private-key findings and public-key non-findings.
+- Updated README and architecture stage-review notes so the hardcode gate describes PEM private-key header detection.
+
+Quality gate:
+
+- `npx vitest run scripts/check-sensitive-hardcodes.test.mjs`: passed, 1 file / 14 tests
+- `npm run scan:hardcode`: passed
+- `npm run verify:stage`: passed, including Node version check, top-level/root identity and workspace package-lock sync plus stale workspace lock-entry check, maintained-docs presence/scope check, sensitive hardcode scan with PEM private-key header coverage, typecheck, 95 files passed / 1 skipped, 971 tests passed / 1 skipped, production build, dependency audit with 0 vulnerabilities, and `git diff --check` with the same already-dirty-file line-ending warnings only
+
+Review:
+
+- Runtime behavior, provider configuration, AI/remote sync contracts, request adapters, credentials, engine policy, and dependency versions did not change.
+- No provider id, endpoint URL, model id, API key, private key, Feishu scope, token name, folder id, storage path, or credential literal was added.
+
+## 2026-06-13 - GitHub Token Hardcode Scan Coverage
+
+Completed:
+
+- Added sensitive hardcode scanner coverage for GitHub token-shaped literals, including classic token prefixes and fine-grained `github_pat_` tokens.
+- Kept the rule length-bounded so short placeholder labels such as `ghp_example` are not rejected.
+- Added script-level coverage for classic, server, and fine-grained GitHub token findings plus the short-placeholder non-finding.
+- Updated README and architecture stage-review notes so the hardcode gate describes OpenAI, Slack, and GitHub token-shaped credential detection explicitly.
+
+Quality gate:
+
+- `npx vitest run scripts/check-sensitive-hardcodes.test.mjs`: passed, 1 file / 15 tests
+- `npm run scan:hardcode`: passed
+- `npm run verify:stage`: passed, including Node version check, top-level/root identity and workspace package-lock sync plus stale workspace lock-entry check, maintained-docs presence/scope check, sensitive hardcode scan with GitHub token coverage, typecheck, 95 files passed / 1 skipped, 972 tests passed / 1 skipped, production build, dependency audit with 0 vulnerabilities, and `git diff --check` with the same already-dirty-file line-ending warnings only
+
+Review:
+
+- Runtime behavior, provider configuration, AI/remote sync contracts, request adapters, credentials, engine policy, and dependency versions did not change.
+- No provider id, endpoint URL, model id, API key, GitHub token, private key, Feishu scope, token name, folder id, storage path, or credential literal was added.
+
+## 2026-06-13 - AWS Access Key Hardcode Scan Coverage
+
+Completed:
+
+- Added sensitive hardcode scanner coverage for AWS access key id shaped literals with `AKIA` and `ASIA` prefixes.
+- Kept the rule length-bounded so short placeholder labels such as `AKIAEXAMPLE` are not rejected.
+- Added script-level coverage for long-lived and temporary AWS access key id findings plus the short-placeholder non-finding.
+- Updated README and architecture stage-review notes so the hardcode gate describes OpenAI, Slack, GitHub, and AWS token-shaped credential detection explicitly.
+
+Quality gate:
+
+- `npx vitest run scripts/check-sensitive-hardcodes.test.mjs`: passed, 1 file / 16 tests
+- `npm run scan:hardcode`: passed
+- `npm run verify:stage`: passed, including Node version check, top-level/root identity and workspace package-lock sync plus stale workspace lock-entry check, maintained-docs presence/scope check, sensitive hardcode scan with AWS access key id coverage, typecheck, 95 files passed / 1 skipped, 973 tests passed / 1 skipped, production build, dependency audit with 0 vulnerabilities, and `git diff --check` with the same already-dirty-file line-ending warnings only
+
+Review:
+
+- Runtime behavior, provider configuration, AI/remote sync contracts, request adapters, credentials, engine policy, and dependency versions did not change.
+- No provider id, endpoint URL, model id, API key, GitHub token, AWS access key, private key, Feishu scope, token name, folder id, storage path, or credential literal was added.
+
+## 2026-06-13 - JWT Hardcode Scan Coverage
+
+Completed:
+
+- Added sensitive hardcode scanner coverage for JWT-shaped literals with three long base64url segments and an `eyJ` JSON-header prefix.
+- Kept the rule segment-length-bounded so short placeholders such as `eyJ.short.token` are not rejected.
+- Added script-level coverage for JWT findings and short segmented placeholder non-findings.
+- Updated README and architecture stage-review notes so the hardcode gate describes OpenAI, Slack, GitHub, AWS, and JWT token-shaped credential detection explicitly.
+
+Quality gate:
+
+- `npx vitest run scripts/check-sensitive-hardcodes.test.mjs`: passed, 1 file / 17 tests
+- `npm run scan:hardcode`: passed
+- `npm run verify:stage`: passed, including Node version check, top-level/root identity and workspace package-lock sync plus stale workspace lock-entry check, maintained-docs presence/scope check, sensitive hardcode scan with JWT coverage, typecheck, 95 files passed / 1 skipped, 974 tests passed / 1 skipped, production build, dependency audit with 0 vulnerabilities, and `git diff --check` with the same already-dirty-file line-ending warnings only
+
+Review:
+
+- Runtime behavior, provider configuration, AI/remote sync contracts, request adapters, credentials, engine policy, and dependency versions did not change.
+- No provider id, endpoint URL, model id, API key, GitHub token, AWS access key, JWT, private key, Feishu scope, token name, folder id, storage path, or credential literal was added.
+
+## 2026-06-13 - Opaque Bearer Token Hardcode Scan Coverage
+
+Completed:
+
+- Added sensitive hardcode scanner coverage for long opaque Bearer token literals while leaving dynamic `Bearer ${...}` construction and short fixture headers alone.
+- Kept JWT-bearing headers routed through the dedicated JWT rule by excluding `Bearer eyJ...` from the opaque Bearer token detector.
+- Added script-level coverage for short Bearer fixtures, dynamic Bearer headers, JWT Bearer headers, and long opaque Bearer token findings.
+- Updated README and architecture stage-review notes so the hardcode gate describes OpenAI, Slack, GitHub, AWS, JWT, and opaque Bearer token-shaped credential detection explicitly.
+
+Quality gate:
+
+- `npx vitest run scripts/check-sensitive-hardcodes.test.mjs`: passed, 1 file / 18 tests
+- `npm run scan:hardcode`: passed
+- `npm run verify:stage`: passed, including Node version check, top-level/root identity and workspace package-lock sync plus stale workspace lock-entry check, maintained-docs presence/scope check, sensitive hardcode scan with opaque Bearer token coverage, typecheck, 95 files passed / 1 skipped, 975 tests passed / 1 skipped, production build, dependency audit with 0 vulnerabilities, and `git diff --check` with the same already-dirty-file line-ending warnings only
+
+Review:
+
+- Runtime behavior, provider configuration, AI/remote sync contracts, request adapters, credentials, engine policy, and dependency versions did not change.
+- No provider id, endpoint URL, model id, API key, GitHub token, AWS access key, JWT, Bearer token, private key, Feishu scope, token name, folder id, storage path, or credential literal was added.
+
+## 2026-06-13 - Google API Key Hardcode Scan Coverage
+
+Completed:
+
+- Added sensitive hardcode scanner coverage for Google API key-shaped literals with the `AIza` prefix and exact key-body length.
+- Kept the rule shape-bounded so short placeholders such as `AIza-example` are not rejected.
+- Added script-level coverage for Google API key findings plus the short-placeholder non-finding.
+- Updated README and architecture stage-review notes so the hardcode gate describes OpenAI, Google, Slack, GitHub, AWS, JWT, and opaque Bearer token-shaped credential detection explicitly.
+
+Quality gate:
+
+- `npx vitest run scripts/check-sensitive-hardcodes.test.mjs`: passed, 1 file / 19 tests
+- `npm run scan:hardcode`: passed
+- `npm run verify:stage`: passed, including Node version check, top-level/root identity and workspace package-lock sync plus stale workspace lock-entry check, maintained-docs presence/scope check, sensitive hardcode scan with Google API key coverage, typecheck, 95 files passed / 1 skipped, 976 tests passed / 1 skipped, production build, dependency audit with 0 vulnerabilities, and `git diff --check` with the same already-dirty-file line-ending warnings only
+
+Review:
+
+- Runtime behavior, provider configuration, AI/remote sync contracts, request adapters, credentials, engine policy, and dependency versions did not change.
+- No provider id, endpoint URL, model id, API key, Google API key, GitHub token, AWS access key, JWT, Bearer token, private key, Feishu scope, token name, folder id, storage path, or credential literal was added.
+
+## 2026-06-13 - npm Token Hardcode Scan Coverage
+
+Completed:
+
+- Added sensitive hardcode scanner coverage for npm token-shaped literals with the `npm_` prefix and exact token-body length.
+- Kept the rule shape-bounded so short placeholders such as `npm_example` and command text such as `npm run build` are not rejected.
+- Added script-level coverage for npm token findings plus placeholder and command non-findings.
+- Updated README and architecture stage-review notes so the hardcode gate describes OpenAI, Google, npm, Slack, GitHub, AWS, JWT, and opaque Bearer token-shaped credential detection explicitly.
+
+Quality gate:
+
+- `npx vitest run scripts/check-sensitive-hardcodes.test.mjs`: passed, 1 file / 20 tests
+- `npm run scan:hardcode`: passed
+- `npm run verify:stage`: passed, including Node version check, top-level/root identity and workspace package-lock sync plus stale workspace lock-entry check, maintained-docs presence/scope check, sensitive hardcode scan with npm token coverage, typecheck, 95 files passed / 1 skipped, 977 tests passed / 1 skipped, production build, dependency audit with 0 vulnerabilities, and `git diff --check` with the same already-dirty-file line-ending warnings only
+
+Review:
+
+- Runtime behavior, provider configuration, AI/remote sync contracts, request adapters, credentials, engine policy, and dependency versions did not change.
+- No provider id, endpoint URL, model id, API key, Google API key, npm token, GitHub token, AWS access key, JWT, Bearer token, private key, Feishu scope, token name, folder id, storage path, or credential literal was added.
+
+## 2026-06-13 - Stripe Secret Key Hardcode Scan Coverage
+
+Completed:
+
+- Added sensitive hardcode scanner coverage for Stripe secret and restricted key-shaped literals with `sk_live`, `sk_test`, `rk_live`, and `rk_test` prefixes.
+- Kept publishable `pk_...` keys outside the rule and kept short placeholders such as `sk_live_example` from being rejected.
+- Added script-level coverage for Stripe secret/restricted key findings plus publishable-key and placeholder non-findings.
+- Updated README and architecture stage-review notes so the hardcode gate describes OpenAI, Google, npm, Stripe, Slack, GitHub, AWS, JWT, and opaque Bearer token-shaped credential detection explicitly.
+
+Quality gate:
+
+- `npx vitest run scripts/check-sensitive-hardcodes.test.mjs`: passed, 1 file / 21 tests
+- `npm run scan:hardcode`: passed
+- `npm run verify:stage`: passed, including Node version check, top-level/root identity and workspace package-lock sync plus stale workspace lock-entry check, maintained-docs presence/scope check, sensitive hardcode scan with Stripe secret key coverage, typecheck, 95 files passed / 1 skipped, 978 tests passed / 1 skipped, production build, dependency audit with 0 vulnerabilities, and `git diff --check` with the same already-dirty-file line-ending warnings only
+
+Review:
+
+- Runtime behavior, provider configuration, AI/remote sync contracts, request adapters, credentials, engine policy, and dependency versions did not change.
+- No provider id, endpoint URL, model id, API key, Google API key, npm token, Stripe secret key, GitHub token, AWS access key, JWT, Bearer token, private key, Feishu scope, token name, folder id, storage path, or credential literal was added.
+
+## 2026-06-13 - Azure Storage Account Key Hardcode Scan Coverage
+
+Completed:
+
+- Added sensitive hardcode scanner coverage for Azure Storage `AccountKey=` connection-string fragments with long base64-shaped key values.
+- Kept the rule scoped to literal account-key values so short placeholders such as `AccountKey=example` and dynamic template values are not rejected.
+- Added script-level coverage for Azure Storage account-key findings plus placeholder and dynamic-value non-findings.
+- Updated README and architecture stage-review notes so the hardcode gate describes Azure Storage account-key detection explicitly.
+
+Quality gate:
+
+- `npx vitest run scripts/check-sensitive-hardcodes.test.mjs`: passed, 1 file / 22 tests
+- `npm run scan:hardcode`: passed
+- `npm run verify:stage`: passed, including Node version check, top-level/root identity and workspace package-lock sync plus stale workspace lock-entry check, maintained-docs presence/scope check, sensitive hardcode scan with Azure Storage account-key coverage, typecheck, 95 files passed / 1 skipped, 979 tests passed / 1 skipped, production build, dependency audit with 0 vulnerabilities, and `git diff --check` with the same already-dirty-file line-ending warnings only
+
+Review:
+
+- Runtime behavior, provider configuration, AI/remote sync contracts, request adapters, credentials, engine policy, and dependency versions did not change.
+- No provider id, endpoint URL, model id, API key, Google API key, npm token, Stripe secret key, GitHub token, AWS access key, Azure Storage account key, JWT, Bearer token, private key, Feishu scope, token name, folder id, storage path, or credential literal was added.
+
+## 2026-06-13 - Azure Storage SAS Token Hardcode Scan Coverage
+
+Completed:
+
+- Added sensitive hardcode scanner coverage for Azure Storage SAS query fragments that contain both a service version parameter and a long signature value.
+- Covered URL query and connection-string `SharedAccessSignature=` forms while leaving short placeholder signatures and dynamic template values alone.
+- Added script-level coverage for SAS token findings plus placeholder and dynamic-value non-findings.
+- Updated README and architecture stage-review notes so the hardcode gate describes Azure Storage SAS token detection explicitly.
+
+Quality gate:
+
+- `npx vitest run scripts/check-sensitive-hardcodes.test.mjs`: passed, 1 file / 23 tests
+- `npm run scan:hardcode`: passed
+- `npm run verify:stage`: passed, including Node version check, top-level/root identity and workspace package-lock sync plus stale workspace lock-entry check, maintained-docs presence/scope check, sensitive hardcode scan with Azure Storage SAS token coverage, typecheck, 95 files passed / 1 skipped, 980 tests passed / 1 skipped, production build, dependency audit with 0 vulnerabilities, and `git diff --check` with the same already-dirty-file line-ending warnings only
+
+Review:
+
+- Runtime behavior, provider configuration, AI/remote sync contracts, request adapters, credentials, engine policy, and dependency versions did not change.
+- No provider id, endpoint URL, model id, API key, Google API key, npm token, Stripe secret key, GitHub token, AWS access key, Azure Storage account key, Azure Storage SAS token, JWT, Bearer token, private key, Feishu scope, token name, folder id, storage path, or credential literal was added.
+
+## 2026-06-13 - URL Embedded Credential Hardcode Scan Coverage
+
+Completed:
+
+- Added sensitive hardcode scanner coverage for supported URL schemes that embed a username plus a long password/token before the host.
+- Covered HTTP(S), WebSocket, PostgreSQL, MySQL/MariaDB, MongoDB, and Redis URL forms while leaving short placeholders such as `https://user:pass@example.com` and dynamic template credentials alone.
+- Added script-level coverage for HTTPS and PostgreSQL embedded-credential findings plus placeholder and dynamic-value non-findings.
+- Updated README and architecture stage-review notes so the hardcode gate describes URL-embedded credential detection explicitly.
+
+Quality gate:
+
+- `npx vitest run scripts/check-sensitive-hardcodes.test.mjs`: passed, 1 file / 24 tests
+- `npm run scan:hardcode`: passed
+- `npm run verify:stage`: passed, including Node version check, top-level/root identity and workspace package-lock sync plus stale workspace lock-entry check, maintained-docs presence/scope check, sensitive hardcode scan with URL-embedded credential coverage, typecheck, 95 files passed / 1 skipped, 981 tests passed / 1 skipped, production build, dependency audit with 0 vulnerabilities, and `git diff --check` with the same already-dirty-file line-ending warnings only
+
+Review:
+
+- Runtime behavior, provider configuration, AI/remote sync contracts, request adapters, credentials, engine policy, and dependency versions did not change.
+- No provider id, endpoint URL, model id, API key, Google API key, npm token, Stripe secret key, GitHub token, AWS access key, Azure Storage account key, Azure Storage SAS token, URL-embedded credential, JWT, Bearer token, private key, Feishu scope, token name, folder id, storage path, or credential literal was added.
+
+## 2026-06-13 - Generic Secret Field Hardcode Scan Coverage
+
+Completed:
+
+- Added sensitive hardcode scanner coverage for common secret-bearing fields such as `apiKey`, `token`, `password`, `accessToken`, `refreshToken`, and `clientSecret` when they are assigned long literal values.
+- Kept the rule as a fallback for unknown long credentials by skipping values already covered by dedicated OpenAI, Google, npm, Stripe, Slack, GitHub, AWS, and JWT token-shape rules.
+- Added script-level coverage for generic long secret-field findings, short placeholders, dynamic values, and non-duplicated dedicated token findings.
+- Updated README and architecture stage-review notes so the hardcode gate describes generic secret-field literal detection explicitly.
+
+Quality gate:
+
+- `npx vitest run scripts/check-sensitive-hardcodes.test.mjs`: passed, 1 file / 25 tests
+- `npm run scan:hardcode`: passed
+- `npm run verify:stage`: passed, including Node version check, top-level/root identity and workspace package-lock sync plus stale workspace lock-entry check, maintained-docs presence/scope check, sensitive hardcode scan with generic secret-field literal coverage, typecheck, 95 files passed / 1 skipped, 982 tests passed / 1 skipped, production build, dependency audit with 0 vulnerabilities, and `git diff --check` with the same already-dirty-file line-ending warnings only
+
+Review:
+
+- Runtime behavior, provider configuration, AI/remote sync contracts, request adapters, credentials, engine policy, and dependency versions did not change.
+- No provider id, endpoint URL, model id, API key, Google API key, npm token, Stripe secret key, GitHub token, AWS access key, Azure Storage account key, Azure Storage SAS token, URL-embedded credential, generic secret-field credential, JWT, Bearer token, private key, Feishu scope, token name, folder id, storage path, or credential literal was added.
+
+## 2026-06-13 - Basic Auth Hardcode Scan Coverage
+
+Completed:
+
+- Added sensitive hardcode scanner coverage for long HTTP Basic Auth token literals.
+- Kept the rule shape-bounded so short placeholders such as `Basic dXNlcjpwYXNz` and dynamic template headers remain allowed.
+- Added script-level coverage for Basic Auth findings plus short-placeholder and dynamic-value non-findings.
+- Updated README and architecture stage-review notes so the hardcode gate describes Basic Auth token-shaped credential detection explicitly.
+
+Quality gate:
+
+- `npx vitest run scripts/check-sensitive-hardcodes.test.mjs`: passed, 1 file / 26 tests
+- `npm run scan:hardcode`: passed
+- `npm run verify:stage`: passed
+
+Review:
+
+- Runtime behavior, provider configuration, AI/remote sync contracts, request adapters, credentials, engine policy, and dependency versions did not change.
+- No provider id, endpoint URL, model id, API key, Google API key, npm token, Stripe secret key, GitHub token, AWS access key, Azure Storage account key, Azure Storage SAS token, URL-embedded credential, generic secret-field credential, JWT, Bearer token, Basic Auth token, private key, Feishu scope, token name, folder id, storage path, or credential literal was added.
+
+## 2026-06-13 - Local AI Smoke Runner
+
+Completed:
+
+- Added `npm run test:ai:smoke` as an explicit local Responses-compatible AI provider smoke entry point.
+- Added a script-level smoke runner that validates endpoint, API key, and model environment-variable groups before invoking the existing Responses provider smoke test.
+- Kept the normal test suite safe by leaving the smoke test skipped when environment values are absent, while allowing explicit smoke runs to require those values through `TYPORA_PLUS_AI_SMOKE_REQUIRED`.
+- Added script-level coverage for missing-environment reporting, spawned Vitest arguments, propagated exit codes, and deterministic environment-group formatting.
+- Updated README and architecture notes so local Codex or loopback-compatible provider validation is documented without committing provider ids, endpoints, models, or secrets.
+
+Quality gate:
+
+- `npx vitest run scripts/run-ai-smoke.test.mjs`: passed, 1 file / 4 tests
+- `npx vitest run packages/platform/src/responsesAiProvider.test.ts packages/platform/src/responsesAiProvider.smoke.test.ts`: passed, 1 file / 15 tests, 1 file / 1 skipped test
+- `npm run check:lockfile`: passed
+- `npm run scan:hardcode`: passed
+- `npm run verify:stage`: passed, including Node version check, top-level/root identity and workspace package-lock sync plus stale workspace lock-entry check, maintained-docs presence/scope check, sensitive hardcode scan, typecheck, 96 files passed / 1 skipped, 987 tests passed / 1 skipped, production build, dependency audit with 0 vulnerabilities, and `git diff --check` with the same already-dirty-file line-ending warnings only
+
+Review:
+
+- Runtime AI request behavior did not change unless the new explicit smoke command is invoked.
+- The smoke command consumes provider values only through environment variables and does not print endpoint, key, or model values in missing-environment diagnostics.
+- No provider id, endpoint URL, model id, API key, token, Feishu scope, folder id, storage path, or credential literal was added.
+
+## 2026-06-13 - Remote Sync Raw Mirror Smoke Runner
+
+Completed:
+
+- Added `npm run test:remote-sync:smoke` as an explicit provider-neutral raw mirror remote sync smoke entry point.
+- Added a script-level smoke runner that validates provider identity, base URL, workspace URI, raw mirror route, and optional secret header environment groups before invoking the smoke test.
+- Added an environment-gated raw mirror smoke test that builds a configured native-request profile, uses the existing configured-provider factory and profile request transport path, and creates a dry-run plan without local file mutation.
+- Kept optional gateway authorization out of source by mapping secret header name, secret reference, and secret value exclusively from environment variables.
+- Updated README and architecture notes so Lark CLI-backed local gateway testing is documented as a provider-neutral raw mirror path without committing provider ids, endpoints, app ids, folder ids, routes, or tokens.
+
+Quality gate:
+
+- `npx vitest run scripts/run-remote-sync-smoke.test.mjs`: passed, 1 file / 5 tests
+- `npx vitest run packages/platform/src/remoteSyncConfiguredRawMirrorProvider.smoke.test.ts`: passed with 1 skipped test because local remote sync smoke environment variables are not set
+- `npx vitest run packages/platform/src/remoteSyncConfiguredRawMirrorProvider.test.ts packages/platform/src/remoteSyncProfileRequest.test.ts packages/platform/src/responsesAiProvider.smoke.test.ts`: passed, 2 files / 35 tests and 1 skipped smoke file / 1 skipped test
+- `npm run check:lockfile`: passed
+- `npm run check:docs`: passed
+- `npm run scan:hardcode`: passed
+- `npm run typecheck`: passed
+- `npm run verify:stage`: passed, including Node version check, top-level/root identity and workspace package-lock sync plus stale workspace lock-entry check, maintained-docs presence/scope check, sensitive hardcode scan, typecheck, 97 files passed / 2 skipped, 992 tests passed / 2 skipped, production build, dependency audit with 0 vulnerabilities, and `git diff --check` with the same already-dirty-file line-ending warnings only
+
+Review:
+
+- Runtime remote sync behavior does not change unless the new explicit smoke command is invoked.
+- The smoke command consumes gateway/provider/secret values only through environment variables and does not print configured values in missing-environment diagnostics.
+- No provider id, endpoint URL, model id, API key, token, Feishu scope, folder id, storage path, or credential literal was added.
+
+## 2026-06-13 - Shared Smoke Runner Utilities
+
+Completed:
+
+- Extracted shared smoke runner helpers for environment-group validation, missing-group formatting, spawned command execution, and Vitest smoke invocation.
+- Rewired the AI and remote sync smoke runners to reuse the shared helper while keeping provider-specific environment groups, required flags, and user-facing messages in their own entry points.
+- Added focused script-level coverage for blank environment handling, deterministic group formatting, required smoke flag injection, spawned Vitest arguments, and spawn-error propagation.
+- Confirmed the local environment currently exposes the Codex CLI but not a Lark CLI, and that no public AI or remote sync smoke environment variables are configured.
+- Updated README and architecture notes so smoke CLI behavior is documented as a shared quality boundary instead of duplicated process logic.
+
+Quality gate:
+
+- `npx vitest run scripts/smoke-runner.test.mjs scripts/run-ai-smoke.test.mjs scripts/run-remote-sync-smoke.test.mjs packages/platform/src/responsesAiProvider.smoke.test.ts packages/platform/src/remoteSyncConfiguredRawMirrorProvider.smoke.test.ts`: passed, 3 script files / 13 tests and 2 skipped smoke files / 2 skipped tests
+- `npm run check:docs`: passed
+- `npm run check:lockfile`: passed
+- `npm run scan:hardcode`: passed
+- `npm run verify:stage`: passed, including Node version check, top-level/root identity and workspace package-lock sync plus stale workspace lock-entry check, maintained-docs presence/scope check, sensitive hardcode scan, typecheck, 98 files passed / 2 skipped, 996 tests passed / 2 skipped, production build, dependency audit with 0 vulnerabilities, and `git diff --check` with the same already-dirty-file line-ending warnings only
+
+Review:
+
+- Runtime AI and remote sync request behavior did not change.
+- Smoke command behavior remains environment-only and does not print configured endpoint, gateway, provider, model, key, token, scope, folder, path, or secret values in missing-environment diagnostics.
+- No provider id, endpoint URL, model id, API key, token, Feishu scope, folder id, storage path, or credential literal was added.
+
+## 2026-06-13 - Remote Sync Smoke Local Resource Snapshots
+
+Completed:
+
+- Added optional local resource snapshot JSON support to the raw mirror remote sync smoke test.
+- The smoke test can now compare user-provided local resource metadata with the remote gateway list response during dry-run planning without reading local file content or executing upload/download/delete operations.
+- Added focused smoke-test coverage for local resource snapshot parsing, workspace-relative URI construction, invalid JSON rejection, parent traversal rejection, and non-negative size validation.
+- Updated README and architecture notes so the remote sync smoke contract documents optional local resource metadata as environment-only input.
+
+Quality gate:
+
+- `npx vitest run packages/platform/src/remoteSyncConfiguredRawMirrorProvider.smoke.test.ts scripts/run-remote-sync-smoke.test.mjs scripts/smoke-runner.test.mjs`: passed, 3 files / 11 tests and 1 skipped smoke test
+- `npm run check:docs`: passed
+- `npm run check:lockfile`: passed
+- `npm run scan:hardcode`: passed
+- `npm run typecheck`: passed
+- `npm run verify:stage`: passed, including Node version check, top-level/root identity and workspace package-lock sync plus stale workspace lock-entry check, maintained-docs presence/scope check, sensitive hardcode scan, typecheck, 99 files passed / 1 skipped, 998 tests passed / 2 skipped, production build, dependency audit with 0 vulnerabilities, and `git diff --check` with the same already-dirty-file line-ending warnings only
+
+Review:
+
+- Runtime remote sync behavior does not change unless the explicit smoke test is invoked with environment values.
+- Local resource snapshot values remain environment-only and are not persisted into source, docs examples, configuration defaults, or committed fixtures.
+- No provider id, endpoint URL, model id, API key, token, Feishu scope, folder id, local path, storage path, or credential literal was added.
+
+## 2026-06-13 - Remote Sync Smoke Snapshot Preflight
+
+Completed:
+
+- Added script-level preflight validation for optional raw mirror smoke local resource snapshot JSON before Vitest is spawned.
+- The remote sync smoke runner now rejects invalid JSON, non-array snapshots, unsafe or non-relative paths, invalid resource kinds, negative/non-finite numeric metadata, and non-string string metadata without printing the raw snapshot value.
+- Added script-level coverage proving valid snapshots still spawn the smoke test, invalid snapshots stop before spawn, raw snapshot values are not echoed, and validation issue ordering stays deterministic.
+- Updated README and architecture notes so the remote sync smoke command documents CLI preflight as a quality boundary before the platform dry-run planner.
+
+Quality gate:
+
+- `npx vitest run scripts/run-remote-sync-smoke.test.mjs scripts/smoke-runner.test.mjs packages/platform/src/remoteSyncConfiguredRawMirrorProvider.smoke.test.ts`: passed, 3 files / 14 tests and 1 skipped smoke test
+- `npm run check:docs`: passed
+- `npm run check:lockfile`: passed
+- `npm run scan:hardcode`: passed
+- `npm run typecheck`: passed
+- `npm run verify:stage`: passed, including Node version check, top-level/root identity and workspace package-lock sync plus stale workspace lock-entry check, maintained-docs presence/scope check, sensitive hardcode scan, typecheck, 99 files passed / 1 skipped, 1001 tests passed / 2 skipped, production build, dependency audit with 0 vulnerabilities, and `git diff --check` with the same already-dirty-file line-ending warnings only
+
+Review:
+
+- Runtime remote sync behavior does not change unless the explicit smoke command is invoked with environment values.
+- Local resource snapshot values remain environment-only and are not persisted into source, docs examples, configuration defaults, or committed fixtures.
+- No provider id, endpoint URL, model id, API key, token, Feishu scope, folder id, local path, storage path, or credential literal was added.
+
+## 2026-06-13 - AI Smoke Environment Preflight
+
+Completed:
+
+- Added script-level preflight validation for explicit local Responses-compatible AI smoke environment values before Vitest is spawned.
+- The AI smoke runner now rejects invalid endpoint shapes, non-HTTPS non-loopback HTTP endpoints, oversized endpoint strings, oversized API key values, and oversized model names without printing the raw endpoint, key, or model.
+- Kept endpoint policy aligned with configured AI providers and the Electron native AI request bridge by accepting HTTPS plus loopback HTTP for local Codex/Responses-compatible testing.
+- Added focused script-level coverage proving valid loopback endpoints still spawn the smoke test, invalid values stop before spawn, raw configured values are not echoed, and validation issue ordering stays deterministic.
+- Updated README and architecture notes so AI smoke preflight is documented as a CLI quality boundary before the platform provider smoke test.
+
+Quality gate:
+
+- `npx vitest run scripts/run-ai-smoke.test.mjs scripts/smoke-runner.test.mjs packages/platform/src/responsesAiProvider.smoke.test.ts`: passed, 2 files / 10 tests and 1 skipped smoke test
+- `npm run check:docs`: passed
+- `npm run check:lockfile`: passed
+- `npm run scan:hardcode`: passed
+- `npm run typecheck`: passed
+- `npm run verify:stage`: passed, including Node version check, top-level/root identity and workspace package-lock sync plus stale workspace lock-entry check, maintained-docs presence/scope check, sensitive hardcode scan, typecheck, 99 files passed / 1 skipped, 1003 tests passed / 2 skipped, production build, dependency audit with 0 vulnerabilities, and `git diff --check` with the same already-dirty-file line-ending warnings only
+
+Review:
+
+- Runtime AI request behavior does not change unless the explicit smoke command is invoked with environment values.
+- AI smoke endpoint, key, and model values remain environment-only and are not persisted into source, docs examples, configuration defaults, or committed fixtures.
+- No provider id, endpoint URL, model id, API key, token, Feishu scope, folder id, local path, storage path, or credential literal was added.
+
+## 2026-06-13 - Remote Sync Smoke Profile Preflight
+
+Completed:
+
+- Added script-level preflight validation for required and optional raw mirror remote sync smoke profile environment values before Vitest is spawned.
+- The remote sync smoke runner now rejects invalid provider ids, overlong provider titles, non-HTTPS non-loopback base URLs, invalid workspace URIs, unsafe raw mirror paths, invalid sync directions, invalid list page sizes, overlong remote scope ids, invalid secret names/references/values, invalid header names, and invalid header schemes without printing raw endpoint, route, scope, header, token, or snapshot values.
+- Kept profile preflight aligned with configured remote sync provider and raw mirror metadata rules: HTTPS plus loopback HTTP base URLs, relative raw mirror paths, bounded page sizes, provider-safe secret binding names, and HTTP-token header names.
+- Updated script-level smoke tests so valid smoke fixtures use real parseable loopback URL/workspace URI shapes rather than placeholder strings.
+- Updated README and architecture notes so remote sync smoke preflight is documented as a CLI quality boundary before the platform dry-run planner.
+
+Quality gate:
+
+- `npx vitest run scripts/run-remote-sync-smoke.test.mjs scripts/smoke-runner.test.mjs packages/platform/src/remoteSyncConfiguredRawMirrorProvider.smoke.test.ts`: passed, 3 files / 16 tests and 1 skipped smoke test
+- `npm run check:docs`: passed
+- `npm run check:lockfile`: passed
+- `npm run scan:hardcode`: passed
+- `npm run typecheck`: passed
+- `npm run verify:stage`: passed, including Node version check, top-level/root identity and workspace package-lock sync plus stale workspace lock-entry check, maintained-docs presence/scope check, sensitive hardcode scan, typecheck, 99 files passed / 1 skipped, 1005 tests passed / 2 skipped, production build, dependency audit with 0 vulnerabilities, and `git diff --check` with the same already-dirty-file line-ending warnings only
+
+Review:
+
+- Runtime remote sync behavior does not change unless the explicit smoke command is invoked with environment values.
+- Remote sync smoke profile values remain environment-only and are not persisted into source, docs examples, configuration defaults, or committed fixtures.
+- No provider id, endpoint URL, model id, API key, token, Feishu scope, folder id, local path, storage path, or credential literal was added.
+
+## 2026-06-13 - Remote Sync Smoke Direct Environment Parity
+
+Completed:
+
+- Tightened the platform raw mirror smoke test environment reader so direct Vitest runs reject invalid optional smoke values instead of silently falling back.
+- Added injectable environment input for the smoke environment reader, allowing direct tests without mutating `process.env`.
+- Direct smoke tests now reject invalid `TYPORA_PLUS_REMOTE_SYNC_SMOKE_DIRECTION`, incomplete secret header configuration, header-scheme-only configuration, and invalid `TYPORA_PLUS_REMOTE_SYNC_SMOKE_LIST_PAGE_SIZE` before provider registration or planning.
+- Kept the CLI preflight as the primary user-facing guard while ensuring the platform smoke file itself does not accept ambiguous environment state when run directly.
+- Updated architecture notes so the CLI and platform smoke validation split is explicit.
+
+Quality gate:
+
+- `npx vitest run packages/platform/src/remoteSyncConfiguredRawMirrorProvider.smoke.test.ts scripts/run-remote-sync-smoke.test.mjs scripts/smoke-runner.test.mjs`: passed, 3 files / 20 tests and 1 skipped smoke test
+- `npm run check:docs`: passed
+- `npm run check:lockfile`: passed
+- `npm run scan:hardcode`: passed
+- `npm run typecheck`: passed
+- `npm run verify:stage`: passed, including Node version check, top-level/root identity and workspace package-lock sync plus stale workspace lock-entry check, maintained-docs presence/scope check, sensitive hardcode scan, typecheck, 99 files passed / 1 skipped, 1009 tests passed / 2 skipped, production build, dependency audit with 0 vulnerabilities, and `git diff --check` with the same already-dirty-file line-ending warnings only
+
+Review:
+
+- Runtime remote sync behavior does not change unless the explicit smoke test is invoked with environment values.
+- Direct smoke validation remains environment-only and does not persist provider ids, endpoints, routes, scopes, local paths, tokens, or secret values into source defaults.
+- No provider id, endpoint URL, model id, API key, token, Feishu scope, folder id, local path, storage path, or credential literal was added.
+
+## 2026-06-13 - AI Smoke Direct Environment Parity
+
+Completed:
+
+- Tightened the platform Responses AI smoke test environment reader so complete direct Vitest smoke runs validate endpoint, API key, and model values before provider creation.
+- Added injectable environment input for direct AI smoke environment tests without mutating `process.env`.
+- Direct smoke tests now reject invalid endpoint shapes, non-HTTPS non-loopback endpoints, oversized API keys, and oversized model names with redacted diagnostics.
+- Kept the CLI preflight as the primary user-facing smoke entry point while ensuring the smoke file itself does not accept ambiguous complete environment state when run directly.
+- Updated README and architecture notes so the CLI and platform smoke validation split is explicit.
+
+Quality gate:
+
+- `npx vitest run packages/platform/src/responsesAiProvider.smoke.test.ts scripts/run-ai-smoke.test.mjs scripts/smoke-runner.test.mjs`: passed, 3 files / 14 tests and 1 skipped smoke test
+- `npm run verify:stage`: passed, including Node version check, top-level/root identity and workspace package-lock sync plus stale workspace lock-entry check, maintained-docs presence/scope check, sensitive hardcode scan, typecheck, 100 files passed, 1013 tests passed / 2 skipped, production build, dependency audit with 0 vulnerabilities, and `git diff --check` with the same already-dirty-file line-ending warnings only
+
+Review:
+
+- Runtime AI request behavior does not change unless the explicit smoke test is invoked with environment values.
+- Direct smoke validation remains environment-only and does not persist provider ids, endpoints, models, keys, local paths, tokens, or secret values into source defaults.
+- No provider id, endpoint URL, model id, API key, token, Feishu scope, folder id, local path, storage path, or credential literal was added.
+
+## 2026-06-14 - Remote Sync Smoke Direct Profile Parity
+
+Completed:
+
+- Tightened the platform raw mirror remote sync smoke test environment reader so complete direct Vitest smoke runs validate required profile values before provider registration.
+- Direct smoke tests now reject invalid provider ids, non-HTTPS non-loopback base URLs, invalid workspace URIs, unsafe raw mirror paths, oversized remote scope ids, malformed secret names/references/header names/header schemes, and oversized secret values with redacted diagnostics.
+- Kept the CLI preflight as the primary user-facing smoke entry point while ensuring the smoke file itself does not accept ambiguous complete profile state when run directly.
+- Updated README and architecture notes so the CLI and platform smoke validation split covers required profile values as well as optional values.
+
+Quality gate:
+
+- `npx vitest run packages/platform/src/remoteSyncConfiguredRawMirrorProvider.smoke.test.ts scripts/run-remote-sync-smoke.test.mjs scripts/smoke-runner.test.mjs`: passed, 3 files / 22 tests and 1 skipped smoke test
+- `npm run verify:stage`: passed, including Node version check, top-level/root identity and workspace package-lock sync plus stale workspace lock-entry check, maintained-docs presence/scope check, sensitive hardcode scan, typecheck, 100 files passed, 1015 tests passed / 2 skipped, production build, dependency audit with 0 vulnerabilities, and `git diff --check` with the same already-dirty-file line-ending warnings only
+
+Review:
+
+- Runtime remote sync behavior does not change unless the explicit smoke test is invoked with environment values.
+- Direct smoke validation remains environment-only and does not persist provider ids, endpoints, routes, scopes, local paths, tokens, or secret values into source defaults.
+- No provider id, endpoint URL, model id, API key, token, Feishu scope, folder id, local path, storage path, or credential literal was added.
+
+## 2026-06-14 - Remote Sync Smoke Injected Snapshot Parity
+
+Completed:
+
+- Fixed the platform raw mirror smoke environment reader so injected direct-test environment objects feed optional local resource snapshot JSON into the same reader used by process environment runs.
+- Added direct smoke coverage proving full environment reads include injected local resource snapshots without mutating `process.env`.
+- Updated architecture notes so the direct Vitest smoke boundary documents injected local resource snapshots as environment-owned input rather than process-global fallback.
+
+Quality gate:
+
+- `npx vitest run packages/platform/src/remoteSyncConfiguredRawMirrorProvider.smoke.test.ts scripts/run-remote-sync-smoke.test.mjs scripts/smoke-runner.test.mjs`: passed, 3 files / 23 tests and 1 skipped smoke test
+- `npm run verify:stage`: passed, including Node version check, top-level/root identity and workspace package-lock sync plus stale workspace lock-entry check, maintained-docs presence/scope check, sensitive hardcode scan, typecheck, 100 files passed, 1016 tests passed / 2 skipped, production build, dependency audit with 0 vulnerabilities, and `git diff --check` with the same already-dirty-file line-ending warnings only
+
+Review:
+
+- Runtime remote sync behavior does not change unless the explicit smoke test is invoked with environment values.
+- Local resource snapshot values remain environment-only and are not persisted into source defaults, docs examples, configuration defaults, or committed fixtures.
+- No provider id, endpoint URL, model id, API key, token, Feishu scope, folder id, local path, storage path, or credential literal was added.
+
+## 2026-06-14 - Smoke Runner Child Process Hardening
+
+Completed:
+
+- Hardened the shared smoke runner so synchronous spawn failures and malformed child-process results become deterministic failed smoke runs instead of uncaught exceptions.
+- Kept duplicate child-process lifecycle events from changing an already-settled smoke result or printing late error noise after a successful close.
+- Added focused smoke-runner coverage for synchronous spawn exceptions, malformed spawn return values, and close/error event races.
+- Updated README and architecture notes so the shared smoke runner boundary documents child-process lifecycle handling alongside environment validation and secret-redaction behavior.
+
+Quality gate:
+
+- `npx vitest run scripts/smoke-runner.test.mjs scripts/run-ai-smoke.test.mjs scripts/run-remote-sync-smoke.test.mjs`: passed, 3 files / 23 tests
+- `npm run verify:stage`: passed, including Node version check, top-level/root identity and workspace package-lock sync plus stale workspace lock-entry check, maintained-docs presence/scope check, sensitive hardcode scan, typecheck, 100 files passed, 1019 tests passed / 2 skipped, production build, dependency audit with 0 vulnerabilities, and `git diff --check` with the same already-dirty-file line-ending warnings only
+
+Review:
+
+- Runtime AI and remote sync request behavior did not change.
+- Smoke process failures now settle through the same exit-code contract as provider-specific smoke failures.
+- No provider id, endpoint URL, model id, API key, token, Feishu scope, folder id, local path, gateway path, or credential literal was added.
+
+## 2026-06-14 - Workbench Localization Coverage Guard
+
+Completed:
+
+- Added focused Workbench i18n coverage tests that compare built-in command metadata, default menu contributions, Settings sections, and Settings entries against both English and Simplified Chinese message tables.
+- The guard prevents new built-in commands, menu items, or Settings surfaces from silently falling back to source English when a locale table is missing coverage.
+- Updated README and architecture notes so the current localization boundary documents command/menu/settings coverage as part of the ordinary test suite.
+
+Quality gate:
+
+- `npx vitest run packages/workbench/src/workbenchI18n.test.ts packages/workbench/src/settingsModel.test.ts packages/workbench/src/workbenchCommandMetadata.test.ts`: passed, 3 files / 49 tests
+- `npm run verify:stage`: passed, including Node version check, top-level/root identity and workspace package-lock sync plus stale workspace lock-entry check, maintained-docs presence/scope check, sensitive hardcode scan, typecheck, 100 files passed, 1020 tests passed / 2 skipped, production build, dependency audit with 0 vulnerabilities, and `git diff --check` with the same already-dirty-file line-ending warnings only
+
+Review:
+
+- Runtime Workbench behavior did not change; this is a regression guard for future UI surface growth.
+- Built-in localization remains keyed by stable command, menu, Settings section, and Settings entry ids rather than by rendered English strings.
+- No provider id, endpoint URL, model id, API key, token, Feishu scope, folder id, local path, gateway path, or credential literal was added.
+
+## 2026-06-14 - Locale Configuration Source Alignment
+
+Completed:
+
+- Added an exported platform `typoraPlusLocales` list and derived the `TyporaPlusLocale` type from it, keeping locale validation and default locale checks behind the platform configuration boundary.
+- Updated Settings locale options and Workbench locale selector options to derive their values from the platform locale list while keeping locale-specific display labels owned by the UI/i18n layer.
+- Added focused tests proving platform locale persistence accepts every supported locale, Settings options expose the platform locale values, and Workbench locale options stay aligned for every message table.
+- Updated README and architecture notes to document the centralized locale-id boundary.
+
+Quality gate:
+
+- `npx vitest run packages/platform/src/platform.test.ts packages/workbench/src/settingsModel.test.ts packages/workbench/src/workbenchI18n.test.ts`: passed, 3 files / 155 tests
+- `npm run verify:stage`: passed, including Node version check, top-level/root identity and workspace package-lock sync plus stale workspace lock-entry check, maintained-docs presence/scope check, sensitive hardcode scan, typecheck, 100 files passed, 1021 tests passed / 2 skipped, production build, dependency audit with 0 vulnerabilities, and `git diff --check` with the same already-dirty-file line-ending warnings only
+
+Review:
+
+- Runtime supported locales did not change; this removes duplicated locale-id sources before future language additions.
+- Locale display labels remain UI-owned, while locale identity and validation stay platform-owned.
+- No provider id, endpoint URL, model id, API key, token, Feishu scope, folder id, local path, gateway path, or credential literal was added.
+
+## 2026-06-14 - Workbench Locale Message Map Alignment
+
+Completed:
+
+- Replaced the Workbench locale selection branch with a `Record<TyporaPlusLocale, WorkbenchMessages>` mapping so every platform-supported locale must have a Workbench message table.
+- Extended the Workbench i18n coverage guard to assert that each platform locale returns a matching message table before checking command, menu, and Settings coverage.
+- Updated README and architecture notes to document that Workbench message tables are keyed by the platform locale contract.
+
+Quality gate:
+
+- `npx vitest run packages/workbench/src/workbenchI18n.test.ts`: passed, 1 file / 14 tests
+- `npm run verify:stage`: passed, including Node version check, top-level/root identity and workspace package-lock sync plus stale workspace lock-entry check, maintained-docs presence/scope check, sensitive hardcode scan, typecheck, 100 files passed, 1021 tests passed / 2 skipped, production build, dependency audit with 0 vulnerabilities, and `git diff --check` with the same already-dirty-file line-ending warnings only
+
+Review:
+
+- Runtime supported locales did not change.
+- Locale selection still defaults to English when no locale is configured, but platform-supported locales now resolve through an exhaustive typed map.
+- No provider id, endpoint URL, model id, API key, token, Feishu scope, folder id, local path, gateway path, or credential literal was added.
+
+## 2026-06-14 - Default Locale Boundary Alignment
+
+Completed:
+
+- Added an exported platform `defaultTyporaPlusLocale` constant derived from the platform locale list.
+- Updated `defaultConfiguration.appearance.locale` and Workbench undefined-locale message fallback to use the platform default locale instead of separate English-default assumptions.
+- Added focused assertions that platform default configuration and Workbench fallback behavior resolve through `defaultTyporaPlusLocale`.
+- Updated README and architecture notes so the localization boundary covers both supported locale ids and the default locale.
+
+Quality gate:
+
+- `npx vitest run packages/platform/src/platform.test.ts packages/workbench/src/workbenchI18n.test.ts`: passed, 2 files / 124 tests
+- `npm run verify:stage`: passed, including Node version check, top-level/root identity and workspace package-lock sync plus stale workspace lock-entry check, maintained-docs presence/scope check, sensitive hardcode scan, typecheck, 100 files passed, 1021 tests passed / 2 skipped, production build, dependency audit with 0 vulnerabilities, and `git diff --check` with the same already-dirty-file line-ending warnings only
+
+Review:
+
+- Runtime supported locales did not change.
+- Workbench still defaults to English through the platform default locale, but the fallback source is now centralized for future locale-default changes.
+- Locale display labels remain UI-owned, while locale identity, validation, and default selection stay platform-owned.
+- No provider id, endpoint URL, model id, API key, token, Feishu scope, folder id, local path, gateway path, or credential literal was added.
+
+## 2026-06-14 - Editor Label Default Locale Guard
+
+Completed:
+
+- Extended the Workbench i18n fallback coverage so `createWorkbenchEditorLabels(undefined)` must resolve to the editor labels from `defaultTyporaPlusLocale`.
+- Updated architecture notes to include editor-label copy in the Workbench i18n boundary and document the fallback guard.
+
+Quality gate:
+
+- `npx vitest run packages/workbench/src/workbenchI18n.test.ts packages/workbench/src/workbenchEditorAdapter.test.ts`: passed, 2 files / 21 tests
+- `npm run verify:stage`: passed, including Node version check, top-level/root identity and workspace package-lock sync plus stale workspace lock-entry check, maintained-docs presence/scope check, sensitive hardcode scan, typecheck, 100 files passed, 1021 tests passed / 2 skipped, production build, dependency audit with 0 vulnerabilities, and `git diff --check` with the same already-dirty-file line-ending warnings only
+
+Review:
+
+- Runtime behavior did not change; this is a regression guard for Workbench-to-editor localization drift.
+- Editor labels remain owned by Workbench i18n and injected through the editor adapter; the editor package still depends only on its label contract.
+- No provider id, endpoint URL, model id, API key, token, Feishu scope, folder id, local path, gateway path, or credential literal was added.
+
+## 2026-06-14 - Provider Selection Agnostic Guard
+
+Completed:
+
+- Added focused Workbench provider-selection coverage proving default provider choice stays deterministic, input-order independent, and based only on registered provider title/id metadata.
+- Included Codex/OpenAI/Feishu-shaped provider identities in the guard so future AI or remote sync integrations cannot accidentally add brand-specific priority in Workbench action logic.
+- Updated architecture notes to document that provider-specific priority must come from future explicit user configuration rather than hard-coded Workbench selection rules.
+
+Quality gate:
+
+- `npx vitest run packages/workbench/src/workbenchProviderSelection.test.ts packages/workbench/src/workbenchAiActions.test.ts packages/workbench/src/workbenchRemoteSyncActions.test.ts`: passed, 3 files / 30 tests
+- `npm run verify:stage`: passed, including Node version check, top-level/root identity and workspace package-lock sync plus stale workspace lock-entry check, maintained-docs presence/scope check, sensitive hardcode scan, typecheck, 100 files passed, 1022 tests passed / 2 skipped, production build, dependency audit with 0 vulnerabilities, and `git diff --check` with the same already-dirty-file line-ending warnings only
+
+Review:
+
+- Runtime behavior did not change; this is a regression guard for future provider configuration growth.
+- AI and remote sync default provider selection remains provider-neutral and service-boundary driven.
+- No endpoint URL, model id, API key, token, Feishu scope, folder id, local path, gateway path, or credential literal was added.
+
+## 2026-06-14 - Configured Provider Synchronization Boundary
+
+Completed:
+
+- Extracted the duplicated Workbench configured-provider lifecycle into `synchronizeWorkbenchConfiguredProviders()`.
+- Updated configured AI provider synchronization and configured remote sync provider synchronization to share the same registration, refresh, collision-skip, and disposal policy while keeping their provider construction paths separate.
+- Added focused helper coverage for configuration refreshes, externally visible provider-id collisions, disabled provider creation, and disposable cleanup.
+- Updated architecture notes so configuration-backed AI and remote sync provider registration documents the shared Workbench synchronization boundary.
+
+Quality gate:
+
+- `npx vitest run packages/workbench/src/workbenchConfiguredProviders.test.ts packages/workbench/src/workbenchConfiguredAiProviders.test.ts packages/workbench/src/workbenchConfiguredRemoteSyncProviders.test.ts`: passed, 3 files / 9 tests
+- `npm run verify:stage`: passed, including Node version check, top-level/root identity and workspace package-lock sync plus stale workspace lock-entry check, maintained-docs presence/scope check, sensitive hardcode scan, typecheck, 101 files passed, 1025 tests passed / 2 skipped, production build, dependency audit with 0 vulnerabilities, and `git diff --check` with the same already-dirty-file line-ending warnings only
+
+Review:
+
+- Runtime behavior did not change; this consolidates duplicated lifecycle code before future provider types or explicit provider-priority configuration are added.
+- AI and remote sync provider construction still stays behind their existing platform factories and native bridge availability checks.
+- No endpoint URL, model id, API key, token, Feishu scope, folder id, local path, gateway path, or credential literal was added.
+
+## 2026-06-14 - Provider Availability Selection Alignment
+
+Completed:
+
+- Updated Workbench provider availability context creation to use the same default provider selection helpers used by command registration and action execution.
+- Added focused context-model coverage proving AI and remote sync provider availability stays aligned with the default provider selection boundary.
+- Updated architecture notes so provider-gated menus and commands document one shared provider availability policy.
+
+Quality gate:
+
+- `npx vitest run packages/workbench/src/workbenchContextModel.test.ts packages/workbench/src/workbenchProviderSelection.test.ts packages/workbench/src/workbenchCommandRegistration.test.ts packages/workbench/src/workbenchContributions.test.ts`: passed, 4 files / 41 tests
+- `npm run verify:stage`: passed, including Node version check, top-level/root identity and workspace package-lock sync plus stale workspace lock-entry check, maintained-docs presence/scope check, sensitive hardcode scan, typecheck, 101 files passed, 1026 tests passed / 2 skipped, production build, dependency audit with 0 vulnerabilities, and `git diff --check` with the same already-dirty-file line-ending warnings only
+
+Review:
+
+- Runtime behavior is intentionally unchanged with the current stable title/id provider selection policy.
+- Future explicit provider priority or disablement rules can change default provider selection without creating separate menu/context availability policy.
+- No endpoint URL, model id, API key, token, Feishu scope, folder id, local path, gateway path, or credential literal was added.
+
+## 2026-06-14 - Menu Context Change Dedup Guard
+
+Completed:
+
+- Added platform menu-service coverage proving one context-key change publishes one menu refresh per affected menu even when multiple contributed items in that menu depend on the same key.
+- Included a nested context expression in the guard so future provider-gated or workspace-gated menu contributions stay covered without relying on React-level tests.
+
+Quality gate:
+
+- `npx vitest run packages/platform/src/platform.test.ts`: passed, 1 file / 111 tests
+- `npm run verify:stage`: passed, including Node version check, top-level/root identity and workspace package-lock sync plus stale workspace lock-entry check, maintained-docs presence/scope check, sensitive hardcode scan, typecheck, 101 files passed, 1027 tests passed / 2 skipped, production build, dependency audit with 0 vulnerabilities, and `git diff --check` with the same already-dirty-file line-ending warnings only
+
+Review:
+
+- Runtime behavior did not change; this records the existing set-based affected-menu policy as a regression guard.
+- The guard keeps future VS Code-style menu/context contribution growth from adding duplicate refresh noise.
+- No endpoint URL, model id, API key, token, Feishu scope, folder id, local path, gateway path, or credential literal was added.
+
+## 2026-06-14 - Workbench Menu Context Key Guard
+
+Completed:
+
+- Added Workbench contribution coverage that extracts context keys from every built-in menu `when` expression and toggled state binding.
+- Compared those keys against the centralized `workbenchContextKeys` model so future built-in menu actions cannot silently disappear because of an unregistered or misspelled context key.
+- Kept this as a test-only architecture guard; runtime menu behavior is unchanged.
+
+Quality gate:
+
+- `npx vitest run packages/workbench/src/workbenchContributions.test.ts`: passed, 1 file / 12 tests
+- `npm run verify:stage`: passed, including Node version check, top-level/root identity and workspace package-lock sync plus stale workspace lock-entry check, maintained-docs presence/scope check, sensitive hardcode scan, typecheck, 101 files passed, 1028 tests passed / 2 skipped, production build, dependency audit with 0 vulnerabilities, and `git diff --check` with the same already-dirty-file line-ending warnings only
+
+Review:
+
+- Built-in menu context ownership stays centralized in the Workbench context model while the platform parser remains provider-neutral and generic.
+- This guard supports future VS Code-style menu/context contribution growth without hard-coding provider ids, endpoints, models, tokens, Feishu scopes, folder ids, local paths, or gateway paths.
+
+## 2026-06-14 - Workbench Contribution Command Guard
+
+Completed:
+
+- Added Workbench contribution coverage that verifies every built-in menu command and default keybinding command resolves to centralized Workbench command metadata.
+- Kept the command id, command metadata, menu contribution, and keybinding contribution surfaces aligned without moving executable handlers into the extension-style manifest.
+- Preserved runtime behavior; this is a regression guard for future menu/keybinding growth.
+
+Quality gate:
+
+- `npx vitest run packages/workbench/src/workbenchContributions.test.ts packages/workbench/src/workbenchCommandMetadata.test.ts`: passed, 2 files / 17 tests
+- `npm run verify:stage`: passed, including Node version check, top-level/root identity and workspace package-lock sync plus stale workspace lock-entry check, maintained-docs presence/scope check, sensitive hardcode scan, typecheck, 101 files passed, 1029 tests passed / 2 skipped, production build, dependency audit with 0 vulnerabilities, and `git diff --check` with the same already-dirty-file line-ending warnings only
+
+Review:
+
+- Command identity remains centralized in `workbenchCommandIds` and surfaced through command metadata before menus, keybindings, Settings, and the command palette consume it.
+- No provider id, endpoint URL, model id, API key, token, Feishu scope, folder id, local path, gateway path, or credential literal was added.
+
+## 2026-06-14 - Workbench Menu Target Guard
+
+Completed:
+
+- Added Workbench contribution coverage that verifies every built-in menu item targets one of the centralized Workbench menu contribution points.
+- Kept titlebar and activitybar menu ids owned by `workbenchMenuIds` while default extension-style contributions continue to consume those ids.
+- Preserved runtime behavior; this is a regression guard for future menu surface growth.
+
+Quality gate:
+
+- `npx vitest run packages/workbench/src/workbenchContributions.test.ts packages/workbench/src/workbenchMenuModel.test.ts`: passed, 2 files / 21 tests
+- `npm run verify:stage`: passed, including Node version check, top-level/root identity and workspace package-lock sync plus stale workspace lock-entry check, maintained-docs presence/scope check, sensitive hardcode scan, typecheck, 101 files passed, 1030 tests passed / 2 skipped, production build, dependency audit with 0 vulnerabilities, and `git diff --check` with the same already-dirty-file line-ending warnings only
+
+Review:
+
+- Menu contribution targets now have the same explicit guard shape as command ids, context keys, icon ids, and side-view toggles.
+- No provider id, endpoint URL, model id, API key, token, Feishu scope, folder id, local path, gateway path, or credential literal was added.
+
+## 2026-06-14 - Workbench Default Keybinding Conflict Guard
+
+Completed:
+
+- Added Workbench contribution coverage proving default keybinding shortcuts are unique after platform keybinding normalization.
+- Reused `keybindingEquals()` from the platform keybinding service so the guard matches dispatch, active-label, and Settings conflict semantics.
+- Preserved runtime behavior; this is a regression guard against shadowed default shortcuts.
+
+Quality gate:
+
+- `npx vitest run packages/workbench/src/workbenchContributions.test.ts packages/platform/src/platform.test.ts`: passed, 2 files / 126 tests
+- `npm run verify:stage`: passed, including Node version check, top-level/root identity and workspace package-lock sync plus stale workspace lock-entry check, maintained-docs presence/scope check, sensitive hardcode scan, typecheck, 101 files passed, 1031 tests passed / 2 skipped, production build, dependency audit with 0 vulnerabilities, and `git diff --check` with the same already-dirty-file line-ending warnings only
+
+Review:
+
+- Default keybindings can keep growing through contribution data, but a shortcut cannot silently shadow another built-in command.
+- No provider id, endpoint URL, model id, API key, token, Feishu scope, folder id, local path, gateway path, or credential literal was added.
+
+## 2026-06-14 - Live Preview UI Simplification And Installed Smoke Plan
+
+Completed:
+
+- Simplified editor live-preview chrome for code fences, provider-rendered blocks, table previews, image previews, and math previews by reducing estimated block heights, toolbar/button dimensions, padding, and heavy full-border treatment.
+- Kept the preview affordances as lightweight left-edge markers and compact controls so editing surfaces read less like large cards while preserving source-focused click editing, copy controls, and table edit controls.
+- Documented the release/installed smoke-test boundary in README and architecture notes: the current project has no installer/package script yet, so installed-app validation should become a separate gate once packaging exists.
+- Defined the installed smoke scope for packaged asset loading, preload/native capability exposure, trusted workspace/file operations, export, native persistence, encrypted secrets, AI request/cancel, remote sync request/cancel, and workspace resource bridges.
+- Kept Codex/Responses AI and Feishu/Lark validation environment-driven through user-supplied local endpoints or external Lark CLI-backed gateways instead of repository defaults.
+
+Quality gate:
+
+- Browser check against `http://127.0.0.1:5173/`: passed; the editor loaded with localized live-preview controls after the style change.
+- `npx vitest run packages/editor/src/livePreview.test.ts`: passed, 1 file / 191 tests.
+- `npm run check:docs`: passed.
+- `npm run verify:stage`: passed, including Node version check, top-level/root identity and workspace package-lock sync plus stale workspace lock-entry check, maintained-docs presence/scope check, sensitive hardcode scan, typecheck, 101 files passed, 1031 tests passed / 2 skipped, production build, dependency audit with 0 vulnerabilities, and `git diff --check` with the same already-dirty-file line-ending warnings only.
+
+Review:
+
+- Runtime behavior changes are limited to editor live-preview styling and layout density; parser, command, AI, sync, file, and export behavior did not change.
+- Installed/release-only functional testing is now designed as a future packaging gate, not represented as already automated while no installer or packaged-app script exists.
+- No provider id, endpoint URL, model id, API key, token, Feishu/Lark app id, tenant id, folder id, local path, gateway path, or credential literal was added.
+
+## 2026-06-14 - Settings Surface Density Pass
+
+Completed:
+
+- Reduced shared dialog chrome density by tightening overlay padding, header height, action spacing, button dimensions, and dialog shadow.
+- Tightened Settings layout spacing for sidebar navigation, search inputs, section gaps, field rows, segmented controls, text inputs, textareas, number controls, keybinding rows, and empty states.
+- Changed configured AI/remote sync provider drafts from heavy bordered cards into lightweight left-rule groups, preserving existing controls and validation text without changing provider configuration behavior.
+- Changed keybinding conflict rows from boxed panels into compact left-rule warnings so Settings reads more like a tool surface than stacked cards.
+
+Quality gate:
+
+- Browser check against `http://127.0.0.1:5173/`: passed; Settings opened in the current narrow viewport, provider draft styling used transparent background with a left rule, and no obvious text overlap or blank dialog state was observed.
+- `npm run typecheck`: passed.
+- `npm run build -w @typora-plus/desktop`: passed, with the existing Mermaid chunk-size warning only.
+- `npm run verify:stage`: passed, including Node version check, top-level/root identity and workspace package-lock sync plus stale workspace lock-entry check, maintained-docs presence/scope check, sensitive hardcode scan, typecheck, 101 files passed, 1031 tests passed / 2 skipped, production build, dependency audit with 0 vulnerabilities, and `git diff --check` with the same already-dirty-file line-ending warnings only.
+
+Review:
+
+- Runtime behavior changes are limited to CSS layout density for dialogs and Settings; configuration, provider creation, secret handling, keybinding recording, AI, sync, file, and export logic did not change.
+- The temporary provider draft used during browser inspection was not saved.
+- No provider id, endpoint URL, model id, API key, token, Feishu/Lark app id, tenant id, folder id, local path, gateway path, or credential literal was added.
+
+## 2026-06-14 - Sidebar And Result List Density Pass
+
+Completed:
+
+- Reduced the desktop sidebar column width from 292px to 276px, keeping the activity bar width stable while giving more space back to the editor.
+- Tightened activity bar, sidebar header, sidebar content padding, file rows, folder rows, outline rows, search fields, result rows, tag rows, section labels, empty rows, and search status text.
+- Changed sidebar action buttons from bordered blocks to lightweight left-rule rows so Files actions sit closer to the rest of the navigation surface.
+- Kept the mobile overlay sidebar width unchanged, so narrow in-app browser layouts remain usable.
+
+Quality gate:
+
+- Browser check against `http://127.0.0.1:5173/`: passed in the current narrow viewport; Search opened, search input height was 30px, temporary `a` query produced seven readable 30px result rows, and no visible overlap was observed.
+- Browser desktop viewport check at 1280x720: passed; body columns resolved to `48px 276px 956px`, the sidebar measured 276px, and result/search rows measured 30px before the viewport override was reset.
+- `npm run typecheck`: passed.
+- `npm run build -w @typora-plus/desktop`: passed, with the existing Mermaid chunk-size warning only.
+- `npm run verify:stage`: passed, including Node version check, top-level/root identity and workspace package-lock sync plus stale workspace lock-entry check, maintained-docs presence/scope check, sensitive hardcode scan, typecheck, 101 files passed, 1031 tests passed / 2 skipped, production build, dependency audit with 0 vulnerabilities, and `git diff --check` with the same already-dirty-file line-ending warnings only.
+
+Review:
+
+- Runtime behavior changes are limited to CSS layout density for the activity bar, sidebar, search, result, outline, tag, and file navigation surfaces.
+- Workbench React structure, navigation handlers, search/index behavior, AI, remote sync, file, export, and configuration logic did not change.
+- The temporary search query used during browser inspection was cleared.
+- No provider id, endpoint URL, model id, API key, token, Feishu/Lark app id, tenant id, folder id, local path, gateway path, or credential literal was added.
+
+## 2026-06-14 - Command Overlay Density And Installed Gate Design
+
+Completed:
+
+- Reduced command palette and quick-open overlay density by tightening overlay offset, palette width/height, shadow depth, input height, list padding, command row spacing, empty-state spacing, and quick-open row columns.
+- Kept command palette and quick-open behavior unchanged while making the transient command surface read more like an editor tool than a large modal block.
+- Expanded the release smoke plan in README and architecture notes into a concrete installed-artifact gate design: source-stage verification remains separate from packaged-app validation, installed tests use environment-provided artifact paths and generated temporary workspaces, and clean install, upgrade, offline, optional AI, and optional remote-sync profiles are distinct release runs.
+- Documented that Feishu/Lark validation should continue through an external Lark CLI-authorized raw mirror gateway, with provider-specific values kept out of source, docs examples, package metadata, and committed fixtures.
+
+Quality gate:
+
+- Browser command palette check against `http://127.0.0.1:5173/`: passed in the current narrow viewport; command palette measured 580px wide, 42px input height, 32px command rows, 19 commands, no horizontal overflow, and no app console errors.
+- Browser quick-open check against `http://127.0.0.1:5173/`: passed for the current no-workspace candidate state; quick-open shell measured 580px wide with a 42px input, no horizontal overflow, and the overlay was closed after inspection.
+- `npm run typecheck`: passed.
+- `npm run build -w @typora-plus/desktop`: passed, with the existing Mermaid chunk-size warning only.
+- `npm run verify:stage`: passed, including Node version check, top-level/root identity and workspace package-lock sync plus stale workspace lock-entry check, maintained-docs presence/scope check, sensitive hardcode scan, typecheck, 101 files passed, 1031 tests passed / 2 skipped, production build, dependency audit with 0 vulnerabilities, and `git diff --check` with the same already-dirty-file line-ending warnings only.
+
+Review:
+
+- Runtime behavior changes are limited to CSS layout density for command palette and quick-open overlays.
+- The installed/release testing design is intentionally not represented as an automated gate until a real installer or packaged-app launcher exists.
+- No provider id, endpoint URL, model id, API key, token, Feishu/Lark app id, tenant id, folder id, local path, gateway path, or credential literal was added.
+
+## 2026-06-14 - Shell And Remote Sync Dialog Density Pass
+
+Completed:
+
+- Tightened the main shell chrome by reducing the titlebar and statusbar row heights, titlebar padding, statusbar spacing, and titlebar background treatment.
+- Removed the editor pane decorative gradient so the editing surface reads as a plain workspace canvas instead of a framed preview area.
+- Split remote sync plan summary and execution status text away from the AI response block styling, using compact left-rule status rows instead of large response panels.
+- Kept remote sync planning, execution, cancellation, conflict resolution, provider selection, AI response handling, and file behavior unchanged.
+
+Quality gate:
+
+- Browser shell check against `http://127.0.0.1:5173/`: passed in the current narrow viewport; shell rows measured `42px 679.286px 25px`, titlebar/statusbar backgrounds were flat surface colors, editor pane used the canvas background, no horizontal overflow, and no app console errors.
+- Browser command palette regression check: passed after the shell change; command palette remained 580px wide with a 42px input, 32px command rows, 19 commands, and no horizontal overflow before the overlay was closed.
+- `npm run typecheck`: passed.
+- `npm run build -w @typora-plus/desktop`: passed, with the existing Mermaid chunk-size warning only.
+- `npm run verify:stage`: passed, including Node version check, top-level/root identity and workspace package-lock sync plus stale workspace lock-entry check, maintained-docs presence/scope check, sensitive hardcode scan, typecheck, 101 files passed, 1031 tests passed / 2 skipped, production build, dependency audit with 0 vulnerabilities, and `git diff --check` with the same already-dirty-file line-ending warnings only.
+
+Review:
+
+- Runtime behavior changes are limited to CSS layout density and remote sync dialog class names used for presentation.
+- The remote sync dialog still consumes provider-neutral plan/execution models and does not introduce provider-specific display logic.
+- No provider id, endpoint URL, model id, API key, token, Feishu/Lark app id, tenant id, folder id, local path, gateway path, or credential literal was added.
+
+## 2026-06-14 - Installed App Smoke Entry And Preload Runtime Fix
+
+Completed:
+
+- Added `npm run test:installed:smoke` as an explicit release-artifact smoke launcher that requires `TYPORA_PLUS_INSTALLED_SMOKE_APP_PATH`, creates isolated user data by default, starts the app with `--typora-plus-installed-smoke`, and reads a sanitized result JSON file.
+- Added Electron main-process installed smoke mode that loads the renderer through the same app path, verifies renderer mount and preload capability groups, and performs native configuration, index snapshot, remote sync manifest, AI secret, and remote sync secret round trips against the isolated user-data directory.
+- Changed the desktop preload from ESM `preload.js` to sandbox-compatible CommonJS `preload.cjs`, preserving `contextIsolation: true`, `nodeIntegration: false`, and `sandbox: true` while making the native bridge load in Electron runtime.
+- Added a source-level preload channel alignment test so duplicated CJS preload channel strings cannot drift from native IPC module channel constants.
+- Documented the installed smoke command and preload runtime boundary in the maintained docs only.
+
+Quality gate:
+
+- `npx vitest run scripts/run-installed-smoke.test.mjs scripts/smoke-runner.test.mjs`: passed, 2 files / 17 tests.
+- `npx vitest run apps/desktop/electron/preloadChannels.test.ts scripts/run-installed-smoke.test.mjs`: passed, 2 files / 11 tests.
+- Electron smoke dry run through `node_modules/.bin/electron.cmd apps/desktop/dist-electron/main.js --typora-plus-installed-smoke`: passed against the local dev server with isolated temporary user data; renderer mount, preload bridge, all native capability groups, configuration/index/manifest round trips, and AI/remote-sync secret set/delete checks were true. `packaged` was false because this dry run used the source-built Electron main rather than a packaged release artifact.
+- `npm run typecheck`: passed.
+- `npm run build -w @typora-plus/desktop`: passed, with the existing Mermaid chunk-size warning only.
+- `npm run scan:hardcode`: passed.
+- `npm run check:docs`: passed.
+- `npm run verify:stage`: passed, including Node version check, top-level/root identity and workspace package-lock sync plus stale workspace lock-entry check, maintained-docs presence/scope check, sensitive hardcode scan, typecheck, 103 files passed, 1042 tests passed / 2 skipped, production build, dependency audit with 0 vulnerabilities, and `git diff --check` with the same already-dirty-file line-ending warnings only.
+
+Review:
+
+- The installed smoke command is intentionally outside the normal stage gate because it needs an installed executable or app bundle path.
+- The Electron dry run proved the new smoke mode and preload runtime boundary, but a true installed/release validation still requires a packaged artifact supplied through `TYPORA_PLUS_INSTALLED_SMOKE_APP_PATH`.
+- No provider id, endpoint URL, model id, API key, token, Feishu/Lark app id, tenant id, folder id, local path, gateway path, or credential literal was added.
+
+## 2026-06-14 - Installed Smoke Workspace Bridge Coverage
+
+Completed:
+
+- Extended the installed-app smoke runner to create an isolated temporary workspace fixture by default, with optional `TYPORA_PLUS_INSTALLED_SMOKE_WORKSPACE_DIR` support for user-supplied release fixtures.
+- Passed the workspace directory into Electron smoke mode and seeded the isolated user-data trust store before renderer checks so the smoke path exercises trusted workspace reopening rather than bypassing the native workspace boundary.
+- Expanded the Electron installed smoke renderer checks to cover trusted workspace open, Markdown file read/write, workspace image resource resolution, remote sync workspace resource read, and remote sync workspace resource write/read/delete.
+- Kept configured user-data and workspace directories user-owned: the runner deletes only its temporary result/fixture root, not paths supplied through environment variables.
+- Fixed the smoke workspace URI to follow the desktop native `file://` URI convention instead of Node's standard `file:///` format, which surfaced during the first workspace dry run as a trusted-workspace mismatch.
+
+Quality gate:
+
+- `npx vitest run scripts/run-installed-smoke.test.mjs`: passed, 1 file / 11 tests.
+- `npx vitest run apps/desktop/electron/preloadChannels.test.ts scripts/run-installed-smoke.test.mjs`: passed, 2 files / 12 tests.
+- Electron smoke dry run through `node_modules/.bin/electron.cmd apps/desktop/dist-electron/main.js --typora-plus-installed-smoke`: passed against the local dev server with isolated temporary user data and workspace; renderer mount, preload bridge, all native capability groups, configuration/index/manifest round trips, AI/remote-sync secret set/delete, trusted workspace reopen, Markdown read/write, image resource resolution, and remote sync workspace resource read/write/delete checks were true. `packaged` was false because this dry run used the source-built Electron main rather than a packaged release artifact.
+- `npm run typecheck`: passed.
+- `npm run build -w @typora-plus/desktop`: passed, with the existing Mermaid chunk-size warning only.
+- `npm run verify:stage`: passed, including Node version check, top-level/root identity and workspace package-lock sync plus stale workspace lock-entry check, maintained-docs presence/scope check, sensitive hardcode scan, typecheck, 103 files passed, 1043 tests passed / 2 skipped, production build, dependency audit with 0 vulnerabilities, and `git diff --check` with the same already-dirty-file line-ending warnings only.
+
+Review:
+
+- Installed smoke coverage now reaches the native workspace bridge and remote sync workspace resource bridge, which the browser dev server cannot prove.
+- The release-artifact command still remains optional and environment-driven; no installed app path, workspace path, provider id, endpoint URL, model id, API key, token, Feishu/Lark app id, tenant id, folder id, gateway path, or credential literal was added.
+
+## 2026-06-14 - Installed Smoke Harness Modularization
+
+Completed:
+
+- Extracted installed smoke CLI option parsing, user-data override handling, result generation, trusted-workspace seeding, renderer smoke options, and renderer-side smoke script ownership from `main.ts` into a dedicated Electron `installedSmoke` module.
+- Kept `main.ts` focused on Electron startup composition: compute paths, configure installed smoke user data before IPC registration, register native IPC, create windows, and delegate installed smoke execution.
+- Added focused installed smoke module tests for CLI option parsing, optional-field omission, userData override gating, desktop-native `file://` workspace URI generation, and renderer smoke option creation.
+- Preserved the existing installed smoke runtime behavior and native IPC channel alignment guard.
+
+Quality gate:
+
+- `npx vitest run apps/desktop/electron/installedSmoke.test.ts apps/desktop/electron/preloadChannels.test.ts scripts/run-installed-smoke.test.mjs`: passed, 3 files / 16 tests.
+- Electron smoke dry run through `node_modules/.bin/electron.cmd apps/desktop/dist-electron/main.js --typora-plus-installed-smoke`: passed against the local dev server with isolated temporary user data and workspace; renderer mount, preload bridge, all native capability groups, configuration/index/manifest round trips, AI/remote-sync secret set/delete, trusted workspace reopen, Markdown read/write, image resource resolution, and remote sync workspace resource read/write/delete checks were true. `packaged` was false because this dry run used the source-built Electron main rather than a packaged release artifact.
+- `npm run typecheck`: passed.
+- `npm run build -w @typora-plus/desktop`: passed, with the existing Mermaid chunk-size warning only.
+- `npm run scan:hardcode`: passed.
+- `npm run verify:stage`: passed, including Node version check, top-level/root identity and workspace package-lock sync plus stale workspace lock-entry check, maintained-docs presence/scope check, sensitive hardcode scan, typecheck, 104 files passed, 1047 tests passed / 2 skipped, production build, dependency audit with 0 vulnerabilities, and `git diff --check` with the same already-dirty-file line-ending warnings only.
+
+Review:
+
+- This stage is an architecture/maintainability change; installed smoke coverage and runtime behavior are intentionally unchanged.
+- Installed smoke remains release-artifact, environment-driven, and provider-neutral, with no installed app path, workspace path, provider id, endpoint URL, model id, API key, token, Feishu/Lark app id, tenant id, folder id, gateway path, or credential literal added.
+
+## 2026-06-14 - Installed Smoke Required Checks And UI Simplification
+
+Completed:
+
+- Tightened the installed-app smoke result reader so `passed: true` is not enough: every required installed-smoke check must be present and exactly `true`.
+- Added deterministic required-check failure reporting for missing, false, or malformed installed smoke check values without echoing paths, secrets, or raw result payloads.
+- Simplified the desktop shell presentation by reducing titlebar, activitybar, sidebar, and statusbar density and replacing heavier panel backgrounds with canvas-aligned surfaces and subtler dividers.
+- Simplified editor live-preview presentation for code, renderer, table, image, and math blocks by replacing large filled cards with left-rule grouping, lighter controls, and tighter responsive editor padding.
+- Updated the maintained docs to describe fixed installed-smoke result validation and the release-artifact testing split.
+
+Quality gate:
+
+- `npx vitest run scripts/run-installed-smoke.test.mjs`: passed, 1 file / 15 tests.
+- `npx vitest run scripts/run-installed-smoke.test.mjs packages/editor/src/livePreview.test.ts apps/desktop/electron/installedSmoke.test.ts apps/desktop/electron/preloadChannels.test.ts`: passed, 4 files / 211 tests.
+- Electron smoke dry run through `node_modules/.bin/electron.cmd apps/desktop/dist-electron/main.js --typora-plus-installed-smoke`: passed against the local dev server with isolated temporary user data and workspace; all 26 required checks were true. `packaged` was false because this dry run used the source-built Electron main rather than a packaged release artifact.
+- `npm run typecheck`: passed.
+- `npm run build -w @typora-plus/desktop`: passed, with the existing Mermaid chunk-size warning only.
+- `npm run verify:stage`: passed, including Node version check, package-lock sync, maintained-docs scope check, sensitive hardcode scan, typecheck, 104 files passed, 1051 tests passed / 2 skipped, production build, dependency audit with 0 vulnerabilities, and `git diff --check` with the same already-dirty-file line-ending warnings only.
+
+Review:
+
+- Runtime behavior changes are limited to installed smoke result validation and CSS/editor theme presentation.
+- AI, remote sync, file, export, command registration, and provider selection logic did not change.
+- The true release gate still needs an installed executable or app bundle supplied through `TYPORA_PLUS_INSTALLED_SMOKE_APP_PATH`; the source-built Electron dry run only proves the smoke mode and native bridge path.
+- The in-app browser did not expose an active tab during this pass, so visual confirmation was limited to build output and Electron smoke execution rather than a Browser screenshot.
+- No provider id, endpoint URL, model id, API key, token, Feishu/Lark app id, tenant id, folder id, local path, gateway path, or credential literal was added.
+
+## 2026-06-14 - Installed Smoke Required Check Drift Guard
+
+Completed:
+
+- Added a source-level installed smoke alignment guard that extracts Electron harness base checks, renderer `record()` checks, and bridge capability loop checks from `apps/desktop/electron/installedSmoke.ts`.
+- The runner required-check list now fails tests if it drifts from the Electron app-side smoke scope, so future release-artifact checks cannot be added or renamed on one side only.
+- Updated the maintained docs to describe the alignment guard without adding another documentation surface.
+
+Quality gate:
+
+- `npx vitest run scripts/run-installed-smoke.test.mjs`: passed, 1 file / 16 tests.
+- `npx vitest run scripts/run-installed-smoke.test.mjs apps/desktop/electron/installedSmoke.test.ts apps/desktop/electron/preloadChannels.test.ts`: passed, 3 files / 21 tests.
+- `npm run typecheck`: passed.
+- `npm run build -w @typora-plus/desktop`: passed, with the existing Mermaid chunk-size warning only.
+- `npm run verify:stage`: passed, including Node version check, package-lock sync, maintained-docs scope check, sensitive hardcode scan, typecheck, 104 files passed, 1052 tests passed / 2 skipped, production build, dependency audit with 0 vulnerabilities, and `git diff --check` with the same already-dirty-file line-ending warnings only.
+
+Review:
+
+- Runtime behavior did not change; this stage only strengthens the release smoke test harness.
+- The test reads source-level check names only and does not introduce provider ids, endpoints, models, keys, tokens, Feishu/Lark ids, local paths, gateway paths, or credential literals.
+
+## 2026-06-14 - Installed Smoke App-Side Required Check Enforcement
+
+Completed:
+
+- Added an Electron-side installed smoke required-check list and helper so the app's own `passed` value requires every release smoke check to be present and exactly `true`.
+- Kept the external runner required-check list aligned with the Electron required-check list and actual Electron harness checks through the source-level drift guard.
+- Added focused Electron harness coverage for complete, missing, false, and malformed required-check values.
+- Updated the maintained docs to state that both app-side smoke mode and the external runner enforce fixed required checks.
+
+Quality gate:
+
+- `npx vitest run apps/desktop/electron/installedSmoke.test.ts scripts/run-installed-smoke.test.mjs apps/desktop/electron/preloadChannels.test.ts`: passed, 3 files / 23 tests.
+- Electron smoke dry run through `node_modules/.bin/electron.cmd apps/desktop/dist-electron/main.js --typora-plus-installed-smoke`: passed against the local dev server with isolated temporary user data and workspace; all 26 required checks were true and the app-side `passed` value was true. `packaged` was false because this dry run used the source-built Electron main rather than a packaged release artifact.
+- `npm run typecheck`: passed.
+- `npm run build -w @typora-plus/desktop`: passed, with the existing Mermaid chunk-size warning only.
+- `npm run verify:stage`: passed, including Node version check, package-lock sync, maintained-docs scope check, sensitive hardcode scan, typecheck, 104 files passed, 1054 tests passed / 2 skipped, production build, dependency audit with 0 vulnerabilities, and `git diff --check` with the same already-dirty-file line-ending warnings only.
+
+Review:
+
+- This stage changes only installed smoke pass/fail semantics for incomplete smoke results; normal app behavior, AI, remote sync, file, export, command, and UI logic did not change.
+- No provider id, endpoint URL, model id, API key, token, Feishu/Lark app id, tenant id, folder id, local path, gateway path, or credential literal was added.
+
+## 2026-06-14 - Installed Smoke Result Error Sanitization
+
+Completed:
+
+- Changed Electron installed smoke harness-level exceptions to write a fixed `installedSmokeHarness` error identifier instead of raw exception messages into the result JSON.
+- Kept renderer-side failures as bounded check ids so release diagnostics remain useful without exposing local paths, URLs, or secret-adjacent error strings.
+- Added a result-file test proving a thrown error containing a local path does not appear in the installed smoke JSON output.
+- Updated the maintained docs to describe sanitized fixed check/error identifiers.
+
+Quality gate:
+
+- `npx vitest run apps/desktop/electron/installedSmoke.test.ts`: passed, 1 file / 7 tests.
+- `npx vitest run apps/desktop/electron/installedSmoke.test.ts scripts/run-installed-smoke.test.mjs apps/desktop/electron/preloadChannels.test.ts`: passed, 3 files / 24 tests.
+- Electron smoke dry run through `node_modules/.bin/electron.cmd apps/desktop/dist-electron/main.js --typora-plus-installed-smoke`: passed against the local dev server with isolated temporary user data and workspace; all 26 required checks were true, `errors` was empty, and `passed` was true. `packaged` was false because this dry run used the source-built Electron main rather than a packaged release artifact.
+- `npm run typecheck`: passed.
+- `npm run build -w @typora-plus/desktop`: passed, with the existing Mermaid chunk-size warning only.
+- `npm run verify:stage`: passed, including Node version check, package-lock sync, maintained-docs scope check, sensitive hardcode scan, typecheck, 104 files passed, 1055 tests passed / 2 skipped, production build, dependency audit with 0 vulnerabilities, and `git diff --check` with the same already-dirty-file line-ending warnings only.
+
+Review:
+
+- Runtime app behavior outside explicit installed smoke mode did not change.
+- Installed smoke still needs a real installed executable or app bundle for true release validation; source-built Electron dry runs only prove the harness path.
+- No provider id, endpoint URL, model id, API key, token, Feishu/Lark app id, tenant id, folder id, local path, gateway path, or credential literal was added.
+
+## 2026-06-14 - Installed Smoke Runner Result Error Validation
+
+Completed:
+
+- Extended the installed smoke runner result schema to parse sanitized `errors` from the result JSON.
+- The runner now fails on any fixed smoke error id even when `passed` is true and all checks are true.
+- Unknown or malformed result error values are rejected as invalid smoke output without echoing raw values, preventing a malformed result JSON from leaking local paths or exception text through CLI diagnostics.
+- Expanded the source-level alignment guard to keep the runner harness error id aligned with the Electron harness error id.
+- Updated the maintained docs to describe fixed error-id validation in the installed smoke runner.
+
+Quality gate:
+
+- `npx vitest run scripts/run-installed-smoke.test.mjs`: passed, 1 file / 19 tests.
+- `npx vitest run scripts/run-installed-smoke.test.mjs apps/desktop/electron/installedSmoke.test.ts apps/desktop/electron/preloadChannels.test.ts`: passed, 3 files / 27 tests.
+- Electron smoke dry run through `node_modules/.bin/electron.cmd apps/desktop/dist-electron/main.js --typora-plus-installed-smoke`: passed against the local dev server with isolated temporary user data and workspace; all 26 required checks were true, `errors` was empty, and `passed` was true. `packaged` was false because this dry run used the source-built Electron main rather than a packaged release artifact.
+- `npm run typecheck`: passed.
+- `npm run build -w @typora-plus/desktop`: passed, with the existing Mermaid chunk-size warning only.
+- `npm run verify:stage`: passed, including Node version check, package-lock sync, maintained-docs scope check, sensitive hardcode scan, typecheck, 104 files passed, 1058 tests passed / 2 skipped, production build, dependency audit with 0 vulnerabilities, and `git diff --check` with the same already-dirty-file line-ending warnings only.
+
+Review:
+
+- Runtime app behavior did not change; this stage only hardens the external release-artifact smoke runner.
+- Result diagnostics remain bounded to fixed check/error identifiers.
+- No provider id, endpoint URL, model id, API key, token, Feishu/Lark app id, tenant id, folder id, local path, gateway path, or credential literal was added.
+
+## 2026-06-14 - Source Electron Smoke Runner
+
+Completed:
+
+- Added `npm run test:electron:smoke` as a repeatable local source-built Electron smoke runner, separate from the release-artifact installed smoke runner.
+- The source runner resolves the real Electron executable from the installed `electron` package, requires the built Electron main output, requires the renderer dev server, creates isolated temporary user-data and workspace fixtures by default, and launches `electron <main.js> --typora-plus-installed-smoke`.
+- Reused the installed smoke app-side harness and external result validation so source Electron smoke and installed smoke share the same fixed check/error semantics.
+- Added source runner tests for invalid environment preflight, missing Electron executable, missing built main output, missing renderer dev server, isolated fixture launch arguments, configured fixture ownership, configured workspace existence, dev-server reachability, Electron package executable resolution, and dev-server URL drift from the Electron shell config.
+- Updated maintained docs to describe the four-layer testing split: stage gate, source-built Electron smoke, installed release-artifact smoke, and optional environment-driven AI/remote sync/Feishu-Lark integration smoke.
+- Tightened the narrow-viewport sidebar overlay from a 304px maximum to 248px and reduced its shadow, leaving more editor content visible in the in-app browser while preserving the compact activitybar/sidebar model.
+
+Quality gate:
+
+- `npx vitest run scripts/run-electron-smoke.test.mjs scripts/run-installed-smoke.test.mjs apps/desktop/electron/installedSmoke.test.ts apps/desktop/electron/preloadChannels.test.ts`: passed, 4 files / 38 tests.
+- `npm run build -w @typora-plus/desktop`: passed, with the existing Mermaid chunk-size warning only.
+- `npm run test:electron:smoke`: passed against the current source-built Electron main and renderer dev server with isolated temporary user data and workspace.
+- Browser visual check at `http://127.0.0.1:5173/`: passed in a 635px-wide in-app browser viewport; sidebar width measured 248px after the compact overlay adjustment and the shell had no horizontal body overflow.
+- `npm run typecheck`: passed.
+- `npm run check:docs`: passed.
+- `npm run verify:stage`: passed, including Node version check, package-lock sync, maintained-docs scope check, sensitive hardcode scan, typecheck, 105 files passed, 1069 tests passed / 2 skipped, production build, dependency audit with 0 vulnerabilities, and `git diff --check` with the same already-dirty-file line-ending warnings only.
+
+Review:
+
+- This stage turns the previous manual source-built Electron dry run into a checked command without weakening `npm run test:installed:smoke`, which still requires a real installed executable or app bundle.
+- The source smoke command validates native bridge behavior during development but does not claim installer layout, packaged renderer loading, or OS install behavior.
+- No provider id, endpoint URL, model id, API key, token, Feishu/Lark app id, tenant id, folder id, gateway path, or credential literal was added.
+
+## 2026-06-15 - Installed Smoke Packaged Artifact Guard
+
+Completed:
+
+- Tightened the installed smoke result schema so every result must include a boolean `packaged` field from the Electron app-side harness.
+- Changed the release installed smoke runner to require `packaged: true` by default, preventing a source-built Electron dry run from satisfying the release-artifact gate.
+- Kept `npm run test:electron:smoke` as the explicit source-built validation path by calling the shared result reader with packaged-result enforcement disabled.
+- Added runner tests for packaged metadata failures and source-smoke acceptance of non-packaged results while preserving fixed check/error validation.
+- Updated maintained docs to record the split: source Electron smoke may report `packaged: false`, installed release smoke must report `packaged: true`.
+
+Quality gate:
+
+- `npx vitest run scripts/run-installed-smoke.test.mjs scripts/run-electron-smoke.test.mjs`: passed, 2 files / 32 tests.
+- `npx vitest run scripts/run-installed-smoke.test.mjs scripts/run-electron-smoke.test.mjs apps/desktop/electron/installedSmoke.test.ts apps/desktop/electron/preloadChannels.test.ts`: passed, 4 files / 40 tests.
+- `npm run build -w @typora-plus/desktop`: passed, with the existing Mermaid chunk-size warning only.
+- `npm run check:docs`: passed.
+- `npm run test:electron:smoke`: passed after starting the required local renderer dev server at `http://127.0.0.1:5173/`.
+- `npm run verify:stage`: passed, including Node version check, package-lock sync, maintained-docs scope check, sensitive hardcode scan, typecheck, 105 files passed, 1071 tests passed / 2 skipped, production build, dependency audit with 0 vulnerabilities, and `git diff --check` with the same already-dirty-file line-ending warnings only.
+
+Review:
+
+- This is a release-test hardening change only; ordinary app runtime behavior is unchanged outside explicit smoke mode.
+- Installed smoke still needs a real installed executable or app bundle supplied through `TYPORA_PLUS_INSTALLED_SMOKE_APP_PATH`.
+- No provider id, endpoint URL, model id, API key, token, Feishu/Lark app id, tenant id, folder id, gateway path, local path, or credential literal was added.
+
+## 2026-06-15 - Markdown Syntax Symbol Hiding
+
+Completed:
+
+- Changed Markdown syntax markers from low-opacity display to `display: none`, so ordinary rendered lines no longer show symbols such as heading `#`, emphasis delimiters, inline-code backticks, link brackets, or list/task markers, including when the cursor is on the same line.
+- Extended inline/reference link marker ranges so only the visible label remains; link targets, reference keys, and punctuation are hidden together instead of leaving target text visible after punctuation hiding.
+- Changed marker range normalization to merge overlapping or adjacent syntax ranges, which keeps composite Markdown shells such as `](target)` hidden as one presentation span.
+- Kept code, math, and table source blocks visible while editing, but ordinary Markdown lines now hide syntax symbols even when they are the active editor line.
+- Updated maintained docs to describe syntax hiding rather than soft marker fading.
+
+Quality gate:
+
+- `npx vitest run packages/editor/src/livePreview.test.ts`: passed, 1 file / 191 tests.
+- `npm run typecheck`: passed.
+- `npm run build -w @typora-plus/desktop`: passed, with the existing Mermaid chunk-size warning only.
+- Browser visual check at `http://127.0.0.1:5173/`: passed; heading `#` and emphasis `*` markers both reported `display: none`, and the screenshot showed rendered content without the Markdown symbols.
+- Browser end-to-end visual check at `http://127.0.0.1:5173/`: passed after pasting a Markdown sample covering headings, bold, italic, inline/reference links, quote, list item, task items, and inline code; screenshot inspection confirmed the rendered editor did not show heading markers, emphasis delimiters, link targets/reference keys, task/list source markers, or inline-code backticks.
+- `npm run test:electron:smoke`: passed.
+- `npm run check:docs`: passed.
+- `npm run verify:stage`: passed, including Node version check, package-lock sync, maintained-docs scope check, sensitive hardcode scan, typecheck, 105 files passed, 1071 tests passed / 2 skipped, production build, dependency audit with 0 vulnerabilities, and `git diff --check` with the same already-dirty-file line-ending warnings only.
+
+Review:
+
+- The Markdown text model is unchanged; this is a CodeMirror decoration/presentation change only.
+- The editor package still owns Markdown syntax presentation, with Workbench and platform layers unaffected.
+
+## 2026-06-15 - Theme Toggle Applied-State Fix
+
+Completed:
+
+- Changed the Workbench theme toggle command to use the currently applied light/dark theme as the source of truth before choosing the next color scheme.
+- Cleared custom theme selection when using the top-right theme toggle, so a selected custom theme cannot visually mask the requested light/dark switch.
+- Kept DOM theme reads inside the Application boundary and passed the applied color scheme into command registration through a callback.
+
+Quality gate:
+
+- `npx vitest run packages/workbench/src/workbenchCommandRegistration.test.ts packages/workbench/src/workbenchThemeApplication.test.ts packages/workbench/src/workbenchMenuIcons.test.ts`: passed, 3 files / 28 tests.
+- `npm run typecheck`: passed.
+- Browser visual check at `http://127.0.0.1:5173/`: passed; clicking the top-right theme button switched `data-theme` from `light` to `dark` and a second click switched it back to `light`, with screenshots confirming the visible theme change.
+
+Review:
+
+- The command no longer treats `system` as a blind configuration string when deciding the next theme.
+- No provider id, endpoint URL, model id, API key, token, Feishu/Lark app id, tenant id, folder id, local path, gateway path, or credential literal was added.
+
+## 2026-06-15 - Heading Decoration Cleanup
+
+Completed:
+
+- Removed underline text decoration from rendered Markdown heading lines and their syntax-highlight child spans.
+
+Quality gate:
+
+- Browser visual check at `http://127.0.0.1:5173/`: passed; H1 and H2 headings rendered without underlines, and computed styles for the heading line plus child spans reported `textDecorationLine: none`.
+
+Review:
+
+- This is a scoped editor presentation change only; Markdown parsing and source text are unchanged.
+
+## 2026-06-15 - Packaged Renderer Smoke Fix
+
+Completed:
+
+- Tested a temporary unpacked packaged Electron app built from the current desktop production output and copied Electron runtime.
+- Found a packaged-only renderer mount failure: production `index.html` emitted root-relative `/assets/...` URLs, which fail under Electron `loadFile()` from `file://`.
+- Changed the desktop Vite config to emit relative renderer asset URLs with `base: "./"`.
+- Added a script-level regression test that keeps the desktop Vite base aligned with Electron packaged `loadFile()` requirements.
+
+Quality gate:
+
+- Initial temporary packaged smoke failed only `packagedApp` when launched through the npm Electron executable, then failed `rendererMounted` after renaming the executable and reaching `app.isPackaged: true`.
+- `npm run build -w @typora-plus/desktop`: passed and generated `./assets/...` script, preload, and stylesheet URLs in `apps/desktop/dist/renderer/index.html`.
+- `npx vitest run scripts/run-electron-smoke.test.mjs`: passed, 1 file / 12 tests.
+- Temporary unpacked packaged app smoke with `TYPORA_PLUS_INSTALLED_SMOKE_APP_PATH` pointing to the renamed `TyporaPlus.exe`: passed.
+- Packaged app visual check through Electron remote debugging: passed; the renderer loaded from `file://.../dist/renderer/index.html`, `#root` had one mounted child, and the captured screenshot showed the Workbench shell.
+
+Review:
+
+- The installed smoke now catches the release-only asset-path class of failures before a real installer exists.
+- This does not add an official packaging script or installer; it validates an unpacked packaged shape assembled from current build outputs.
+
+## 2026-06-15 - Lark CLI Raw Mirror Gateway
+
+Completed:
+
+- Added a local Feishu/Lark raw mirror gateway script backed by `lark-cli`, exposed through `npm run lark:gateway`.
+- Added `/auth/login/start`, `/auth/login/complete`, and `/auth/status` helper routes so user authorization can stay in the Lark CLI local profile instead of Typora Plus configuration.
+- Added `/mirror/list`, `/mirror/upload`, `/mirror/download`, and `/mirror/delete` routes that match the existing provider-neutral raw mirror contract.
+- Mapped recursive Drive folder listings to workspace-relative file resources and kept unsafe path segments out of the mirror view.
+- Implemented upload handling that creates missing remote folders, deletes a same-path old file when present, uploads a temporary local copy, and removes temporary files afterward.
+- Added `npm run lark:profile` to print a raw mirror profile skeleton for Settings without embedding real app ids, Drive scopes, folder ids, tokens, local paths, or user secrets.
+
+Quality gate:
+
+- `npx vitest run scripts/lark-cli-raw-mirror-gateway.test.mjs`: passed, 1 file / 7 tests.
+- `npm run scan:hardcode`: passed.
+
+Review:
+
+- This is a validation and integration bridge, not a built-in provider default. The Workbench still talks only to a configured raw mirror HTTP profile.
+- A later in-app one-click OAuth flow can wrap these helper routes or replace them with an Electron OAuth bridge while reusing native configuration, secret storage, and remote sync boundaries.
+
+## 2026-06-15 - Lark Authorization Settings Controls
+
+Completed:
+
+- Added a Settings shortcut that creates a local Lark raw mirror provider draft with the loopback gateway URL and Raw Mirror route metadata prefilled.
+- Added per-profile Lark authorization controls for checking gateway auth status, starting the Lark CLI device authorization flow, opening the returned verification URL, showing the user code, and completing authorization with the returned device code.
+- Routed the authorization controls through the existing Electron native remote sync request bridge, so renderer code does not perform cross-origin gateway fetches directly.
+- Reused configured Raw Mirror secret header metadata for optional gateway shared-secret protection without storing Lark OAuth tokens in Typora Plus configuration.
+- Localized the new Settings labels and Lark auth action errors in English and Simplified Chinese.
+
+Quality gate:
+
+- `npx vitest run packages/workbench/src/settingsModel.test.ts packages/workbench/src/workbenchRemoteSyncLarkAuth.test.ts packages/workbench/src/workbenchI18n.test.ts`: passed, 3 files / 50 tests.
+- `npm run typecheck`: passed.
+
+Review:
+
+- This makes Lark authorization discoverable from the app, but the durable authorization state still belongs to the user-owned Lark CLI local profile.
+- No app id, tenant id, folder id, token, API key, or provider credential literal was added.
+
+## 2026-06-15 - Lark Gateway Windows CLI Compatibility
+
+Completed:
+
+- Fixed the local Lark raw mirror gateway default CLI resolution on Windows so it prefers the installed `@larksuite/cli` Node entrypoint when available instead of spawning the PowerShell shim.
+- Kept `TYPORA_PLUS_LARK_CLI_PATH` as an explicit override for custom CLI locations.
+- Updated device-login startup so explicit scope requests are not combined with `--domain`, matching the installed `lark-cli` validation rules.
+
+Quality gate:
+
+- `npx vitest run scripts/lark-cli-raw-mirror-gateway.test.mjs packages/workbench/src/workbenchRemoteSyncLarkAuth.test.ts`: passed, 2 files / 15 tests.
+- `npm run scan:hardcode`: passed.
+- Local gateway `/auth/status?verify=true` and `/auth/login/start` loopback checks: passed after restarting the gateway.
+
+Review:
+
+- The Settings authorization UI was failing because the local gateway was unavailable or could not spawn the Windows CLI shim, not because the Feishu account authorization was invalid.
+- The gateway still stores durable user authorization state in the Lark CLI local profile and does not add app ids, tenant ids, folder ids, tokens, API keys, or provider credentials to source.
+
+## 2026-06-15 - Remote Sync Result Visibility
+
+Completed:
+
+- Added explicit Remote Sync Plan dialog labels for provider id, sync direction, remote scope, workspace URI, and execution completion time.
+- Labeled planned operations, progress events, and executed operations separately so users can tell whether a sync only planned changes or actually executed them.
+- Kept operation rows focused on relative paths under the selected remote scope, matching the provider-neutral sync contract.
+
+Quality gate:
+
+- `npx vitest run packages/workbench/src/workbenchI18n.test.ts packages/workbench/src/workbenchRemoteSyncDialogModel.test.ts packages/workbench/src/workbenchRemoteSyncActions.test.ts scripts/lark-cli-raw-mirror-gateway.test.mjs`: passed, 4 files / 55 tests.
+- `npm run typecheck`: passed.
+- `npm run build -w @typora-plus/desktop`: passed, with the existing Mermaid chunk-size warning only.
+- `npm run test:installed:smoke` against local release `typora-plus-0.1.0-local-20260615-194245`: passed.
+
+Review:
+
+- This is a UI feedback change only; remote sync planning, execution, manifest storage, and provider adapters are unchanged.
+- The dialog now shows where a sync is scoped without exposing provider-specific credentials or tokens beyond the configured remote scope id.
+
+## 2026-06-15 - Windows Native Title Bar Cleanup
+
+Completed:
+
+- Hid the default Electron application menu and switched the Windows window chrome to the hidden title bar style.
+- Added a title bar overlay and drag region so the app-owned title bar replaces the previous native white title/menu strip.
+- Reserved the system window-control area in both comfortable and compact density modes so toolbar actions do not sit under minimize/maximize/close controls.
+
+Quality gate:
+
+- `npm run typecheck`: passed.
+- `npm run build -w @typora-plus/desktop`: passed, with the existing Mermaid chunk-size warning only.
+- `npm run test:installed:smoke` against local release `typora-plus-0.1.0-local-20260615-195212`: passed.
+- Windows window-region screenshot of `typora-plus-0.1.0-local-20260615-195212`: verified the white native title/menu strip is gone.
+
+Review:
+
+- Older local release directories still show the previous white native chrome; users need to open the `20260615-195212` release or a later package to see this change.
+
+## 2026-06-15 - Editor Slash Insert Commands
+
+Completed:
+
+- Added editor slash commands that open a compact inline menu when a line starts with `/`.
+- Added structured Markdown insertions for table, task list, meeting notes, callout, code block, quote, divider, and date.
+- Kept the visible menu label-only, so commands are shown as localized names/descriptions rather than literal slash strings.
+- Localized the slash command menu and inserted placeholder content for English and Simplified Chinese editor labels.
+
+Quality gate:
+
+- `npx vitest run packages/editor/src/slashCommands.test.ts`: passed, 1 file / 7 tests.
+- `npx vitest run packages/editor/src/slashCommands.test.ts packages/editor/src/livePreview.test.ts`: passed, 2 files / 198 tests.
+- `npx vitest run packages/workbench/src/workbenchI18n.test.ts packages/editor/src/slashCommands.test.ts`: passed, 2 files / 21 tests.
+- `npm run typecheck`: passed.
+- `npm run build -w @typora-plus/desktop`: passed, with the existing Mermaid chunk-size warning only.
+- Browser visual check at `http://127.0.0.1:5173/`: passed; `/table` showed a compact localized menu, inserted a three-column table, and selected the first header placeholder. `/todo` inserted a localized three-item task list.
+
+Review:
+
+- This is an editor-local insertion feature; Workbench commands, file persistence, remote sync, and AI providers are unchanged.
+- Slash triggers are only recognized at the start of the current line, avoiding accidental command menus in prose or URLs.

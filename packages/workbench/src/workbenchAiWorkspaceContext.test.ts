@@ -102,6 +102,36 @@ describe("workbench AI workspace context", () => {
     expect(query).not.toHaveBeenCalled();
   });
 
+  it("uses injected labels when formatting workspace-search context details", () => {
+    expect(createWorkbenchWorkspaceAiContext({
+      indexService: {
+        getStatus: () => status("ready"),
+        query: () => [searchResult("C:/Notes/related.md", "related.md", 7, "Related implementation detail")]
+      }
+    }, {
+      name: "Current Plan.md",
+      uri: URI.file("C:/Notes/current.md"),
+      value: "# Current Plan"
+    }, {
+      maxPreviewLength: 120,
+      maxResults: 1,
+      messages: {
+        detailList: (details) => details.join("\n"),
+        line: (line) => `行：${line}`,
+        path: (relativePath) => `路径：${relativePath}`
+      }
+    })).toEqual([{
+      kind: "workspace-search",
+      title: "related.md:7",
+      uri: URI.file("C:/Notes/related.md"),
+      value: [
+        "路径：related.md",
+        "行：7",
+        "Related implementation detail"
+      ].join("\n")
+    }]);
+  });
+
   it("derives stable search queries from note name, headings, and tags", () => {
     expect(createWorkbenchWorkspaceAiContextQueries({
       name: "Launch Plan.md",

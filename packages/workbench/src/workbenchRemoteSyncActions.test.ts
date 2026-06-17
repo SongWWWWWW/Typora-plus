@@ -3,11 +3,16 @@ import { describe, expect, it, vi } from "vitest";
 import type { WorkspaceFileTree, WorkspaceState } from "@typora-plus/platform";
 import {
   getWorkbenchRemoteSyncPlanExecutionBlockReason,
+  getWorkbenchRemoteSyncPlanExecutionBlockReasonCode,
   resolveWorkbenchRemoteSyncPlanConflicts,
   runWorkbenchExecuteWorkspaceRemoteSyncAction,
+  runWorkbenchPlanFolderRemoteSyncAction,
   runWorkbenchPlanWorkspaceRemoteSyncAction,
-  workbenchRemoteSyncConflictResolutions
+  workbenchRemoteSyncPlanExecutionBlockReasons,
+  workbenchRemoteSyncConflictResolutions,
+  type WorkbenchRemoteSyncActionMessages
 } from "./workbenchRemoteSyncActions";
+import type { WorkbenchRemoteSyncMarkdownAssetMessages } from "./workbenchRemoteSyncMarkdownAssets";
 import { workbenchRemoteSyncRequestActions } from "./workbenchRemoteSyncRequestModel";
 
 describe("workbench remote sync actions", () => {
@@ -83,6 +88,23 @@ describe("workbench remote sync actions", () => {
     expect(services.remoteSyncService.createPlan).not.toHaveBeenCalled();
   });
 
+  it("uses injected messages for no-provider plan failures", async () => {
+    const services = {
+      remoteSyncService: {
+        getProviders: vi.fn(() => []),
+        createPlan: vi.fn(),
+        executePlan: vi.fn()
+      },
+      workspaceService: {
+        getWorkspace: vi.fn(() => createWorkspace())
+      }
+    };
+
+    await expect(runWorkbenchPlanWorkspaceRemoteSyncAction(services, {
+      actionMessages: localizedRemoteSyncActionMessages
+    })).rejects.toThrow("Localized sync provider unavailable");
+  });
+
   it("adds content hashes to workspace plan resources when the native resource bridge is available", async () => {
     const services = {
       ...createServices(),
@@ -116,6 +138,83 @@ describe("workbench remote sync actions", () => {
       relativePath: "A.md"
     });
     expect(services.remoteSyncService.createPlan).toHaveBeenCalledWith("a.sync", result.request);
+  });
+
+  it("plans folder bindings with the selected local folder as the resource root", async () => {
+    const workspace = createFolderWorkspace();
+    const localFolder = workspace.files!.root.children![0]!;
+    const services = {
+      remoteSyncService: {
+        getProviders: vi.fn(() => [
+          { id: "folder.sync", title: "Folder Sync" }
+        ]),
+        createPlan: vi.fn(async () => ({
+          operations: [],
+          summary: {
+            creates: 0,
+            updates: 0,
+            deletes: 0,
+            skips: 0,
+            conflicts: 0
+          }
+        })),
+        executePlan: vi.fn()
+      },
+      remoteSyncWorkspaceResourceService: {
+        isAvailable: vi.fn(() => true),
+        readResource: vi.fn(async () => ({
+          workspaceUri: URI.file("C:/Notes/projects"),
+          relativePath: "Plan.md",
+          value: "",
+          encoding: "base64" as const,
+          size: 4,
+          mtime: 30,
+          contentHash: "sha256:plan"
+        }))
+      },
+      workspaceService: {
+        getWorkspace: vi.fn(() => workspace)
+      }
+    };
+
+    const result = await runWorkbenchPlanFolderRemoteSyncAction(services, {
+      binding: {
+        id: "folder-binding",
+        localUri: localFolder.uri.toString(),
+        localRelativePath: localFolder.relativePath,
+        localName: localFolder.name,
+        providerId: "folder.sync",
+        remoteScopeId: "remote-folder",
+        remoteName: "Remote Folder"
+      },
+      includeDirectories: true,
+      localFolder
+    });
+
+    expect(result.providerId).toBe("folder.sync");
+    expect(result.request.workspaceUri).toEqual(URI.file("C:/Notes/projects"));
+    expect(result.request.remoteScopeId).toBe("remote-folder");
+    expect(result.request.resources.map((resource) => ({
+      relativePath: resource.relativePath,
+      kind: resource.kind,
+      contentHash: resource.contentHash
+    }))).toEqual([
+      {
+        relativePath: "Plan.md",
+        kind: "file",
+        contentHash: "sha256:plan"
+      },
+      {
+        relativePath: "empty",
+        kind: "directory",
+        contentHash: undefined
+      }
+    ]);
+    expect(services.remoteSyncWorkspaceResourceService.readResource).toHaveBeenCalledWith({
+      workspaceUri: URI.file("C:/Notes/projects"),
+      relativePath: "Plan.md"
+    });
+    expect(services.remoteSyncService.createPlan).toHaveBeenCalledWith("folder.sync", result.request);
   });
 
   it("adds Markdown-linked local assets before remote sync planning", async () => {
@@ -165,6 +264,27 @@ describe("workbench remote sync actions", () => {
       contentHash: "sha256:chart"
     });
     expect(services.remoteSyncService.createPlan).toHaveBeenCalledWith("a.sync", result.request);
+  });
+
+  it("uses injected Markdown asset messages during workspace planning", async () => {
+    const services = {
+      ...createServices(),
+      remoteSyncWorkspaceResourceService: {
+        isAvailable: vi.fn(() => true),
+        readResource: vi.fn(async () => ({
+          workspaceUri: URI.file("C:/Notes"),
+          relativePath: "A.md",
+          value: "!!!!",
+          encoding: "base64" as const,
+          size: 4
+        }))
+      }
+    };
+
+    await expect(runWorkbenchPlanWorkspaceRemoteSyncAction(services, {
+      markdownAssetMessages: localizedMarkdownAssetMessages
+    })).rejects.toThrow("Localized valid base64 required");
+    expect(services.remoteSyncService.createPlan).not.toHaveBeenCalled();
   });
 
   it("executes an existing workspace plan with a non-dry-run request", async () => {
@@ -255,6 +375,58 @@ describe("workbench remote sync actions", () => {
         conflicts: 0
       }
     })).toBe("No remote sync changes to execute");
+    expect(getWorkbenchRemoteSyncPlanExecutionBlockReasonCode({
+      operations: [],
+      summary: {
+        creates: 0,
+        updates: 0,
+        deletes: 0,
+        skips: 0,
+        conflicts: 0
+      }
+    })).toBe(workbenchRemoteSyncPlanExecutionBlockReasons.empty);
+    expect(executePlan).not.toHaveBeenCalled();
+  });
+
+  it("uses injected messages for execution block reasons", async () => {
+    const executePlan = vi.fn();
+    const services = {
+      remoteSyncService: {
+        executePlan
+      }
+    };
+
+    await expect(runWorkbenchExecuteWorkspaceRemoteSyncAction(services, {
+      providerId: "a.sync",
+      request: request(),
+      plan: {
+        operations: [{
+          kind: "conflict",
+          target: "both",
+          relativePath: "A.md"
+        }],
+        summary: {
+          creates: 0,
+          updates: 0,
+          deletes: 0,
+          skips: 0,
+          conflicts: 1
+        }
+      }
+    }, {
+      actionMessages: localizedRemoteSyncActionMessages
+    })).rejects.toThrow("Localized resolve conflicts");
+
+    expect(getWorkbenchRemoteSyncPlanExecutionBlockReason({
+      operations: [],
+      summary: {
+        creates: 0,
+        updates: 0,
+        deletes: 0,
+        skips: 0,
+        conflicts: 0
+      }
+    }, localizedRemoteSyncActionMessages)).toBe("Localized no changes");
     expect(executePlan).not.toHaveBeenCalled();
   });
 
@@ -378,6 +550,38 @@ describe("workbench remote sync actions", () => {
         skips: 1,
         conflicts: 0
       }
+    });
+  });
+
+  it("uses injected messages when resolving executable conflicts", () => {
+    const plan = {
+      operations: [{
+        kind: "conflict" as const,
+        target: "both" as const,
+        relativePath: "Changed.md",
+        localUri: URI.file("C:/Notes/Changed.md"),
+        remoteId: "remote-changed",
+        message: "Resource changed on both sides"
+      }],
+      summary: {
+        creates: 0,
+        updates: 0,
+        deletes: 0,
+        skips: 0,
+        conflicts: 1
+      }
+    };
+
+    const resolved = resolveWorkbenchRemoteSyncPlanConflicts(
+      plan,
+      workbenchRemoteSyncConflictResolutions.useLocal,
+      localizedRemoteSyncActionMessages
+    );
+
+    expect(resolved.operations[0]).toMatchObject({
+      kind: "update",
+      target: "remote",
+      message: "Localized use local"
     });
   });
 
@@ -632,3 +836,67 @@ function createWorkspaceFileTree(): WorkspaceFileTree {
     }]
   };
 }
+
+function createFolderWorkspace(): WorkspaceState {
+  return {
+    name: "Notes",
+    rootUri: URI.file("C:/Notes"),
+    files: {
+      root: {
+        uri: URI.file("C:/Notes"),
+        name: "Notes",
+        relativePath: ".",
+        kind: "directory",
+        children: [
+          {
+            uri: URI.file("C:/Notes/projects"),
+            name: "projects",
+            relativePath: "projects",
+            kind: "directory",
+            children: [
+              {
+                uri: URI.file("C:/Notes/projects/Plan.md"),
+                name: "Plan.md",
+                relativePath: "projects/Plan.md",
+                kind: "file"
+              },
+              {
+                uri: URI.file("C:/Notes/projects/empty"),
+                name: "empty",
+                relativePath: "projects/empty",
+                kind: "directory",
+                children: []
+              }
+            ]
+          }
+        ]
+      },
+      files: [
+        {
+          uri: URI.file("C:/Notes/projects/Plan.md"),
+          name: "Plan.md",
+          relativePath: "projects/Plan.md",
+          kind: "file"
+        }
+      ]
+    }
+  };
+}
+
+const localizedRemoteSyncActionMessages: WorkbenchRemoteSyncActionMessages = {
+  conflictResolutionMessages: {
+    [workbenchRemoteSyncConflictResolutions.useLocal]: "Localized use local",
+    [workbenchRemoteSyncConflictResolutions.useRemote]: "Localized use remote"
+  },
+  executionBlockReasons: {
+    [workbenchRemoteSyncPlanExecutionBlockReasons.conflicts]: "Localized resolve conflicts",
+    [workbenchRemoteSyncPlanExecutionBlockReasons.empty]: "Localized no changes"
+  },
+  noProviderAvailable: "Localized sync provider unavailable"
+};
+
+const localizedMarkdownAssetMessages: WorkbenchRemoteSyncMarkdownAssetMessages = {
+  aborted: "Localized asset discovery aborted",
+  contentEncodingInvalid: "Localized valid base64 required",
+  contentEncodingRequired: "Localized base64 required"
+};

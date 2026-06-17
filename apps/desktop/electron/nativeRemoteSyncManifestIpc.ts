@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { app, ipcMain } from "electron";
+import { isSafeNativeSnapshotStorageKey } from "./nativeStorageKeys.js";
 
 export const nativeRemoteSyncManifestIpcChannels = {
   read: "typora-plus:remote-sync-manifest:read",
@@ -24,7 +25,7 @@ export function registerNativeRemoteSyncManifestIpc(config: NativeRemoteSyncMani
 }
 
 function readRemoteSyncManifestValue(config: NativeRemoteSyncManifestConfig, key: string): string | undefined {
-  if (!isSafeRemoteSyncManifestKey(key)) {
+  if (!isSafeNativeSnapshotStorageKey(key)) {
     return undefined;
   }
 
@@ -43,7 +44,7 @@ function writeRemoteSyncManifestValue(
   key: string,
   value: string
 ): void {
-  if (!isSafeRemoteSyncManifestKey(key)) {
+  if (!isSafeNativeSnapshotStorageKey(key)) {
     throw new Error("Invalid remote sync manifest key");
   }
 
@@ -54,10 +55,6 @@ function writeRemoteSyncManifestValue(
   const storagePath = remoteSyncManifestStoragePath(config, key);
   fs.mkdirSync(path.dirname(storagePath), { recursive: true });
   fs.writeFileSync(storagePath, value, "utf8");
-}
-
-function isSafeRemoteSyncManifestKey(value: string): boolean {
-  return /^[a-z0-9.-]+$/i.test(value);
 }
 
 function remoteSyncManifestStoragePath(config: NativeRemoteSyncManifestConfig, key: string): string {

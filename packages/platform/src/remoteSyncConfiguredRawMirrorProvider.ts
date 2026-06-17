@@ -240,7 +240,7 @@ async function listConfiguredRawMirrorResources(
       {
         path: context.rawMirror.listPath,
         method: "GET",
-        query: createConfiguredRawMirrorListQuery(context.profile, context.rawMirror, listRequest.direction, cursor),
+        query: createConfiguredRawMirrorListQuery(context.profile, context.rawMirror, listRequest, cursor),
         responseType: "json",
         ...createConfiguredRawMirrorSecretRequest(context.rawMirror),
         ...(listRequest.signal !== undefined ? { signal: listRequest.signal } : {})
@@ -264,8 +264,7 @@ async function listConfiguredRawMirrorResources(
     }
 
     if (!page.nextCursor) {
-      return resources
-        .filter((resource) => resource.kind === "file")
+      return [...filterConfiguredRawMirrorResourcesForDirection(resources, listRequest.direction)]
         .sort((first, second) => first.relativePath.localeCompare(second.relativePath));
     }
 
@@ -273,6 +272,15 @@ async function listConfiguredRawMirrorResources(
   }
 
   throw new Error("Configured raw mirror resource list response has too many pages");
+}
+
+function filterConfiguredRawMirrorResourcesForDirection(
+  resources: readonly RemoteSyncRemoteResource[],
+  direction: RemoteSyncRawMirrorListRequest["direction"]
+): readonly RemoteSyncRemoteResource[] {
+  return direction === "push"
+    ? resources
+    : resources.filter((resource) => resource.kind === "file");
 }
 
 async function executeConfiguredRawMirrorOperations(
@@ -290,14 +298,20 @@ async function executeConfiguredRawMirrorOperations(
   });
   const uploadedByPath = new Map(uploadContents.map((content) => [content.operation.relativePath, content]));
   const downloadedContents: RemoteSyncRawMirrorLocalFileContent[] = [];
+  const executedRemoteResources: RemoteSyncRemoteResource[] = [];
 
   for (const [operationIndex, operation] of executeRequest.operations.entries()) {
     throwIfConfiguredRawMirrorAborted(executeRequest.signal);
 
     if (operation.target === "remote") {
-      await executeConfiguredRawMirrorRemoteOperation(context, executeRequest, operation, uploadedByPath.get(
+      const remoteResource = await executeConfiguredRawMirrorRemoteOperation(context, executeRequest, operation, uploadedByPath.get(
         operation.relativePath
       ));
+
+      if (remoteResource) {
+        executedRemoteResources.push(remoteResource);
+      }
+
       reportConfiguredRawMirrorOperationProgress(executeRequest, operation, operationIndex + 1);
       continue;
     }
@@ -325,7 +339,7 @@ async function executeConfiguredRawMirrorOperations(
       uploadFileContents: uploadContents,
       localApplyResults
     }),
-    remoteResources,
+    remoteResources: mergeConfiguredRawMirrorRemoteResources(remoteResources, executedRemoteResources),
     operations: executeRequest.operations
   };
 }
@@ -335,14 +349,14 @@ async function executeConfiguredRawMirrorRemoteOperation(
   executeRequest: RemoteSyncRawMirrorExecuteRequest,
   operation: RemoteSyncOperation,
   uploadContent: RemoteSyncRawMirrorUploadFileContent | undefined
-): Promise<void> {
+): Promise<RemoteSyncRemoteResource | undefined> {
   if (operation.kind === "delete") {
     await requestConfiguredRawMirrorDelete(context, executeRequest, operation);
-    return;
+    return undefined;
   }
 
   if (operation.kind !== "create" && operation.kind !== "update") {
-    return;
+    return undefined;
   }
 
   const resource = executeRequest.localResources.find((candidate) => candidate.relativePath === operation.relativePath);
@@ -351,15 +365,15 @@ async function executeConfiguredRawMirrorRemoteOperation(
     throw new Error(`Configured raw mirror upload ${operation.relativePath} requires a local resource`);
   }
 
-  if (resource.kind !== "file") {
-    throw new Error(`Configured raw mirror upload ${operation.relativePath} only supports files`);
+  if (resource.kind === "directory") {
+    return requestConfiguredRawMirrorUpload(context, executeRequest, operation, resource);
   }
 
   if (!uploadContent) {
     throw new Error(`Configured raw mirror upload ${operation.relativePath} requires file content`);
   }
 
-  await requestConfiguredRawMirrorUpload(context, executeRequest, operation, resource, uploadContent);
+  return requestConfiguredRawMirrorUpload(context, executeRequest, operation, resource, uploadContent);
 }
 
 async function requestConfiguredRawMirrorUpload(
@@ -367,29 +381,31 @@ async function requestConfiguredRawMirrorUpload(
   executeRequest: RemoteSyncRawMirrorExecuteRequest,
   operation: RemoteSyncOperation,
   resource: RemoteSyncResource,
-  uploadContent: RemoteSyncRawMirrorUploadFileContent
-): Promise<void> {
-  ensureConfiguredRawMirrorResponseOk(await requestConfiguredRawMirror(
+  uploadContent?: RemoteSyncRawMirrorUploadFileContent
+): Promise<RemoteSyncRemoteResource> {
+  const response = await requestConfiguredRawMirror(
     context,
     {
       path: context.rawMirror.uploadPath,
       method: "PUT",
-      query: createConfiguredRawMirrorOperationQuery(context.profile, operation),
+      query: createConfiguredRawMirrorOperationQuery(context.profile, executeRequest, operation),
       headers: {
         "Content-Type": "application/json"
       },
       body: createConfiguredRawMirrorJsonBody({
         operation: createConfiguredRawMirrorOperationPayload(operation),
         resource: createConfiguredRawMirrorResourcePayload(resource),
-        content: {
-          value: uploadContent.content.value,
-          encoding: uploadContent.content.encoding,
-          size: uploadContent.content.size,
-          ...(uploadContent.content.mtime !== undefined ? { mtime: uploadContent.content.mtime } : {}),
-          ...(uploadContent.content.contentHash !== undefined
-            ? { contentHash: uploadContent.content.contentHash }
-            : {})
-        }
+        ...(uploadContent ? {
+          content: {
+            value: uploadContent.content.value,
+            encoding: uploadContent.content.encoding,
+            size: uploadContent.content.size,
+            ...(uploadContent.content.mtime !== undefined ? { mtime: uploadContent.content.mtime } : {}),
+            ...(uploadContent.content.contentHash !== undefined
+              ? { contentHash: uploadContent.content.contentHash }
+              : {})
+          }
+        } : {})
       }),
       bodyEncoding: "utf8",
       responseType: "json",
@@ -401,7 +417,10 @@ async function requestConfiguredRawMirrorUpload(
       operation,
       "Retrying remote sync upload request"
     )
-  ), "upload");
+  );
+
+  ensureConfiguredRawMirrorResponseOk(response, "upload");
+  return createConfiguredRawMirrorExecutedRemoteResource(resource, response.body);
 }
 
 async function requestConfiguredRawMirrorDelete(
@@ -414,7 +433,7 @@ async function requestConfiguredRawMirrorDelete(
     {
       path: context.rawMirror.deletePath,
       method: "DELETE",
-      query: createConfiguredRawMirrorOperationQuery(context.profile, operation),
+      query: createConfiguredRawMirrorOperationQuery(context.profile, executeRequest, operation),
       responseType: "json",
       ...createConfiguredRawMirrorSecretRequest(context.rawMirror),
       ...(executeRequest.signal !== undefined ? { signal: executeRequest.signal } : {})
@@ -425,6 +444,61 @@ async function requestConfiguredRawMirrorDelete(
       "Retrying remote sync delete request"
     )
   ), "delete");
+}
+
+function mergeConfiguredRawMirrorRemoteResources(
+  listedResources: readonly RemoteSyncRemoteResource[],
+  executedResources: readonly RemoteSyncRemoteResource[]
+): readonly RemoteSyncRemoteResource[] {
+  if (executedResources.length === 0) {
+    return listedResources;
+  }
+
+  const resourcesByPath = new Map(listedResources.map((resource) => [resource.relativePath, resource]));
+
+  for (const executed of executedResources) {
+    const listed = resourcesByPath.get(executed.relativePath);
+
+    resourcesByPath.set(executed.relativePath, listed
+      ? mergeConfiguredRawMirrorRemoteResource(listed, executed)
+      : executed);
+  }
+
+  return [...resourcesByPath.values()]
+    .sort((first, second) => first.relativePath.localeCompare(second.relativePath));
+}
+
+function mergeConfiguredRawMirrorRemoteResource(
+  listed: RemoteSyncRemoteResource,
+  executed: RemoteSyncRemoteResource
+): RemoteSyncRemoteResource {
+  const remoteId = listed.remoteId ?? executed.remoteId;
+  const size = listed.size ?? executed.size;
+  const mtime = listed.mtime ?? executed.mtime;
+  const contentHash = listed.contentHash ?? executed.contentHash;
+
+  return {
+    relativePath: listed.relativePath,
+    kind: listed.kind,
+    ...(remoteId !== undefined ? { remoteId } : {}),
+    ...(size !== undefined ? { size } : {}),
+    ...(mtime !== undefined ? { mtime } : {}),
+    ...(contentHash !== undefined ? { contentHash } : {})
+  };
+}
+
+function createConfiguredRawMirrorExecutedRemoteResource(
+  resource: RemoteSyncResource,
+  responseBody: unknown
+): RemoteSyncRemoteResource {
+  return {
+    relativePath: resource.relativePath,
+    kind: resource.kind,
+    ...readConfiguredRawMirrorUploadRemoteIdProperty(responseBody),
+    ...(resource.size !== undefined ? { size: resource.size } : {}),
+    ...(resource.mtime !== undefined ? { mtime: resource.mtime } : {}),
+    ...(resource.contentHash !== undefined ? { contentHash: resource.contentHash } : {})
+  };
 }
 
 async function downloadConfiguredRawMirrorFile(
@@ -449,7 +523,7 @@ async function downloadConfiguredRawMirrorFile(
     {
       path: context.rawMirror.downloadPath,
       method: "GET",
-      query: createConfiguredRawMirrorOperationQuery(context.profile, operation),
+      query: createConfiguredRawMirrorOperationQuery(context.profile, executeRequest, operation),
       responseType: "json",
       ...createConfiguredRawMirrorSecretRequest(context.rawMirror),
       ...(executeRequest.signal !== undefined ? { signal: executeRequest.signal } : {})
@@ -522,10 +596,15 @@ function reportConfiguredRawMirrorRetryProgress(
 
 function createConfiguredRawMirrorBaseQuery(
   profile: RemoteSyncProviderConfiguration,
+  requestRemoteScopeId: string | undefined,
   direction?: string
 ): Readonly<Record<string, string | undefined>> {
+  const remoteScopeId = requestRemoteScopeId !== undefined
+    ? requestRemoteScopeId
+    : profile.remoteScopeId;
+
   return {
-    ...(profile.remoteScopeId !== undefined ? { remoteScopeId: profile.remoteScopeId } : {}),
+    ...(remoteScopeId !== undefined ? { remoteScopeId } : {}),
     ...(direction !== undefined ? { direction } : {})
   };
 }
@@ -533,11 +612,11 @@ function createConfiguredRawMirrorBaseQuery(
 function createConfiguredRawMirrorListQuery(
   profile: RemoteSyncProviderConfiguration,
   rawMirror: RemoteSyncConfiguredRawMirrorProfile,
-  direction: RemoteSyncRawMirrorListRequest["direction"],
+  request: RemoteSyncRawMirrorListRequest,
   cursor: string | undefined
 ): Readonly<Record<string, string | undefined>> {
   return {
-    ...createConfiguredRawMirrorBaseQuery(profile, direction),
+    ...createConfiguredRawMirrorBaseQuery(profile, request.remoteScopeId, request.direction),
     ...(rawMirror.listPageSize !== undefined ? { pageSize: String(rawMirror.listPageSize) } : {}),
     ...(cursor !== undefined ? { cursor } : {})
   };
@@ -545,10 +624,11 @@ function createConfiguredRawMirrorListQuery(
 
 function createConfiguredRawMirrorOperationQuery(
   profile: RemoteSyncProviderConfiguration,
+  request: RemoteSyncRawMirrorExecuteRequest,
   operation: RemoteSyncOperation
 ): Readonly<Record<string, string | undefined>> {
   return {
-    ...createConfiguredRawMirrorBaseQuery(profile),
+    ...createConfiguredRawMirrorBaseQuery(profile, request.remoteScopeId),
     path: operation.relativePath,
     ...(operation.remoteId !== undefined ? { remoteId: operation.remoteId } : {})
   };
@@ -674,14 +754,61 @@ function createConfiguredRawMirrorJsonBody(value: unknown): string {
 }
 
 function ensureConfiguredRawMirrorResponseOk(
-  response: { readonly status: number; readonly statusText: string },
+  response: { readonly status: number; readonly statusText: string; readonly body?: unknown },
   operation: string
 ): void {
   if (response.status >= 200 && response.status < 300) {
     return;
   }
 
-  throw new Error(`Configured raw mirror ${operation} request failed: ${response.status} ${response.statusText}`);
+  const detail = readConfiguredRawMirrorFailureDetail(response.body);
+  throw new Error([
+    `Configured raw mirror ${operation} request failed: ${response.status} ${response.statusText}`,
+    detail
+  ].filter(Boolean).join(": "));
+}
+
+function readConfiguredRawMirrorFailureDetail(body: unknown): string | undefined {
+  if (body === undefined || body === null) {
+    return undefined;
+  }
+
+  if (typeof body === "string") {
+    return normalizeConfiguredRawMirrorFailureDetail(body);
+  }
+
+  if (isRecord(body)) {
+    if (typeof body.error === "string") {
+      return normalizeConfiguredRawMirrorFailureDetail(body.error);
+    }
+
+    if (isRecord(body.error) && typeof body.error.message === "string") {
+      return normalizeConfiguredRawMirrorFailureDetail(body.error.message);
+    }
+
+    if (typeof body.message === "string") {
+      return normalizeConfiguredRawMirrorFailureDetail(body.message);
+    }
+  }
+
+  try {
+    return normalizeConfiguredRawMirrorFailureDetail(JSON.stringify(body));
+  } catch {
+    return undefined;
+  }
+}
+
+function normalizeConfiguredRawMirrorFailureDetail(value: string): string | undefined {
+  const normalized = value
+    .replace(/[A-Za-z0-9._~+/-]{48,}={0,2}/g, "[redacted]")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (!normalized) {
+    return undefined;
+  }
+
+  return normalized.length > 500 ? `${normalized.slice(0, 497)}...` : normalized;
 }
 
 function readConfiguredRawMirrorProfile(
@@ -1275,6 +1402,32 @@ function readConfiguredRawMirrorOptionalStringProperty(
 ): { readonly [key: string]: string } {
   const value = readConfiguredRawMirrorOptionalString(record[key], label);
   return value !== undefined ? { [key]: value } : {};
+}
+
+function readConfiguredRawMirrorUploadRemoteIdProperty(value: unknown): { readonly remoteId?: string } {
+  const record = isRecord(value) && isRecord(value.data) ? value.data : value;
+
+  if (!isRecord(record)) {
+    return {};
+  }
+
+  const remoteId = readConfiguredRawMirrorOptionalUploadRemoteId(record);
+  return remoteId ? { remoteId } : {};
+}
+
+function readConfiguredRawMirrorOptionalUploadRemoteId(record: Record<string, unknown>): string | undefined {
+  for (const key of ["remoteId", "token", "fileToken", "file_token"]) {
+    const value = readConfiguredRawMirrorOptionalString(
+      record[key],
+      "Configured raw mirror upload remote id"
+    );
+
+    if (value) {
+      return value;
+    }
+  }
+
+  return undefined;
 }
 
 function readConfiguredRawMirrorOptionalString(value: unknown, label: string): string | undefined {

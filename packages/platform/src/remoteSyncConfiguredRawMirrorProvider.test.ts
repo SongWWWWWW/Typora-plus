@@ -127,6 +127,415 @@ describe("configured raw mirror remote sync provider", () => {
     ]);
   });
 
+  it("uses request remote scopes instead of the provider default scope", async () => {
+    const requests: RemoteSyncNativeRequestInput[] = [];
+    const storage = createMemoryManifestStorage();
+    const workspaceUri = URI.file("C:/Notes/projects");
+    const localResource = {
+      uri: URI.file("C:/Notes/projects/Plan.md"),
+      relativePath: "Plan.md",
+      kind: "file" as const,
+      name: "Plan.md",
+      size: 4,
+      mtime: 20,
+      contentHash: "sha256:plan"
+    };
+    const providers = createConfiguredRemoteSyncProviders([
+      configuration()
+    ], {
+      transport: createTransport(requests, [
+        { resources: [] },
+        { resources: [] },
+        { ok: true },
+        { resources: [remoteResource("Plan.md", undefined, {
+          size: 4,
+          mtime: 20,
+          contentHash: "sha256:plan"
+        })] }
+      ]),
+      workspaceResources: {
+        readResource: vi.fn(async () => ({
+          workspaceUri,
+          relativePath: "Plan.md",
+          value: "UGxhbg==",
+          encoding: "base64" as const,
+          size: 4,
+          mtime: 20,
+          contentHash: "sha256:plan"
+        })),
+        writeResource: vi.fn(),
+        deleteResource: vi.fn()
+      },
+      createProvider: createRemoteSyncConfiguredRawMirrorProviderFactory({ manifestStorage: storage })
+    });
+    const request = {
+      workspaceUri,
+      resources: [localResource],
+      direction: "push" as const,
+      remoteScopeId: "folder-projects",
+      dryRun: true
+    };
+    const plan = await providers[0]!.createPlan(request);
+
+    await providers[0]!.executePlan(plan, {
+      ...request,
+      dryRun: false
+    });
+
+    expect(requests.map((rawRequest) => [rawRequest.method, rawRequest.url])).toEqual([
+      ["GET", "https://sync.example.test/api/mirror/list?remoteScopeId=folder-projects&direction=push"],
+      ["GET", "https://sync.example.test/api/mirror/list?remoteScopeId=folder-projects&direction=push"],
+      ["PUT", "https://sync.example.test/api/mirror/upload?remoteScopeId=folder-projects&path=Plan.md"],
+      ["GET", "https://sync.example.test/api/mirror/list?remoteScopeId=folder-projects&direction=push"]
+    ]);
+  });
+
+  it("uploads bound folder subtrees under the selected request remote scope", async () => {
+    const requests: RemoteSyncNativeRequestInput[] = [];
+    const storage = createMemoryManifestStorage();
+    const workspaceUri = URI.file("C:/Notes/Typora-plus");
+    const directory = {
+      uri: URI.file("C:/Notes/Typora-plus/bbb"),
+      relativePath: "bbb",
+      kind: "directory" as const,
+      name: "bbb"
+    };
+    const file = {
+      uri: URI.file("C:/Notes/Typora-plus/bbb/bbb.md"),
+      relativePath: "bbb/bbb.md",
+      kind: "file" as const,
+      name: "bbb.md",
+      size: 7,
+      mtime: 30,
+      contentHash: "sha256:bbb"
+    };
+    const providers = createConfiguredRemoteSyncProviders([
+      configuration()
+    ], {
+      transport: createTransport(requests, [
+        { resources: [] },
+        { resources: [] },
+        { ok: true, remoteId: "remote-bbb-folder" },
+        { ok: true, remoteId: "remote-bbb-file" },
+        { resources: [
+          { relativePath: "bbb", kind: "directory", remoteId: "remote-bbb-folder" },
+          remoteResource("bbb/bbb.md", "remote-bbb-file", {
+            size: 7,
+            mtime: 30,
+            contentHash: "sha256:bbb"
+          })
+        ] }
+      ]),
+      workspaceResources: {
+        readResource: vi.fn(async () => ({
+          workspaceUri,
+          relativePath: "bbb/bbb.md",
+          value: "IyBiYmI=",
+          encoding: "base64" as const,
+          size: 7,
+          mtime: 30,
+          contentHash: "sha256:bbb"
+        })),
+        writeResource: vi.fn(),
+        deleteResource: vi.fn()
+      },
+      createProvider: createRemoteSyncConfiguredRawMirrorProviderFactory({ manifestStorage: storage })
+    });
+    const request = {
+      workspaceUri,
+      resources: [directory, file],
+      direction: "push" as const,
+      remoteScopeId: "folder-typora-plus",
+      dryRun: true
+    };
+    const plan = await providers[0]!.createPlan(request);
+
+    await providers[0]!.executePlan(plan, {
+      ...request,
+      dryRun: false
+    });
+
+    expect(requests.map((rawRequest) => [rawRequest.method, rawRequest.url])).toEqual([
+      ["GET", "https://sync.example.test/api/mirror/list?remoteScopeId=folder-typora-plus&direction=push"],
+      ["GET", "https://sync.example.test/api/mirror/list?remoteScopeId=folder-typora-plus&direction=push"],
+      ["PUT", "https://sync.example.test/api/mirror/upload?remoteScopeId=folder-typora-plus&path=bbb"],
+      ["PUT", "https://sync.example.test/api/mirror/upload?remoteScopeId=folder-typora-plus&path=bbb%2Fbbb.md"],
+      ["GET", "https://sync.example.test/api/mirror/list?remoteScopeId=folder-typora-plus&direction=push"]
+    ]);
+  });
+
+  it("executes remote directory creates without requiring file upload content", async () => {
+    const requests: RemoteSyncNativeRequestInput[] = [];
+    const storage = createMemoryManifestStorage();
+    const workspaceUri = URI.file("C:/Notes/projects");
+    const providers = createConfiguredRemoteSyncProviders([
+      configuration()
+    ], {
+      transport: createTransport(requests, [
+        { resources: [] },
+        { resources: [] },
+        { ok: true, remoteId: "remote-empty" },
+        { resources: [] }
+      ]),
+      workspaceResources: {
+        readResource: vi.fn(),
+        writeResource: vi.fn(),
+        deleteResource: vi.fn()
+      },
+      createProvider: createRemoteSyncConfiguredRawMirrorProviderFactory({ manifestStorage: storage })
+    });
+    const request = {
+      workspaceUri,
+      resources: [
+        {
+          uri: URI.file("C:/Notes/projects/empty"),
+          relativePath: "empty",
+          kind: "directory" as const,
+          name: "empty"
+        }
+      ],
+      direction: "push" as const,
+      remoteScopeId: "folder-projects",
+      dryRun: true
+    };
+    const plan = await providers[0]!.createPlan(request);
+
+    await expect(providers[0]!.executePlan(plan, {
+      ...request,
+      dryRun: false
+    })).resolves.toMatchObject({
+      operations: [
+        {
+          kind: "create",
+          target: "remote",
+          relativePath: "empty"
+        }
+      ]
+    });
+
+    expect(requests.map((rawRequest) => [rawRequest.method, rawRequest.url])).toEqual([
+      ["GET", "https://sync.example.test/api/mirror/list?remoteScopeId=folder-projects&direction=push"],
+      ["GET", "https://sync.example.test/api/mirror/list?remoteScopeId=folder-projects&direction=push"],
+      ["PUT", "https://sync.example.test/api/mirror/upload?remoteScopeId=folder-projects&path=empty"],
+      ["GET", "https://sync.example.test/api/mirror/list?remoteScopeId=folder-projects&direction=push"]
+    ]);
+    expect(JSON.parse([...storage.values.values()][0]!).resources).toEqual([
+      {
+        relativePath: "empty",
+        kind: "directory",
+        remoteId: "remote-empty"
+      }
+    ]);
+  });
+
+  it("uses uploaded local metadata when the refreshed remote list omits comparable hashes", async () => {
+    const requests: RemoteSyncNativeRequestInput[] = [];
+    const storage = createMemoryManifestStorage();
+    const workspaceUri = URI.file("C:/Notes");
+    const localResource = {
+      uri: URI.file("C:/Notes/Daily.md"),
+      relativePath: "Daily.md",
+      kind: "file" as const,
+      name: "Daily.md",
+      size: 5,
+      mtime: 100,
+      contentHash: "sha256:local"
+    };
+    const providers = createConfiguredRemoteSyncProviders([
+      configuration()
+    ], {
+      transport: createTransport(requests, [
+        { resources: [] },
+        { resources: [] },
+        { ok: true },
+        {
+          resources: [{
+            relativePath: "Daily.md",
+            kind: "file",
+            remoteId: "remote-1",
+            mtime: 200
+          }]
+        }
+      ]),
+      workspaceResources: {
+        readResource: vi.fn(async () => ({
+          workspaceUri,
+          relativePath: "Daily.md",
+          value: "SGVsbG8=",
+          encoding: "base64" as const,
+          size: 5,
+          mtime: 100,
+          contentHash: "sha256:local"
+        })),
+        writeResource: vi.fn(),
+        deleteResource: vi.fn()
+      },
+      createProvider: createRemoteSyncConfiguredRawMirrorProviderFactory({ manifestStorage: storage })
+    });
+    const plan = await providers[0]!.createPlan({
+      workspaceUri,
+      resources: [localResource],
+      direction: "push",
+      dryRun: true
+    });
+
+    await expect(providers[0]!.executePlan(plan, {
+      workspaceUri,
+      resources: [localResource],
+      direction: "push",
+      dryRun: false
+    })).resolves.toMatchObject({
+      operations: plan.operations,
+      summary: {
+        creates: 1,
+        updates: 0,
+        deletes: 0,
+        skips: 0,
+        conflicts: 0
+      }
+    });
+    expect([...storage.values.values()][0]).toContain("\"contentHash\":\"sha256:local\"");
+    expect([...storage.values.values()][0]).toContain("\"remoteId\":\"remote-1\"");
+  });
+
+  it("plans local content edits as remote updates with the existing remote id", async () => {
+    const requests: RemoteSyncNativeRequestInput[] = [];
+    const storage = createMemoryManifestStorage();
+    const workspaceUri = URI.file("C:/Notes");
+    const initialLocalResource = {
+      uri: URI.file("C:/Notes/Daily.md"),
+      relativePath: "Daily.md",
+      kind: "file" as const,
+      name: "Daily.md",
+      size: 5,
+      mtime: 100,
+      contentHash: "sha256:initial"
+    };
+    const editedLocalResource = {
+      ...initialLocalResource,
+      size: 11,
+      mtime: 200,
+      contentHash: "sha256:edited"
+    };
+    let uploadedContent = {
+      value: "SGVsbG8=",
+      size: 5,
+      mtime: 100,
+      contentHash: "sha256:initial"
+    };
+    const providers = createConfiguredRemoteSyncProviders([
+      configuration()
+    ], {
+      transport: createTransport(requests, [
+        { resources: [] },
+        { resources: [] },
+        { ok: true, remoteId: "remote-1" },
+        { resources: [remoteResource("Daily.md", "remote-1", {
+          size: 5,
+          mtime: 100,
+          contentHash: "sha256:initial"
+        })] },
+        { resources: [remoteResource("Daily.md", "remote-1", {
+          size: 5,
+          mtime: 100,
+          contentHash: "sha256:initial"
+        })] },
+        { resources: [remoteResource("Daily.md", "remote-1", {
+          size: 5,
+          mtime: 100,
+          contentHash: "sha256:initial"
+        })] },
+        { ok: true, remoteId: "remote-1" },
+        { resources: [remoteResource("Daily.md", "remote-1", {
+          size: 11,
+          mtime: 200,
+          contentHash: "sha256:edited"
+        })] }
+      ]),
+      workspaceResources: {
+        readResource: vi.fn(async () => ({
+          workspaceUri,
+          relativePath: "Daily.md",
+          encoding: "base64" as const,
+          ...uploadedContent
+        })),
+        writeResource: vi.fn(),
+        deleteResource: vi.fn()
+      },
+      createProvider: createRemoteSyncConfiguredRawMirrorProviderFactory({ manifestStorage: storage })
+    });
+    const createPlan = await providers[0]!.createPlan({
+      workspaceUri,
+      resources: [initialLocalResource],
+      direction: "push",
+      dryRun: true
+    });
+
+    await providers[0]!.executePlan(createPlan, {
+      workspaceUri,
+      resources: [initialLocalResource],
+      direction: "push",
+      dryRun: false
+    });
+
+    uploadedContent = {
+      value: "SGVsbG8gZWRpdA==",
+      size: 11,
+      mtime: 200,
+      contentHash: "sha256:edited"
+    };
+    const updatePlan = await providers[0]!.createPlan({
+      workspaceUri,
+      resources: [editedLocalResource],
+      direction: "bidirectional",
+      dryRun: true
+    });
+
+    expect(updatePlan.operations).toEqual([{
+      kind: "update",
+      target: "remote",
+      relativePath: "Daily.md",
+      localUri: URI.file("C:/Notes/Daily.md"),
+      remoteId: "remote-1"
+    }]);
+
+    await expect(providers[0]!.executePlan(updatePlan, {
+      workspaceUri,
+      resources: [editedLocalResource],
+      direction: "bidirectional",
+      dryRun: false
+    })).resolves.toMatchObject({
+      summary: {
+        creates: 0,
+        updates: 1,
+        deletes: 0,
+        skips: 0,
+        conflicts: 0
+      }
+    });
+
+    expect(requests.map((request) => [request.method, request.url])).toContainEqual([
+      "PUT",
+      "https://sync.example.test/api/mirror/upload?remoteScopeId=workspace-root&path=Daily.md&remoteId=remote-1"
+    ]);
+    const updateRequest = requests.find((request) =>
+      request.method === "PUT" && request.url.includes("remoteId=remote-1")
+    );
+    expect(JSON.parse(updateRequest?.body ?? "{}")).toMatchObject({
+      operation: {
+        kind: "update",
+        target: "remote",
+        relativePath: "Daily.md",
+        remoteId: "remote-1"
+      },
+      content: {
+        value: "SGVsbG8gZWRpdA==",
+        encoding: "base64",
+        contentHash: "sha256:edited"
+      }
+    });
+  });
+
   it("downloads remote file content and applies pull plans through workspace resources", async () => {
     const requests: RemoteSyncNativeRequestInput[] = [];
     const storage = createMemoryManifestStorage();
@@ -523,6 +932,55 @@ describe("configured raw mirror remote sync provider", () => {
     });
   });
 
+  it("keeps configured raw mirror directory snapshots for push planning", async () => {
+    const providers = createConfiguredRemoteSyncProviders([
+      configuration()
+    ], {
+      transport: createTransport([], [
+        {
+          resources: [
+            directoryResource("Folder")
+          ]
+        }
+      ]),
+      workspaceResources: {
+        readResource: vi.fn(),
+        writeResource: vi.fn(),
+        deleteResource: vi.fn()
+      },
+      createProvider: createRemoteSyncConfiguredRawMirrorProviderFactory({
+        manifestStorage: createMemoryManifestStorage()
+      })
+    });
+    const workspaceUri = URI.file("C:/Notes");
+
+    await expect(providers[0]!.createPlan({
+      workspaceUri,
+      resources: [{
+        uri: URI.file("C:/Notes/Folder"),
+        relativePath: "Folder",
+        kind: "directory",
+        name: "Folder"
+      }],
+      direction: "push",
+      dryRun: true
+    })).resolves.toEqual({
+      operations: [{
+        kind: "skip",
+        target: "none",
+        relativePath: "Folder",
+        localUri: URI.file("C:/Notes/Folder")
+      }],
+      summary: {
+        creates: 0,
+        updates: 0,
+        deletes: 0,
+        skips: 1,
+        conflicts: 0
+      }
+    });
+  });
+
   it("follows configured raw mirror list cursors before planning", async () => {
     const requests: RemoteSyncNativeRequestInput[] = [];
     const progressEvents: RemoteSyncProgress[] = [];
@@ -642,6 +1100,34 @@ describe("configured raw mirror remote sync provider", () => {
       direction: "pull",
       dryRun: true
     })).rejects.toThrow("Configured raw mirror list request failed: 503 Service Unavailable");
+  });
+
+  it("includes sanitized gateway response details in failed raw mirror requests", async () => {
+    const providers = createConfiguredRemoteSyncProviders([
+      configuration()
+    ], {
+      transport: createStatusTransport(500, "Internal Server Error", {
+        ok: false,
+        error: "unsafe file path abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+      }),
+      workspaceResources: {
+        readResource: vi.fn(),
+        writeResource: vi.fn(),
+        deleteResource: vi.fn()
+      },
+      createProvider: createRemoteSyncConfiguredRawMirrorProviderFactory({
+        manifestStorage: createMemoryManifestStorage()
+      })
+    });
+
+    await expect(providers[0]!.createPlan({
+      workspaceUri: URI.file("C:/Notes"),
+      resources: [],
+      direction: "pull",
+      dryRun: true
+    })).rejects.toThrow(
+      "Configured raw mirror list request failed: 500 Internal Server Error: unsafe file path [redacted]"
+    );
   });
 
   it("retries configured gateway status codes before parsing raw mirror responses", async () => {
@@ -1085,10 +1571,11 @@ function createSequenceTransport(
   });
 }
 
-function createMemoryManifestStorage(): RemoteSyncManifestStorage {
+function createMemoryManifestStorage(): RemoteSyncManifestStorage & { readonly values: Map<string, string> } {
   const values = new Map<string, string>();
 
   return {
+    values,
     read: (key) => values.get(key),
     write: (key, value) => {
       values.set(key, value);

@@ -37,15 +37,21 @@ export interface ITextFileService {
 
 export const ITextFileService = createServiceIdentifier<ITextFileService>("textFile");
 
+export const textFileStorageKeyLimits = {
+  storageKeyLength: 240
+} as const;
+
 export class BrowserTextFileService extends Disposable implements ITextFileService {
   private readonly emitter = new Emitter<TextFileModel>();
   private readonly now: () => Date;
+  private readonly storageKey: string;
   private model: TextFileModel;
 
   readonly onDidChangeModel = this.emitter.event;
 
   constructor(private readonly options: TextFileServiceOptions) {
     super();
+    this.storageKey = normalizeTextFileStorageKey(options.storageKey);
     this.now = options.now ?? (() => new Date());
     this.model = this.createInitialModel();
   }
@@ -111,7 +117,7 @@ export class BrowserTextFileService extends Disposable implements ITextFileServi
   }
 
   private createInitialModel(): TextFileModel {
-    const stored = readStorage(this.options.storageKey);
+    const stored = readStorage(this.storageKey);
     const value = stored?.value ?? this.options.defaultContent;
     const lastSavedAt = stored?.lastSavedAt ? new Date(stored.lastSavedAt) : undefined;
 
@@ -134,7 +140,7 @@ export class BrowserTextFileService extends Disposable implements ITextFileServi
     };
 
     if (this.model.lastSavedAt) {
-      writeStorage(this.options.storageKey, {
+      writeStorage(this.storageKey, {
         ...storedModel,
         lastSavedAt: this.model.lastSavedAt.toISOString(),
         ...(this.model.lastSavedMtime === undefined ? {} : { lastSavedMtime: this.model.lastSavedMtime })
@@ -142,12 +148,13 @@ export class BrowserTextFileService extends Disposable implements ITextFileServi
       return;
     }
 
-    writeStorage(this.options.storageKey, storedModel);
+    writeStorage(this.storageKey, storedModel);
   }
 }
 
 export class WorkspaceTextFileService extends Disposable implements ITextFileService {
   private readonly emitter = new Emitter<TextFileModel>();
+  private readonly storageKey: string;
   private model: TextFileModel;
 
   readonly onDidChangeModel = this.emitter.event;
@@ -157,6 +164,7 @@ export class WorkspaceTextFileService extends Disposable implements ITextFileSer
     private readonly options: TextFileServiceOptions
   ) {
     super();
+    this.storageKey = normalizeTextFileStorageKey(options.storageKey);
     this.model = this.createInitialModel();
   }
 
@@ -235,7 +243,7 @@ export class WorkspaceTextFileService extends Disposable implements ITextFileSer
   }
 
   private createInitialModel(): TextFileModel {
-    const stored = readStorage(this.options.storageKey);
+    const stored = readStorage(this.storageKey);
     const value = stored?.value ?? this.options.defaultContent;
     const lastSavedAt = stored?.lastSavedAt ? new Date(stored.lastSavedAt) : undefined;
 
@@ -258,7 +266,7 @@ export class WorkspaceTextFileService extends Disposable implements ITextFileSer
     };
 
     if (this.model.lastSavedAt) {
-      writeStorage(this.options.storageKey, {
+      writeStorage(this.storageKey, {
         ...storedModel,
         lastSavedAt: this.model.lastSavedAt.toISOString(),
         ...(this.model.lastSavedMtime === undefined ? {} : { lastSavedMtime: this.model.lastSavedMtime })
@@ -266,7 +274,7 @@ export class WorkspaceTextFileService extends Disposable implements ITextFileSer
       return;
     }
 
-    writeStorage(this.options.storageKey, storedModel);
+    writeStorage(this.storageKey, storedModel);
   }
 }
 
@@ -302,6 +310,30 @@ function writeStorage(key: string, value: StoredTextFileModel): void {
   }
 
   window.localStorage.setItem(key, JSON.stringify(value));
+}
+
+function normalizeTextFileStorageKey(value: unknown): string {
+  if (typeof value !== "string") {
+    throw new Error("Text file storage key must be a string");
+  }
+
+  const normalized = value.trim();
+
+  if (!normalized) {
+    throw new Error("Text file storage key must not be empty");
+  }
+
+  if (normalized.length > textFileStorageKeyLimits.storageKeyLength) {
+    throw new Error(
+      `Text file storage key must be at most ${textFileStorageKeyLimits.storageKeyLength} characters`
+    );
+  }
+
+  if (!/^[A-Za-z0-9][A-Za-z0-9.-]*$/.test(normalized)) {
+    throw new Error(`Text file storage key is invalid: ${normalized}`);
+  }
+
+  return normalized;
 }
 
 function hasLocalStorage(): boolean {

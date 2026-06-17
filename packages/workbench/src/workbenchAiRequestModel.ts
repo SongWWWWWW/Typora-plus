@@ -1,5 +1,6 @@
 import type {
   AiTextContextItem,
+  AiTextOutputFormat,
   AiTextRequest,
   TextFileModel
 } from "@typora-plus/platform";
@@ -13,6 +14,10 @@ export const workbenchAiRequestActions = {
 
 export type WorkbenchAiRequestAction =
   typeof workbenchAiRequestActions[keyof typeof workbenchAiRequestActions];
+
+export interface WorkbenchAiRequestMessages {
+  readonly instructions: Readonly<Record<WorkbenchAiRequestAction, string>>;
+}
 
 export const workbenchAiActionTitles = {
   continueActiveNote: "Continue Active Note",
@@ -29,8 +34,8 @@ export const workbenchAiInstructions = {
   ].join(" "),
   extractTasksActiveNote: [
     "Extract actionable tasks from the active Markdown note.",
-    "Return a concise Markdown task list grouped by topic when useful.",
-    "Preserve concrete owners, dates, and blockers from the source, and do not invent tasks."
+    "Return JSON matching the requested schema with task groups and concrete task fields.",
+    "Use null for missing owners, dates, blockers, or topics, and do not invent tasks."
   ].join(" "),
   rewriteActiveNote: [
     "Rewrite the active Markdown note for clarity and flow.",
@@ -44,12 +49,79 @@ export const workbenchAiInstructions = {
   ].join(" ")
 } as const satisfies Record<WorkbenchAiRequestAction, string>;
 
+export const defaultWorkbenchAiRequestMessages: WorkbenchAiRequestMessages = {
+  instructions: workbenchAiInstructions
+};
+
+const workbenchAiStructuredOutputFormats = {
+  extractTasksActiveNote: {
+    kind: "jsonSchema",
+    name: "active_note_tasks",
+    description: "Actionable tasks extracted from the active Markdown note.",
+    schema: {
+      type: "object",
+      properties: {
+        groups: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              topic: {
+                type: ["string", "null"]
+              },
+              tasks: {
+                type: "array",
+                items: {
+                  type: "object",
+                  properties: {
+                    title: {
+                      type: "string"
+                    },
+                    owner: {
+                      type: ["string", "null"]
+                    },
+                    due: {
+                      type: ["string", "null"]
+                    },
+                    blocker: {
+                      type: ["string", "null"]
+                    },
+                    done: {
+                      type: "boolean"
+                    }
+                  },
+                  required: ["title", "owner", "due", "blocker", "done"],
+                  additionalProperties: false
+                }
+              }
+            },
+            required: ["topic", "tasks"],
+            additionalProperties: false
+          }
+        }
+      },
+      required: ["groups"],
+      additionalProperties: false
+    },
+    strict: true
+  }
+} as const satisfies Partial<Record<WorkbenchAiRequestAction, AiTextOutputFormat>>;
+
+export const workbenchAiOutputFormats: Partial<Record<WorkbenchAiRequestAction, AiTextOutputFormat>> =
+  workbenchAiStructuredOutputFormats;
+
 export interface WorkbenchActiveNoteAiRequestOptions {
   readonly action: WorkbenchAiRequestAction;
   readonly instruction: string;
   readonly context?: readonly AiTextContextItem[];
   readonly metadata?: Readonly<Record<string, string>>;
+  readonly outputFormat?: AiTextOutputFormat;
   readonly signal?: AbortSignal;
+}
+
+export interface WorkbenchActiveNoteAiRequestForActionOptions
+  extends Omit<Partial<WorkbenchActiveNoteAiRequestOptions>, "action" | "instruction"> {
+  readonly messages?: WorkbenchAiRequestMessages;
 }
 
 export function createWorkbenchActiveNoteAiTextRequest(
@@ -68,6 +140,7 @@ export function createWorkbenchActiveNoteAiTextRequest(
       sourceScheme: model.uri.scheme,
       languageId: model.languageId
     },
+    ...(options.outputFormat !== undefined ? { outputFormat: options.outputFormat } : {}),
     ...(options.signal !== undefined ? { signal: options.signal } : {})
   };
 }
@@ -75,18 +148,23 @@ export function createWorkbenchActiveNoteAiTextRequest(
 export function createWorkbenchActiveNoteAiTextRequestForAction(
   model: TextFileModel,
   action: WorkbenchAiRequestAction,
-  options: Omit<Partial<WorkbenchActiveNoteAiRequestOptions>, "action" | "instruction"> = {}
+  options: WorkbenchActiveNoteAiRequestForActionOptions = {}
 ): AiTextRequest {
+  const { messages, outputFormat, ...requestOptions } = options;
+  const requestMessages = messages ?? defaultWorkbenchAiRequestMessages;
+  const resolvedOutputFormat = outputFormat ?? workbenchAiOutputFormats[action];
+
   return createWorkbenchActiveNoteAiTextRequest(model, {
-    ...options,
+    ...requestOptions,
     action,
-    instruction: workbenchAiInstructions[action]
+    instruction: requestMessages.instructions[action],
+    ...(resolvedOutputFormat !== undefined ? { outputFormat: resolvedOutputFormat } : {})
   });
 }
 
 export function createWorkbenchSummarizeActiveNoteAiTextRequest(
   model: TextFileModel,
-  options: Omit<Partial<WorkbenchActiveNoteAiRequestOptions>, "action" | "instruction"> = {}
+  options: WorkbenchActiveNoteAiRequestForActionOptions = {}
 ): AiTextRequest {
   return createWorkbenchActiveNoteAiTextRequestForAction(
     model,

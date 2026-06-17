@@ -10,6 +10,7 @@ import {
   createWorkbenchActiveNoteAiTextRequestForAction,
   workbenchAiActionTitles,
   workbenchAiRequestActions,
+  type WorkbenchAiRequestMessages,
   type WorkbenchAiRequestAction
 } from "./workbenchAiRequestModel";
 import type { WorkbenchAiResponseApplyMode } from "./workbenchAiResponseModel";
@@ -25,9 +26,21 @@ export interface WorkbenchAiActionServices {
   readonly textFileService: Pick<ITextFileService, "getActiveModel" | "updateContent">;
 }
 
+export interface WorkbenchAiActionMessages {
+  readonly noProviderAvailable: (actionTitle: string) => string;
+  readonly titles: Readonly<Record<WorkbenchAiRequestAction, string>>;
+}
+
+export const defaultWorkbenchAiActionMessages: WorkbenchAiActionMessages = {
+  noProviderAvailable: (actionTitle) => `No AI provider available for ${actionTitle}`,
+  titles: workbenchAiActionTitles
+};
+
 export interface WorkbenchAiActionOptions {
+  readonly actionMessages?: WorkbenchAiActionMessages;
   readonly context?: readonly AiTextContextItem[];
   readonly metadata?: Readonly<Record<string, string>>;
+  readonly requestMessages?: WorkbenchAiRequestMessages;
   readonly signal?: AbortSignal;
   readonly workspaceContext?: WorkbenchAiWorkspaceContextOptions;
 }
@@ -38,13 +51,20 @@ export async function runWorkbenchActiveNoteAiAction(
   options: WorkbenchAiActionOptions = {}
 ): Promise<AiTextResponse> {
   const providerId = selectWorkbenchDefaultAiProviderId(services);
+  const actionMessages = options.actionMessages ?? defaultWorkbenchAiActionMessages;
 
   if (!providerId) {
-    throw new Error(`No AI provider available for ${workbenchAiActionTitles[action]}`);
+    throw new Error(actionMessages.noProviderAvailable(actionMessages.titles[action]));
   }
 
   const activeModel = services.textFileService.getActiveModel();
   const context = createWorkbenchAiActionContext(services, activeModel, options);
+  const {
+    actionMessages: _actionMessages,
+    requestMessages,
+    workspaceContext: _workspaceContext,
+    ...requestOptions
+  } = options;
 
   return services.aiService.requestText(
     providerId,
@@ -52,7 +72,8 @@ export async function runWorkbenchActiveNoteAiAction(
       activeModel,
       action,
       {
-        ...options,
+        ...requestOptions,
+        ...(requestMessages ? { messages: requestMessages } : {}),
         ...(context.length > 0 ? { context } : {})
       }
     )

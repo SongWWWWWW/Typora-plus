@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { app, ipcMain } from "electron";
+import { isSafeNativeSnapshotStorageKey } from "./nativeStorageKeys.js";
 
 export const nativeIndexSnapshotIpcChannels = {
   read: "typora-plus:index-snapshot:read",
@@ -24,7 +25,7 @@ export function registerNativeIndexSnapshotIpc(config: NativeIndexSnapshotConfig
 }
 
 function readIndexSnapshotValue(config: NativeIndexSnapshotConfig, key: string): string | undefined {
-  if (!isSafeIndexSnapshotKey(key)) {
+  if (!isSafeNativeSnapshotStorageKey(key)) {
     return undefined;
   }
 
@@ -39,7 +40,7 @@ function readIndexSnapshotValue(config: NativeIndexSnapshotConfig, key: string):
 }
 
 function writeIndexSnapshotValue(config: NativeIndexSnapshotConfig, key: string, value: string): void {
-  if (!isSafeIndexSnapshotKey(key)) {
+  if (!isSafeNativeSnapshotStorageKey(key)) {
     throw new Error("Invalid index snapshot key");
   }
 
@@ -50,10 +51,6 @@ function writeIndexSnapshotValue(config: NativeIndexSnapshotConfig, key: string,
   const storagePath = indexSnapshotStoragePath(config, key);
   fs.mkdirSync(path.dirname(storagePath), { recursive: true });
   fs.writeFileSync(storagePath, value, "utf8");
-}
-
-function isSafeIndexSnapshotKey(value: string): boolean {
-  return /^[a-z0-9.-]+$/i.test(value);
 }
 
 function indexSnapshotStoragePath(config: NativeIndexSnapshotConfig, key: string): string {

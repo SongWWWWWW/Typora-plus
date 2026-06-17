@@ -106,6 +106,40 @@ describe("Responses AI provider", () => {
     });
   });
 
+  it("allows Responses context prompt framing to be injected", async () => {
+    const transport = vi.fn(async (_request: ResponsesAiProviderTransportRequest) => ({
+      output_text: "Summary"
+    }));
+    const provider = createResponsesAiProvider(configuration(), {
+      promptMessages: {
+        contextHeading: "Reference Context:",
+        contextItemHeading: (kind, title) => `### Reference ${title ? `${kind} / ${title}` : kind}`,
+        uri: (uri) => `Source URI: ${uri}`
+      },
+      readSecret: () => "test-api-key",
+      transport
+    });
+
+    await provider.requestText({
+      instruction: "Summarize.",
+      input: "# Note",
+      context: [{
+        kind: "workspace-search",
+        title: "Related",
+        value: "Related implementation detail",
+        uri: URI.file("C:/Notes/related.md")
+      }]
+    });
+
+    expect(JSON.parse(transport.mock.calls[0]?.[0].body ?? "{}").input).toBe([
+      "# Note",
+      [
+        "Reference Context:",
+        "### Reference workspace-search / Related\nSource URI: file://C:/Notes/related.md\nRelated implementation detail"
+      ].join("\n\n")
+    ].join("\n\n"));
+  });
+
   it("adds configured Responses request controls without changing provider identity", async () => {
     const transport = vi.fn(async (_request: ResponsesAiProviderTransportRequest) => ({
       output_text: "Rewritten"
@@ -121,7 +155,23 @@ describe("Responses AI provider", () => {
 
     await expect(provider.requestText({
       instruction: "Rewrite.",
-      input: "Draft"
+      input: "Draft",
+      outputFormat: {
+        kind: "jsonSchema",
+        name: "rewrite_result",
+        description: "A rewritten Markdown document.",
+        schema: {
+          type: "object",
+          properties: {
+            markdown: {
+              type: "string"
+            }
+          },
+          required: ["markdown"],
+          additionalProperties: false
+        },
+        strict: true
+      }
     })).resolves.toEqual({
       value: "Rewritten",
       model: "notes-model"
@@ -137,8 +187,99 @@ describe("Responses AI provider", () => {
       },
       store: false,
       text: {
+        format: {
+          type: "json_schema",
+          name: "rewrite_result",
+          description: "A rewritten Markdown document.",
+          schema: {
+            type: "object",
+            properties: {
+              markdown: {
+                type: "string"
+              }
+            },
+            required: ["markdown"],
+            additionalProperties: false
+          },
+          strict: true
+        },
         verbosity: "high"
       }
+    });
+  });
+
+  it("maps provider-neutral JSON output requests to Responses JSON mode", async () => {
+    const transport = vi.fn(async (_request: ResponsesAiProviderTransportRequest) => ({
+      output_text: "{\"tasks\":[]}"
+    }));
+    const provider = createResponsesAiProvider(configuration(), {
+      readSecret: () => "test-api-key",
+      transport
+    });
+
+    await expect(provider.requestText({
+      instruction: "Extract JSON.",
+      input: "- [ ] Ship",
+      outputFormat: {
+        kind: "json"
+      }
+    })).resolves.toEqual({
+      value: "{\"tasks\":[]}",
+      model: "notes-model"
+    });
+
+    expect(JSON.parse(transport.mock.calls[0]?.[0].body ?? "{}")).toEqual({
+      model: "notes-model",
+      instructions: "Extract JSON.",
+      input: "- [ ] Ship",
+      store: false,
+      text: {
+        format: {
+          type: "json_object"
+        }
+      }
+    });
+  });
+
+  it("maps request metadata through Responses metadata limits", async () => {
+    const transport = vi.fn(async (_request: ResponsesAiProviderTransportRequest) => ({
+      output_text: "ok"
+    }));
+    const provider = createResponsesAiProvider(configuration(), {
+      readSecret: () => "test-api-key",
+      transport
+    });
+    const longMetadataValue = "x".repeat(520);
+    const metadata = {
+      action: "summarizeActiveNote",
+      longValue: longMetadataValue,
+      ["k".repeat(65)]: "ignored",
+      ...Object.fromEntries(Array.from({ length: 20 }, (_, index) => [`extra${index}`, `value${index}`]))
+    };
+
+    await provider.requestText({
+      instruction: "Summarize.",
+      input: "# Note",
+      metadata
+    });
+
+    expect(JSON.parse(transport.mock.calls[0]?.[0].body ?? "{}").metadata).toEqual({
+      action: "summarizeActiveNote",
+      longValue: "x".repeat(512),
+      extra0: "value0",
+      extra1: "value1",
+      extra2: "value2",
+      extra3: "value3",
+      extra4: "value4",
+      extra5: "value5",
+      extra6: "value6",
+      extra7: "value7",
+      extra8: "value8",
+      extra9: "value9",
+      extra10: "value10",
+      extra11: "value11",
+      extra12: "value12",
+      extra13: "value13"
     });
   });
 
@@ -197,6 +338,33 @@ describe("Responses AI provider", () => {
       instruction: "Summarize.",
       input: "# Note"
     })).rejects.toThrow("Responses provider request failed: rate limited");
+  });
+
+  it("surfaces structured-output refusals distinctly from missing text", async () => {
+    const provider = createResponsesAiProvider(configuration(), {
+      readSecret: () => "test-api-key",
+      transport: async () => ({
+        output: [
+          {
+            type: "message",
+            content: [
+              {
+                type: "refusal",
+                refusal: "I cannot produce that output."
+              }
+            ]
+          }
+        ]
+      })
+    });
+
+    await expect(provider.requestText({
+      instruction: "Return JSON.",
+      input: "Unsafe input",
+      outputFormat: {
+        kind: "json"
+      }
+    })).rejects.toThrow("Responses provider refused: I cannot produce that output.");
   });
 
   it("creates providers from configuration without hard-coded provider identity", () => {

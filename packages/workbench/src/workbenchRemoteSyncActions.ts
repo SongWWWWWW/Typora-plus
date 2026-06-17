@@ -1,7 +1,9 @@
 import type {
+  FileTreeEntry,
   IRemoteSyncService,
   IRemoteSyncWorkspaceResourceService,
   IWorkspaceService,
+  RemoteSyncFolderBindingConfiguration,
   RemoteSyncOperation,
   RemoteSyncPlan,
   RemoteSyncPlanRequest,
@@ -9,10 +11,16 @@ import type {
   RemoteSyncResult
 } from "@typora-plus/platform";
 import { createRemoteSyncResourcesWithContentHashes } from "@typora-plus/platform";
-import { createWorkbenchRemoteSyncResourcesWithMarkdownAssets } from "./workbenchRemoteSyncMarkdownAssets";
+import {
+  createWorkbenchRemoteSyncResourcesWithMarkdownAssets,
+  type WorkbenchRemoteSyncMarkdownAssetMessages
+} from "./workbenchRemoteSyncMarkdownAssets";
 import {
   createWorkbenchWorkspaceRemoteSyncPlanRequest,
+  createWorkbenchFolderRemoteSyncPlanRequest,
+  defaultWorkbenchRemoteSyncRequestMessages,
   workbenchRemoteSyncRequestActions,
+  type WorkbenchRemoteSyncRequestMessages,
   type WorkbenchWorkspaceRemoteSyncRequestOptions
 } from "./workbenchRemoteSyncRequestModel";
 import { selectWorkbenchDefaultRemoteSyncProviderId } from "./workbenchProviderSelection";
@@ -37,6 +45,7 @@ export interface WorkbenchRemoteSyncPlanResult {
 }
 
 export interface WorkbenchRemoteSyncExecutionOptions {
+  readonly actionMessages?: WorkbenchRemoteSyncActionMessages;
   readonly metadata?: Readonly<Record<string, string>>;
   readonly onProgress?: (progress: RemoteSyncProgress) => void;
   readonly signal?: AbortSignal;
@@ -57,22 +66,72 @@ export const workbenchRemoteSyncConflictResolutions = {
 export type WorkbenchRemoteSyncConflictResolution =
   typeof workbenchRemoteSyncConflictResolutions[keyof typeof workbenchRemoteSyncConflictResolutions];
 
+export const workbenchRemoteSyncPlanExecutionBlockReasons = {
+  conflicts: "conflicts",
+  empty: "empty"
+} as const;
+
+export type WorkbenchRemoteSyncPlanExecutionBlockReason =
+  typeof workbenchRemoteSyncPlanExecutionBlockReasons[keyof typeof workbenchRemoteSyncPlanExecutionBlockReasons];
+
+export interface WorkbenchRemoteSyncActionMessages {
+  readonly conflictResolutionMessages: Readonly<Record<WorkbenchRemoteSyncConflictResolution, string>>;
+  readonly executionBlockReasons: Readonly<Record<WorkbenchRemoteSyncPlanExecutionBlockReason, string>>;
+  readonly noProviderAvailable: string;
+}
+
+export const defaultWorkbenchRemoteSyncActionMessages: WorkbenchRemoteSyncActionMessages = {
+  conflictResolutionMessages: {
+    [workbenchRemoteSyncConflictResolutions.useLocal]: "Resolved by using local resource",
+    [workbenchRemoteSyncConflictResolutions.useRemote]: "Resolved by using remote resource"
+  },
+  executionBlockReasons: {
+    [workbenchRemoteSyncPlanExecutionBlockReasons.conflicts]: "Resolve remote sync conflicts before execution",
+    [workbenchRemoteSyncPlanExecutionBlockReasons.empty]: "No remote sync changes to execute"
+  },
+  noProviderAvailable: "No remote sync provider available for workspace sync planning"
+};
+
+export interface WorkbenchPlanWorkspaceRemoteSyncActionOptions
+  extends WorkbenchWorkspaceRemoteSyncRequestOptions {
+  readonly actionMessages?: WorkbenchRemoteSyncActionMessages;
+  readonly markdownAssetMessages?: WorkbenchRemoteSyncMarkdownAssetMessages;
+  readonly requestMessages?: WorkbenchRemoteSyncRequestMessages;
+}
+
+export interface WorkbenchPlanFolderRemoteSyncActionOptions
+  extends Omit<WorkbenchWorkspaceRemoteSyncRequestOptions, "remoteScopeId"> {
+  readonly actionMessages?: WorkbenchRemoteSyncActionMessages;
+  readonly binding: RemoteSyncFolderBindingConfiguration;
+  readonly localFolder: FileTreeEntry;
+  readonly markdownAssetMessages?: WorkbenchRemoteSyncMarkdownAssetMessages;
+  readonly requestMessages?: WorkbenchRemoteSyncRequestMessages;
+}
+
 export async function runWorkbenchPlanWorkspaceRemoteSyncAction(
   services: WorkbenchRemoteSyncActionServices,
-  options: WorkbenchWorkspaceRemoteSyncRequestOptions = {}
+  options: WorkbenchPlanWorkspaceRemoteSyncActionOptions = {}
 ): Promise<WorkbenchRemoteSyncPlanResult> {
   const providerId = selectWorkbenchDefaultRemoteSyncProviderId(services);
+  const actionMessages = options.actionMessages ?? defaultWorkbenchRemoteSyncActionMessages;
 
   if (!providerId) {
-    throw new Error("No remote sync provider available for workspace sync planning");
+    throw new Error(actionMessages.noProviderAvailable);
   }
 
+  const requestMessages = options.requestMessages ?? options.messages ?? defaultWorkbenchRemoteSyncRequestMessages;
   const request = await createWorkbenchRemoteSyncPlanRequestWithContentHashes(
     services,
     createWorkbenchWorkspaceRemoteSyncPlanRequest(
       services.workspaceService.getWorkspace(),
-      options
-    )
+      {
+        ...options,
+        messages: requestMessages
+      }
+    ),
+    {
+      ...(options.markdownAssetMessages ? { markdownAssetMessages: options.markdownAssetMessages } : {})
+    }
   );
 
   return {
@@ -82,9 +141,49 @@ export async function runWorkbenchPlanWorkspaceRemoteSyncAction(
   };
 }
 
+export async function runWorkbenchPlanFolderRemoteSyncAction(
+  services: WorkbenchRemoteSyncActionServices,
+  options: WorkbenchPlanFolderRemoteSyncActionOptions
+): Promise<WorkbenchRemoteSyncPlanResult> {
+  const actionMessages = options.actionMessages ?? defaultWorkbenchRemoteSyncActionMessages;
+  const providerAvailable = services.remoteSyncService.getProviders()
+    .some((provider) => provider.id === options.binding.providerId);
+
+  if (!providerAvailable) {
+    throw new Error(actionMessages.noProviderAvailable);
+  }
+
+  const requestMessages = options.requestMessages ?? options.messages ?? defaultWorkbenchRemoteSyncRequestMessages;
+  const request = await createWorkbenchRemoteSyncPlanRequestWithContentHashes(
+    services,
+    createWorkbenchFolderRemoteSyncPlanRequest(
+      services.workspaceService.getWorkspace(),
+      {
+        ...options,
+        localFolder: options.localFolder,
+        providerId: options.binding.providerId,
+        remoteScopeId: options.binding.remoteScopeId,
+        messages: requestMessages
+      }
+    ),
+    {
+      ...(options.markdownAssetMessages ? { markdownAssetMessages: options.markdownAssetMessages } : {})
+    }
+  );
+
+  return {
+    providerId: options.binding.providerId,
+    request,
+    plan: await services.remoteSyncService.createPlan(options.binding.providerId, request)
+  };
+}
+
 async function createWorkbenchRemoteSyncPlanRequestWithContentHashes(
   services: WorkbenchRemoteSyncActionServices,
-  request: RemoteSyncPlanRequest
+  request: RemoteSyncPlanRequest,
+  options: {
+    readonly markdownAssetMessages?: WorkbenchRemoteSyncMarkdownAssetMessages;
+  } = {}
 ): Promise<RemoteSyncPlanRequest> {
   if (!services.remoteSyncWorkspaceResourceService?.isAvailable()) {
     return request;
@@ -96,6 +195,7 @@ async function createWorkbenchRemoteSyncPlanRequestWithContentHashes(
       workspaceUri: request.workspaceUri,
       resources: request.resources,
       resourceService: services.remoteSyncWorkspaceResourceService,
+      ...(options.markdownAssetMessages ? { messages: options.markdownAssetMessages } : {}),
       ...(request.signal !== undefined ? { signal: request.signal } : {})
     })
   };
@@ -116,7 +216,10 @@ export async function runWorkbenchExecuteWorkspaceRemoteSyncAction(
   planResult: WorkbenchRemoteSyncPlanResult,
   options: WorkbenchRemoteSyncExecutionOptions = {}
 ): Promise<WorkbenchRemoteSyncExecutionResult> {
-  const blockReason = getWorkbenchRemoteSyncPlanExecutionBlockReason(planResult.plan);
+  const blockReason = getWorkbenchRemoteSyncPlanExecutionBlockReason(
+    planResult.plan,
+    options.actionMessages
+  );
 
   if (blockReason) {
     throw new Error(blockReason);
@@ -136,13 +239,24 @@ export async function runWorkbenchExecuteWorkspaceRemoteSyncAction(
   };
 }
 
-export function getWorkbenchRemoteSyncPlanExecutionBlockReason(plan: RemoteSyncPlan): string | undefined {
+export function getWorkbenchRemoteSyncPlanExecutionBlockReason(
+  plan: RemoteSyncPlan,
+  messages: WorkbenchRemoteSyncActionMessages = defaultWorkbenchRemoteSyncActionMessages
+): string | undefined {
+  const reason = getWorkbenchRemoteSyncPlanExecutionBlockReasonCode(plan);
+
+  return reason ? messages.executionBlockReasons[reason] : undefined;
+}
+
+export function getWorkbenchRemoteSyncPlanExecutionBlockReasonCode(
+  plan: RemoteSyncPlan
+): WorkbenchRemoteSyncPlanExecutionBlockReason | undefined {
   if (plan.operations.some((operation) => operation.kind === "conflict")) {
-    return "Resolve remote sync conflicts before execution";
+    return workbenchRemoteSyncPlanExecutionBlockReasons.conflicts;
   }
 
   if (plan.operations.length === 0) {
-    return "No remote sync changes to execute";
+    return workbenchRemoteSyncPlanExecutionBlockReasons.empty;
   }
 
   return undefined;
@@ -154,11 +268,12 @@ export function isWorkbenchRemoteSyncBaselineRefreshPlan(plan: RemoteSyncPlan): 
 
 export function resolveWorkbenchRemoteSyncPlanConflicts(
   plan: RemoteSyncPlan,
-  resolution: WorkbenchRemoteSyncConflictResolution
+  resolution: WorkbenchRemoteSyncConflictResolution,
+  messages: WorkbenchRemoteSyncActionMessages = defaultWorkbenchRemoteSyncActionMessages
 ): RemoteSyncPlan {
   const operations = plan.operations.map((operation) =>
     operation.kind === "conflict"
-      ? resolveWorkbenchRemoteSyncConflictOperation(operation, resolution)
+      ? resolveWorkbenchRemoteSyncConflictOperation(operation, resolution, messages)
       : operation
   );
 
@@ -170,15 +285,19 @@ export function resolveWorkbenchRemoteSyncPlanConflicts(
 
 function resolveWorkbenchRemoteSyncConflictOperation(
   operation: RemoteSyncOperation,
-  resolution: WorkbenchRemoteSyncConflictResolution
+  resolution: WorkbenchRemoteSyncConflictResolution,
+  messages: WorkbenchRemoteSyncActionMessages
 ): RemoteSyncOperation {
   return resolution === workbenchRemoteSyncConflictResolutions.useLocal
-    ? resolveWorkbenchRemoteSyncConflictWithLocal(operation)
-    : resolveWorkbenchRemoteSyncConflictWithRemote(operation);
+    ? resolveWorkbenchRemoteSyncConflictWithLocal(operation, messages)
+    : resolveWorkbenchRemoteSyncConflictWithRemote(operation, messages);
 }
 
-function resolveWorkbenchRemoteSyncConflictWithLocal(operation: RemoteSyncOperation): RemoteSyncOperation {
-  const message = "Resolved by using local resource";
+function resolveWorkbenchRemoteSyncConflictWithLocal(
+  operation: RemoteSyncOperation,
+  messages: WorkbenchRemoteSyncActionMessages
+): RemoteSyncOperation {
+  const message = messages.conflictResolutionMessages[workbenchRemoteSyncConflictResolutions.useLocal];
   const shape = classifyWorkbenchRemoteSyncConflictOperation(operation);
 
   if (shape === "localAndRemote" && operation.localUri) {
@@ -215,8 +334,11 @@ function resolveWorkbenchRemoteSyncConflictWithLocal(operation: RemoteSyncOperat
   return operation;
 }
 
-function resolveWorkbenchRemoteSyncConflictWithRemote(operation: RemoteSyncOperation): RemoteSyncOperation {
-  const message = "Resolved by using remote resource";
+function resolveWorkbenchRemoteSyncConflictWithRemote(
+  operation: RemoteSyncOperation,
+  messages: WorkbenchRemoteSyncActionMessages
+): RemoteSyncOperation {
+  const message = messages.conflictResolutionMessages[workbenchRemoteSyncConflictResolutions.useRemote];
   const shape = classifyWorkbenchRemoteSyncConflictOperation(operation);
 
   if (shape === "localAndRemote" && operation.localUri) {

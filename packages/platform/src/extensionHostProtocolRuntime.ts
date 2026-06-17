@@ -1079,6 +1079,7 @@ function toRuntimeAiTextRequest(request: Omit<AiTextRequest, "signal" | "context
       }))
     } : {}),
     ...(request.metadata ? { metadata: request.metadata } : {}),
+    ...(request.outputFormat ? { outputFormat: request.outputFormat } : {}),
     ...(signal ? { signal } : {})
   };
 }

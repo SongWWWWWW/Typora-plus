@@ -10,6 +10,12 @@ export interface MarkdownExportInput {
   readonly assetMode?: MarkdownExportAssetMode;
 }
 
+export interface MarkdownPreviewInput {
+  readonly value: string;
+  readonly resolveImageSource?: MarkdownImageSourceResolver;
+  readonly breaks?: boolean;
+}
+
 export interface MarkdownHtmlExportedDocument {
   readonly format: "html";
   readonly defaultFileName: string;
@@ -38,12 +44,7 @@ export async function createMarkdownHtmlExport(input: MarkdownExportInput): Prom
     ? await resolveExportImageSources(input.value, input.resolveImageSource)
     : new Map<string, string>();
   const exportImages = createExportImageSources(input.name, resolvedImageSources, input.assetMode ?? "inline");
-  const body = marked.parse(input.value, {
-    async: false,
-    breaks: false,
-    gfm: true,
-    renderer: createSafeHtmlExportRenderer(exportImages.sources)
-  });
+  const body = renderMarkdownBodyHtml(input.value, exportImages.sources, { breaks: false });
   const assets = exportImages.assets;
 
   return {
@@ -53,6 +54,29 @@ export async function createMarkdownHtmlExport(input: MarkdownExportInput): Prom
     value: createHtmlDocument(title, body),
     ...(assets.length > 0 ? { assets } : {})
   };
+}
+
+export async function createMarkdownPreviewHtml(input: MarkdownPreviewInput): Promise<string> {
+  const resolvedImageSources = input.resolveImageSource
+    ? await resolveExportImageSources(input.value, input.resolveImageSource)
+    : new Map<string, string>();
+
+  return renderMarkdownBodyHtml(input.value, resolvedImageSources, {
+    breaks: input.breaks ?? false
+  });
+}
+
+function renderMarkdownBodyHtml(
+  value: string,
+  resolvedImageSources: ReadonlyMap<string, string>,
+  options: { readonly breaks: boolean }
+): string {
+  return marked.parse(value, {
+    async: false,
+    breaks: options.breaks,
+    gfm: true,
+    renderer: createSafeHtmlExportRenderer(resolvedImageSources)
+  });
 }
 
 function createSafeHtmlExportRenderer(resolvedImageSources: ReadonlyMap<string, string>): Renderer<string, string> {

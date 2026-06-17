@@ -25,6 +25,28 @@ describe("workbench provider selection", () => {
     expect(selectWorkbenchDefaultProviderId([])).toBeUndefined();
   });
 
+  it("keeps provider selection provider-id agnostic and input-order independent", () => {
+    const openAiProvider = { id: "openai.responses", title: "OpenAI Responses" };
+    const feishuProvider = { id: "feishu.drive", title: "Feishu Drive" };
+    const codexProvider = { id: "codex.local", title: "Codex Local" };
+    const alphaProvider = { id: "alpha.provider", title: "Alpha Provider" };
+    const providers = [
+      openAiProvider,
+      feishuProvider,
+      codexProvider,
+      alphaProvider
+    ];
+
+    expect(selectWorkbenchDefaultProviderId(providers)).toBe("alpha.provider");
+    expect(selectWorkbenchDefaultProviderId([...providers].reverse())).toBe("alpha.provider");
+    expect(selectWorkbenchDefaultProviderId([
+      codexProvider,
+      openAiProvider,
+      alphaProvider,
+      feishuProvider
+    ])).toBe("alpha.provider");
+  });
+
   it("reads AI and remote sync providers through service boundaries", () => {
     const services = {
       aiService: {

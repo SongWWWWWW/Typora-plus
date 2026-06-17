@@ -551,7 +551,8 @@ function toProtocolAiTextRequest(request: AiTextRequest) {
         ...(item.uri ? { uri: item.uri.toString() } : {})
       }))
     } : {}),
-    ...(request.metadata ? { metadata: request.metadata } : {})
+    ...(request.metadata ? { metadata: request.metadata } : {}),
+    ...(request.outputFormat ? { outputFormat: request.outputFormat } : {})
   };
 }
 

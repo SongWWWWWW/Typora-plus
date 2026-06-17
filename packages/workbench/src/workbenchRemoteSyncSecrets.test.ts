@@ -4,7 +4,8 @@ import {
   createWorkbenchRemoteSyncSecretActions,
   deleteWorkbenchRemoteSyncSecret,
   setWorkbenchRemoteSyncSecret,
-  type WorkbenchRemoteSyncSecretBridge
+  type WorkbenchRemoteSyncSecretBridge,
+  type WorkbenchRemoteSyncSecretMessages
 } from "./workbenchRemoteSyncSecrets";
 
 describe("workbench remote sync secrets", () => {
@@ -34,6 +35,26 @@ describe("workbench remote sync secrets", () => {
     expect(bridge.deleteSecret).not.toHaveBeenCalled();
   });
 
+  it("uses injected secret validation messages", async () => {
+    const bridge = createBridge();
+
+    await expect(setWorkbenchRemoteSyncSecret(bridge, "bad ref", "secret", zhRemoteSyncSecretMessages))
+      .rejects.toThrow("远程同步密钥引用无效");
+    await expect(setWorkbenchRemoteSyncSecret(
+      bridge,
+      "typora-plus.remote-sync.provider",
+      "   ",
+      zhRemoteSyncSecretMessages
+    )).rejects.toThrow("远程同步密钥值不能为空");
+    await expect(deleteWorkbenchRemoteSyncSecret(
+      undefined,
+      "typora-plus.remote-sync.provider",
+      zhRemoteSyncSecretMessages
+    )).rejects.toThrow("远程同步密钥存储不可用");
+    expect(bridge.setSecret).not.toHaveBeenCalled();
+    expect(bridge.deleteSecret).not.toHaveBeenCalled();
+  });
+
   it("creates action handlers with shared operation-error mapping", async () => {
     const operationErrors: Array<string | undefined> = [];
     const bridge = createBridge({
@@ -50,6 +71,18 @@ describe("workbench remote sync secrets", () => {
 
     expect(actions.isAvailable).toBe(true);
     expect(operationErrors).toEqual([undefined, "Native remote sync store failed", undefined]);
+  });
+
+  it("passes injected secret messages through action handlers", async () => {
+    const operationErrors: Array<string | undefined> = [];
+    const actions = createWorkbenchRemoteSyncSecretActions({
+      messages: zhRemoteSyncSecretMessages,
+      setOperationError: (error) => operationErrors.push(error)
+    }, createBridge());
+
+    await expect(actions.setSecret("bad ref", "secret")).resolves.toBe(false);
+
+    expect(operationErrors).toEqual([undefined, "远程同步密钥引用无效"]);
   });
 
   it("reads native bridge availability from the global Typora Plus bridge", () => {
@@ -85,3 +118,9 @@ function createBridge(overrides: {
     deleteSecret: vi.fn(overrides.deleteSecret ?? (async () => true))
   };
 }
+
+const zhRemoteSyncSecretMessages: WorkbenchRemoteSyncSecretMessages = {
+  referenceInvalid: "远程同步密钥引用无效",
+  storageUnavailable: "远程同步密钥存储不可用",
+  valueEmpty: "远程同步密钥值不能为空"
+};

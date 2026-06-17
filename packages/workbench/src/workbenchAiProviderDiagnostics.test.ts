@@ -5,8 +5,9 @@ import type {
 import { describe, expect, it, vi } from "vitest";
 import {
   createWorkbenchAiProviderDiagnosticActions,
+  defaultWorkbenchAiProviderDiagnosticMessages,
   testWorkbenchAiProvider,
-  workbenchAiProviderDiagnosticRequest
+  type WorkbenchAiProviderDiagnosticMessages
 } from "./workbenchAiProviderDiagnostics";
 
 describe("workbench AI provider diagnostics", () => {
@@ -32,8 +33,8 @@ describe("workbench AI provider diagnostics", () => {
     })).resolves.toBe(response);
 
     expect(requestText).toHaveBeenCalledWith("writer.local", {
-      instruction: workbenchAiProviderDiagnosticRequest.instruction,
-      input: workbenchAiProviderDiagnosticRequest.input,
+      instruction: defaultWorkbenchAiProviderDiagnosticMessages.request.instruction,
+      input: defaultWorkbenchAiProviderDiagnosticMessages.request.input,
       metadata: {
         surface: "unit-test",
         action: "testProvider",
@@ -54,6 +55,36 @@ describe("workbench AI provider diagnostics", () => {
     await expect(testWorkbenchAiProvider(services, "   "))
       .rejects.toThrow("AI provider id is required for diagnostics");
     expect(requestText).not.toHaveBeenCalled();
+  });
+
+  it("uses injected diagnostic request messages", async () => {
+    const response: AiTextResponse = {
+      providerId: "writer.local",
+      value: "ok"
+    };
+    const requestText = vi.fn(async (_providerId: string, _request: AiTextRequest) => response);
+    const messages: WorkbenchAiProviderDiagnosticMessages = {
+      providerIdRequired: "Provider id is required.",
+      request: {
+        instruction: "Return a localized diagnostic confirmation.",
+        input: "Localized diagnostic input."
+      }
+    };
+    const services = {
+      aiService: {
+        requestText
+      }
+    };
+
+    await expect(testWorkbenchAiProvider(services, "writer.local", { messages }))
+      .resolves.toBe(response);
+
+    expect(requestText).toHaveBeenCalledWith("writer.local", expect.objectContaining({
+      instruction: "Return a localized diagnostic confirmation.",
+      input: "Localized diagnostic input."
+    }));
+    await expect(testWorkbenchAiProvider(services, "   ", { messages }))
+      .rejects.toThrow("Provider id is required.");
   });
 
   it("creates action handlers with shared operation-error mapping", async () => {
@@ -78,5 +109,34 @@ describe("workbench AI provider diagnostics", () => {
 
     expect(requestText).toHaveBeenCalledTimes(2);
     expect(operationErrors).toEqual([undefined, undefined, "Provider failed"]);
+  });
+
+  it("forwards injected diagnostic messages through action handlers", async () => {
+    const response: AiTextResponse = {
+      providerId: "writer.local",
+      value: "ok"
+    };
+    const requestText = vi.fn(async (_providerId: string, _request: AiTextRequest) => response);
+    const actions = createWorkbenchAiProviderDiagnosticActions({
+      aiService: {
+        requestText
+      }
+    }, {
+      messages: {
+        providerIdRequired: "AI 服务商 ID 是诊断所必需的",
+        request: {
+          instruction: "返回一句简短的诊断确认。",
+          input: "本地化诊断输入。"
+        }
+      },
+      setOperationError: vi.fn()
+    });
+
+    await expect(actions.testProvider("writer.local")).resolves.toBe(response);
+
+    expect(requestText).toHaveBeenCalledWith("writer.local", expect.objectContaining({
+      instruction: "返回一句简短的诊断确认。",
+      input: "本地化诊断输入。"
+    }));
   });
 });

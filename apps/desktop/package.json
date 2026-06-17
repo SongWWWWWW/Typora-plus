@@ -6,7 +6,7 @@
   "main": "./dist-electron/main.js",
   "scripts": {
     "dev": "vite --host 127.0.0.1 --port 5173",
-    "build": "vite build && tsc -p tsconfig.electron.json",
+    "build": "vite build && tsc -p tsconfig.electron.json && node ../../scripts/copy-desktop-electron-assets.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {

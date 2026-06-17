@@ -45,6 +45,7 @@ import {
   createDefaultRemoteSyncManifestStorage,
   createNativeResponsesAiProviderFactoryOptions,
   createNativeRemoteSyncConfiguredProviderFactoryOptions,
+  createNativeRemoteSyncRequestTransport,
   createRemoteSyncConfiguredRawMirrorProviderFactory,
   createDefaultWorkspaceIndexSnapshotStorage,
   type IAttachmentService as AttachmentServiceContract,
@@ -123,7 +124,7 @@ export function createWorkbenchServices(): WorkbenchServices {
     createRemoteSyncConfiguredRawMirrorProviderFactory(remoteSyncManifestStorage
       ? { manifestStorage: remoteSyncManifestStorage }
       : {}),
-    undefined,
+    createNativeRemoteSyncRequestTransport(),
     remoteSyncWorkspaceResourceService
   );
   const extensionHostService = new ExtensionHostService();

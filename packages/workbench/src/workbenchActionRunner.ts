@@ -11,7 +11,18 @@ export interface WorkbenchCommandExecutionServices {
 export type WorkbenchOperationErrorSetter = (value: string | undefined) => void;
 export type WorkbenchSaveConflictSetter = (value: FileSaveConflict | undefined) => void;
 
+export interface WorkbenchActionRunnerMessages {
+  readonly fileChangedOnDisk: string;
+  readonly operationFailed: string;
+}
+
+export const defaultWorkbenchActionRunnerMessages: WorkbenchActionRunnerMessages = {
+  fileChangedOnDisk: "File changed on disk",
+  operationFailed: "Operation failed"
+};
+
 export interface WorkbenchCommandExecutionCallbacks {
+  readonly messages?: WorkbenchActionRunnerMessages;
   readonly setOperationError: WorkbenchOperationErrorSetter;
   readonly setSaveConflict?: WorkbenchSaveConflictSetter;
 }
@@ -25,7 +36,8 @@ export function createWorkbenchCommandExecutor(
       services,
       command,
       callbacks.setOperationError,
-      callbacks.setSaveConflict
+      callbacks.setSaveConflict,
+      callbacks.messages
     );
   };
 }
@@ -34,19 +46,22 @@ export function executeWorkbenchCommand(
   services: WorkbenchCommandExecutionServices,
   command: string,
   setOperationError: WorkbenchOperationErrorSetter,
-  setSaveConflict?: WorkbenchSaveConflictSetter
+  setSaveConflict?: WorkbenchSaveConflictSetter,
+  messages?: WorkbenchActionRunnerMessages
 ): void {
   void runWorkbenchAction(
     () => services.commandService.executeCommand(command),
     setOperationError,
-    setSaveConflict
+    setSaveConflict,
+    messages
   );
 }
 
 export async function runWorkbenchAction<T>(
   action: () => Promise<T> | T,
   setOperationError: WorkbenchOperationErrorSetter,
-  setSaveConflict?: WorkbenchSaveConflictSetter
+  setSaveConflict?: WorkbenchSaveConflictSetter,
+  messages: WorkbenchActionRunnerMessages = defaultWorkbenchActionRunnerMessages
 ): Promise<T | undefined> {
   try {
     setOperationError(undefined);
@@ -54,11 +69,11 @@ export async function runWorkbenchAction<T>(
   } catch (error) {
     if (isFileSaveConflictError(error)) {
       setSaveConflict?.(error.conflict);
-      setOperationError("File changed on disk");
+      setOperationError(messages.fileChangedOnDisk);
       return undefined;
     }
 
-    setOperationError(error instanceof Error ? error.message : "Operation failed");
+    setOperationError(error instanceof Error ? error.message : messages.operationFailed);
     return undefined;
   }
 }

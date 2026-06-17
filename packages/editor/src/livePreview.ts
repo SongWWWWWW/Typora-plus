@@ -9,13 +9,68 @@ import {
   WidgetType
 } from "@codemirror/view";
 import { renderToString as renderKatexToString } from "katex";
+import {
+  defaultMarkdownSlashCommandLabels,
+  type MarkdownSlashCommandLabelOverrides,
+  type MarkdownSlashCommandLabels
+} from "./slashCommands";
 
 export interface MarkdownEditorConfiguration {
   readonly fontSize: number;
   readonly lineHeight: number;
   readonly maxWidth: number;
   readonly focusMode: boolean;
+  readonly labels?: MarkdownEditorLabelOverrides;
   readonly typewriterMode: boolean;
+}
+
+export type MarkdownEditorLabelOverrides = Partial<Omit<MarkdownEditorLabels, "slashCommands">> & {
+  readonly slashCommands?: MarkdownSlashCommandLabelOverrides;
+};
+
+export interface MarkdownEditorLabels {
+  readonly code: string;
+  readonly codeBlockTools: string;
+  readonly codeCopied: string;
+  readonly copied: string;
+  readonly copy: string;
+  readonly copyCode: string;
+  readonly copyTex: string;
+  readonly deleteColumn: (column: number) => string;
+  readonly deleteLastColumn: string;
+  readonly deleteLastRow: string;
+  readonly deleteRow: (row: number) => string;
+  readonly editCodeSource: string;
+  readonly editInlineMath: string;
+  readonly editInlineRendererSource: string;
+  readonly editSourceForColumn: (column: number) => string;
+  readonly editTexSource: string;
+  readonly emptyMathBlock: string;
+  readonly emptyTex: string;
+  readonly inlineMathPreview: string;
+  readonly inlinePreview: (language: string) => string;
+  readonly insertColumnAfter: (column: number) => string;
+  readonly insertColumnRight: string;
+  readonly insertRowBelow: string;
+  readonly insertRowBelowRow: (row: number) => string;
+  readonly invalidInlineMath: string;
+  readonly invalidTex: (message: string) => string;
+  readonly markComplete: string;
+  readonly markIncomplete: string;
+  readonly markTaskComplete: string;
+  readonly markTaskIncomplete: string;
+  readonly mathPreview: string;
+  readonly renderedCodeBlock: string;
+  readonly rendererUnavailable: (message: string) => string;
+  readonly renderingPreview: string;
+  readonly setColumnAlignment: (column: number, alignment: string) => string;
+  readonly slashCommands: MarkdownSlashCommandLabels;
+  readonly table: string;
+  readonly tableAlignment: (alignment: MarkdownTableColumnAlignment) => string;
+  readonly tablePreview: string;
+  readonly tex: string;
+  readonly texCopied: string;
+  readonly texError: string;
 }
 
 export interface MarkdownSyntaxMarkerRange {
@@ -54,6 +109,8 @@ type MarkdownInlineLinkSyntaxKind = "inline" | "reference" | "collapsed-referenc
 
 interface MarkdownInlineLinkSyntaxRange extends MarkdownSyntaxMarkerRange {
   readonly kind: MarkdownInlineLinkSyntaxKind;
+  readonly labelFrom: number;
+  readonly labelTo: number;
   readonly markerRanges: readonly MarkdownSyntaxMarkerRange[];
 }
 
@@ -209,26 +266,77 @@ export interface MarkdownCodeFenceSourceRange {
 }
 
 const syntaxMarkerDecoration = Decoration.mark({ class: "tp-editor-markdown-marker" });
-const externalRendererEstimatedMinHeightPx = 92;
-const externalRendererLineEstimatedHeightPx = 22;
-const externalRendererEstimatedMaxHeightPx = 360;
+const externalRendererEstimatedMinHeightPx = 72;
+const externalRendererLineEstimatedHeightPx = 20;
+const externalRendererEstimatedMaxHeightPx = 320;
 const previewCopyFeedbackDurationMs = 1200;
-const previewCopyButtonHeightPx = 24;
-const previewCopyButtonMinWidthPx = 54;
+const previewCopyButtonHeightPx = 22;
+const previewCopyButtonMinWidthPx = 48;
 const markdownTableMinimumColumnCount = 2;
-const mathPreviewBodyMinHeightPx = 38;
-const mathPreviewEstimatedHeight = 92;
-const mathPreviewMinHeightPx = 66;
-const mathPreviewToolbarMinHeightPx = 24;
+const mathPreviewBodyMinHeightPx = 32;
+const mathPreviewEstimatedHeight = 76;
+const mathPreviewMinHeightPx = 54;
+const mathPreviewToolbarMinHeightPx = 22;
 const tablePreviewCellMaxWidthPx = 260;
 const tablePreviewCellMinWidthPx = 88;
-const tablePreviewHeaderEstimatedHeight = 42;
-const tablePreviewRowEstimatedHeight = 34;
-const tablePreviewToolbarEstimatedHeight = 36;
+const tablePreviewHeaderEstimatedHeight = 34;
+const tablePreviewRowEstimatedHeight = 30;
+const tablePreviewToolbarEstimatedHeight = 30;
 const tableAlignmentButtonHeightPx = 22;
 const tableAlignmentButtonMinWidthPx = 28;
-const tableToolButtonHeightPx = 24;
-const tableToolButtonMinWidthPx = 38;
+const tableToolButtonHeightPx = 22;
+const tableToolButtonMinWidthPx = 34;
+
+export const defaultMarkdownEditorLabels: MarkdownEditorLabels = {
+  code: "Code",
+  codeBlockTools: "Code block tools",
+  codeCopied: "Code copied",
+  copied: "Copied",
+  copy: "Copy",
+  copyCode: "Copy code",
+  copyTex: "Copy TeX",
+  deleteColumn: (column) => `Delete column ${column}`,
+  deleteLastColumn: "Delete last column",
+  deleteLastRow: "Delete last row",
+  deleteRow: (row) => `Delete row ${row}`,
+  editCodeSource: "Edit code source",
+  editInlineMath: "Edit inline math",
+  editInlineRendererSource: "Edit inline renderer source",
+  editSourceForColumn: (column) => `Edit source for column ${column}`,
+  editTexSource: "Edit TeX source",
+  emptyMathBlock: "Empty math block",
+  emptyTex: "Empty TeX",
+  inlineMathPreview: "Inline math preview",
+  inlinePreview: (language) => `${language} inline preview`,
+  insertColumnAfter: (column) => `Insert column after column ${column}`,
+  insertColumnRight: "Insert column right",
+  insertRowBelow: "Insert row below",
+  insertRowBelowRow: (row) => `Insert row below row ${row}`,
+  invalidInlineMath: "Invalid inline math",
+  invalidTex: (message) => `Invalid TeX: ${message}`,
+  markComplete: "Mark complete",
+  markIncomplete: "Mark incomplete",
+  markTaskComplete: "Mark task complete",
+  markTaskIncomplete: "Mark task incomplete",
+  mathPreview: "Math preview",
+  renderedCodeBlock: "Rendered code block",
+  rendererUnavailable: (message) => `Renderer unavailable: ${message}`,
+  renderingPreview: "Rendering preview...",
+  setColumnAlignment: (column, alignment) => `Set column ${column} alignment to ${alignment}`,
+  slashCommands: defaultMarkdownSlashCommandLabels,
+  table: "Table",
+  tableAlignment: (alignment) => {
+    if (alignment === "default") {
+      return "Auto";
+    }
+
+    return alignment.charAt(0).toUpperCase() + alignment.slice(1);
+  },
+  tablePreview: "Table preview",
+  tex: "TeX",
+  texCopied: "TeX copied",
+  texError: "TeX error"
+};
 
 export function livePreviewExtension(
   configuration: MarkdownEditorConfiguration,
@@ -236,6 +344,8 @@ export function livePreviewExtension(
   renderCodeFence?: MarkdownCodeFenceRenderer,
   renderInline?: MarkdownInlineRenderer
 ): Extension {
+  const labels = resolveMarkdownEditorLabels(configuration.labels);
+
   return [
     markdownEditorTheme(configuration),
     ViewPlugin.fromClass(
@@ -243,7 +353,14 @@ export function livePreviewExtension(
         decorations: DecorationSet;
 
         constructor(view: EditorView) {
-          this.decorations = buildDecorations(view, configuration, resolveImageSource, renderCodeFence, renderInline);
+          this.decorations = buildDecorations(
+            view,
+            configuration,
+            labels,
+            resolveImageSource,
+            renderCodeFence,
+            renderInline
+          );
         }
 
         update(update: ViewUpdate): void {
@@ -251,6 +368,7 @@ export function livePreviewExtension(
             this.decorations = buildDecorations(
               update.view,
               configuration,
+              labels,
               resolveImageSource,
               renderCodeFence,
               renderInline
@@ -263,6 +381,21 @@ export function livePreviewExtension(
       }
     )
   ];
+}
+
+function resolveMarkdownEditorLabels(labels: MarkdownEditorLabelOverrides | undefined): MarkdownEditorLabels {
+  if (!labels) {
+    return defaultMarkdownEditorLabels;
+  }
+
+  return {
+    ...defaultMarkdownEditorLabels,
+    ...labels,
+    slashCommands: {
+      ...defaultMarkdownEditorLabels.slashCommands,
+      ...labels.slashCommands
+    }
+  };
 }
 
 export function classifyMarkdownLine(
@@ -867,6 +1000,7 @@ export function findMarkdownCodeFenceSourceRange(
 function buildDecorations(
   view: EditorView,
   configuration: MarkdownEditorConfiguration,
+  labels: MarkdownEditorLabels,
   resolveImageSource: MarkdownImageSourceResolver | undefined,
   renderCodeFence: MarkdownCodeFenceRenderer | undefined,
   renderInline: MarkdownInlineRenderer | undefined
@@ -910,19 +1044,19 @@ function buildDecorations(
         const shouldRenderWidget = !renderedExternalCodeFenceBlocks.has(codeFenceKey);
         renderedExternalCodeFenceBlocks.add(codeFenceKey);
         builder.add(line.from, line.to, Decoration.replace(
-          shouldRenderWidget ? { widget: new MarkdownExternalCodeFenceWidget(codeFence, renderCodeFence) } : {}
+          shouldRenderWidget ? { widget: new MarkdownExternalCodeFenceWidget(codeFence, renderCodeFence, labels) } : {}
         ));
       } else if (codeFence && shouldReplaceInactiveCodeFenceLine(codeFence.role, codeFenceIsActive)) {
         builder.add(line.from, line.to, Decoration.replace(
-          codeFence.role === "open" ? { widget: new MarkdownCodeFenceHeaderWidget(codeFence) } : {}
+          codeFence.role === "open" ? { widget: new MarkdownCodeFenceHeaderWidget(codeFence, labels) } : {}
         ));
       } else if (mathBlock && !mathBlockIsActive) {
         builder.add(line.from, line.to, Decoration.replace(
-          mathBlock.role === "open" ? { widget: new MarkdownMathBlockWidget(mathBlock) } : {}
+          mathBlock.role === "open" ? { widget: new MarkdownMathBlockWidget(mathBlock, labels) } : {}
         ));
       } else if (tableBlock && shouldReplaceInactiveTableLine(tableBlockIsActive)) {
         builder.add(line.from, line.to, Decoration.replace(
-          tableBlock.line === tableBlock.previewLine ? { widget: new MarkdownTableBlockWidget(tableBlock) } : {}
+          tableBlock.line === tableBlock.previewLine ? { widget: new MarkdownTableBlockWidget(tableBlock, labels) } : {}
         ));
       } else if (imageBlock && !lineIsActive) {
         builder.add(line.from, line.to, Decoration.replace({
@@ -938,7 +1072,7 @@ function buildDecorations(
           : findRenderableMarkdownInlineRendererRanges(line.text, lineIsActive, inlineRenderer);
         const taskListMarkerRanges = lineBlockState?.codeFenceRole || lineBlockState?.mathBlock || tableBlockIsActive
           ? []
-          : findInactiveMarkdownTaskListMarkerRanges(line.text, lineIsActive);
+          : findInactiveMarkdownTaskListMarkerRanges(line.text, false);
         const inlineDecorations = inlineMathRanges.map((inlineMath) => ({
           decoration: Decoration.replace({
             widget: new MarkdownInlineMathWidget(
@@ -946,7 +1080,8 @@ function buildDecorations(
               line.from + inlineMath.from,
               line.from + inlineMath.to,
               line.from + inlineMath.expressionFrom,
-              line.from + inlineMath.expressionTo
+              line.from + inlineMath.expressionTo,
+              labels
             )
           }),
           from: line.from + inlineMath.from,
@@ -960,7 +1095,8 @@ function buildDecorations(
               line.from + range.to,
               line.from + range.valueFrom,
               line.from + range.valueTo,
-              inlineRenderer
+              inlineRenderer,
+              labels
             )
           }),
           from: line.from + range.from,
@@ -971,14 +1107,18 @@ function buildDecorations(
             widget: new MarkdownTaskListMarkerWidget(
               task.checked,
               line.from + task.from,
-              line.from + task.to
+              line.from + task.to,
+              labels
             )
           }),
           from: line.from + task.from,
           to: line.from + task.to
         }));
-        const sourceLineIsActive = lineIsActive || codeFenceIsActive || tableBlockIsActive;
-        const markerDecorations = findInactiveMarkdownSyntaxMarkers(line.text, sourceLineIsActive)
+        const shouldHideMarkdownSyntaxMarkers = !lineBlockState?.codeFenceRole && !lineBlockState?.mathBlock && !tableBlockIsActive;
+        const markerDecorations = (shouldHideMarkdownSyntaxMarkers
+          ? findInactiveMarkdownSyntaxMarkers(line.text, false)
+          : []
+        )
           .filter((marker) =>
             !inlineMathRanges.some((inlineMath) => rangesOverlap(marker, inlineMath)) &&
             !inlineRendererRanges.some((inlineRenderer) => rangesOverlap(marker, inlineRenderer)) &&
@@ -2217,6 +2357,8 @@ function readMarkdownInlineLinkSyntaxRanges(
       ranges.push({
         from: syntaxFrom,
         kind: "inline",
+        labelFrom: openBracket + 1,
+        labelTo: closeBracket,
         markerRanges: [
           ...labelMarkerRanges,
           { from: openParen, to: openParen + 1 },
@@ -2249,6 +2391,8 @@ function readMarkdownInlineLinkSyntaxRanges(
       ranges.push({
         from: syntaxFrom,
         kind: referenceOpenBracket + 1 === referenceCloseBracket ? "collapsed-reference" : "reference",
+        labelFrom: openBracket + 1,
+        labelTo: closeBracket,
         markerRanges: [
           ...labelMarkerRanges,
           { from: referenceOpenBracket, to: referenceOpenBracket + 1 },
@@ -2267,6 +2411,8 @@ function readMarkdownInlineLinkSyntaxRanges(
       ranges.push({
         from: syntaxFrom,
         kind: "shortcut-reference",
+        labelFrom: openBracket + 1,
+        labelTo: closeBracket,
         markerRanges: labelMarkerRanges,
         to: closeBracket + 1
       });
@@ -2958,19 +3104,23 @@ function updateMarkdownTableColumnAlignment(
 }
 
 class MarkdownTableBlockWidget extends WidgetType {
-  constructor(private readonly tableBlock: MarkdownTableBlockState) {
+  constructor(
+    private readonly tableBlock: MarkdownTableBlockState,
+    private readonly labels: MarkdownEditorLabels
+  ) {
     super();
   }
 
   override eq(widget: WidgetType): boolean {
     return widget instanceof MarkdownTableBlockWidget &&
+      widget.labels === this.labels &&
       serializeTableBlock(widget.tableBlock) === serializeTableBlock(this.tableBlock);
   }
 
   override toDOM(view: EditorView): HTMLElement {
     const wrapper = document.createElement("span");
     wrapper.className = "tp-editor-table-preview";
-    wrapper.setAttribute("aria-label", "Table preview");
+    wrapper.setAttribute("aria-label", this.labels.tablePreview);
     wrapper.setAttribute("role", "group");
 
     const toolbar = document.createElement("span");
@@ -2978,7 +3128,7 @@ class MarkdownTableBlockWidget extends WidgetType {
 
     const label = document.createElement("span");
     label.className = "tp-editor-table-label";
-    label.textContent = "Table";
+    label.textContent = this.labels.table;
 
     const actions = document.createElement("span");
     actions.className = "tp-editor-table-actions";
@@ -2986,27 +3136,27 @@ class MarkdownTableBlockWidget extends WidgetType {
       createTableToolButton({
         className: "tp-editor-table-insert-row",
         text: "Row +",
-        title: "Insert row below",
+        title: this.labels.insertRowBelow,
         onClick: () => insertMarkdownTableRowBelow(view, this.tableBlock)
       }),
       createTableToolButton({
         className: "tp-editor-table-delete-row",
         disabled: this.tableBlock.bodyRows.length === 0,
         text: "Row -",
-        title: "Delete last row",
+        title: this.labels.deleteLastRow,
         onClick: () => deleteMarkdownTableBodyRow(view, this.tableBlock)
       }),
       createTableToolButton({
         className: "tp-editor-table-insert-column",
         text: "Col +",
-        title: "Insert column right",
+        title: this.labels.insertColumnRight,
         onClick: () => insertMarkdownTableColumnRight(view, this.tableBlock)
       }),
       createTableToolButton({
         className: "tp-editor-table-delete-column",
         disabled: this.tableBlock.headerCells.length <= markdownTableMinimumColumnCount,
         text: "Col -",
-        title: "Delete last column",
+        title: this.labels.deleteLastColumn,
         onClick: () => deleteMarkdownTableColumn(view, this.tableBlock)
       })
     );
@@ -3024,7 +3174,7 @@ class MarkdownTableBlockWidget extends WidgetType {
       const headerCell = document.createElement("th");
       headerCell.scope = "col";
       setTableCellAlignment(headerCell, this.tableBlock.alignments[index]);
-      addTableCellSourceNavigation(headerCell, view, this.tableBlock.blockStart, index);
+      addTableCellSourceNavigation(headerCell, view, this.tableBlock.blockStart, index, this.labels);
 
       const content = document.createElement("span");
       content.className = "tp-editor-table-header-content";
@@ -3039,19 +3189,20 @@ class MarkdownTableBlockWidget extends WidgetType {
         createTableAlignmentButton({
           alignment: this.tableBlock.alignments[index] ?? "default",
           columnIndex: index,
+          labels: this.labels,
           onClick: (alignment) => updateMarkdownTableColumnAlignment(view, this.tableBlock, index, alignment)
         }),
         createTableInlineButton({
           className: "tp-editor-table-insert-column-inline",
           text: "+",
-          title: `Insert column after column ${index + 1}`,
+          title: this.labels.insertColumnAfter(index + 1),
           onClick: () => insertMarkdownTableColumnRight(view, this.tableBlock, index + 1)
         }),
         createTableInlineButton({
           className: "tp-editor-table-delete-column-inline",
           disabled: this.tableBlock.headerCells.length <= markdownTableMinimumColumnCount,
           text: "-",
-          title: `Delete column ${index + 1}`,
+          title: this.labels.deleteColumn(index + 1),
           onClick: () => deleteMarkdownTableColumn(view, this.tableBlock, index)
         })
       );
@@ -3073,7 +3224,13 @@ class MarkdownTableBlockWidget extends WidgetType {
         row.forEach((cell, index) => {
           const bodyCell = document.createElement("td");
           setTableCellAlignment(bodyCell, this.tableBlock.alignments[index]);
-          addTableCellSourceNavigation(bodyCell, view, this.tableBlock.blockStart + rowIndex + 2, index);
+          addTableCellSourceNavigation(
+            bodyCell,
+            view,
+            this.tableBlock.blockStart + rowIndex + 2,
+            index,
+            this.labels
+          );
 
           if (index === 0) {
             const content = document.createElement("span");
@@ -3089,13 +3246,13 @@ class MarkdownTableBlockWidget extends WidgetType {
               createTableInlineButton({
                 className: "tp-editor-table-insert-row-inline",
                 text: "+",
-                title: `Insert row below row ${rowIndex + 1}`,
+                title: this.labels.insertRowBelowRow(rowIndex + 1),
                 onClick: () => insertMarkdownTableRowBelow(view, this.tableBlock, rowIndex + 1)
               }),
               createTableInlineButton({
                 className: "tp-editor-table-delete-row-inline",
                 text: "-",
-                title: `Delete row ${rowIndex + 1}`,
+                title: this.labels.deleteRow(rowIndex + 1),
                 onClick: () => deleteMarkdownTableBodyRow(view, this.tableBlock, rowIndex)
               })
             );
@@ -3175,12 +3332,16 @@ function createTableInlineButton(options: TableInlineButtonOptions): HTMLButtonE
 interface TableAlignmentButtonOptions {
   readonly alignment: MarkdownTableColumnAlignment;
   readonly columnIndex: number;
+  readonly labels: MarkdownEditorLabels;
   readonly onClick: (alignment: MarkdownTableColumnAlignment) => void;
 }
 
 function createTableAlignmentButton(options: TableAlignmentButtonOptions): HTMLButtonElement {
   const nextAlignment = getNextMarkdownTableColumnAlignment(options.alignment);
-  const title = `Set column ${options.columnIndex + 1} alignment to ${readTableAlignmentLabel(nextAlignment)}`;
+  const title = options.labels.setColumnAlignment(
+    options.columnIndex + 1,
+    options.labels.tableAlignment(nextAlignment)
+  );
   const button = document.createElement("button");
   button.className = "tp-editor-table-align";
   button.type = "button";
@@ -3209,11 +3370,12 @@ function addTableCellSourceNavigation(
   cell: HTMLTableCellElement,
   view: EditorView,
   lineNumber: number,
-  columnIndex: number
+  columnIndex: number,
+  labels: MarkdownEditorLabels
 ): void {
   cell.classList.add("tp-editor-table-source-cell");
   cell.dataset.tableCellSource = "true";
-  cell.title = `Edit source for column ${columnIndex + 1}`;
+  cell.title = labels.editSourceForColumn(columnIndex + 1);
   cell.addEventListener("mousedown", (event) => {
     event.preventDefault();
     event.stopPropagation();
@@ -3267,14 +3429,6 @@ function readTableAlignmentButtonText(alignment: MarkdownTableColumnAlignment): 
   return "A";
 }
 
-function readTableAlignmentLabel(alignment: MarkdownTableColumnAlignment): string {
-  if (alignment === "default") {
-    return "Auto";
-  }
-
-  return alignment.charAt(0).toUpperCase() + alignment.slice(1);
-}
-
 function setTableCellAlignment(cell: HTMLTableCellElement, alignment: MarkdownTableColumnAlignment | undefined): void {
   cell.dataset.align = alignment ?? "default";
 }
@@ -3305,12 +3459,16 @@ function serializeTableBlock(tableBlock: MarkdownTableBlockState): string {
 }
 
 class MarkdownCodeFenceHeaderWidget extends WidgetType {
-  constructor(private readonly codeFence: MarkdownCodeFenceBlockState) {
+  constructor(
+    private readonly codeFence: MarkdownCodeFenceBlockState,
+    private readonly labels: MarkdownEditorLabels
+  ) {
     super();
   }
 
   override eq(widget: WidgetType): boolean {
     return widget instanceof MarkdownCodeFenceHeaderWidget &&
+      widget.labels === this.labels &&
       widget.codeFence.content === this.codeFence.content &&
       widget.codeFence.info === this.codeFence.info &&
       widget.codeFence.language === this.codeFence.language;
@@ -3319,21 +3477,21 @@ class MarkdownCodeFenceHeaderWidget extends WidgetType {
   override toDOM(): HTMLElement {
     const toolbar = document.createElement("span");
     toolbar.className = "tp-editor-code-toolbar";
-    toolbar.setAttribute("aria-label", "Code block tools");
+    toolbar.setAttribute("aria-label", this.labels.codeBlockTools);
     toolbar.setAttribute("role", "group");
 
     const language = document.createElement("span");
     language.className = "tp-editor-code-language";
-    language.textContent = this.codeFence.language || "Code";
+    language.textContent = readCodeFencePreviewLabel(this.codeFence, this.labels);
 
     const copyButton = createPreviewCopyButton({
       className: "tp-editor-code-copy",
       content: this.codeFence.content,
-      copiedAriaLabel: "Code copied",
-      copiedTitle: "Copied",
-      defaultAriaLabel: "Copy code",
-      defaultTitle: "Copy code",
-      text: "Copy"
+      copiedAriaLabel: this.labels.codeCopied,
+      copiedTitle: this.labels.copied,
+      defaultAriaLabel: this.labels.copyCode,
+      defaultTitle: this.labels.copyCode,
+      text: this.labels.copy
     });
 
     toolbar.append(language, copyButton);
@@ -3350,13 +3508,15 @@ class MarkdownExternalCodeFenceWidget extends WidgetType {
 
   constructor(
     private readonly codeFence: MarkdownCodeFenceBlockState,
-    private readonly renderCodeFence: MarkdownCodeFenceRenderer
+    private readonly renderCodeFence: MarkdownCodeFenceRenderer,
+    private readonly labels: MarkdownEditorLabels
   ) {
     super();
   }
 
   override eq(widget: WidgetType): boolean {
     return widget instanceof MarkdownExternalCodeFenceWidget &&
+      widget.labels === this.labels &&
       widget.codeFence.content === this.codeFence.content &&
       widget.codeFence.info === this.codeFence.info &&
       widget.codeFence.language === this.codeFence.language &&
@@ -3367,7 +3527,7 @@ class MarkdownExternalCodeFenceWidget extends WidgetType {
     this.disposed = false;
     const block = document.createElement("span");
     block.className = "tp-editor-renderer-block tp-editor-renderer-loading";
-    block.setAttribute("aria-label", "Rendered code block");
+    block.setAttribute("aria-label", this.labels.renderedCodeBlock);
     block.setAttribute("role", "group");
 
     const toolbar = document.createElement("span");
@@ -3375,24 +3535,24 @@ class MarkdownExternalCodeFenceWidget extends WidgetType {
 
     const label = document.createElement("span");
     label.className = "tp-editor-renderer-label";
-    label.textContent = readCodeFencePreviewLabel(this.codeFence);
+    label.textContent = readCodeFencePreviewLabel(this.codeFence, this.labels);
 
     const copyButton = createPreviewCopyButton({
       className: "tp-editor-renderer-copy",
       content: this.codeFence.content,
-      copiedAriaLabel: "Code copied",
-      copiedTitle: "Copied",
-      defaultAriaLabel: "Copy code",
-      defaultTitle: "Copy code",
-      text: "Copy"
+      copiedAriaLabel: this.labels.codeCopied,
+      copiedTitle: this.labels.copied,
+      defaultAriaLabel: this.labels.copyCode,
+      defaultTitle: this.labels.copyCode,
+      text: this.labels.copy
     });
 
     toolbar.append(label, copyButton);
 
     const body = document.createElement("span");
     body.className = "tp-editor-renderer-body";
-    addCodeFenceSourceNavigation(body, view, this.codeFence);
-    renderExternalCodeFenceLoading(body);
+    addCodeFenceSourceNavigation(body, view, this.codeFence, this.labels);
+    renderExternalCodeFenceLoading(body, this.labels);
 
     block.append(toolbar, body);
     void this.renderExternalPreview(block, body, label, view);
@@ -3440,7 +3600,7 @@ class MarkdownExternalCodeFenceWidget extends WidgetType {
         return;
       }
 
-      label.textContent = result.label || readCodeFencePreviewLabel(this.codeFence);
+      label.textContent = result.label || readCodeFencePreviewLabel(this.codeFence, this.labels);
       renderSanitizedMarkdownRendererHtml(body, result.html);
       block.classList.remove("tp-editor-renderer-loading", "tp-editor-renderer-error", "tp-editor-renderer-fallback");
       block.classList.add("tp-editor-renderer-ready");
@@ -3450,7 +3610,7 @@ class MarkdownExternalCodeFenceWidget extends WidgetType {
         return;
       }
 
-      renderExternalCodeFenceError(body, readRendererErrorMessage(error));
+      renderExternalCodeFenceError(body, readRendererErrorMessage(error), this.labels);
       block.classList.remove("tp-editor-renderer-loading", "tp-editor-renderer-ready");
       block.classList.add("tp-editor-renderer-error");
       view.requestMeasure();
@@ -3458,8 +3618,8 @@ class MarkdownExternalCodeFenceWidget extends WidgetType {
   }
 }
 
-function readCodeFencePreviewLabel(codeFence: MarkdownCodeFenceBlockState): string {
-  return codeFence.language || "Code";
+function readCodeFencePreviewLabel(codeFence: MarkdownCodeFenceBlockState, labels: MarkdownEditorLabels): string {
+  return codeFence.language || labels.code;
 }
 
 function canRenderCodeFence(
@@ -3500,9 +3660,9 @@ function canRenderInline(
     : true;
 }
 
-function renderExternalCodeFenceLoading(body: HTMLElement): void {
+function renderExternalCodeFenceLoading(body: HTMLElement, labels: MarkdownEditorLabels): void {
   body.className = "tp-editor-renderer-body tp-editor-renderer-placeholder";
-  body.textContent = "Rendering preview...";
+  body.textContent = labels.renderingPreview;
 }
 
 function renderExternalCodeFenceFallback(body: HTMLElement, content: string): void {
@@ -3516,9 +3676,9 @@ function renderExternalCodeFenceFallback(body: HTMLElement, content: string): vo
   body.append(pre);
 }
 
-function renderExternalCodeFenceError(body: HTMLElement, message: string): void {
+function renderExternalCodeFenceError(body: HTMLElement, message: string, labels: MarkdownEditorLabels): void {
   body.className = "tp-editor-renderer-body tp-editor-renderer-placeholder";
-  body.textContent = `Renderer unavailable: ${message}`;
+  body.textContent = labels.rendererUnavailable(message);
 }
 
 function renderSanitizedMarkdownRendererHtml(body: HTMLElement, html: string): void {
@@ -3719,10 +3879,11 @@ function sanitizeRendererClassName(value: string): string {
 function addCodeFenceSourceNavigation(
   body: HTMLElement,
   view: EditorView,
-  codeFence: MarkdownCodeFenceBlockState
+  codeFence: MarkdownCodeFenceBlockState,
+  labels: MarkdownEditorLabels
 ): void {
   body.dataset.codeFenceSource = "true";
-  body.title = "Edit code source";
+  body.title = labels.editCodeSource;
   body.addEventListener("mousedown", (event) => {
     event.preventDefault();
     event.stopPropagation();
@@ -3956,12 +4117,16 @@ class MarkdownImageBlockWidget extends WidgetType {
 }
 
 class MarkdownMathBlockWidget extends WidgetType {
-  constructor(private readonly math: MarkdownMathBlockState) {
+  constructor(
+    private readonly math: MarkdownMathBlockState,
+    private readonly labels: MarkdownEditorLabels
+  ) {
     super();
   }
 
   override eq(widget: WidgetType): boolean {
     return widget instanceof MarkdownMathBlockWidget &&
+      widget.labels === this.labels &&
       widget.math.blockEnd === this.math.blockEnd &&
       widget.math.blockStart === this.math.blockStart &&
       widget.math.expression === this.math.expression;
@@ -3971,23 +4136,23 @@ class MarkdownMathBlockWidget extends WidgetType {
     const renderResult = renderMarkdownMathExpression(this.math.expression, true);
     const block = document.createElement("span");
     block.className = `tp-editor-math-preview tp-editor-math-preview-state-${renderResult.status}`;
-    block.setAttribute("aria-label", "Math preview");
+    block.setAttribute("aria-label", this.labels.mathPreview);
 
     const toolbar = document.createElement("span");
     toolbar.className = "tp-editor-math-toolbar";
 
     const label = document.createElement("span");
     label.className = "tp-editor-math-label";
-    label.textContent = readMathPreviewLabel(renderResult.status);
+    label.textContent = readMathPreviewLabel(renderResult.status, this.labels);
 
     const copyButton = createPreviewCopyButton({
       className: "tp-editor-math-copy",
       content: this.math.expression,
-      copiedAriaLabel: "TeX copied",
-      copiedTitle: "Copied",
-      defaultAriaLabel: "Copy TeX",
-      defaultTitle: "Copy TeX",
-      text: "Copy"
+      copiedAriaLabel: this.labels.texCopied,
+      copiedTitle: this.labels.copied,
+      defaultAriaLabel: this.labels.copyTex,
+      defaultTitle: this.labels.copyTex,
+      text: this.labels.copy
     });
 
     toolbar.append(label, copyButton);
@@ -3995,17 +4160,17 @@ class MarkdownMathBlockWidget extends WidgetType {
 
     const body = document.createElement("span");
     body.className = "tp-editor-math-body";
-    addMathBlockSourceNavigation(body, view, this.math);
+    addMathBlockSourceNavigation(body, view, this.math, this.labels);
 
     if (renderResult.status === "empty") {
-      body.textContent = "Empty math block";
+      body.textContent = this.labels.emptyMathBlock;
       body.classList.add("tp-editor-math-preview-empty");
       block.append(body);
       return block;
     }
 
     if (renderResult.status === "error") {
-      body.textContent = `Invalid TeX: ${renderResult.error}`;
+      body.textContent = this.labels.invalidTex(renderResult.error ?? "");
       body.title = renderResult.source;
       body.classList.add("tp-editor-math-preview-error");
       block.append(body);
@@ -4029,10 +4194,11 @@ class MarkdownMathBlockWidget extends WidgetType {
 function addMathBlockSourceNavigation(
   body: HTMLElement,
   view: EditorView,
-  math: MarkdownMathBlockState
+  math: MarkdownMathBlockState,
+  labels: MarkdownEditorLabels
 ): void {
   body.dataset.mathBlockSource = "true";
-  body.title = "Edit TeX source";
+  body.title = labels.editTexSource;
   body.addEventListener("mousedown", (event) => {
     event.preventDefault();
     event.stopPropagation();
@@ -4079,13 +4245,15 @@ class MarkdownTaskListMarkerWidget extends WidgetType {
   constructor(
     private readonly checked: boolean,
     private readonly sourceFrom: number,
-    private readonly sourceTo: number
+    private readonly sourceTo: number,
+    private readonly labels: MarkdownEditorLabels
   ) {
     super();
   }
 
   override eq(widget: WidgetType): boolean {
     return widget instanceof MarkdownTaskListMarkerWidget &&
+      widget.labels === this.labels &&
       widget.checked === this.checked &&
       widget.sourceFrom === this.sourceFrom &&
       widget.sourceTo === this.sourceTo;
@@ -4097,8 +4265,11 @@ class MarkdownTaskListMarkerWidget extends WidgetType {
     checkbox.type = "checkbox";
     checkbox.checked = this.checked;
     checkbox.dataset.taskListMarker = "true";
-    checkbox.setAttribute("aria-label", this.checked ? "Mark task incomplete" : "Mark task complete");
-    checkbox.title = this.checked ? "Mark incomplete" : "Mark complete";
+    checkbox.setAttribute(
+      "aria-label",
+      this.checked ? this.labels.markTaskIncomplete : this.labels.markTaskComplete
+    );
+    checkbox.title = this.checked ? this.labels.markIncomplete : this.labels.markComplete;
     checkbox.addEventListener("mousedown", (event) => {
       event.preventDefault();
       event.stopPropagation();
@@ -4154,13 +4325,15 @@ class MarkdownInlineMathWidget extends WidgetType {
     private readonly sourceFrom: number,
     private readonly sourceTo: number,
     private readonly expressionFrom: number,
-    private readonly expressionTo: number
+    private readonly expressionTo: number,
+    private readonly labels: MarkdownEditorLabels
   ) {
     super();
   }
 
   override eq(widget: WidgetType): boolean {
     return widget instanceof MarkdownInlineMathWidget &&
+      widget.labels === this.labels &&
       widget.math.expression === this.math.expression &&
       widget.sourceFrom === this.sourceFrom &&
       widget.sourceTo === this.sourceTo &&
@@ -4172,11 +4345,14 @@ class MarkdownInlineMathWidget extends WidgetType {
     const renderResult = renderMarkdownMathExpression(this.math.expression, false);
     const inline = document.createElement("span");
     inline.className = `tp-editor-inline-math-preview tp-editor-inline-math-preview-${renderResult.status}`;
-    inline.setAttribute("aria-label", renderResult.status === "error" ? "Invalid inline math" : "Inline math preview");
+    inline.setAttribute(
+      "aria-label",
+      renderResult.status === "error" ? this.labels.invalidInlineMath : this.labels.inlineMathPreview
+    );
     inline.dataset.inlineMathSource = "true";
     inline.title = renderResult.status === "error"
-      ? `Invalid TeX: ${renderResult.error ?? ""}`
-      : "Edit inline math";
+      ? this.labels.invalidTex(renderResult.error ?? "")
+      : this.labels.editInlineMath;
     inline.addEventListener("mousedown", (event) => {
       event.preventDefault();
       event.stopPropagation();
@@ -4231,13 +4407,15 @@ class MarkdownInlineRendererWidget extends WidgetType {
     private readonly sourceTo: number,
     private readonly valueFrom: number,
     private readonly valueTo: number,
-    private readonly renderer: MarkdownInlineRenderer
+    private readonly renderer: MarkdownInlineRenderer,
+    private readonly labels: MarkdownEditorLabels
   ) {
     super();
   }
 
   override eq(widget: WidgetType): boolean {
     return widget instanceof MarkdownInlineRendererWidget &&
+      widget.labels === this.labels &&
       widget.inline.language === this.inline.language &&
       widget.inline.source === this.inline.source &&
       widget.inline.value === this.inline.value &&
@@ -4253,8 +4431,8 @@ class MarkdownInlineRendererWidget extends WidgetType {
     const inline = document.createElement("span");
     inline.className = "tp-editor-inline-renderer-preview tp-editor-inline-renderer-loading";
     inline.dataset.inlineRendererSource = "true";
-    inline.setAttribute("aria-label", `${this.inline.language} inline preview`);
-    inline.title = "Edit inline renderer source";
+    inline.setAttribute("aria-label", this.labels.inlinePreview(this.inline.language));
+    inline.title = this.labels.editInlineRendererSource;
     inline.textContent = this.inline.value;
     inline.addEventListener("mousedown", (event) => {
       event.preventDefault();
@@ -4307,7 +4485,7 @@ class MarkdownInlineRendererWidget extends WidgetType {
       inline.classList.remove("tp-editor-inline-renderer-loading", "tp-editor-inline-renderer-ready");
       inline.classList.add("tp-editor-inline-renderer-error");
       inline.textContent = this.inline.value;
-      inline.title = `Renderer unavailable: ${readRendererErrorMessage(error)}`;
+      inline.title = this.labels.rendererUnavailable(readRendererErrorMessage(error));
       view.requestMeasure();
     }
   }
@@ -4362,16 +4540,16 @@ function isInlineRendererSourceNavigationEvent(event: Event): boolean {
   return event.target instanceof Element && Boolean(event.target.closest("[data-inline-renderer-source='true']"));
 }
 
-function readMathPreviewLabel(status: MarkdownMathRenderStatus): string {
+function readMathPreviewLabel(status: MarkdownMathRenderStatus, labels: MarkdownEditorLabels): string {
   if (status === "empty") {
-    return "Empty TeX";
+    return labels.emptyTex;
   }
 
   if (status === "error") {
-    return "TeX error";
+    return labels.texError;
   }
 
-  return "TeX";
+  return labels.tex;
 }
 
 function readMathRenderErrorMessage(error: unknown): string {
@@ -4519,7 +4697,17 @@ function collectLinkMarkers(
     }
 
     ranges.push(...syntaxRange.markerRanges);
+    ranges.push(...readMarkdownLinkHiddenSyntaxShellRanges(syntaxRange));
   }
+}
+
+function readMarkdownLinkHiddenSyntaxShellRanges(
+  syntaxRange: MarkdownInlineLinkSyntaxRange
+): readonly MarkdownSyntaxMarkerRange[] {
+  return [
+    { from: syntaxRange.from, to: syntaxRange.labelFrom },
+    { from: syntaxRange.labelTo + 1, to: syntaxRange.to }
+  ];
 }
 
 function normalizeSyntaxMarkerRanges(ranges: readonly MarkdownSyntaxMarkerRange[]): readonly MarkdownSyntaxMarkerRange[] {
@@ -4531,7 +4719,11 @@ function normalizeSyntaxMarkerRanges(ranges: readonly MarkdownSyntaxMarkerRange[
     }
 
     const previous = normalized.at(-1);
-    if (previous && range.from < previous.to) {
+    if (previous && range.from <= previous.to) {
+      normalized[normalized.length - 1] = {
+        from: previous.from,
+        to: Math.max(previous.to, range.to)
+      };
       continue;
     }
 
@@ -4542,7 +4734,7 @@ function normalizeSyntaxMarkerRanges(ranges: readonly MarkdownSyntaxMarkerRange[
 }
 
 function markdownEditorTheme(configuration: MarkdownEditorConfiguration): Extension {
-  const topPadding = configuration.typewriterMode ? "36vh" : "64px";
+  const topPadding = configuration.typewriterMode ? "34vh" : "56px";
 
   return EditorView.theme({
     "&": {
@@ -4562,7 +4754,7 @@ function markdownEditorTheme(configuration: MarkdownEditorConfiguration): Extens
       maxWidth: `${configuration.maxWidth}px`,
       minHeight: "100%",
       margin: "0 auto",
-      padding: `${topPadding} 40px 140px`,
+      padding: `${topPadding} clamp(24px, 5vw, 48px) 128px`,
       caretColor: "var(--tp-color-accent)"
     },
     ".cm-line": {
@@ -4578,7 +4770,11 @@ function markdownEditorTheme(configuration: MarkdownEditorConfiguration): Extens
     ".tp-editor-heading": {
       fontFamily: "var(--tp-font-ui)",
       fontWeight: "680",
-      color: "var(--tp-color-text)"
+      color: "var(--tp-color-text)",
+      textDecoration: "none"
+    },
+    ".tp-editor-heading *": {
+      textDecoration: "none"
     },
     ".tp-editor-heading-1": {
       fontSize: "1.9em",
@@ -4599,8 +4795,8 @@ function markdownEditorTheme(configuration: MarkdownEditorConfiguration): Extens
     },
     ".tp-editor-quote": {
       color: "var(--tp-color-text-muted)",
-      borderLeft: "3px solid var(--tp-color-border-strong)",
-      paddingLeft: "14px"
+      borderLeft: "2px solid var(--tp-color-border-strong)",
+      paddingLeft: "12px"
     },
     ".tp-editor-list": {
       color: "var(--tp-color-text)"
@@ -4611,20 +4807,16 @@ function markdownEditorTheme(configuration: MarkdownEditorConfiguration): Extens
     },
     ".tp-editor-code-block": {
       fontFamily: "ui-monospace, SFMono-Regular, Consolas, monospace",
-      backgroundColor: "var(--tp-color-code-block)",
-      borderLeft: "3px solid var(--tp-color-code-block-border)",
-      paddingLeft: "12px",
-      paddingRight: "12px"
+      borderLeft: "2px solid var(--tp-color-code-block-border)",
+      backgroundColor: "transparent",
+      paddingLeft: "10px",
+      paddingRight: "4px"
     },
     ".tp-editor-code-block-open": {
-      borderTopLeftRadius: "var(--tp-radius-control)",
-      borderTopRightRadius: "var(--tp-radius-control)",
-      paddingTop: "6px"
+      paddingTop: "4px"
     },
     ".tp-editor-code-block-close": {
-      borderBottomLeftRadius: "var(--tp-radius-control)",
-      borderBottomRightRadius: "var(--tp-radius-control)",
-      paddingBottom: "6px"
+      paddingBottom: "4px"
     },
     ".tp-editor-code-block-content": {
       color: "var(--tp-color-text-muted)"
@@ -4633,7 +4825,7 @@ function markdownEditorTheme(configuration: MarkdownEditorConfiguration): Extens
       display: "flex",
       alignItems: "center",
       justifyContent: "space-between",
-      gap: "10px",
+      gap: "8px",
       width: "100%",
       minHeight: "28px",
       boxSizing: "border-box",
@@ -4655,9 +4847,9 @@ function markdownEditorTheme(configuration: MarkdownEditorConfiguration): Extens
       minWidth: `${previewCopyButtonMinWidthPx}px`,
       height: `${previewCopyButtonHeightPx}px`,
       padding: "0 8px",
-      border: "1px solid var(--tp-color-code-block-border)",
-      borderRadius: "6px",
-      backgroundColor: "var(--tp-color-code-toolbar)",
+      border: "1px solid transparent",
+      borderRadius: "4px",
+      backgroundColor: "var(--tp-color-surface-muted)",
       color: "var(--tp-color-text-muted)",
       font: "inherit",
       fontWeight: "650",
@@ -4678,10 +4870,10 @@ function markdownEditorTheme(configuration: MarkdownEditorConfiguration): Extens
       minHeight: `${externalRendererEstimatedMinHeightPx}px`,
       boxSizing: "border-box",
       overflow: "hidden",
-      border: "1px solid var(--tp-color-code-block-border)",
-      borderLeft: "3px solid var(--tp-color-code-block-border)",
-      borderRadius: "var(--tp-radius-control)",
-      backgroundColor: "var(--tp-color-code-block)",
+      border: "0",
+      borderLeft: "2px solid var(--tp-color-code-block-border)",
+      borderRadius: "0",
+      backgroundColor: "transparent",
       color: "var(--tp-color-text)",
       fontFamily: "var(--tp-font-ui)"
     },
@@ -4689,14 +4881,14 @@ function markdownEditorTheme(configuration: MarkdownEditorConfiguration): Extens
       display: "flex",
       alignItems: "center",
       justifyContent: "space-between",
-      gap: "10px",
+      gap: "8px",
       width: "100%",
       minWidth: "0",
-      minHeight: "36px",
+      minHeight: "30px",
       boxSizing: "border-box",
-      padding: "6px 8px",
-      borderBottom: "1px solid var(--tp-color-code-block-border)",
-      backgroundColor: "var(--tp-color-code-toolbar)",
+      padding: "2px 0 4px 8px",
+      borderBottom: "0",
+      backgroundColor: "transparent",
       color: "var(--tp-color-text-muted)",
       fontSize: "12px",
       lineHeight: "1"
@@ -4713,9 +4905,9 @@ function markdownEditorTheme(configuration: MarkdownEditorConfiguration): Extens
       display: "block",
       width: "100%",
       minWidth: "0",
-      minHeight: "52px",
+      minHeight: "44px",
       boxSizing: "border-box",
-      padding: "12px",
+      padding: "4px 0 6px 8px",
       overflow: "auto",
       cursor: "text"
     },
@@ -4799,13 +4991,12 @@ function markdownEditorTheme(configuration: MarkdownEditorConfiguration): Extens
       borderBottomColor: "var(--tp-color-danger)"
     },
     ".tp-editor-table-row": {
-      backgroundColor: "var(--tp-color-table-row)",
-      borderLeft: "3px solid var(--tp-color-table-border)",
-      paddingLeft: "12px",
-      paddingRight: "12px"
+      borderLeft: "2px solid var(--tp-color-table-border)",
+      backgroundColor: "transparent",
+      paddingLeft: "10px",
+      paddingRight: "4px"
     },
     ".tp-editor-table-header": {
-      backgroundColor: "var(--tp-color-table-header)",
       color: "var(--tp-color-text)",
       fontWeight: "650"
     },
@@ -4835,10 +5026,10 @@ function markdownEditorTheme(configuration: MarkdownEditorConfiguration): Extens
       boxSizing: "border-box",
       contain: "inline-size",
       overflow: "hidden",
-      border: "1px solid var(--tp-color-table-border)",
-      borderLeft: "3px solid var(--tp-color-table-border)",
-      borderRadius: "var(--tp-radius-control)",
-      backgroundColor: "var(--tp-color-table-row)",
+      border: "0",
+      borderLeft: "2px solid var(--tp-color-table-border)",
+      borderRadius: "0",
+      backgroundColor: "transparent",
       color: "var(--tp-color-text)",
       fontFamily: "var(--tp-font-ui)"
     },
@@ -4846,14 +5037,14 @@ function markdownEditorTheme(configuration: MarkdownEditorConfiguration): Extens
       display: "flex",
       alignItems: "center",
       justifyContent: "space-between",
-      gap: "10px",
+      gap: "8px",
       width: "100%",
       minWidth: "0",
       minHeight: `${tablePreviewToolbarEstimatedHeight}px`,
       boxSizing: "border-box",
-      padding: "6px 8px",
-      borderBottom: "1px solid var(--tp-color-table-border)",
-      backgroundColor: "var(--tp-color-table-header)",
+      padding: "2px 0 4px 8px",
+      borderBottom: "0",
+      backgroundColor: "transparent",
       color: "var(--tp-color-text-muted)",
       fontSize: "12px",
       lineHeight: "1"
@@ -4869,7 +5060,7 @@ function markdownEditorTheme(configuration: MarkdownEditorConfiguration): Extens
     ".tp-editor-table-actions": {
       display: "flex",
       alignItems: "center",
-      gap: "6px",
+      gap: "4px",
       flex: "0 1 auto",
       flexWrap: "wrap",
       justifyContent: "flex-end",
@@ -4880,9 +5071,9 @@ function markdownEditorTheme(configuration: MarkdownEditorConfiguration): Extens
       height: `${tableToolButtonHeightPx}px`,
       padding: "0 8px",
       boxSizing: "border-box",
-      border: "1px solid var(--tp-color-table-border)",
-      borderRadius: "6px",
-      backgroundColor: "var(--tp-color-surface-raised)",
+      border: "1px solid transparent",
+      borderRadius: "4px",
+      backgroundColor: "var(--tp-color-surface-muted)",
       color: "var(--tp-color-text-muted)",
       font: "inherit",
       fontWeight: "650",
@@ -4915,7 +5106,7 @@ function markdownEditorTheme(configuration: MarkdownEditorConfiguration): Extens
     ".tp-editor-table-preview th, .tp-editor-table-preview td": {
       minWidth: `${tablePreviewCellMinWidthPx}px`,
       maxWidth: `${tablePreviewCellMaxWidthPx}px`,
-      padding: "8px 10px",
+      padding: "6px 8px",
       borderBottom: "1px solid var(--tp-color-table-border)",
       borderRight: "1px solid var(--tp-color-table-border)",
       overflow: "hidden",
@@ -4982,7 +5173,7 @@ function markdownEditorTheme(configuration: MarkdownEditorConfiguration): Extens
       padding: "0 6px",
       border: "1px solid var(--tp-color-table-border)",
       borderRadius: "6px",
-      backgroundColor: "var(--tp-color-surface-raised)",
+      backgroundColor: "var(--tp-color-surface-muted)",
       color: "var(--tp-color-text-muted)",
       font: "inherit",
       fontSize: "11px",
@@ -5003,7 +5194,7 @@ function markdownEditorTheme(configuration: MarkdownEditorConfiguration): Extens
       padding: "0",
       border: "1px solid var(--tp-color-table-border)",
       borderRadius: "6px",
-      backgroundColor: "var(--tp-color-surface-raised)",
+      backgroundColor: "var(--tp-color-surface-muted)",
       color: "var(--tp-color-text-subtle)",
       font: "inherit",
       fontSize: "13px",
@@ -5044,33 +5235,33 @@ function markdownEditorTheme(configuration: MarkdownEditorConfiguration): Extens
     },
     ".tp-editor-image-block": {
       display: "grid",
-      gridTemplateColumns: "minmax(64px, 136px) minmax(0, 1fr)",
+      gridTemplateColumns: "minmax(52px, 104px) minmax(0, 1fr)",
       alignItems: "center",
-      gap: "12px",
+      gap: "10px",
       width: "100%",
-      minHeight: "86px",
+      minHeight: "66px",
       boxSizing: "border-box",
       margin: "0",
-      padding: "10px 12px",
-      border: "1px solid var(--tp-color-image-block-border)",
-      borderLeft: "3px solid var(--tp-color-image-block-border)",
-      borderRadius: "var(--tp-radius-control)",
-      backgroundColor: "var(--tp-color-image-block)"
+      padding: "4px 0 4px 8px",
+      border: "0",
+      borderLeft: "2px solid var(--tp-color-image-block-border)",
+      borderRadius: "0",
+      backgroundColor: "transparent"
     },
     ".tp-editor-image-preview, .tp-editor-image-placeholder": {
       display: "flex",
       alignItems: "center",
       justifyContent: "center",
       minWidth: "0",
-      minHeight: "64px",
+      minHeight: "52px",
       overflow: "hidden",
       borderRadius: "6px",
-      backgroundColor: "var(--tp-color-image-preview)"
+      backgroundColor: "var(--tp-color-surface-muted)"
     },
     ".tp-editor-image-preview img": {
       display: "block",
       maxWidth: "100%",
-      maxHeight: "180px",
+      maxHeight: "140px",
       objectFit: "contain"
     },
     ".tp-editor-image-placeholder": {
@@ -5103,20 +5294,16 @@ function markdownEditorTheme(configuration: MarkdownEditorConfiguration): Extens
     },
     ".tp-editor-math-block": {
       fontFamily: "ui-monospace, SFMono-Regular, Consolas, monospace",
-      backgroundColor: "var(--tp-color-math-block)",
-      borderLeft: "3px solid var(--tp-color-math-block-border)",
-      paddingLeft: "12px",
-      paddingRight: "12px"
+      borderLeft: "2px solid var(--tp-color-math-block-border)",
+      backgroundColor: "transparent",
+      paddingLeft: "10px",
+      paddingRight: "4px"
     },
     ".tp-editor-math-open": {
-      borderTopLeftRadius: "var(--tp-radius-control)",
-      borderTopRightRadius: "var(--tp-radius-control)",
-      paddingTop: "6px"
+      paddingTop: "4px"
     },
     ".tp-editor-math-close": {
-      borderBottomLeftRadius: "var(--tp-radius-control)",
-      borderBottomRightRadius: "var(--tp-radius-control)",
-      paddingBottom: "6px"
+      paddingBottom: "4px"
     },
     ".tp-editor-math-content": {
       color: "var(--tp-color-text-muted)"
@@ -5126,22 +5313,22 @@ function markdownEditorTheme(configuration: MarkdownEditorConfiguration): Extens
       flexDirection: "column",
       alignItems: "stretch",
       justifyContent: "flex-start",
-      gap: "8px",
+      gap: "6px",
       minHeight: `${mathPreviewMinHeightPx}px`,
       boxSizing: "border-box",
       overflowX: "auto",
-      padding: "12px",
-      border: "1px solid var(--tp-color-math-block-border)",
-      borderLeft: "3px solid var(--tp-color-math-block-border)",
-      borderRadius: "var(--tp-radius-control)",
-      backgroundColor: "var(--tp-color-math-block)",
+      padding: "6px 0 6px 8px",
+      border: "0",
+      borderLeft: "2px solid var(--tp-color-math-block-border)",
+      borderRadius: "0",
+      backgroundColor: "transparent",
       color: "var(--tp-color-text)"
     },
     ".tp-editor-math-toolbar": {
       display: "flex",
       alignItems: "center",
       justifyContent: "space-between",
-      gap: "10px",
+      gap: "8px",
       width: "100%",
       minHeight: `${mathPreviewToolbarMinHeightPx}px`,
       color: "var(--tp-color-text-muted)",
@@ -5262,8 +5449,7 @@ function markdownEditorTheme(configuration: MarkdownEditorConfiguration): Extens
       fontSize: "13px"
     },
     ".tp-editor-markdown-marker": {
-      color: "var(--tp-color-text-soft)",
-      opacity: "var(--tp-opacity-markdown-marker)"
+      display: "none"
     },
     ".tp-editor-task-checkbox": {
       width: "14px",

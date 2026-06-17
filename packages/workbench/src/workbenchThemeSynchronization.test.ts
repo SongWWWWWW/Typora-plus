@@ -14,7 +14,14 @@ describe("workbench theme synchronization", () => {
   it("creates a theme environment from browser and document boundaries", () => {
     const target = createThemeTarget();
     const media = createMediaQueryList(false);
+    const setTitleBarTheme = vi.fn(async () => true);
     const browser = {
+      typoraPlus: {
+        windowControls: {
+          isAvailable: true,
+          setTitleBarTheme
+        }
+      },
       matchMedia: vi.fn(() => media)
     };
 
@@ -26,12 +33,17 @@ describe("workbench theme synchronization", () => {
     expect(environment.target).toBe(target.element);
     expect(result).toBe(media);
     expect(browser.matchMedia).toHaveBeenCalledWith(workbenchDarkThemeMediaQuery);
+
+    environment.syncNativeTheme?.("light");
+
+    expect(setTitleBarTheme).toHaveBeenCalledWith("light");
   });
 
   it("applies the current media theme and listens for system changes", () => {
     const target = createThemeTarget();
     const media = createMediaQueryList(true);
-    const environment = createEnvironment(target.element, media);
+    const nativeThemeUpdates: string[] = [];
+    const environment = createEnvironment(target.element, media, (theme) => nativeThemeUpdates.push(theme));
 
     const disposable = registerWorkbenchThemeSynchronization(
       environment,
@@ -41,10 +53,12 @@ describe("workbench theme synchronization", () => {
 
     expect(environment.matchMedia).toHaveBeenCalledWith(workbenchDarkThemeMediaQuery);
     expect(target.attributes.get(themeAttribute)).toBe("dark");
+    expect(nativeThemeUpdates).toEqual(["dark"]);
 
     media.setMatches(false);
 
     expect(target.attributes.get(themeAttribute)).toBe("light");
+    expect(nativeThemeUpdates).toEqual(["dark", "light"]);
 
     disposable.dispose();
     media.setMatches(true);
@@ -80,13 +94,15 @@ describe("workbench theme synchronization", () => {
 
 function createEnvironment(
   target: HTMLElement,
-  media: WorkbenchThemeMediaQueryList
+  media: WorkbenchThemeMediaQueryList,
+  syncNativeTheme?: WorkbenchThemeSynchronizationEnvironment["syncNativeTheme"]
 ): WorkbenchThemeSynchronizationEnvironment & {
   readonly matchMedia: ReturnType<typeof vi.fn>;
 } {
   return {
     target,
-    matchMedia: vi.fn(() => media)
+    matchMedia: vi.fn(() => media),
+    ...(syncNativeTheme ? { syncNativeTheme } : {})
   };
 }
 
@@ -126,13 +142,13 @@ function createServices(themes: readonly RegisteredTheme[] = []): WorkbenchTheme
 }
 
 function configuration(
-  appearance: Omit<TyporaPlusConfiguration["appearance"], "density"> & {
-    readonly density?: TyporaPlusConfiguration["appearance"]["density"];
-  }
+  appearance: Partial<TyporaPlusConfiguration["appearance"]>
 ): Pick<TyporaPlusConfiguration, "appearance"> {
   return {
     appearance: {
+      colorScheme: "system",
       density: "comfortable",
+      locale: "en",
       ...appearance
     }
   };

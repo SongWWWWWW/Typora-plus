@@ -3,6 +3,10 @@
 interface Window {
   readonly typoraPlus?: {
     readonly platform: string;
+    readonly windowControls?: {
+      readonly isAvailable: boolean;
+      setTitleBarTheme(theme: "light" | "dark"): Promise<boolean>;
+    };
     readonly configuration?: {
       readonly isAvailable: boolean;
       read(key: string): string | undefined;
@@ -56,6 +60,10 @@ interface Window {
       openWorkspace(): Promise<unknown>;
       openRecentWorkspace(uri: string): Promise<unknown>;
       refreshWorkspace(): Promise<unknown>;
+      createDirectory(request: { readonly parentUri: string; readonly name: string }): Promise<unknown>;
+      createFile(request: { readonly parentUri: string; readonly name: string }): Promise<unknown>;
+      renameEntry(request: { readonly uri: string; readonly name: string }): Promise<unknown>;
+      deleteEntry(uri: string): Promise<unknown>;
       readFile(uri: string): Promise<unknown>;
       writeFile(uri: string, value: string, options?: { readonly expectedMtime?: number; readonly overwrite?: boolean }): Promise<unknown>;
       saveFileAs(defaultName: string, value: string): Promise<unknown>;

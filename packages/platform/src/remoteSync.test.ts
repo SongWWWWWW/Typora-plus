@@ -1,5 +1,9 @@
 import { URI } from "@typora-plus/base";
 import { describe, expect, it } from "vitest";
+import {
+  configurationMaxRemoteSyncProviderIdLength,
+  configurationMaxRemoteSyncProviderTitleLength
+} from "./configuration";
 import type { FileTreeEntry, WorkspaceFileTree } from "./files";
 import {
   createRemoteSyncManifestResourcesFromExecution,
@@ -8,7 +12,10 @@ import {
   createRemoteSyncPlanFromManifest,
   createRemoteSyncResourcesFromWorkspace,
   defaultRemoteSyncManifestStoreOptions,
+  remoteSyncManifestStorageKeyLimits,
   remoteSyncManifestSnapshotVersion,
+  remoteSyncPayloadLimits,
+  remoteSyncRequestMetadataLimits,
   RemoteSyncManifestStore,
   RemoteSyncService,
   type RemoteSyncManifestStorage,
@@ -133,6 +140,49 @@ describe("remote sync service", () => {
     expect(executeRequests).toEqual(planRequests);
   });
 
+  it("preserves empty remote scope ids so requests can target provider roots", async () => {
+    const service = new RemoteSyncService();
+    const planRequests: RemoteSyncPlanRequest[] = [];
+
+    service.registerProvider({
+      id: "sync.root",
+      title: "Root Sync",
+      createPlan(request) {
+        planRequests.push(request);
+        return {
+          operations: [],
+          summary: {
+            creates: 0,
+            updates: 0,
+            deletes: 0,
+            skips: 0,
+            conflicts: 0
+          }
+        };
+      },
+      executePlan(plan) {
+        return {
+          operations: plan.operations,
+          summary: plan.summary
+        };
+      }
+    });
+
+    await service.createPlan("sync.root", {
+      workspaceUri: URI.file("C:/Notes"),
+      direction: "push",
+      resources: [],
+      remoteScopeId: " "
+    });
+
+    expect(planRequests).toEqual([{
+      workspaceUri: URI.file("C:/Notes"),
+      direction: "push",
+      resources: [],
+      remoteScopeId: ""
+    }]);
+  });
+
   it("normalizes provider progress callbacks before they reach callers", async () => {
     const service = new RemoteSyncService();
     const fileUri = URI.file("C:/Notes/daily/today.md");
@@ -183,6 +233,209 @@ describe("remote sync service", () => {
     }]);
   });
 
+  it("bounds remote sync request metadata before providers receive requests", async () => {
+    const service = new RemoteSyncService();
+    const requests: RemoteSyncPlanRequest[] = [];
+
+    service.registerProvider({
+      id: "metadata.sync",
+      title: "Metadata Sync",
+      createPlan(nextRequest) {
+        requests.push(nextRequest);
+        return plan();
+      },
+      executePlan() {
+        return result();
+      }
+    });
+
+    const metadata = Object.fromEntries(Array.from(
+      { length: remoteSyncRequestMetadataLimits.entries },
+      (_, index) => [`key${index}`, `value${index}`]
+    ));
+
+    await expect(service.createPlan("metadata.sync", request({ metadata }))).resolves.toEqual(plan());
+    expect(requests[0]?.metadata).toEqual(metadata);
+
+    await expect(service.createPlan("metadata.sync", request({
+      metadata: {
+        ...metadata,
+        extra: "value"
+      }
+    }))).rejects.toThrow(
+      `Remote sync request metadata must contain at most ${remoteSyncRequestMetadataLimits.entries} entries`
+    );
+    await expect(service.createPlan("metadata.sync", request({
+      metadata: {
+        ["k".repeat(remoteSyncRequestMetadataLimits.keyLength + 1)]: "value"
+      }
+    }))).rejects.toThrow(
+      `Remote sync request metadata key must be at most ${remoteSyncRequestMetadataLimits.keyLength} characters`
+    );
+    await expect(service.createPlan("metadata.sync", request({
+      metadata: {
+        key: "x".repeat(remoteSyncRequestMetadataLimits.valueLength + 1)
+      }
+    }))).rejects.toThrow(
+      `Remote sync request metadata value for key must be at most ${remoteSyncRequestMetadataLimits.valueLength} characters`
+    );
+    await expect(service.createPlan("metadata.sync", request({
+      metadata: {
+        key: "first",
+        " key ": "second"
+      }
+    }))).rejects.toThrow("Remote sync request metadata must not contain duplicate key: key");
+  });
+
+  it("bounds remote sync payload sizes before crossing provider boundaries", async () => {
+    const service = new RemoteSyncService();
+    const maxRelativePath = "a".repeat(remoteSyncPayloadLimits.relativePathLength);
+    const maxRemoteId = "r".repeat(remoteSyncPayloadLimits.remoteIdLength);
+    const maxMessage = "m".repeat(remoteSyncPayloadLimits.messageLength);
+
+    service.registerProvider({
+      id: "payload.sync",
+      title: "Payload Sync",
+      createPlan() {
+        return {
+          operations: [{
+            kind: "create",
+            target: "remote",
+            relativePath: maxRelativePath,
+            remoteId: maxRemoteId,
+            message: maxMessage
+          }],
+          summary: {
+            creates: 1,
+            updates: 0,
+            deletes: 0,
+            skips: 0,
+            conflicts: 0
+          }
+        };
+      },
+      executePlan(nextPlan, nextRequest) {
+        nextRequest.onProgress?.({
+          message: maxMessage,
+          completed: remoteSyncPayloadLimits.operationCount,
+          total: remoteSyncPayloadLimits.operationCount
+        });
+
+        return {
+          operations: nextPlan.operations,
+          summary: nextPlan.summary,
+          completedAt: remoteSyncPayloadLimits.completedAtMax
+        };
+      }
+    });
+    service.registerProvider({
+      id: "too.many.operations",
+      title: "Too Many Operations",
+      createPlan() {
+        return {
+          operations: new Array(remoteSyncPayloadLimits.operationCount + 1).fill({
+            kind: "skip",
+            target: "none",
+            relativePath: "a.md"
+          }),
+          summary: {
+            creates: 0,
+            updates: 0,
+            deletes: 0,
+            skips: remoteSyncPayloadLimits.operationCount + 1,
+            conflicts: 0
+          }
+        };
+      },
+      executePlan() {
+        return result();
+      }
+    });
+    service.registerProvider({
+      id: "long.remote.id",
+      title: "Long Remote Id",
+      createPlan() {
+        return {
+          operations: [{
+            kind: "create",
+            target: "remote",
+            relativePath: "a.md",
+            remoteId: "r".repeat(remoteSyncPayloadLimits.remoteIdLength + 1)
+          }],
+          summary: {
+            creates: 1,
+            updates: 0,
+            deletes: 0,
+            skips: 0,
+            conflicts: 0
+          }
+        };
+      },
+      executePlan() {
+        return result();
+      }
+    });
+    service.registerProvider({
+      id: "long.progress",
+      title: "Long Progress",
+      createPlan() {
+        return plan();
+      },
+      executePlan(_nextPlan, nextRequest) {
+        nextRequest.onProgress?.({
+          message: "m".repeat(remoteSyncPayloadLimits.messageLength + 1)
+        });
+
+        return result();
+      }
+    });
+    service.registerProvider({
+      id: "late.result",
+      title: "Late Result",
+      createPlan() {
+        return plan();
+      },
+      executePlan() {
+        return {
+          ...result(),
+          completedAt: remoteSyncPayloadLimits.completedAtMax + 1
+        };
+      }
+    });
+
+    const maxRequest = request({
+      resources: [localResource(maxRelativePath)],
+      remoteScopeId: maxRemoteId,
+      onProgress: () => undefined
+    });
+    const maxPlan = await service.createPlan("payload.sync", maxRequest);
+
+    await expect(service.executePlan("payload.sync", maxPlan, maxRequest)).resolves.toEqual({
+      operations: maxPlan.operations,
+      summary: maxPlan.summary,
+      completedAt: remoteSyncPayloadLimits.completedAtMax
+    });
+    await expect(service.createPlan("payload.sync", request({
+      resources: new Array(remoteSyncPayloadLimits.resourceCount + 1).fill(localResource("a.md"))
+    }))).rejects.toThrow(`Remote sync resources must contain at most ${remoteSyncPayloadLimits.resourceCount} items`);
+    await expect(service.createPlan("payload.sync", request({
+      resources: [localResource("a".repeat(remoteSyncPayloadLimits.relativePathLength + 1))]
+    }))).rejects.toThrow(
+      `Remote sync resource 0 relative path must be at most ${remoteSyncPayloadLimits.relativePathLength} characters`
+    );
+    await expect(service.createPlan("too.many.operations", request())).rejects
+      .toThrow(`Remote sync operations must contain at most ${remoteSyncPayloadLimits.operationCount} items`);
+    await expect(service.createPlan("long.remote.id", request())).rejects
+      .toThrow(`Remote sync operation 0 remote id must be at most ${remoteSyncPayloadLimits.remoteIdLength} characters`);
+    await expect(service.executePlan("long.progress", plan(), request({
+      onProgress: () => undefined
+    }))).rejects.toThrow(
+      `Remote sync progress message must be at most ${remoteSyncPayloadLimits.messageLength} characters`
+    );
+    await expect(service.executePlan("late.result", plan(), request())).rejects
+      .toThrow(`Remote sync completed timestamp must be between 0 and ${remoteSyncPayloadLimits.completedAtMax}`);
+  });
+
   it("returns provider metadata sorted by title and id", () => {
     const service = new RemoteSyncService();
     service.registerProvider(provider("z.provider", "Workspace Mirror"));
@@ -194,6 +447,25 @@ describe("remote sync service", () => {
       { id: "b.provider", title: "Cloud Drive" },
       { id: "z.provider", title: "Workspace Mirror" }
     ]);
+  });
+
+  it("bounds remote sync provider identity before registration and lookup", async () => {
+    const service = new RemoteSyncService();
+    const maxId = `a${"x".repeat(configurationMaxRemoteSyncProviderIdLength - 1)}`;
+    const maxTitle = "T".repeat(configurationMaxRemoteSyncProviderTitleLength);
+
+    service.registerProvider(provider(` ${maxId} `, ` ${maxTitle} `));
+
+    expect(service.getProviders()).toEqual([{ id: maxId, title: maxTitle }]);
+    await expect(service.createPlan(` ${maxId} `, request())).resolves.toEqual(plan());
+    expect(() => service.registerProvider(provider("bad provider", "Bad Provider")))
+      .toThrow("Remote sync provider id is invalid: bad provider");
+    expect(() => service.registerProvider(provider(`a${"x".repeat(configurationMaxRemoteSyncProviderIdLength)}`, "Too Long")))
+      .toThrow(`Remote sync provider id must be at most ${configurationMaxRemoteSyncProviderIdLength} characters`);
+    expect(() => service.registerProvider(provider("sync.title", "T".repeat(configurationMaxRemoteSyncProviderTitleLength + 1))))
+      .toThrow(`Remote sync provider title for sync.title must be at most ${configurationMaxRemoteSyncProviderTitleLength} characters`);
+    await expect(service.createPlan("bad provider", request())).rejects
+      .toThrow("Remote sync provider id is invalid: bad provider");
   });
 
   it("fires provider change events when providers are registered and unregistered", () => {
@@ -686,6 +958,37 @@ describe("remote sync service", () => {
     });
   });
 
+  it("treats matching directory resources as synchronized without file metadata", () => {
+    const plan = createRemoteSyncPlanFromDiff({
+      direction: "bidirectional",
+      localResources: [
+        localResource("projects", { kind: "directory" })
+      ],
+      remoteResources: [
+        remoteResource("projects", { kind: "directory", remoteId: "remote-projects" })
+      ]
+    });
+
+    expect(plan).toEqual({
+      operations: [
+        {
+          kind: "skip",
+          target: "none",
+          relativePath: "projects",
+          localUri: URI.file("C:/Notes/projects"),
+          remoteId: "remote-projects"
+        }
+      ],
+      summary: {
+        creates: 0,
+        updates: 0,
+        deletes: 0,
+        skips: 1,
+        conflicts: 0
+      }
+    });
+  });
+
   it("uses sync manifests to resolve single-sided bidirectional changes", () => {
     const plan = createRemoteSyncPlanFromManifest({
       direction: "bidirectional",
@@ -749,6 +1052,88 @@ describe("remote sync service", () => {
         updates: 2,
         deletes: 0,
         skips: 1,
+        conflicts: 0
+      }
+    });
+  });
+
+  it("uses push manifests to skip unchanged local files when remote metadata is sparse", () => {
+    const plan = createRemoteSyncPlanFromManifest({
+      direction: "push",
+      localResources: [
+        localResource("same.md", { contentHash: "same", size: 10, mtime: 1 })
+      ],
+      remoteResources: [
+        remoteResource("same.md", { remoteId: "new-remote-id", mtime: 2 })
+      ],
+      manifestResources: [
+        manifestResource("same.md", { remoteId: "old-remote-id", contentHash: "same", size: 10, mtime: 1 })
+      ]
+    });
+
+    expect(plan).toEqual({
+      operations: [
+        {
+          kind: "skip",
+          target: "none",
+          relativePath: "same.md",
+          localUri: URI.file("C:/Notes/same.md"),
+          remoteId: "new-remote-id"
+        }
+      ],
+      summary: {
+        creates: 0,
+        updates: 0,
+        deletes: 0,
+        skips: 1,
+        conflicts: 0
+      }
+    });
+    expect(createRemoteSyncManifestResourcesFromExecution({
+      manifestResources: [
+        manifestResource("same.md", { remoteId: "old-remote-id", contentHash: "same", size: 10, mtime: 1 })
+      ],
+      localResources: [
+        localResource("same.md", { contentHash: "same", size: 10, mtime: 1 })
+      ],
+      remoteResources: [
+        remoteResource("same.md", { remoteId: "new-remote-id", mtime: 2 })
+      ],
+      operations: plan.operations
+    })).toEqual([
+      manifestResource("same.md", { remoteId: "new-remote-id", contentHash: "same" })
+    ]);
+  });
+
+  it("uses push manifests to update sparse remote files when local content changed", () => {
+    const plan = createRemoteSyncPlanFromManifest({
+      direction: "push",
+      localResources: [
+        localResource("changed.md", { contentHash: "local-v2", size: 11, mtime: 2 })
+      ],
+      remoteResources: [
+        remoteResource("changed.md", { remoteId: "current-remote-id", mtime: 3 })
+      ],
+      manifestResources: [
+        manifestResource("changed.md", { remoteId: "old-remote-id", contentHash: "base", size: 10, mtime: 1 })
+      ]
+    });
+
+    expect(plan).toEqual({
+      operations: [
+        {
+          kind: "update",
+          target: "remote",
+          relativePath: "changed.md",
+          localUri: URI.file("C:/Notes/changed.md"),
+          remoteId: "current-remote-id"
+        }
+      ],
+      summary: {
+        creates: 0,
+        updates: 1,
+        deletes: 0,
+        skips: 0,
         conflicts: 0
       }
     });
@@ -990,6 +1375,30 @@ describe("remote sync service", () => {
     ]);
   });
 
+  it("records executed remote writes when the remote snapshot lacks a content hash", () => {
+    const resources = createRemoteSyncManifestResourcesFromExecution({
+      manifestResources: [],
+      localResources: [
+        localResource("uploaded.md", { contentHash: "local-uploaded", size: 9, mtime: 100 })
+      ],
+      remoteResources: [
+        remoteResource("uploaded.md", { remoteId: "remote-uploaded", mtime: 200 })
+      ],
+      operations: [
+        { kind: "create", target: "remote", relativePath: "uploaded.md", remoteId: "remote-from-upload" }
+      ]
+    });
+
+    expect(resources).toEqual([
+      manifestResource("uploaded.md", {
+        remoteId: "remote-from-upload",
+        contentHash: "local-uploaded",
+        size: 9,
+        mtime: 200
+      })
+    ]);
+  });
+
   it("refreshes manifests from verified skip operations", () => {
     const resources = createRemoteSyncManifestResourcesFromExecution({
       manifestResources: [
@@ -1147,6 +1556,27 @@ describe("remote sync service", () => {
     })).toThrow("Remote sync manifest update unknown.md resource state cannot be compared");
   });
 
+  it("records executed directory resources in manifests without file metadata", () => {
+    expect(createRemoteSyncManifestResourcesFromExecution({
+      manifestResources: [],
+      localResources: [
+        localResource("projects", { kind: "directory" })
+      ],
+      remoteResources: [
+        remoteResource("projects", { kind: "directory", remoteId: "remote-projects" })
+      ],
+      operations: [
+        { kind: "create", target: "remote", relativePath: "projects" }
+      ]
+    })).toEqual([
+      {
+        relativePath: "projects",
+        kind: "directory",
+        remoteId: "remote-projects"
+      }
+    ]);
+  });
+
   it("persists and restores normalized manifest resources", () => {
     const storage = manifestStorage();
     const scope = {
@@ -1176,6 +1606,73 @@ describe("remote sync service", () => {
 
     restored.clear();
     expect(store.readResources()).toEqual([]);
+  });
+
+  it("bounds manifest store scope before deriving storage keys or restoring snapshots", () => {
+    const storage = manifestStorage();
+    const store = new RemoteSyncManifestStore({ storage });
+
+    expect(() => store.setScope({
+      workspaceUri: "file:///" + "w".repeat(remoteSyncPayloadLimits.uriLength)
+    })).toThrow(`Remote sync manifest workspace URI must be at most ${remoteSyncPayloadLimits.uriLength} characters`);
+    expect(() => store.setScope({
+      providerId: "bad provider"
+    })).toThrow("Remote sync manifest provider id is invalid: bad provider");
+    expect(() => store.setScope({
+      providerId: `a${"x".repeat(configurationMaxRemoteSyncProviderIdLength)}`
+    })).toThrow(`Remote sync manifest provider id must be at most ${configurationMaxRemoteSyncProviderIdLength} characters`);
+    expect(() => store.setScope({
+      remoteScopeId: "r".repeat(remoteSyncPayloadLimits.remoteIdLength + 1)
+    })).toThrow(`Remote sync manifest remote scope id must be at most ${remoteSyncPayloadLimits.remoteIdLength} characters`);
+    expect(() => createRemoteSyncManifestStorageKey(
+      defaultRemoteSyncManifestStoreOptions.storageKey,
+      "s".repeat(remoteSyncPayloadLimits.manifestScopeLength + 1)
+    )).toThrow(`Remote sync manifest scope must be at most ${remoteSyncPayloadLimits.manifestScopeLength} characters`);
+
+    storage.values.set(defaultRemoteSyncManifestStoreOptions.storageKey, JSON.stringify({
+      version: remoteSyncManifestSnapshotVersion,
+      providerId: "bad provider",
+      resources: [manifestResource("a.md")]
+    }));
+    expect(store.readResources()).toEqual([]);
+
+    storage.values.set(defaultRemoteSyncManifestStoreOptions.storageKey, JSON.stringify({
+      version: remoteSyncManifestSnapshotVersion,
+      remoteScopeId: "r".repeat(remoteSyncPayloadLimits.remoteIdLength + 1),
+      resources: [manifestResource("a.md")]
+    }));
+    expect(store.readResources()).toEqual([]);
+  });
+
+  it("bounds manifest storage keys before reading or writing manifests", () => {
+    const storage = manifestStorage();
+    const maxStorageKey = `m${"a".repeat(remoteSyncManifestStorageKeyLimits.baseKeyLength - 1)}`;
+    const scopedKey = createRemoteSyncManifestStorageKey(` ${maxStorageKey} `, {
+      providerId: "sync.provider"
+    });
+    const store = new RemoteSyncManifestStore({
+      storage,
+      storageKey: ` ${maxStorageKey} `
+    });
+
+    expect(createRemoteSyncManifestStorageKey(` ${maxStorageKey} `, undefined))
+      .toBe(maxStorageKey);
+    expect(scopedKey.startsWith(`${maxStorageKey}.`)).toBe(true);
+
+    store.setScope({ providerId: "sync.provider" });
+    store.writeResources([manifestResource("a.md")]);
+
+    expect(storage.values.has(scopedKey)).toBe(true);
+    expect(() => new RemoteSyncManifestStore({ storage, storageKey: "" }))
+      .toThrow("Remote sync manifest storage key must not be empty");
+    expect(() => createRemoteSyncManifestStorageKey("bad/key", undefined))
+      .toThrow("Remote sync manifest storage key is invalid: bad/key");
+    expect(() => createRemoteSyncManifestStorageKey(
+      `m${"a".repeat(remoteSyncManifestStorageKeyLimits.baseKeyLength)}`,
+      undefined
+    )).toThrow(
+      `Remote sync manifest storage key must be at most ${remoteSyncManifestStorageKeyLimits.baseKeyLength} characters`
+    );
   });
 
   it("scopes persisted manifests by workspace, provider, and remote scope", () => {

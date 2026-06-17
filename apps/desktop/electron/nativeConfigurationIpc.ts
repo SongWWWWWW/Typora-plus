@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { app, ipcMain } from "electron";
+import { isSafeNativeConfigurationStorageKey } from "./nativeStorageKeys.js";
 
 export const nativeConfigurationIpcChannels = {
   read: "typora-plus:configuration:read",
@@ -24,7 +25,7 @@ export function registerNativeConfigurationIpc(config: NativeConfigurationConfig
 }
 
 function readConfigurationValue(config: NativeConfigurationConfig, key: string): string | undefined {
-  if (!isSafeKey(key)) {
+  if (!isSafeNativeConfigurationStorageKey(key)) {
     return undefined;
   }
 
@@ -32,7 +33,7 @@ function readConfigurationValue(config: NativeConfigurationConfig, key: string):
 }
 
 function writeConfigurationValue(config: NativeConfigurationConfig, key: string, value: string): void {
-  if (!isSafeKey(key)) {
+  if (!isSafeNativeConfigurationStorageKey(key)) {
     throw new Error("Invalid configuration key");
   }
 
@@ -58,7 +59,9 @@ function readConfigurationStore(config: NativeConfigurationConfig): Record<strin
     }
 
     return Object.fromEntries(Object.entries(parsed.values).filter((entry): entry is [string, string] =>
-      isSafeKey(entry[0]) && typeof entry[1] === "string" && Buffer.byteLength(entry[1], "utf8") <= config.maxValueBytes
+      isSafeNativeConfigurationStorageKey(entry[0]) &&
+      typeof entry[1] === "string" &&
+      Buffer.byteLength(entry[1], "utf8") <= config.maxValueBytes
     ));
   } catch {
     return {};
@@ -67,10 +70,6 @@ function readConfigurationStore(config: NativeConfigurationConfig): Record<strin
 
 interface SerializedConfigurationStore {
   readonly values?: unknown;
-}
-
-function isSafeKey(value: string): boolean {
-  return /^[a-z0-9.-]+$/i.test(value);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

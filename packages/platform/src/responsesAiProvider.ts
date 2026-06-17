@@ -1,6 +1,7 @@
 import type {
   AiProvider,
   AiTextContextItem,
+  AiTextOutputFormat,
   AiTextProviderResult,
   AiTextRequest,
   AiTokenUsage
@@ -9,6 +10,12 @@ import { clampConfigurationNumber, configurationNumberConstraints } from "./conf
 import type { AiProviderConfiguration } from "./configuration";
 
 let nextNativeResponsesRequestId = 0;
+
+const responsesMetadataLimits = {
+  entries: 16,
+  keyLength: 64,
+  valueLength: 512
+} as const;
 
 export interface ResponsesAiProviderTransportRequest {
   readonly url: string;
@@ -35,10 +42,23 @@ export type ResponsesAiProviderRequestHandler =
   (request: ResponsesAiProviderRequest) => Promise<unknown>;
 
 export interface ResponsesAiProviderFactoryOptions {
+  readonly promptMessages?: ResponsesAiProviderPromptMessages;
   readonly request?: ResponsesAiProviderRequestHandler;
   readonly readSecret?: ResponsesAiProviderSecretReader;
   readonly transport?: ResponsesAiProviderTransport;
 }
+
+export interface ResponsesAiProviderPromptMessages {
+  readonly contextHeading: string;
+  readonly contextItemHeading: (kind: string, title: string | undefined) => string;
+  readonly uri: (uri: string) => string;
+}
+
+export const defaultResponsesAiProviderPromptMessages: ResponsesAiProviderPromptMessages = {
+  contextHeading: "Context:",
+  contextItemHeading: (kind, title) => `### ${title ? `${kind}: ${title}` : kind}`,
+  uri: (uri) => `URI: ${uri}`
+};
 
 export interface NativeResponsesAiBridge {
   readonly isAvailable: boolean;
@@ -72,7 +92,11 @@ export function createResponsesAiProvider(
     id: normalizedConfiguration.id,
     title: normalizedConfiguration.title,
     requestText: async (request) => {
-      const body = JSON.stringify(createResponsesRequestBody(normalizedConfiguration, request));
+      const body = JSON.stringify(createResponsesRequestBody(
+        normalizedConfiguration,
+        request,
+        options.promptMessages ?? defaultResponsesAiProviderPromptMessages
+      ));
       const response = await requestResponses(normalizedConfiguration, options, body, request.signal);
 
       return readResponsesProviderResult(response, normalizedConfiguration.model);
@@ -185,48 +209,82 @@ async function requestResponsesWithSecret(
 
 function createResponsesRequestBody(
   configuration: AiProviderConfiguration,
-  request: AiTextRequest
+  request: AiTextRequest,
+  promptMessages: ResponsesAiProviderPromptMessages
 ): Readonly<Record<string, unknown>> {
   return {
     model: configuration.model,
     instructions: request.instruction,
-    input: createResponsesInput(request.input, request.context),
+    input: createResponsesInput(request.input, request.context, promptMessages),
     ...(configuration.maxOutputTokens !== undefined ? { max_output_tokens: configuration.maxOutputTokens } : {}),
     ...createOptionalResponsesMetadata(request.metadata),
     ...(configuration.reasoningEffort !== undefined ? { reasoning: { effort: configuration.reasoningEffort } } : {}),
     ...(configuration.store !== undefined ? { store: configuration.store } : {}),
-    ...createOptionalResponsesText(configuration)
+    ...createOptionalResponsesText(configuration, request.outputFormat)
   };
 }
 
 function createOptionalResponsesText(
-  configuration: AiProviderConfiguration
+  configuration: AiProviderConfiguration,
+  outputFormat: AiTextOutputFormat | undefined
 ): { readonly text?: Readonly<Record<string, unknown>> } {
-  return configuration.textVerbosity !== undefined
-    ? { text: { verbosity: configuration.textVerbosity } }
-    : {};
+  const text: Record<string, unknown> = {
+    ...(configuration.textVerbosity !== undefined ? { verbosity: configuration.textVerbosity } : {}),
+    ...createOptionalResponsesTextFormat(outputFormat)
+  };
+
+  return Object.keys(text).length > 0 ? { text } : {};
+}
+
+function createOptionalResponsesTextFormat(
+  outputFormat: AiTextOutputFormat | undefined
+): { readonly format?: Readonly<Record<string, unknown>> } {
+  if (!outputFormat) {
+    return {};
+  }
+
+  switch (outputFormat.kind) {
+    case "text":
+      return { format: { type: "text" } };
+    case "json":
+      return { format: { type: "json_object" } };
+    case "jsonSchema":
+      return {
+        format: {
+          type: "json_schema",
+          name: outputFormat.name,
+          schema: outputFormat.schema,
+          ...(outputFormat.description ? { description: outputFormat.description } : {}),
+          ...(outputFormat.strict !== undefined ? { strict: outputFormat.strict } : {})
+        }
+      };
+  }
 }
 
 function createResponsesInput(
   input: string,
-  context: readonly AiTextContextItem[] | undefined
+  context: readonly AiTextContextItem[] | undefined,
+  promptMessages: ResponsesAiProviderPromptMessages
 ): string {
   const sections = [input];
 
   if (context && context.length > 0) {
     sections.push([
-      "Context:",
-      ...context.map(formatResponsesContextItem)
+      promptMessages.contextHeading,
+      ...context.map((item) => formatResponsesContextItem(item, promptMessages))
     ].join("\n\n"));
   }
 
   return sections.filter((section) => section.trim()).join("\n\n");
 }
 
-function formatResponsesContextItem(item: AiTextContextItem): string {
+function formatResponsesContextItem(
+  item: AiTextContextItem,
+  promptMessages: ResponsesAiProviderPromptMessages
+): string {
   return [
-    `### ${item.title ? `${item.kind}: ${item.title}` : item.kind}`,
-    ...(item.uri ? [`URI: ${item.uri.toString()}`] : []),
+    promptMessages.contextItemHeading(item.kind, item.title),
+    ...(item.uri ? [promptMessages.uri(item.uri.toString())] : []),
     item.value
   ].join("\n");
 }
@@ -240,14 +298,22 @@ function createOptionalResponsesMetadata(
 
   const normalizedMetadata: Record<string, string> = {};
 
-  for (const [key, value] of Object.entries(metadata).slice(0, 16)) {
+  for (const [key, value] of Object.entries(metadata)) {
+    if (Object.keys(normalizedMetadata).length >= responsesMetadataLimits.entries) {
+      break;
+    }
+
     const normalizedKey = key.trim();
 
-    if (!normalizedKey || normalizedKey.length > 64) {
+    if (
+      !normalizedKey ||
+      normalizedKey.length > responsesMetadataLimits.keyLength ||
+      Object.hasOwn(normalizedMetadata, normalizedKey)
+    ) {
       continue;
     }
 
-    normalizedMetadata[normalizedKey] = value.slice(0, 512);
+    normalizedMetadata[normalizedKey] = value.slice(0, responsesMetadataLimits.valueLength);
   }
 
   return Object.keys(normalizedMetadata).length > 0
@@ -302,6 +368,12 @@ function readResponsesOutputText(record: Record<string, unknown>): string {
     for (const contentItem of item.content) {
       if (!isRecord(contentItem)) {
         continue;
+      }
+
+      const refusal = readOptionalText(contentItem.refusal);
+
+      if (refusal !== undefined) {
+        throw new Error(`Responses provider refused: ${refusal}`);
       }
 
       const text = readOptionalText(contentItem.text) ?? readOptionalText(contentItem.output_text);

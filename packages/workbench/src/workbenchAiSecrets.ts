@@ -4,12 +4,27 @@ import {
 } from "@typora-plus/platform";
 import {
   runWorkbenchAction,
+  type WorkbenchActionRunnerMessages,
   type WorkbenchOperationErrorSetter
 } from "./workbenchActionRunner";
 
 export interface WorkbenchAiSecretCallbacks {
+  readonly actionRunnerMessages?: WorkbenchActionRunnerMessages;
+  readonly messages?: WorkbenchAiSecretMessages;
   readonly setOperationError: WorkbenchOperationErrorSetter;
 }
+
+export interface WorkbenchAiSecretMessages {
+  readonly referenceInvalid: string;
+  readonly storageUnavailable: string;
+  readonly valueEmpty: string;
+}
+
+export const defaultWorkbenchAiSecretMessages: WorkbenchAiSecretMessages = {
+  referenceInvalid: "AI secret reference is invalid",
+  storageUnavailable: "AI secret storage is unavailable",
+  valueEmpty: "AI secret value must not be empty"
+};
 
 export interface WorkbenchAiSecretBridge {
   readonly isAvailable: boolean;
@@ -28,12 +43,16 @@ export function createWorkbenchAiSecretActions(
   return {
     isAvailable: !!bridge?.isAvailable,
     setSecret: (secretRef, value) => runWorkbenchAction(
-      () => setWorkbenchAiProviderSecret(bridge, secretRef, value).then(() => true),
-      callbacks.setOperationError
+      () => setWorkbenchAiProviderSecret(bridge, secretRef, value, callbacks.messages).then(() => true),
+      callbacks.setOperationError,
+      undefined,
+      callbacks.actionRunnerMessages
     ).then(Boolean),
     deleteSecret: (secretRef) => runWorkbenchAction(
-      () => deleteWorkbenchAiProviderSecret(bridge, secretRef).then(() => true),
-      callbacks.setOperationError
+      () => deleteWorkbenchAiProviderSecret(bridge, secretRef, callbacks.messages).then(() => true),
+      callbacks.setOperationError,
+      undefined,
+      callbacks.actionRunnerMessages
     ).then(Boolean)
   };
 }
@@ -41,20 +60,22 @@ export function createWorkbenchAiSecretActions(
 export async function setWorkbenchAiProviderSecret(
   bridge: WorkbenchAiSecretBridge | undefined,
   secretRef: string,
-  value: string
+  value: string,
+  messages: WorkbenchAiSecretMessages = defaultWorkbenchAiSecretMessages
 ): Promise<void> {
-  const availableBridge = requireWorkbenchAiSecretBridge(bridge);
-  const normalizedSecretRef = normalizeWorkbenchAiSecretRef(secretRef);
-  const normalizedValue = normalizeWorkbenchAiSecretValue(value);
+  const availableBridge = requireWorkbenchAiSecretBridge(bridge, messages);
+  const normalizedSecretRef = normalizeWorkbenchAiSecretRef(secretRef, messages);
+  const normalizedValue = normalizeWorkbenchAiSecretValue(value, messages);
   await availableBridge.setSecret(normalizedSecretRef, normalizedValue);
 }
 
 export async function deleteWorkbenchAiProviderSecret(
   bridge: WorkbenchAiSecretBridge | undefined,
-  secretRef: string
+  secretRef: string,
+  messages: WorkbenchAiSecretMessages = defaultWorkbenchAiSecretMessages
 ): Promise<void> {
-  const availableBridge = requireWorkbenchAiSecretBridge(bridge);
-  await availableBridge.deleteSecret(normalizeWorkbenchAiSecretRef(secretRef));
+  const availableBridge = requireWorkbenchAiSecretBridge(bridge, messages);
+  await availableBridge.deleteSecret(normalizeWorkbenchAiSecretRef(secretRef, messages));
 }
 
 export function createNativeWorkbenchAiSecretBridge(): WorkbenchAiSecretBridge | undefined {
@@ -77,16 +98,17 @@ export function createNativeWorkbenchAiSecretBridge(): WorkbenchAiSecretBridge |
 }
 
 function requireWorkbenchAiSecretBridge(
-  bridge: WorkbenchAiSecretBridge | undefined
+  bridge: WorkbenchAiSecretBridge | undefined,
+  messages: WorkbenchAiSecretMessages
 ): WorkbenchAiSecretBridge {
   if (!bridge?.isAvailable) {
-    throw new Error("AI secret storage is unavailable");
+    throw new Error(messages.storageUnavailable);
   }
 
   return bridge;
 }
 
-function normalizeWorkbenchAiSecretRef(value: string): string {
+function normalizeWorkbenchAiSecretRef(value: string, messages: WorkbenchAiSecretMessages): string {
   const normalized = value.trim();
 
   if (
@@ -94,17 +116,17 @@ function normalizeWorkbenchAiSecretRef(value: string): string {
     normalized.length > configurationMaxAiProviderSecretRefLength ||
     !/^[A-Za-z0-9][A-Za-z0-9_.:-]*$/.test(normalized)
   ) {
-    throw new Error("AI secret reference is invalid");
+    throw new Error(messages.referenceInvalid);
   }
 
   return normalized;
 }
 
-function normalizeWorkbenchAiSecretValue(value: string): string {
+function normalizeWorkbenchAiSecretValue(value: string, messages: WorkbenchAiSecretMessages): string {
   const normalized = value.trim();
 
   if (!normalized) {
-    throw new Error("AI secret value must not be empty");
+    throw new Error(messages.valueEmpty);
   }
 
   return normalized;

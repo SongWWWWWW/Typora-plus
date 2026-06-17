@@ -23,6 +23,7 @@ import {
   type MarkdownImageSourceResolver,
   type MarkdownInlineRenderer
 } from "./livePreview";
+import { markdownSlashCommandExtension } from "./slashCommands";
 
 interface MarkdownTaskListLineChange {
   readonly from: number;
@@ -62,6 +63,7 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
     const onChangeRef = useRef(onChange);
     const onPasteImageRef = useRef(onPasteImage);
     const previewCompartmentRef = useRef(new Compartment());
+    const slashCommandCompartmentRef = useRef(new Compartment());
 
     useEffect(() => {
       onChangeRef.current = onChange;
@@ -139,6 +141,9 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
         extensions: [
           ...baseEditorExtensions(),
           imagePasteExtension(() => onPasteImageRef.current),
+          slashCommandCompartmentRef.current.of(
+            markdownSlashCommandExtension(configuration.labels?.slashCommands)
+          ),
           previewCompartmentRef.current.of(
             livePreviewExtension(configuration, resolveImageSource, renderCodeFence, renderInline)
           ),
@@ -166,9 +171,14 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
       }
 
       view.dispatch({
-        effects: previewCompartmentRef.current.reconfigure(
-          livePreviewExtension(configuration, resolveImageSource, renderCodeFence, renderInline)
-        )
+        effects: [
+          slashCommandCompartmentRef.current.reconfigure(
+            markdownSlashCommandExtension(configuration.labels?.slashCommands)
+          ),
+          previewCompartmentRef.current.reconfigure(
+            livePreviewExtension(configuration, resolveImageSource, renderCodeFence, renderInline)
+          )
+        ]
       });
     }, [configuration, resolveImageSource, renderCodeFence, renderInline]);
 

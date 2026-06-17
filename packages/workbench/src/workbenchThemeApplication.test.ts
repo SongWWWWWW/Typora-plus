@@ -91,13 +91,13 @@ function createServices(themes: readonly RegisteredTheme[] = []): WorkbenchTheme
 }
 
 function configuration(
-  appearance: Omit<TyporaPlusConfiguration["appearance"], "density"> & {
-    readonly density?: TyporaPlusConfiguration["appearance"]["density"];
-  }
+  appearance: Partial<TyporaPlusConfiguration["appearance"]>
 ): Pick<TyporaPlusConfiguration, "appearance"> {
   return {
     appearance: {
+      colorScheme: "system",
       density: "comfortable",
+      locale: "en",
       ...appearance
     }
   };

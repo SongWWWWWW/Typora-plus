@@ -6,7 +6,9 @@ import {
   createWorkbenchSummarizeActiveNoteAiTextRequest,
   workbenchAiActionTitles,
   workbenchAiInstructions,
-  workbenchAiRequestActions
+  workbenchAiOutputFormats,
+  workbenchAiRequestActions,
+  type WorkbenchAiRequestMessages
 } from "./workbenchAiRequestModel";
 import type { TextFileModel } from "@typora-plus/platform";
 
@@ -91,6 +93,65 @@ describe("workbench AI request model", () => {
         sourceName: "plan.md",
         sourceScheme: "file",
         languageId: "markdown"
+      }
+    });
+  });
+
+  it("uses injected active-note request instructions without changing request metadata", () => {
+    const messages: WorkbenchAiRequestMessages = {
+      instructions: {
+        ...workbenchAiInstructions,
+        rewriteActiveNote: "Rewrite with injected locale copy."
+      }
+    };
+
+    expect(createWorkbenchActiveNoteAiTextRequestForAction(
+      model(),
+      workbenchAiRequestActions.rewriteActiveNote,
+      {
+        messages,
+        metadata: {
+          surface: "command"
+        }
+      }
+    )).toEqual({
+      instruction: "Rewrite with injected locale copy.",
+      input: "# Plan\n\n- Ship provider model",
+      metadata: {
+        surface: "command",
+        action: "rewriteActiveNote",
+        source: "active-note",
+        sourceName: "plan.md",
+        sourceScheme: "file",
+        languageId: "markdown"
+      }
+    });
+  });
+
+  it("requests structured output for active-note task extraction", () => {
+    expect(createWorkbenchActiveNoteAiTextRequestForAction(
+      model(),
+      workbenchAiRequestActions.extractTasksActiveNote
+    )).toEqual({
+      instruction: workbenchAiInstructions.extractTasksActiveNote,
+      input: "# Plan\n\n- Ship provider model",
+      metadata: {
+        action: "extractTasksActiveNote",
+        source: "active-note",
+        sourceName: "plan.md",
+        sourceScheme: "file",
+        languageId: "markdown"
+      },
+      outputFormat: workbenchAiOutputFormats.extractTasksActiveNote
+    });
+
+    expect(workbenchAiOutputFormats.extractTasksActiveNote).toMatchObject({
+      kind: "jsonSchema",
+      name: "active_note_tasks",
+      strict: true,
+      schema: {
+        additionalProperties: false,
+        required: ["groups"]
       }
     });
   });

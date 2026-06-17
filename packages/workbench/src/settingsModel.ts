@@ -18,7 +18,9 @@ import {
   type RegisteredTheme,
   type RemoteSyncProviderConfiguration,
   type RemoteSyncProviderSecretConfiguration,
-  type TyporaPlusConfiguration
+  type TyporaPlusLocale,
+  type TyporaPlusConfiguration,
+  typoraPlusLocales
 } from "@typora-plus/platform";
 
 export type NumberSettingConstraint = ConfigurationNumberConstraint;
@@ -43,7 +45,8 @@ export const settingsEntryIds = {
   appearance: {
     theme: "appearance.theme",
     customTheme: "appearance.customTheme",
-    density: "appearance.density"
+    density: "appearance.density",
+    language: "appearance.language"
   },
   editor: {
     autoSave: "editor.autoSave",
@@ -94,6 +97,16 @@ export interface SettingsEntryDefinition {
   readonly keywords?: readonly string[];
 }
 
+export interface SettingsEntryLocalization {
+  readonly label?: string;
+  readonly keywords?: readonly string[];
+}
+
+export interface SettingsLocalization {
+  readonly sections?: Partial<Record<SettingsSectionId, string>>;
+  readonly entries?: Partial<Record<SettingsEntryId, SettingsEntryLocalization>>;
+}
+
 export interface SettingsSearchResult {
   readonly query: string;
   readonly visibleEntries: readonly SettingsEntryId[];
@@ -130,7 +143,7 @@ export interface SettingsAiProviderDraft {
 
 export interface SettingsAiProviderDraftValidation {
   readonly provider?: AiProviderConfiguration;
-  readonly issues: readonly string[];
+  readonly issues: readonly SettingsValidationIssueCode[];
   readonly canSave: boolean;
 }
 
@@ -145,7 +158,7 @@ export interface SettingsRemoteSyncProviderDraft {
 
 export interface SettingsRemoteSyncProviderDraftValidation {
   readonly provider?: RemoteSyncProviderConfiguration;
-  readonly issues: readonly string[];
+  readonly issues: readonly SettingsValidationIssueCode[];
   readonly canSave: boolean;
 }
 
@@ -164,6 +177,16 @@ export interface SettingsRawMirrorMetadataDraft {
   readonly retryMaxRetries: string;
   readonly retryDelayMs: string;
 }
+
+export const settingsLarkRawMirrorProviderDefaults = {
+  baseUrl: "http://127.0.0.1:41573/",
+  id: "lark.raw-mirror",
+  listPath: "mirror/list",
+  title: "Lark Raw Mirror",
+  uploadPath: "mirror/upload",
+  downloadPath: "mirror/download",
+  deletePath: "mirror/delete"
+} as const;
 
 export const settingsSections = [
   { id: settingsSectionIds.appearance, title: "Appearance" },
@@ -188,6 +211,16 @@ export const settingsDensityOptions = [
   { value: "comfortable", label: "Comfortable" },
   { value: "compact", label: "Compact" }
 ] as const satisfies readonly SettingsOption<TyporaPlusConfiguration["appearance"]["density"]>[];
+
+const settingsLocaleOptionLabels = {
+  en: "English",
+  "zh-CN": "Chinese"
+} as const satisfies Record<TyporaPlusLocale, string>;
+
+export const settingsLocaleOptions = typoraPlusLocales.map((value) => ({
+  value,
+  label: settingsLocaleOptionLabels[value]
+})) satisfies readonly SettingsOption<TyporaPlusLocale>[];
 
 export const settingsAiReasoningEffortOptions = [
   { value: "", label: "Default" },
@@ -215,6 +248,7 @@ export const settingsEntries = [
   { id: settingsEntryIds.appearance.theme, sectionId: settingsSectionIds.appearance, label: "Theme", keywords: ["color scheme", "system", "light", "dark"] },
   { id: settingsEntryIds.appearance.customTheme, sectionId: settingsSectionIds.appearance, label: "Custom Theme", keywords: ["theme", "extension", "custom", "tokens"] },
   { id: settingsEntryIds.appearance.density, sectionId: settingsSectionIds.appearance, label: "Density", keywords: ["comfortable", "compact"] },
+  { id: settingsEntryIds.appearance.language, sectionId: settingsSectionIds.appearance, label: "Language", keywords: ["locale", "english", "chinese", "translation"] },
   { id: settingsEntryIds.editor.autoSave, sectionId: settingsSectionIds.editor, label: "Auto Save", keywords: ["autosave", "save"] },
   { id: settingsEntryIds.editor.autoSaveDelay, sectionId: settingsSectionIds.editor, label: "Auto Save Delay", keywords: ["autosave", "save", "delay", "debounce", "milliseconds"] },
   { id: settingsEntryIds.editor.focusMode, sectionId: settingsSectionIds.editor, label: "Focus Mode", keywords: ["focus", "distraction"] },
@@ -226,7 +260,7 @@ export const settingsEntries = [
   { id: settingsEntryIds.ai.providers, sectionId: settingsSectionIds.ai, label: "Providers", keywords: ["openai", "responses", "assistant", "model", "endpoint", "secret", "api key", "reasoning", "verbosity", "output tokens"] },
   { id: settingsEntryIds.ai.workspaceContextMaxResults, sectionId: settingsSectionIds.ai, label: "Context Results", keywords: ["workspace", "context", "search", "retrieval", "grounded"] },
   { id: settingsEntryIds.ai.workspaceContextMaxPreviewLength, sectionId: settingsSectionIds.ai, label: "Context Preview", keywords: ["workspace", "context", "preview", "snippet", "retrieval"] },
-  { id: settingsEntryIds.remoteSync.providers, sectionId: settingsSectionIds.remoteSync, label: "Providers", keywords: ["sync", "remote", "cloud", "mirror", "native request", "scope", "secret"] },
+  { id: settingsEntryIds.remoteSync.providers, sectionId: settingsSectionIds.remoteSync, label: "Providers", keywords: ["sync", "remote", "cloud", "mirror", "native request", "scope", "secret", "lark", "feishu", "authorization"] },
   { id: settingsEntryIds.workspace.defaultAssetFolder, sectionId: settingsSectionIds.workspace, label: "Asset Folder", keywords: ["assets", "images", "attachments", "folder"] },
   { id: settingsEntryIds.workspace.quickOpenMaxResults, sectionId: settingsSectionIds.workspace, label: "Quick Open Results", keywords: ["quick open", "files", "results", "limit"] },
   { id: settingsEntryIds.workspace.searchMaxFileSize, sectionId: settingsSectionIds.workspace, label: "Search File Limit", keywords: ["search", "index", "file", "size", "limit"] },
@@ -238,12 +272,19 @@ const settingsEntryById = new Map<SettingsEntryId, SettingsEntryDefinition>(
   settingsEntries.map((entry) => [entry.id, entry])
 );
 
-const settingsRemoteSyncProviderInvalidIssue =
-  "Complete provider id, title, HTTPS or loopback base URL, and valid profile bindings.";
-const settingsRawMirrorMetadataInvalidIssue = "Complete raw mirror metadata paths and header binding.";
-const settingsRawMirrorDeleteInvalidIssue = "Complete raw mirror delete metadata.";
-const settingsRawMirrorListInvalidIssue = "Complete raw mirror list metadata.";
-const settingsRawMirrorRetryInvalidIssue = "Complete raw mirror retry metadata.";
+export const settingsValidationIssueCodes = {
+  aiProviderInvalid: "aiProviderInvalid",
+  providerIdDuplicate: "providerIdDuplicate",
+  rawMirrorDeleteInvalid: "rawMirrorDeleteInvalid",
+  rawMirrorListInvalid: "rawMirrorListInvalid",
+  rawMirrorMetadataInvalid: "rawMirrorMetadataInvalid",
+  rawMirrorRetryInvalid: "rawMirrorRetryInvalid",
+  remoteSyncProviderInvalid: "remoteSyncProviderInvalid"
+} as const satisfies Record<string, string>;
+
+export type SettingsValidationIssueCode =
+  typeof settingsValidationIssueCodes[keyof typeof settingsValidationIssueCodes];
+
 const settingsRawMirrorMetadataKeyOrder = [
   remoteSyncConfiguredRawMirrorMetadataKeys.adapter,
   remoteSyncConfiguredRawMirrorMetadataKeys.listPath,
@@ -344,12 +385,12 @@ export function validateSettingsAiProviderDraft(
   originalId: string | undefined = undefined
 ): SettingsAiProviderDraftValidation {
   const provider = normalizeSettingsAiProviderDraft(draft);
-  const issues: string[] = [];
+  const issues: SettingsValidationIssueCode[] = [];
 
   if (!provider) {
-    issues.push("Complete provider id, title, HTTPS or loopback endpoint, model, secret reference, and valid request settings.");
+    issues.push(settingsValidationIssueCodes.aiProviderInvalid);
   } else if (providers.some((candidate) => candidate.id === provider.id && candidate.id !== originalId)) {
-    issues.push("Provider id is already used.");
+    issues.push(settingsValidationIssueCodes.providerIdDuplicate);
   }
 
   return {
@@ -407,19 +448,51 @@ export function createSettingsRemoteSyncProviderDraft(
   };
 }
 
+export function createSettingsLarkRawMirrorProviderDraft(
+  usedIds: readonly string[] = []
+): SettingsRemoteSyncProviderDraft {
+  const id = createUniqueSettingsProviderId(settingsLarkRawMirrorProviderDefaults.id, usedIds);
+  const draft = createSettingsRemoteSyncProviderDraft({
+    id,
+    title: id === settingsLarkRawMirrorProviderDefaults.id
+      ? settingsLarkRawMirrorProviderDefaults.title
+      : `${settingsLarkRawMirrorProviderDefaults.title} ${id.slice(settingsLarkRawMirrorProviderDefaults.id.length + 1)}`,
+    kind: "native-request",
+    baseUrl: settingsLarkRawMirrorProviderDefaults.baseUrl,
+    secrets: [],
+    metadata: {}
+  });
+
+  return applySettingsRawMirrorMetadataDraft(draft, {
+    enabled: true,
+    listPath: settingsLarkRawMirrorProviderDefaults.listPath,
+    listPageSize: "",
+    deleteMissing: false,
+    uploadPath: settingsLarkRawMirrorProviderDefaults.uploadPath,
+    downloadPath: settingsLarkRawMirrorProviderDefaults.downloadPath,
+    deletePath: settingsLarkRawMirrorProviderDefaults.deletePath,
+    headerBinding: "",
+    headerName: "",
+    headerScheme: "",
+    retryStatusCodes: "",
+    retryMaxRetries: "",
+    retryDelayMs: ""
+  });
+}
+
 export function validateSettingsRemoteSyncProviderDraft(
   draft: SettingsRemoteSyncProviderDraft,
   providers: readonly RemoteSyncProviderConfiguration[],
   originalId: string | undefined = undefined
 ): SettingsRemoteSyncProviderDraftValidation {
   const provider = normalizeSettingsRemoteSyncProviderDraft(draft);
-  const issues: string[] = [];
+  const issues: SettingsValidationIssueCode[] = [];
 
   if (!provider) {
-    issues.push(settingsRemoteSyncProviderInvalidIssue);
+    issues.push(settingsValidationIssueCodes.remoteSyncProviderInvalid);
   } else {
     if (providers.some((candidate) => candidate.id === provider.id && candidate.id !== originalId)) {
-      issues.push("Provider id is already used.");
+      issues.push(settingsValidationIssueCodes.providerIdDuplicate);
     }
 
     const rawMirrorIssue = getSettingsRawMirrorMetadataIssue(provider);
@@ -457,6 +530,26 @@ export function createSettingsRawMirrorMetadataDraft(
     retryMaxRetries: metadata[remoteSyncConfiguredRawMirrorMetadataKeys.retryMaxRetries] ?? "",
     retryDelayMs: metadata[remoteSyncConfiguredRawMirrorMetadataKeys.retryDelayMs] ?? ""
   };
+}
+
+export function isSettingsLarkRawMirrorProviderDraft(
+  draft: SettingsRemoteSyncProviderDraft
+): boolean {
+  const rawMirrorDraft = createSettingsRawMirrorMetadataDraft(draft);
+
+  if (!rawMirrorDraft.enabled) {
+    return false;
+  }
+
+  const searchText = `${draft.id} ${draft.title} ${draft.baseUrl}`.toLowerCase();
+  const hasLarkIdentity = searchText.includes("lark") || searchText.includes("feishu");
+  const hasLarkGatewayPaths =
+    rawMirrorDraft.listPath === settingsLarkRawMirrorProviderDefaults.listPath &&
+    rawMirrorDraft.uploadPath === settingsLarkRawMirrorProviderDefaults.uploadPath &&
+    rawMirrorDraft.downloadPath === settingsLarkRawMirrorProviderDefaults.downloadPath &&
+    rawMirrorDraft.deletePath === settingsLarkRawMirrorProviderDefaults.deletePath;
+
+  return hasLarkIdentity || hasLarkGatewayPaths;
 }
 
 export function applySettingsRawMirrorMetadataDraft(
@@ -570,28 +663,40 @@ export function settingSectionAnchorId(sectionId: SettingsSectionId): string {
   return `tp-settings-section-${sectionId}`;
 }
 
-export function getSettingsSectionDefinition(sectionId: SettingsSectionId): SettingsSectionDefinition {
+export function getSettingsSectionDefinition(
+  sectionId: SettingsSectionId,
+  localization?: SettingsLocalization
+): SettingsSectionDefinition {
   const section = settingsSectionById.get(sectionId);
   if (!section) {
     throw new Error(`Unknown settings section: ${sectionId}`);
   }
-  return section;
+  return localizeSettingsSectionDefinition(section, localization);
 }
 
-export function getSettingsSectionTitle(sectionId: SettingsSectionId): string {
-  return getSettingsSectionDefinition(sectionId).title;
+export function getSettingsSectionTitle(
+  sectionId: SettingsSectionId,
+  localization?: SettingsLocalization
+): string {
+  return getSettingsSectionDefinition(sectionId, localization).title;
 }
 
-export function getSettingsEntryDefinition(entryId: SettingsEntryId): SettingsEntryDefinition {
+export function getSettingsEntryDefinition(
+  entryId: SettingsEntryId,
+  localization?: SettingsLocalization
+): SettingsEntryDefinition {
   const entry = settingsEntryById.get(entryId);
   if (!entry) {
     throw new Error(`Unknown settings entry: ${entryId}`);
   }
-  return entry;
+  return localizeSettingsEntryDefinition(entry, localization);
 }
 
-export function getSettingsEntryLabel(entryId: SettingsEntryId): string {
-  return getSettingsEntryDefinition(entryId).label;
+export function getSettingsEntryLabel(
+  entryId: SettingsEntryId,
+  localization?: SettingsLocalization
+): string {
+  return getSettingsEntryDefinition(entryId, localization).label;
 }
 
 export function createSettingsThemeOptions(
@@ -645,25 +750,30 @@ export function resolveNearestSettingsSection(
   return nearestSection;
 }
 
-export function createSettingsSearchResult(query: string): SettingsSearchResult {
+export function createSettingsSearchResult(
+  query: string,
+  localization?: SettingsLocalization
+): SettingsSearchResult {
   const terms = normalizeSettingsSearchTerms(query);
+  const sections = localizeSettingsSections(localization);
+  const entries = localizeSettingsEntries(localization);
 
   if (terms.length === 0) {
     return {
       query: "",
-      visibleEntries: settingsEntries.map((entry) => entry.id),
-      visibleSections: settingsSections.map((section) => section.id)
+      visibleEntries: entries.map((entry) => entry.id),
+      visibleSections: sections.map((section) => section.id)
     };
   }
 
-  const visibleEntries = settingsEntries
+  const visibleEntries = entries
     .filter((entry) => {
-      const section = settingsSections.find((candidate) => candidate.id === entry.sectionId);
+      const section = sections.find((candidate) => candidate.id === entry.sectionId);
       return matchesTerms(section?.title ?? "", terms) || matchesSettingsEntry(entry, terms);
     })
     .map((entry) => entry.id);
   const visibleSectionSet = new Set(
-    settingsEntries
+    entries
       .filter((entry) => visibleEntries.includes(entry.id))
       .map((entry) => entry.sectionId)
   );
@@ -671,18 +781,23 @@ export function createSettingsSearchResult(query: string): SettingsSearchResult 
   return {
     query: terms.join(" "),
     visibleEntries,
-    visibleSections: settingsSections
+    visibleSections: sections
       .map((section) => section.id)
       .filter((sectionId) => visibleSectionSet.has(sectionId))
   };
 }
 
-export function createSettingsVisibilityState(searchResult: SettingsSearchResult): SettingsVisibilityState {
+export function createSettingsVisibilityState(
+  searchResult: SettingsSearchResult,
+  localization?: SettingsLocalization
+): SettingsVisibilityState {
+  const sections = localizeSettingsSections(localization);
+
   return {
     hasResults: searchResult.visibleSections.length > 0,
     visibleEntryIds: searchResult.visibleEntries,
     visibleSectionIds: searchResult.visibleSections,
-    visibleSections: settingsSections.filter((section) => searchResult.visibleSections.includes(section.id))
+    visibleSections: sections.filter((section) => searchResult.visibleSections.includes(section.id))
   };
 }
 
@@ -721,6 +836,58 @@ function matchesSettingsEntry(entry: SettingsEntryDefinition, terms: readonly st
 function matchesTerms(haystack: string, terms: readonly string[]): boolean {
   const normalizedHaystack = haystack.toLowerCase();
   return terms.every((term) => normalizedHaystack.includes(term));
+}
+
+function localizeSettingsSections(
+  localization: SettingsLocalization | undefined
+): readonly SettingsSectionDefinition[] {
+  if (!localization?.sections) {
+    return settingsSections;
+  }
+
+  return settingsSections.map((section) => localizeSettingsSectionDefinition(section, localization));
+}
+
+function localizeSettingsSectionDefinition(
+  section: SettingsSectionDefinition,
+  localization: SettingsLocalization | undefined
+): SettingsSectionDefinition {
+  const title = localization?.sections?.[section.id];
+
+  return title ? { ...section, title } : section;
+}
+
+function localizeSettingsEntries(
+  localization: SettingsLocalization | undefined
+): readonly SettingsEntryDefinition[] {
+  if (!localization?.entries) {
+    return settingsEntries;
+  }
+
+  return settingsEntries.map((entry) => localizeSettingsEntryDefinition(entry, localization));
+}
+
+function localizeSettingsEntryDefinition(
+  entry: SettingsEntryDefinition,
+  localization: SettingsLocalization | undefined
+): SettingsEntryDefinition {
+  const localizedEntry = localization?.entries?.[entry.id];
+
+  if (!localizedEntry?.label && !localizedEntry?.keywords) {
+    return entry;
+  }
+
+  const keywords = [
+    ...(entry.keywords ?? []),
+    ...(localizedEntry.label && localizedEntry.label !== entry.label ? [localizedEntry.label] : []),
+    ...(localizedEntry.keywords ?? [])
+  ];
+
+  return {
+    ...entry,
+    label: localizedEntry.label ?? entry.label,
+    ...(keywords.length > 0 ? { keywords } : {})
+  };
 }
 
 function normalizeSettingsAiProviderDraft(draft: SettingsAiProviderDraft): AiProviderConfiguration | undefined {
@@ -773,7 +940,7 @@ function readSettingsMetadataText(value: string): Readonly<Record<string, string
 
 function getSettingsRawMirrorMetadataIssue(
   provider: RemoteSyncProviderConfiguration
-): string | undefined {
+): SettingsValidationIssueCode | undefined {
   const issues = diagnoseRemoteSyncConfiguredRawMirrorMetadata(provider);
 
   if (issues.length === 0) {
@@ -781,18 +948,18 @@ function getSettingsRawMirrorMetadataIssue(
   }
 
   if (issues.some((issue) => isSettingsRawMirrorRetryMetadataIssueCode(issue.code))) {
-    return settingsRawMirrorRetryInvalidIssue;
+    return settingsValidationIssueCodes.rawMirrorRetryInvalid;
   }
 
   if (issues.some((issue) => isSettingsRawMirrorListMetadataIssueCode(issue.code))) {
-    return settingsRawMirrorListInvalidIssue;
+    return settingsValidationIssueCodes.rawMirrorListInvalid;
   }
 
   if (issues.some((issue) => isSettingsRawMirrorDeleteMetadataIssueCode(issue.code))) {
-    return settingsRawMirrorDeleteInvalidIssue;
+    return settingsValidationIssueCodes.rawMirrorDeleteInvalid;
   }
 
-  return settingsRawMirrorMetadataInvalidIssue;
+  return settingsValidationIssueCodes.rawMirrorMetadataInvalid;
 }
 
 function isSettingsRawMirrorDeleteMetadataIssueCode(code: string): boolean {
@@ -905,4 +1072,22 @@ function parseSettingsOptionalPositiveInteger(value: string): {
 
 function formatSettingsKeyValueLines(entries: readonly (readonly [string, string])[]): string {
   return entries.map(([key, value]) => `${key}=${value}`).join("\n");
+}
+
+function createUniqueSettingsProviderId(baseId: string, usedIds: readonly string[]): string {
+  const used = new Set(usedIds);
+
+  if (!used.has(baseId)) {
+    return baseId;
+  }
+
+  for (let index = 2; index < 1000; index += 1) {
+    const candidate = `${baseId}.${index}`;
+
+    if (!used.has(candidate)) {
+      return candidate;
+    }
+  }
+
+  return `${baseId}.${used.size + 1}`;
 }

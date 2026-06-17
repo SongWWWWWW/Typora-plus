@@ -1,11 +1,23 @@
 import type {
+  AiJsonObject,
   AiTextContextItem,
+  AiTextOutputFormat,
   AiTextProviderResult,
   AiTextRequest,
   AiTokenUsage,
   RegisteredAiProvider
 } from "./ai";
+import {
+  aiProviderRegistrationLimits,
+  aiTextMetadataLimits,
+  aiTextProviderResultLimits,
+  aiTextRequestLimits
+} from "./ai";
 import type { CommandMetadata } from "./commands";
+import {
+  configurationMaxRemoteSyncProviderIdLength,
+  configurationMaxRemoteSyncProviderTitleLength
+} from "./configuration";
 import type { ContextKeyValue } from "./contextKeys";
 import type { ExtensionActivationRequest, ExtensionActivationState, RegisteredExtension } from "./extensions";
 import type { ExportAssetMode, ExportedDocument, ExportedDocumentAsset, ExportProvider } from "./exports";
@@ -28,6 +40,7 @@ import type {
   RemoteSyncResult,
   RemoteSyncSummary
 } from "./remoteSync";
+import { remoteSyncPayloadLimits, remoteSyncRequestMetadataLimits } from "./remoteSync";
 
 export const extensionHostProtocolMessageTypes = {
   activate: "extensionHost/activate",
@@ -88,20 +101,23 @@ export const requiredExtensionHostProtocolCapabilities = [
 export const extensionHostProtocolLimits = {
   activationEventLength: 256,
   activationEvents: 200,
-  aiContextItemCount: 100,
-  aiContextKindLength: 80,
-  aiContextTitleLength: 240,
-  aiContextValueLength: 1000000,
-  aiMetadataEntries: 100,
-  aiMetadataKeyLength: 120,
-  aiMetadataValueLength: 4000,
-  aiModelLength: 120,
-  aiProviderIdLength: 256,
-  aiProviderTitleLength: 160,
-  aiTextInputLength: 5000000,
-  aiTextInstructionLength: 20000,
-  aiTextOutputLength: 5000000,
-  aiTokenUsageMax: 1000000000,
+  aiContextItemCount: aiTextRequestLimits.contextItemCount,
+  aiContextKindLength: aiTextRequestLimits.contextKindLength,
+  aiContextTitleLength: aiTextRequestLimits.contextTitleLength,
+  aiContextValueLength: aiTextRequestLimits.contextValueLength,
+  aiMetadataEntries: aiTextMetadataLimits.entries,
+  aiMetadataKeyLength: aiTextMetadataLimits.keyLength,
+  aiMetadataValueLength: aiTextMetadataLimits.valueLength,
+  aiModelLength: aiTextProviderResultLimits.modelLength,
+  aiOutputFormatDescriptionLength: aiTextRequestLimits.outputFormatDescriptionLength,
+  aiOutputFormatKindLength: aiTextRequestLimits.outputFormatKindLength,
+  aiOutputFormatNameLength: aiTextRequestLimits.outputFormatNameLength,
+  aiProviderIdLength: aiProviderRegistrationLimits.idLength,
+  aiProviderTitleLength: aiProviderRegistrationLimits.titleLength,
+  aiTextInputLength: aiTextRequestLimits.inputLength,
+  aiTextInstructionLength: aiTextRequestLimits.instructionLength,
+  aiTextOutputLength: aiTextProviderResultLimits.valueLength,
+  aiTokenUsageMax: aiTextProviderResultLimits.tokenUsageMax,
   capabilityCount: 40,
   capabilityLength: 80,
   commandArgumentCount: 20,
@@ -136,18 +152,18 @@ export const extensionHostProtocolLimits = {
   markdownRendererPriorityMin: -100000,
   markdownRendererValueLength: 1000000,
   protocolVersionMax: 1000,
-  remoteSyncCompletedAtMax: 10000000000000,
-  remoteSyncMessageLength: 4000,
-  remoteSyncMetadataEntries: 100,
-  remoteSyncMetadataKeyLength: 120,
-  remoteSyncMetadataValueLength: 4000,
-  remoteSyncOperationCount: 10000,
-  remoteSyncProviderIdLength: 256,
-  remoteSyncProviderTitleLength: 160,
-  remoteSyncRelativePathLength: 1000,
-  remoteSyncRemoteIdLength: 512,
-  remoteSyncResourceCount: 10000,
-  remoteSyncUriLength: 2000,
+  remoteSyncCompletedAtMax: remoteSyncPayloadLimits.completedAtMax,
+  remoteSyncMessageLength: remoteSyncPayloadLimits.messageLength,
+  remoteSyncMetadataEntries: remoteSyncRequestMetadataLimits.entries,
+  remoteSyncMetadataKeyLength: remoteSyncRequestMetadataLimits.keyLength,
+  remoteSyncMetadataValueLength: remoteSyncRequestMetadataLimits.valueLength,
+  remoteSyncOperationCount: remoteSyncPayloadLimits.operationCount,
+  remoteSyncProviderIdLength: configurationMaxRemoteSyncProviderIdLength,
+  remoteSyncProviderTitleLength: configurationMaxRemoteSyncProviderTitleLength,
+  remoteSyncRelativePathLength: remoteSyncPayloadLimits.relativePathLength,
+  remoteSyncRemoteIdLength: remoteSyncPayloadLimits.remoteIdLength,
+  remoteSyncResourceCount: remoteSyncPayloadLimits.resourceCount,
+  remoteSyncUriLength: remoteSyncPayloadLimits.uriLength,
   requestIdLength: 120
 } as const;
 
@@ -1687,6 +1703,7 @@ function normalizeProtocolAiTextRequest(value: unknown): ExtensionHostProtocolAi
   const record = expectRecord(value, "Extension host AI text request");
   const context = normalizeOptionalProtocolAiTextContext(record.context);
   const metadata = normalizeOptionalProtocolAiTextMetadata(record.metadata);
+  const outputFormat = normalizeOptionalProtocolAiTextOutputFormat(record.outputFormat);
 
   return {
     instruction: normalizeRequiredProtocolString(
@@ -1700,7 +1717,8 @@ function normalizeProtocolAiTextRequest(value: unknown): ExtensionHostProtocolAi
       extensionHostProtocolLimits.aiTextInputLength
     ),
     ...(context.length > 0 ? { context } : {}),
-    ...(metadata ? { metadata } : {})
+    ...(metadata ? { metadata } : {}),
+    ...(outputFormat ? { outputFormat } : {})
   };
 }
 
@@ -1786,6 +1804,59 @@ function normalizeOptionalProtocolAiTextMetadata(
   }
 
   return result;
+}
+
+function normalizeOptionalProtocolAiTextOutputFormat(value: unknown): AiTextOutputFormat | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  const record = expectRecord(value, "Extension host AI text request output format");
+  const kind = normalizeRequiredProtocolString(
+    record.kind,
+    "Extension host AI text request output format kind",
+    extensionHostProtocolLimits.aiOutputFormatKindLength
+  );
+
+  if (kind === "text") {
+    return { kind };
+  }
+
+  if (kind === "json") {
+    return { kind };
+  }
+
+  if (kind === "jsonSchema") {
+    const schema = normalizeProtocolJsonValue(
+      record.schema,
+      "Extension host AI text request output format schema"
+    );
+    const description = normalizeOptionalProtocolString(
+      record.description,
+      "Extension host AI text request output format description",
+      extensionHostProtocolLimits.aiOutputFormatDescriptionLength
+    );
+
+    if (!isProtocolJsonObject(schema)) {
+      throw new Error("Extension host AI text request output format schema must be a JSON object");
+    }
+
+    return {
+      kind,
+      name: normalizeRequiredProtocolString(
+        record.name,
+        "Extension host AI text request output format schema name",
+        extensionHostProtocolLimits.aiOutputFormatNameLength
+      ),
+      schema: schema as AiJsonObject,
+      ...(description ? { description } : {}),
+      ...(record.strict !== undefined ? {
+        strict: normalizeBoolean(record.strict, "Extension host AI text request output format strict")
+      } : {})
+    };
+  }
+
+  throw new Error("Extension host AI text request output format kind must be text, json, or jsonSchema");
 }
 
 function normalizeProtocolAiTextProviderResult(value: unknown): ExtensionHostProtocolAiTextProviderResult {
@@ -2727,6 +2798,12 @@ function normalizeProtocolJsonValue(
   }
 
   throw new Error(`${label} must be JSON serializable`);
+}
+
+function isProtocolJsonObject(
+  value: ExtensionHostProtocolJsonValue
+): value is { readonly [key: string]: ExtensionHostProtocolJsonValue } {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function normalizeBoolean(value: unknown, label: string): boolean {

@@ -29,6 +29,7 @@ const mermaidChunkPackageNames = [
 ];
 
 export default defineConfig({
+  base: "./",
   plugins: [react()],
   resolve: {
     alias: [

@@ -4,7 +4,8 @@ import {
   createWorkbenchAiSecretActions,
   deleteWorkbenchAiProviderSecret,
   setWorkbenchAiProviderSecret,
-  type WorkbenchAiSecretBridge
+  type WorkbenchAiSecretBridge,
+  type WorkbenchAiSecretMessages
 } from "./workbenchAiSecrets";
 
 describe("workbench AI secrets", () => {
@@ -34,6 +35,19 @@ describe("workbench AI secrets", () => {
     expect(bridge.deleteSecret).not.toHaveBeenCalled();
   });
 
+  it("uses injected secret validation messages", async () => {
+    const bridge = createBridge();
+
+    await expect(setWorkbenchAiProviderSecret(bridge, "bad ref", "secret", zhAiSecretMessages))
+      .rejects.toThrow("AI 密钥引用无效");
+    await expect(setWorkbenchAiProviderSecret(bridge, "typora-plus.ai.notes", "   ", zhAiSecretMessages))
+      .rejects.toThrow("AI 密钥值不能为空");
+    await expect(deleteWorkbenchAiProviderSecret(undefined, "typora-plus.ai.notes", zhAiSecretMessages))
+      .rejects.toThrow("AI 密钥存储不可用");
+    expect(bridge.setSecret).not.toHaveBeenCalled();
+    expect(bridge.deleteSecret).not.toHaveBeenCalled();
+  });
+
   it("creates action handlers with shared operation-error mapping", async () => {
     const operationErrors: Array<string | undefined> = [];
     const bridge = createBridge({
@@ -50,6 +64,18 @@ describe("workbench AI secrets", () => {
 
     expect(actions.isAvailable).toBe(true);
     expect(operationErrors).toEqual([undefined, "Native store failed", undefined]);
+  });
+
+  it("passes injected secret messages through action handlers", async () => {
+    const operationErrors: Array<string | undefined> = [];
+    const actions = createWorkbenchAiSecretActions({
+      messages: zhAiSecretMessages,
+      setOperationError: (error) => operationErrors.push(error)
+    }, createBridge());
+
+    await expect(actions.setSecret("bad ref", "secret")).resolves.toBe(false);
+
+    expect(operationErrors).toEqual([undefined, "AI 密钥引用无效"]);
   });
 
   it("reads native bridge availability from the global Typora Plus bridge", () => {
@@ -85,3 +111,9 @@ function createBridge(overrides: {
     deleteSecret: vi.fn(overrides.deleteSecret ?? (async () => true))
   };
 }
+
+const zhAiSecretMessages: WorkbenchAiSecretMessages = {
+  referenceInvalid: "AI 密钥引用无效",
+  storageUnavailable: "AI 密钥存储不可用",
+  valueEmpty: "AI 密钥值不能为空"
+};

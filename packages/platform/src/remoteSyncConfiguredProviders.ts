@@ -67,15 +67,17 @@ export function createConfiguredRemoteSyncProviders(
 
 export function createNativeRemoteSyncConfiguredProviderFactoryOptions(
   createProvider: RemoteSyncConfiguredProviderFactory,
-  transport: RemoteSyncNativeRequestTransport | undefined = createNativeRemoteSyncRequestTransport(),
+  transport?: RemoteSyncNativeRequestTransport,
   workspaceResources?: Pick<IRemoteSyncWorkspaceResourceService, "deleteResource" | "readResource" | "writeResource">
 ): RemoteSyncConfiguredProviderFactoryOptions | undefined {
-  if (!transport) {
+  const resolvedTransport = arguments.length < 2 ? createNativeRemoteSyncRequestTransport() : transport;
+
+  if (!resolvedTransport) {
     return undefined;
   }
 
   return {
-    transport,
+    transport: resolvedTransport,
     createProvider,
     ...(workspaceResources !== undefined ? { workspaceResources } : {})
   };

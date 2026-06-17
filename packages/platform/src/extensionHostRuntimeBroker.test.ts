@@ -186,6 +186,9 @@ describe("extension host runtime broker", () => {
       ],
       metadata: {
         surface: "command"
+      },
+      outputFormat: {
+        kind: "json"
       }
     })).resolves.toEqual({
       value: "Remote: # A",
@@ -213,6 +216,9 @@ describe("extension host runtime broker", () => {
         ],
         metadata: {
           surface: "command"
+        },
+        outputFormat: {
+          kind: "json"
         }
       }
     ));

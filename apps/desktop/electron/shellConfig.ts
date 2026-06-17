@@ -6,6 +6,13 @@ export const desktopShellConfig = {
     minWidth: 860,
     minHeight: 560,
     title: "Typora Plus",
+    autoHideMenuBar: true,
+    titleBarStyle: "hidden",
+    titleBarOverlay: {
+      color: "#f8f7f2",
+      symbolColor: "#676d62",
+      height: 38
+    },
     backgroundColor: "#f8f7f2"
   },
   ai: {

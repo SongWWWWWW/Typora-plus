@@ -10,20 +10,31 @@
   "scripts": {
     "dev": "npm run dev -w @typora-plus/desktop",
     "build": "npm run build --workspaces --if-present",
+    "check:docs": "node scripts/check-maintained-docs.mjs",
+    "check:lockfile": "node scripts/check-package-lock.mjs",
+    "check:node": "node scripts/check-node-version.mjs",
+    "scan:hardcode": "node scripts/check-sensitive-hardcodes.mjs",
     "typecheck": "tsc -b tsconfig.build.json",
     "test": "vitest run",
-    "verify": "npm run typecheck && npm run test && npm run build"
+    "test:ai:smoke": "node scripts/run-ai-smoke.mjs",
+    "test:electron:smoke": "node scripts/run-electron-smoke.mjs",
+    "test:installed:smoke": "node scripts/run-installed-smoke.mjs",
+    "test:remote-sync:smoke": "node scripts/run-remote-sync-smoke.mjs",
+    "lark:gateway": "node scripts/lark-cli-raw-mirror-gateway.mjs serve",
+    "lark:profile": "node scripts/lark-cli-raw-mirror-gateway.mjs profile",
+    "verify": "npm run check:node && npm run check:lockfile && npm run check:docs && npm run scan:hardcode && npm run typecheck && npm run test && npm run build",
+    "verify:stage": "npm run verify && npm audit --audit-level=moderate && git diff --check"
   },
   "engines": {
-    "node": ">=22"
+    "node": ">=22.12.0"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
-    "@vitejs/plugin-react": "^5.0.0",
+    "@vitejs/plugin-react": "^6.0.2",
     "electron": "^42.3.3",
     "jsdom": "^26.0.0",
     "typescript": "^5.8.0",
-    "vite": "^7.0.0",
+    "vite": "^8.0.16",
     "vitest": "^4.1.8"
   }
 }

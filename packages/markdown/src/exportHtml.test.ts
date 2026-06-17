@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createMarkdownHtmlExport } from "./index";
+import { createMarkdownHtmlExport, createMarkdownPreviewHtml } from "./index";
 
 describe("createMarkdownHtmlExport", () => {
   it("renders Markdown into a complete HTML document", async () => {
@@ -140,5 +140,66 @@ describe("createMarkdownHtmlExport", () => {
     });
 
     expect(exported.value).toContain("<img src=\"assets/image.png\" alt=\"Local\">");
+  });
+});
+
+describe("createMarkdownPreviewHtml", () => {
+  it("matches Markdown preview soft line break behavior by default", async () => {
+    await expect(createMarkdownPreviewHtml({
+      value: "aaa\nxxx\naaaasdfasd"
+    })).resolves.toBe("<p>aaa\nxxx\naaaasdfasd</p>\n");
+  });
+
+  it("can render hard preview line breaks when explicitly requested", async () => {
+    await expect(createMarkdownPreviewHtml({
+      value: "aaa\nxxx\naaaasdfasd",
+      breaks: true
+    })).resolves.toBe("<p>aaa<br>xxx<br>aaaasdfasd</p>\n");
+  });
+
+  it("renders common GFM structures used by Feishu Markdown preview", async () => {
+    const html = await createMarkdownPreviewHtml({
+      value: [
+        "- [x] Synced",
+        "- [ ] Pending",
+        "",
+        "| Name | Status |",
+        "| --- | --- |",
+        "| Local | Feishu |",
+        "",
+        "~~removed~~"
+      ].join("\n")
+    });
+
+    expect(html).toContain("<input checked=\"\" disabled=\"\" type=\"checkbox\">");
+    expect(html).toContain("<input disabled=\"\" type=\"checkbox\">");
+    expect(html).toContain("<table>");
+    expect(html).toContain("<td>Local</td>");
+    expect(html).toContain("<del>removed</del>");
+  });
+
+  it("uses the same safe HTML handling as export", async () => {
+    const html = await createMarkdownPreviewHtml({
+      value: "<script>alert('x')</script>\n\n<div onclick=\"x\">Raw</div>"
+    });
+
+    expect(html).not.toContain("<script>alert");
+    expect(html).not.toContain("<div onclick");
+    expect(html).toContain("&lt;script&gt;alert(&#39;x&#39;)&lt;/script&gt;");
+    expect(html).toContain("&lt;div onclick=&quot;x&quot;&gt;Raw&lt;/div&gt;");
+  });
+
+  it("resolves local image sources for preview without changing Markdown bytes", async () => {
+    const requests: string[] = [];
+    const html = await createMarkdownPreviewHtml({
+      value: "![Local](assets/image.png)",
+      resolveImageSource(source) {
+        requests.push(source);
+        return "data:image/png;base64,AA==";
+      }
+    });
+
+    expect(requests).toEqual(["assets/image.png"]);
+    expect(html).toContain("<img src=\"data:image/png;base64,AA==\" alt=\"Local\">");
   });
 });

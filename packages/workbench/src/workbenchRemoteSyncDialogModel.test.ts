@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { URI } from "@typora-plus/base";
 import type { RemoteSyncPlan, RemoteSyncResult } from "@typora-plus/platform";
+import { workbenchRemoteSyncPlanExecutionBlockReasons } from "./workbenchRemoteSyncActions";
 import {
   appendWorkbenchRemoteSyncProgressHistory,
   createWorkbenchRemoteSyncDialogConflictPreview,
@@ -8,17 +9,112 @@ import {
   createWorkbenchRemoteSyncDialogProgressPreview,
   createWorkbenchRemoteSyncDialogOperationPreview,
   createWorkbenchRemoteSyncDialogExecutionState,
+  formatWorkbenchRemoteSyncDirection,
+  formatWorkbenchRemoteSyncOperationKind,
   formatWorkbenchRemoteSyncOperationDetail,
   formatWorkbenchRemoteSyncProgress,
   formatWorkbenchRemoteSyncSummary,
-  getWorkbenchRemoteSyncLatestProgress
+  getWorkbenchRemoteSyncLatestProgress,
+  type WorkbenchRemoteSyncDialogMessages
 } from "./workbenchRemoteSyncDialogModel";
+
+const enRemoteSyncMessages: WorkbenchRemoteSyncDialogMessages = {
+  directions: {
+    push: "Push",
+    pull: "Pull",
+    bidirectional: "Bidirectional"
+  },
+  executed: "Executed",
+  executedStatus: (summary) => `Executed: ${summary}`,
+  execute: "Execute",
+  executing: "Executing",
+  executionBlockReasons: {
+    [workbenchRemoteSyncPlanExecutionBlockReasons.conflicts]: "Resolve remote sync conflicts before execution",
+    [workbenchRemoteSyncPlanExecutionBlockReasons.empty]: "No remote sync changes to execute"
+  },
+  executionInProgress: "Execution in progress",
+  executionInProgressWithProgress: (progress) => `Execution in progress: ${progress}`,
+  operationDetail: (target, message) => message ? `${target}: ${message}` : target,
+  operationKinds: {
+    create: "Create",
+    update: "Update",
+    delete: "Delete",
+    skip: "Skip",
+    conflict: "Conflict"
+  },
+  operationTargets: {
+    local: "local",
+    remote: "remote",
+    both: "both",
+    none: "none"
+  },
+  progressCompleted: (count) => `${count} completed`,
+  progressOperation: (operation, relativePath) => `${operation} ${relativePath}`,
+  progressParts: (parts) => parts.join(": "),
+  refreshBaseline: "Refresh Baseline",
+  summary: (summary) => [
+    `${summary.creates} create`,
+    `${summary.updates} update`,
+    `${summary.deletes} delete`,
+    `${summary.skips} skip`,
+    `${summary.conflicts} conflict`
+  ].join(", "),
+  useLocal: "Use Local",
+  useRemote: "Use Remote"
+};
+
+const zhRemoteSyncMessages: WorkbenchRemoteSyncDialogMessages = {
+  ...enRemoteSyncMessages,
+  directions: {
+    push: "推送",
+    pull: "拉取",
+    bidirectional: "双向"
+  },
+  executed: "已执行",
+  executedStatus: (summary) => `已执行：${summary}`,
+  execute: "执行",
+  executing: "执行中",
+  executionBlockReasons: {
+    [workbenchRemoteSyncPlanExecutionBlockReasons.conflicts]: "执行前请先解决远程同步冲突",
+    [workbenchRemoteSyncPlanExecutionBlockReasons.empty]: "没有需要执行的远程同步变更"
+  },
+  executionInProgress: "正在执行",
+  executionInProgressWithProgress: (progress) => `正在执行：${progress}`,
+  operationDetail: (target, message) => message ? `${target}：${message}` : target,
+  operationKinds: {
+    create: "创建",
+    update: "更新",
+    delete: "删除",
+    skip: "跳过",
+    conflict: "冲突"
+  },
+  operationTargets: {
+    local: "本地",
+    remote: "远端",
+    both: "双端",
+    none: "无"
+  },
+  progressCompleted: (count) => `已完成 ${count}`,
+  progressOperation: (operation, relativePath) => `${operation} ${relativePath}`,
+  progressParts: (parts) => parts.join("："),
+  refreshBaseline: "刷新基线",
+  summary: (summary) => [
+    `创建 ${summary.creates}`,
+    `更新 ${summary.updates}`,
+    `删除 ${summary.deletes}`,
+    `跳过 ${summary.skips}`,
+    `冲突 ${summary.conflicts}`
+  ].join("，"),
+  useLocal: "使用本地",
+  useRemote: "使用远端"
+};
 
 describe("workbench remote sync dialog model", () => {
   it("enables execution only for eligible idle plans", () => {
     expect(createWorkbenchRemoteSyncDialogExecutionState(plan("create"), {
       executing: false,
-      execution: undefined
+      execution: undefined,
+      messages: enRemoteSyncMessages
     })).toEqual({
       canCancel: false,
       canExecute: true,
@@ -27,7 +123,8 @@ describe("workbench remote sync dialog model", () => {
 
     expect(createWorkbenchRemoteSyncDialogExecutionState(plan("skip"), {
       executing: false,
-      execution: undefined
+      execution: undefined,
+      messages: enRemoteSyncMessages
     })).toEqual({
       canCancel: false,
       canExecute: true,
@@ -38,7 +135,8 @@ describe("workbench remote sync dialog model", () => {
   it("exposes cancellable running state while execution is pending", () => {
     expect(createWorkbenchRemoteSyncDialogExecutionState(plan("update"), {
       executing: true,
-      execution: undefined
+      execution: undefined,
+      messages: enRemoteSyncMessages
     })).toEqual({
       canCancel: true,
       canExecute: false,
@@ -51,6 +149,7 @@ describe("workbench remote sync dialog model", () => {
     expect(createWorkbenchRemoteSyncDialogExecutionState(plan("update"), {
       executing: true,
       execution: undefined,
+      messages: enRemoteSyncMessages,
       progress: {
         message: "Uploading note",
         completed: 2,
@@ -61,7 +160,7 @@ describe("workbench remote sync dialog model", () => {
       canCancel: true,
       canExecute: false,
       executeLabel: "Executing",
-      statusMessage: "Execution in progress: 2/5: Uploading note: update A.md"
+      statusMessage: "Execution in progress: 2/5: Uploading note: Update A.md"
     });
   });
 
@@ -78,7 +177,8 @@ describe("workbench remote sync dialog model", () => {
         },
         plan: plan("delete"),
         result: result()
-      }
+      },
+      messages: enRemoteSyncMessages
     })).toEqual({
       canCancel: false,
       canExecute: false,
@@ -90,19 +190,22 @@ describe("workbench remote sync dialog model", () => {
   it("reports conflict and empty plan block reasons", () => {
     expect(createWorkbenchRemoteSyncDialogExecutionState(plan("conflict"), {
       executing: false,
-      execution: undefined
+      execution: undefined,
+      messages: enRemoteSyncMessages
     }).statusMessage).toBe("Resolve remote sync conflicts before execution");
 
     expect(createWorkbenchRemoteSyncDialogExecutionState(emptyPlan(), {
       executing: false,
-      execution: undefined
+      execution: undefined,
+      messages: enRemoteSyncMessages
     }).statusMessage).toBe("No remote sync changes to execute");
   });
 
   it("exposes conflict resolution only before execution starts", () => {
     expect(createWorkbenchRemoteSyncDialogConflictResolutionState(plan("conflict"), {
       executing: false,
-      execution: undefined
+      execution: undefined,
+      messages: enRemoteSyncMessages
     })).toEqual({
       canResolve: true,
       useLocalLabel: "Use Local",
@@ -111,7 +214,8 @@ describe("workbench remote sync dialog model", () => {
 
     expect(createWorkbenchRemoteSyncDialogConflictResolutionState(plan("conflict"), {
       executing: true,
-      execution: undefined
+      execution: undefined,
+      messages: enRemoteSyncMessages
     }).canResolve).toBe(false);
     expect(createWorkbenchRemoteSyncDialogConflictResolutionState(plan("conflict"), {
       executing: false,
@@ -125,16 +229,18 @@ describe("workbench remote sync dialog model", () => {
         },
         plan: plan("conflict"),
         result: result()
-      }
+      },
+      messages: enRemoteSyncMessages
     }).canResolve).toBe(false);
     expect(createWorkbenchRemoteSyncDialogConflictResolutionState(plan("update"), {
       executing: false,
-      execution: undefined
+      execution: undefined,
+      messages: enRemoteSyncMessages
     }).canResolve).toBe(false);
   });
 
   it("formats operation summaries consistently", () => {
-    expect(formatWorkbenchRemoteSyncSummary(result().summary))
+    expect(formatWorkbenchRemoteSyncSummary(result().summary, enRemoteSyncMessages))
       .toBe("1 create, 2 update, 0 delete, 3 skip, 0 conflict");
   });
 
@@ -233,9 +339,9 @@ describe("workbench remote sync dialog model", () => {
   });
 
   it("formats operation details with provider messages when present", () => {
-    expect(formatWorkbenchRemoteSyncOperationDetail(operation("update", "A.md", "uploaded")))
+    expect(formatWorkbenchRemoteSyncOperationDetail(operation("update", "A.md", "uploaded"), enRemoteSyncMessages))
       .toBe("remote: uploaded");
-    expect(formatWorkbenchRemoteSyncOperationDetail(operation("skip", "B.md")))
+    expect(formatWorkbenchRemoteSyncOperationDetail(operation("skip", "B.md"), enRemoteSyncMessages))
       .toBe("none");
   });
 
@@ -243,10 +349,25 @@ describe("workbench remote sync dialog model", () => {
     expect(formatWorkbenchRemoteSyncProgress({
       message: "Finalizing",
       completed: 3
-    })).toBe("3 completed: Finalizing");
+    }, enRemoteSyncMessages)).toBe("3 completed: Finalizing");
     expect(formatWorkbenchRemoteSyncProgress({
       message: "Checking remote"
-    })).toBe("Checking remote");
+    }, enRemoteSyncMessages)).toBe("Checking remote");
+  });
+
+  it("formats localized direction, operation kind, summary, details, and progress", () => {
+    expect(formatWorkbenchRemoteSyncDirection("push", zhRemoteSyncMessages)).toBe("推送");
+    expect(formatWorkbenchRemoteSyncOperationKind("conflict", zhRemoteSyncMessages)).toBe("冲突");
+    expect(formatWorkbenchRemoteSyncSummary(result().summary, zhRemoteSyncMessages))
+      .toBe("创建 1，更新 2，删除 0，跳过 3，冲突 0");
+    expect(formatWorkbenchRemoteSyncOperationDetail(operation("update", "A.md", "uploaded"), zhRemoteSyncMessages))
+      .toBe("远端：uploaded");
+    expect(formatWorkbenchRemoteSyncProgress({
+      message: "Uploading note",
+      completed: 2,
+      total: 5,
+      operation: operation("update", "A.md")
+    }, zhRemoteSyncMessages)).toBe("2/5：Uploading note：更新 A.md");
   });
 });
 

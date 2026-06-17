@@ -83,6 +83,35 @@ describe("workbench file tree model", () => {
     })[0]?.dirty).toBe(false);
   });
 
+  it("marks directories as collapsed and omits their children", () => {
+    const docs = directory("docs", [
+      file("docs/architecture.md"),
+      directory("docs/guides", [
+        file("docs/guides/setup.md")
+      ])
+    ]);
+
+    const rows = createWorkbenchFileTreeRows([docs, file("README.md")], {
+      activeUri: "file:///workspace/docs/guides/setup.md",
+      collapsedDirectoryUris: new Set([docs.uri.toString()]),
+      dirty: true
+    });
+
+    expect(rows.map((row) => ({
+      name: row.entry.name,
+      expanded: row.expanded
+    }))).toEqual([
+      {
+        name: "docs",
+        expanded: false
+      },
+      {
+        name: "README.md",
+        expanded: undefined
+      }
+    ]);
+  });
+
   it("normalizes the initial tree depth", () => {
     const entries = [file("README.md")];
 

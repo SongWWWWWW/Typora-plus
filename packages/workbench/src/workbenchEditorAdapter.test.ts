@@ -19,19 +19,34 @@ import {
 
 describe("workbench editor adapter", () => {
   it("maps Workbench editor preferences to editor configuration", () => {
-    expect(createWorkbenchEditorConfiguration(configuration({
+    const editorConfiguration = createWorkbenchEditorConfiguration(configuration({
       fontSize: 19,
       lineHeight: 1.55,
       maxWidth: 920,
       focusMode: true,
       typewriterMode: true
-    }))).toEqual({
+    }));
+
+    expect(editorConfiguration).toMatchObject({
       fontSize: 19,
       lineHeight: 1.55,
       maxWidth: 920,
       focusMode: true,
       typewriterMode: true
     });
+    expect(editorConfiguration.labels?.copyCode).toBe("Copy code");
+  });
+
+  it("maps Workbench locale to editor preview labels", () => {
+    const editorConfiguration = createWorkbenchEditorConfiguration(configuration({}, {
+      locale: "zh-CN"
+    }));
+    const labels = editorConfiguration.labels;
+
+    expect(labels).toBeDefined();
+    expect(labels?.copy).toBe("复制");
+    expect(labels?.copyCode).toBe("复制代码");
+    expect(labels?.tableAlignment?.("center")).toBe("居中");
   });
 
   it("creates content handlers through the text-file service boundary", () => {
@@ -120,7 +135,7 @@ describe("workbench editor adapter", () => {
       language: "chart",
       value: "A"
     })).resolves.toEqual({
-      html: "<div>file:///C:/Notes/chart.md:A:1</div>",
+      html: "<div>file://C:/Notes/chart.md:A:1</div>",
       label: "Chart",
       rendererId: "notes.chart"
     });
@@ -175,9 +190,14 @@ function createServices(options: {
 }
 
 function configuration(
-  editor: Partial<TyporaPlusConfiguration["editor"]> = {}
-): Pick<TyporaPlusConfiguration, "editor"> {
+  editor: Partial<TyporaPlusConfiguration["editor"]> = {},
+  appearance: Partial<TyporaPlusConfiguration["appearance"]> = {}
+): Pick<TyporaPlusConfiguration, "appearance" | "editor"> {
   return {
+    appearance: {
+      ...defaultConfiguration.appearance,
+      ...appearance
+    },
     editor: {
       ...defaultConfiguration.editor,
       ...editor

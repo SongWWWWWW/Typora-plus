@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   createNativeRemoteSyncRequestTransport,
   type NativeRemoteSyncRequestBridge,
@@ -7,6 +7,10 @@ import {
 } from "./remoteSyncNativeRequest";
 
 describe("remote sync native request transport", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   it("delegates provider-neutral requests through the native bridge", async () => {
     const bridge = createBridge();
     const transport = createNativeRemoteSyncRequestTransport(bridge);
@@ -184,6 +188,46 @@ describe("remote sync native request transport", () => {
       isAvailable: false,
       request: vi.fn()
     })).toBeUndefined();
+  });
+
+  it("uses browser fetch as a fallback when no native bridge is installed", async () => {
+    const fetch = vi.fn(async () => new Response(JSON.stringify({ ok: true }), {
+      status: 200,
+      statusText: "OK",
+      headers: {
+        "Content-Type": "application/json"
+      }
+    }));
+
+    vi.stubGlobal("typoraPlus", {});
+    vi.stubGlobal("fetch", fetch);
+
+    const transport = createNativeRemoteSyncRequestTransport();
+
+    await expect(transport?.({
+      url: "http://127.0.0.1:41573/folders/create",
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ name: "Typora Plus" }),
+      bodyEncoding: "utf8",
+      responseType: "json"
+    })).resolves.toEqual({
+      status: 200,
+      statusText: "OK",
+      headers: {
+        "content-type": "application/json"
+      },
+      body: { ok: true }
+    });
+    expect(fetch).toHaveBeenCalledWith("http://127.0.0.1:41573/folders/create", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ name: "Typora Plus" })
+    });
   });
 
   it("reads native bridge availability from the global Typora Plus bridge", async () => {

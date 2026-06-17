@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ContextKeyService, MenuService } from "@typora-plus/platform";
+import { ContextKeyService, contextKeyExpressionKeys, keybindingEquals, MenuService } from "@typora-plus/platform";
 import {
   defaultWorkbenchExtensionManifest,
   defaultWorkbenchKeybindings,
@@ -15,6 +15,8 @@ import {
   workbenchStatusRendererId,
   workbenchStatusRendererLanguage
 } from "./statusMarkdownRenderer";
+import { getWorkbenchCommandMetadata } from "./workbenchCommandMetadata";
+import { workbenchMenuIds } from "./workbenchMenuModel";
 import { workbenchSideViews } from "./workbenchSideViewModel";
 
 describe("workbench contributions", () => {
@@ -114,6 +116,38 @@ describe("workbench contributions", () => {
     expect(new Set(ids).size).toBe(ids.length);
   });
 
+  it("keeps built-in menu contributions scoped to known workbench menus", () => {
+    const knownMenuIds = new Set<string>(Object.values(workbenchMenuIds));
+    const unknownMenus = defaultWorkbenchMenuItems.flatMap((item) =>
+      knownMenuIds.has(item.menu) ? [] : [`${item.id}:${item.menu}`]
+    );
+
+    expect(unknownMenus).toEqual([]);
+  });
+
+  it("keeps built-in menu and keybinding commands aligned with command metadata", () => {
+    const knownCommandIds = new Set(getWorkbenchCommandMetadata().map((command) => command.id));
+    const unknownMenuCommands = defaultWorkbenchMenuItems.flatMap((item) =>
+      knownCommandIds.has(item.command) ? [] : [`${item.id}:${item.command}`]
+    );
+    const unknownKeybindingCommands = defaultWorkbenchKeybindings.flatMap((rule) =>
+      knownCommandIds.has(rule.command) ? [] : [rule.command]
+    );
+
+    expect(unknownMenuCommands).toEqual([]);
+    expect(unknownKeybindingCommands).toEqual([]);
+  });
+
+  it("keeps built-in menu context keys aligned with the workbench context model", () => {
+    const knownContextKeys = new Set<string>(Object.values(workbenchContextKeys));
+    const unknownContextKeys = defaultWorkbenchMenuItems.flatMap((item) => [
+      ...contextKeyExpressionKeys(item.when),
+      ...(item.toggled ? [item.toggled.context] : [])
+    ].flatMap((key) => knownContextKeys.has(key) ? [] : [`${item.id}:${key}`]));
+
+    expect(unknownContextKeys).toEqual([]);
+  });
+
   it("keeps activitybar toggles aligned with known side views", () => {
     const sideViewValues = new Set<string>(Object.values(workbenchSideViews));
     const unknownValues = defaultWorkbenchMenuItems.flatMap((item) =>
@@ -129,6 +163,18 @@ describe("workbench contributions", () => {
     const pairs = defaultWorkbenchKeybindings.map((rule) => `${rule.command}:${JSON.stringify(rule.keybinding)}`);
 
     expect(new Set(pairs).size).toBe(pairs.length);
+  });
+
+  it("keeps default keybinding shortcuts unshadowed", () => {
+    const duplicateShortcuts = defaultWorkbenchKeybindings.flatMap((rule, index) =>
+      defaultWorkbenchKeybindings
+        .slice(0, index)
+        .some((candidate) => keybindingEquals(candidate.keybinding, rule.keybinding))
+        ? [`${rule.command}:${JSON.stringify(rule.keybinding)}`]
+        : []
+    );
+
+    expect(duplicateShortcuts).toEqual([]);
   });
 
   it("contributes built-in themes through Typora Plus tokens", () => {

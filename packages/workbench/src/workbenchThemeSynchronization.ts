@@ -1,5 +1,6 @@
 import { toDisposable, type IDisposable } from "@typora-plus/base";
 import type { TyporaPlusConfiguration } from "@typora-plus/platform";
+import type { ThemeName } from "@typora-plus/theme";
 import {
   applyWorkbenchTheme,
   type WorkbenchThemeApplicationServices
@@ -16,9 +17,16 @@ export interface WorkbenchThemeMediaQueryList {
 export interface WorkbenchThemeSynchronizationEnvironment {
   readonly target: HTMLElement;
   matchMedia(query: string): WorkbenchThemeMediaQueryList;
+  syncNativeTheme?(theme: ThemeName): void;
 }
 
 export interface WorkbenchThemeSynchronizationBrowser {
+  readonly typoraPlus?: {
+    readonly windowControls?: {
+      readonly isAvailable: boolean;
+      setTitleBarTheme(theme: ThemeName): Promise<boolean>;
+    };
+  };
   matchMedia(query: string): WorkbenchThemeMediaQueryList;
 }
 
@@ -32,7 +40,12 @@ export function createWorkbenchThemeSynchronizationEnvironment(
 ): WorkbenchThemeSynchronizationEnvironment {
   return {
     target: themeDocument.documentElement,
-    matchMedia: (query) => browser.matchMedia(query)
+    matchMedia: (query) => browser.matchMedia(query),
+    ...(browser.typoraPlus?.windowControls?.isAvailable ? {
+      syncNativeTheme: (theme) => {
+        void browser.typoraPlus?.windowControls?.setTitleBarTheme(theme).catch(() => undefined);
+      }
+    } : {})
   };
 }
 
@@ -43,7 +56,8 @@ export function registerWorkbenchThemeSynchronization(
 ): IDisposable {
   const media = environment.matchMedia(workbenchDarkThemeMediaQuery);
   const syncTheme = () => {
-    applyWorkbenchTheme(environment.target, configuration, services, media.matches);
+    const appliedTheme = applyWorkbenchTheme(environment.target, configuration, services, media.matches);
+    environment.syncNativeTheme?.(appliedTheme.theme);
   };
 
   syncTheme();

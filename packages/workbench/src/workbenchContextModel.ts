@@ -11,6 +11,10 @@ import type {
   WorkspaceState
 } from "@typora-plus/platform";
 import type { WorkbenchSideView } from "./workbenchSideViewModel";
+import {
+  selectWorkbenchDefaultAiProviderId,
+  selectWorkbenchDefaultRemoteSyncProviderId
+} from "./workbenchProviderSelection";
 
 export const workbenchContextKeys = {
   fileSystemAvailable: "fileSystem.available",
@@ -150,8 +154,8 @@ export function createWorkbenchProviderAvailabilityContext(
   services: WorkbenchProviderAvailabilityContextServices
 ): WorkbenchProviderAvailabilityContext {
   return {
-    aiProviderAvailable: services.aiService.getProviders().length > 0,
-    remoteSyncProviderAvailable: services.remoteSyncService.getProviders().length > 0
+    aiProviderAvailable: selectWorkbenchDefaultAiProviderId(services) !== undefined,
+    remoteSyncProviderAvailable: selectWorkbenchDefaultRemoteSyncProviderId(services) !== undefined
   };
 }
 

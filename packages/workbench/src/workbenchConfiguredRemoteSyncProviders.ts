@@ -1,11 +1,11 @@
-import { DisposableStore, type IDisposable } from "@typora-plus/base";
+import type { IDisposable } from "@typora-plus/base";
 import type {
   IConfigurationService,
   IRemoteSyncService,
-  RemoteSyncConfiguredProviderFactoryOptions,
-  TyporaPlusConfiguration
+  RemoteSyncConfiguredProviderFactoryOptions
 } from "@typora-plus/platform";
 import { createConfiguredRemoteSyncProviders } from "@typora-plus/platform";
+import { synchronizeWorkbenchConfiguredProviders } from "./workbenchConfiguredProviders";
 
 export interface WorkbenchConfiguredRemoteSyncProviderServices {
   readonly configurationService: Pick<IConfigurationService, "getValue" | "onDidChangeConfiguration">;
@@ -16,30 +16,13 @@ export function synchronizeWorkbenchConfiguredRemoteSyncProviders(
   services: WorkbenchConfiguredRemoteSyncProviderServices,
   options: RemoteSyncConfiguredProviderFactoryOptions | undefined
 ): IDisposable {
-  const store = new DisposableStore();
-  const providerStore = new DisposableStore();
-  const applyConfiguration = (configuration: TyporaPlusConfiguration) => {
-    providerStore.clear();
-
-    if (!options) {
-      return;
-    }
-
-    const existingProviderIds = new Set(services.remoteSyncService.getProviders().map((provider) => provider.id));
-
-    for (const provider of createConfiguredRemoteSyncProviders(configuration.remoteSync.providers, options)) {
-      if (existingProviderIds.has(provider.id)) {
-        continue;
-      }
-
-      existingProviderIds.add(provider.id);
-      providerStore.add(services.remoteSyncService.registerProvider(provider));
-    }
-  };
-
-  applyConfiguration(services.configurationService.getValue());
-  store.add(services.configurationService.onDidChangeConfiguration(applyConfiguration));
-  store.add(providerStore);
-
-  return store;
+  return synchronizeWorkbenchConfiguredProviders({
+    configurationService: services.configurationService,
+    providerRegistry: services.remoteSyncService
+  }, {
+    ...(options ? {
+      createProviders: (configuration) => createConfiguredRemoteSyncProviders(configuration.remoteSync.providers, options)
+    } : {}),
+    getProviderId: (provider) => provider.id
+  });
 }

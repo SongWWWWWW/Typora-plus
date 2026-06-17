@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { watch, type FSWatcher, type Stats } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
+import { TextDecoder } from "node:util";
 import { app, BrowserWindow, dialog, ipcMain, type OpenDialogOptions, type SaveDialogOptions } from "electron";
 
 export const nativeFileIpcChannels = {
@@ -9,6 +10,10 @@ export const nativeFileIpcChannels = {
   openRecentWorkspace: "typora-plus:workspace:openRecent",
   refreshWorkspace: "typora-plus:workspace:refresh",
   workspaceChanged: "typora-plus:workspace:changed",
+  createDirectory: "typora-plus:workspace:createDirectory",
+  createFile: "typora-plus:workspace:createFile",
+  renameEntry: "typora-plus:workspace:renameEntry",
+  deleteEntry: "typora-plus:workspace:deleteEntry",
   readFile: "typora-plus:file:read",
   resolveImageResource: "typora-plus:resource:image",
   writeFile: "typora-plus:file:write",
@@ -57,6 +62,26 @@ interface SerializedTextFileContent {
 interface SerializedSaveFileOptions {
   readonly expectedMtime?: number;
   readonly overwrite?: boolean;
+}
+
+interface SerializedCreateWorkspaceEntryRequest {
+  readonly parentUri: string;
+  readonly name: string;
+}
+
+interface SerializedRenameWorkspaceEntryRequest {
+  readonly uri: string;
+  readonly name: string;
+}
+
+interface SerializedCreatedWorkspaceFile {
+  readonly entry: SerializedFileTreeEntry;
+  readonly workspace: SerializedWorkspaceFileTree;
+}
+
+interface SerializedRenamedWorkspaceEntry {
+  readonly entry: SerializedFileTreeEntry;
+  readonly workspace: SerializedWorkspaceFileTree;
 }
 
 interface SerializedFileSaveConflict {
@@ -144,8 +169,18 @@ export function registerNativeFileIpc(config: NativeWorkspaceConfig): void {
     return workspace;
   };
 
+  const loadActiveWorkspace = async () => {
+    const workspace = await loadWorkspace();
+
+    if (!workspace) {
+      throw new Error("No active workspace");
+    }
+
+    return workspace;
+  };
+
   const openWorkspaceRoot = async (rootPath: string) => {
-    workspaceRoot = path.resolve(rootPath);
+    workspaceRoot = await resolveExistingWorkspaceRoot(rootPath);
     const workspace = await loadWorkspace();
     startWorkspaceWatcher();
     return workspace;
@@ -214,7 +249,7 @@ export function registerNativeFileIpc(config: NativeWorkspaceConfig): void {
       return undefined;
     }
 
-    const selectedRoot = result.filePaths[0];
+    const selectedRoot = await resolveExistingWorkspaceRoot(result.filePaths[0]);
     const workspace = await openWorkspaceRoot(selectedRoot);
 
     if (workspace) {
@@ -227,7 +262,7 @@ export function registerNativeFileIpc(config: NativeWorkspaceConfig): void {
   });
 
   ipcMain.handle(nativeFileIpcChannels.openRecentWorkspace, async (_event, uri: string) => {
-    const requestedRoot = pathFromFileUri(uri);
+    const requestedRoot = await resolveExistingWorkspaceRoot(pathFromFileUri(uri));
     const trustedRoots = await readTrustedWorkspaceRoots(config, () => trustedWorkspaceRoots, (roots) => {
       trustedWorkspaceRoots = roots;
     });
@@ -249,6 +284,86 @@ export function registerNativeFileIpc(config: NativeWorkspaceConfig): void {
     }
 
     return loadWorkspace();
+  });
+
+  ipcMain.handle(nativeFileIpcChannels.createDirectory, async (_event, request: SerializedCreateWorkspaceEntryRequest) => {
+    const activeWorkspaceRoot = assertActiveWorkspaceRoot(workspaceRoot);
+    const parentPath = assertWritableWorkspaceDirectory(request.parentUri, activeWorkspaceRoot);
+    const directoryName = normalizeWorkspaceDirectoryName(request.name, config);
+    const directoryPath = path.join(parentPath, directoryName);
+
+    await assertCreatableWorkspaceEntryPath(directoryPath, activeWorkspaceRoot);
+    await fs.mkdir(directoryPath);
+    scheduleWorkspaceChange();
+
+    return await loadActiveWorkspace();
+  });
+
+  ipcMain.handle(nativeFileIpcChannels.createFile, async (_event, request: SerializedCreateWorkspaceEntryRequest) => {
+    const activeWorkspaceRoot = assertActiveWorkspaceRoot(workspaceRoot);
+    const parentPath = assertWritableWorkspaceDirectory(request.parentUri, activeWorkspaceRoot);
+    const fileName = normalizeWorkspaceFileName(request.name, config);
+    const filePath = path.join(parentPath, fileName);
+
+    await assertCreatableWorkspaceEntryPath(filePath, activeWorkspaceRoot);
+    await fs.writeFile(filePath, "", "utf8");
+    allowedFiles.add(filePath);
+    scheduleWorkspaceChange();
+
+    const [workspace, stat] = await Promise.all([loadActiveWorkspace(), fs.stat(filePath)]);
+    const entry = {
+      uri: fileUri(filePath),
+      name: path.basename(filePath),
+      relativePath: normalizePath(path.relative(activeWorkspaceRoot, filePath)),
+      kind: "file",
+      size: stat.size,
+      mtime: stat.mtimeMs
+    } satisfies SerializedFileTreeEntry;
+
+    return {
+      entry,
+      workspace
+    } satisfies SerializedCreatedWorkspaceFile;
+  });
+
+  ipcMain.handle(nativeFileIpcChannels.renameEntry, async (_event, request: SerializedRenameWorkspaceEntryRequest) => {
+    const activeWorkspaceRoot = assertActiveWorkspaceRoot(workspaceRoot);
+    const sourcePath = await assertMutableWorkspaceEntryPath(request.uri, activeWorkspaceRoot, config);
+    const sourceStat = await fs.lstat(sourcePath);
+    const targetName = sourceStat.isDirectory()
+      ? normalizeWorkspaceDirectoryName(request.name, config)
+      : normalizeWorkspaceFileName(request.name, config);
+    const targetPath = path.join(path.dirname(sourcePath), targetName);
+
+    await assertCreatableWorkspaceEntryPath(targetPath, activeWorkspaceRoot);
+    await assertRemoteSyncWorkspaceRealPathInside(sourcePath, activeWorkspaceRoot);
+    await fs.rename(sourcePath, targetPath);
+    scheduleWorkspaceChange();
+
+    const workspace = await loadActiveWorkspace();
+    const entry = findWorkspaceEntryByPath(workspace.root, targetPath);
+
+    if (!entry) {
+      throw new Error("Renamed workspace entry is not visible in the active workspace");
+    }
+
+    return {
+      entry,
+      workspace
+    } satisfies SerializedRenamedWorkspaceEntry;
+  });
+
+  ipcMain.handle(nativeFileIpcChannels.deleteEntry, async (_event, uri: string) => {
+    const activeWorkspaceRoot = assertActiveWorkspaceRoot(workspaceRoot);
+    const entryPath = await assertMutableWorkspaceEntryPath(uri, activeWorkspaceRoot, config);
+    const stat = await fs.lstat(entryPath);
+
+    await assertRemoteSyncWorkspaceRealPathInside(entryPath, activeWorkspaceRoot);
+    await fs.rm(entryPath, { recursive: stat.isDirectory(), force: false });
+    allowedFiles.delete(entryPath);
+    scheduleWorkspaceChange();
+
+    return await loadActiveWorkspace();
   });
 
   ipcMain.handle(nativeFileIpcChannels.readFile, async (_event, uri: string) => {
@@ -501,8 +616,14 @@ async function readTrustedWorkspaceRoots(
   try {
     const rawValue = await fs.readFile(trustedWorkspaceStoragePath(config), "utf8");
     const parsed = JSON.parse(rawValue) as SerializedTrustedWorkspaces;
-    const roots = normalizeTrustedWorkspaceRoots(parsed.roots, config.maxTrustedWorkspaces);
+    const normalizedRoots = normalizeTrustedWorkspaceRoots(parsed.roots, config.maxTrustedWorkspaces);
+    const roots = await resolveExistingWorkspaceRoots(normalizedRoots);
     writeCache(roots);
+    if (JSON.stringify(roots) !== JSON.stringify(normalizedRoots)) {
+      void writeTrustedWorkspaceRoots(config, roots).catch(() => {
+        // Trust-list migration is best-effort; the in-memory repaired roots are still used.
+      });
+    }
     return roots;
   } catch {
     writeCache([]);
@@ -561,6 +682,78 @@ async function isDirectory(value: string): Promise<boolean> {
   }
 }
 
+async function resolveExistingWorkspaceRoots(roots: readonly string[]): Promise<readonly string[]> {
+  const resolved: string[] = [];
+
+  for (const root of roots) {
+    const candidate = await resolveExistingWorkspaceRoot(root);
+
+    if (!resolved.some((trustedRoot) => samePath(trustedRoot, candidate))) {
+      resolved.push(candidate);
+    }
+  }
+
+  return resolved;
+}
+
+async function resolveExistingWorkspaceRoot(rootPath: string): Promise<string> {
+  const root = path.resolve(rootPath);
+
+  if (await isDirectory(root)) {
+    return root;
+  }
+
+  return await resolveUtf8AsGbkMojibakePath(root) ?? root;
+}
+
+async function resolveUtf8AsGbkMojibakePath(filePath: string): Promise<string | undefined> {
+  const resolvedPath = path.resolve(filePath);
+  const parsed = path.parse(resolvedPath);
+  const relativeParts = path.relative(parsed.root, resolvedPath).split(path.sep).filter(Boolean);
+  let currentPath = parsed.root;
+
+  for (const part of relativeParts) {
+    const directPath = path.join(currentPath, part);
+
+    if (await exists(directPath)) {
+      currentPath = directPath;
+      continue;
+    }
+
+    const replacement = await findUtf8AsGbkMojibakePathSegment(currentPath, part);
+
+    if (!replacement) {
+      return undefined;
+    }
+
+    currentPath = path.join(currentPath, replacement);
+  }
+
+  return await isDirectory(currentPath) ? currentPath : undefined;
+}
+
+async function findUtf8AsGbkMojibakePathSegment(parentPath: string, segment: string): Promise<string | undefined> {
+  let entries: readonly { readonly name: string; readonly isDirectory: () => boolean }[];
+
+  try {
+    entries = await fs.readdir(parentPath, { withFileTypes: true });
+  } catch {
+    return undefined;
+  }
+
+  return entries.find((entry) =>
+    entry.isDirectory() && createUtf8AsGbkMojibakeText(entry.name) === segment
+  )?.name;
+}
+
+function createUtf8AsGbkMojibakeText(value: string): string {
+  try {
+    return new TextDecoder("gbk").decode(Buffer.from(value, "utf8"));
+  } catch {
+    return value;
+  }
+}
+
 async function buildWorkspaceFileTree(
   rootPath: string,
   config: NativeWorkspaceConfig
@@ -598,9 +791,7 @@ async function readDirectory(
       }
 
       const directory = await readDirectory(rootPath, entryPath, depth + 1, config, acceptFile);
-      if ((directory.children?.length ?? 0) > 0) {
-        children.push(directory);
-      }
+      children.push(directory);
       continue;
     }
 
@@ -669,6 +860,138 @@ function assertWritableFile(
   return assertReadableFile(uri, workspaceRoot, allowedFiles, config);
 }
 
+function assertActiveWorkspaceRoot(workspaceRoot: string | undefined): string {
+  if (!workspaceRoot) {
+    throw new Error("No active workspace");
+  }
+
+  return workspaceRoot;
+}
+
+function assertWritableWorkspaceDirectory(uri: string, workspaceRoot: string): string {
+  const directoryPath = pathFromFileUri(uri);
+
+  if (!isPathInside(directoryPath, workspaceRoot)) {
+    throw new Error("Directory is outside the active workspace");
+  }
+
+  return directoryPath;
+}
+
+async function assertCreatableWorkspaceEntryPath(filePath: string, workspaceRoot: string): Promise<void> {
+  if (!isPathInside(filePath, workspaceRoot)) {
+    throw new Error("Workspace entry path is outside the active workspace");
+  }
+
+  const parentPath = path.dirname(filePath);
+  const parentStat = await fs.lstat(parentPath);
+
+  if (parentStat.isSymbolicLink()) {
+    throw new Error("Workspace entry parent must not be a symbolic link");
+  }
+
+  if (!parentStat.isDirectory()) {
+    throw new Error("Workspace entry parent must be a directory");
+  }
+
+  await assertRemoteSyncWorkspaceRealPathInside(parentPath, workspaceRoot);
+
+  if (await exists(filePath)) {
+    throw new Error("Workspace entry already exists");
+  }
+}
+
+async function assertMutableWorkspaceEntryPath(
+  uri: string,
+  workspaceRoot: string,
+  config: NativeWorkspaceConfig
+): Promise<string> {
+  const entryPath = pathFromFileUri(uri);
+
+  if (samePath(entryPath, workspaceRoot)) {
+    throw new Error("Workspace root cannot be renamed or deleted");
+  }
+
+  if (!isPathInside(entryPath, workspaceRoot)) {
+    throw new Error("Workspace entry is outside the active workspace");
+  }
+
+  const stat = await fs.lstat(entryPath);
+
+  if (stat.isSymbolicLink()) {
+    throw new Error("Workspace entry must not be a symbolic link");
+  }
+
+  if (!stat.isFile() && !stat.isDirectory()) {
+    throw new Error("Workspace entry must be a file or directory");
+  }
+
+  if (stat.isFile()) {
+    assertMarkdownFile(entryPath, config);
+  }
+
+  return entryPath;
+}
+
+function findWorkspaceEntryByPath(
+  entry: SerializedFileTreeEntry,
+  filePath: string
+): SerializedFileTreeEntry | undefined {
+  if (samePath(pathFromFileUri(entry.uri), filePath)) {
+    return entry;
+  }
+
+  for (const child of entry.children ?? []) {
+    const found = findWorkspaceEntryByPath(child, filePath);
+
+    if (found) {
+      return found;
+    }
+  }
+
+  return undefined;
+}
+
+function normalizeWorkspaceFileName(value: unknown, config: NativeWorkspaceConfig): string {
+  const name = normalizeWorkspaceEntryName(value, "Workspace file name", config);
+  const extension = path.extname(name);
+
+  if (!extension) {
+    return `${name}${config.markdownExtensions[0] ?? ".md"}`;
+  }
+
+  assertMarkdownFile(name, config);
+  return name;
+}
+
+function normalizeWorkspaceDirectoryName(value: unknown, config: NativeWorkspaceConfig): string {
+  const name = normalizeWorkspaceEntryName(value, "Workspace folder name", config);
+
+  if (config.ignoredDirectories.includes(name)) {
+    throw new Error("Workspace folder name is ignored by Typora Plus");
+  }
+
+  return name;
+}
+
+function normalizeWorkspaceEntryName(value: unknown, label: string, config: NativeWorkspaceConfig): string {
+  const name = readRequiredString(value, label);
+
+  if (name !== path.basename(name) || /[<>:"/\\|?*\u0000-\u001F]/.test(name)) {
+    throw new Error(`${label} must be a simple file name`);
+  }
+
+  if (name === "." || name === "..") {
+    throw new Error(`${label} is invalid`);
+  }
+
+  if (config.ignoredDirectories.includes(name)) {
+    throw new Error(`${label} uses an ignored directory name`);
+  }
+
+  return name;
+}
+
 function resolveImageResourcePath(
   notePath: string,
   workspaceRoot: string | undefined,
@@ -734,19 +1057,19 @@ function resolveRemoteSyncWorkspaceResourcePath(
     "Remote sync workspace resource workspace URI"
   ));
 
-  if (!samePath(requestedWorkspaceRoot, workspaceRoot)) {
+  if (!isPathInside(requestedWorkspaceRoot, workspaceRoot)) {
     throw new Error("Remote sync workspace resource workspace is not active");
   }
 
   const relativePath = normalizeRemoteSyncWorkspaceResourceRelativePath(request.relativePath, config);
-  const filePath = path.resolve(workspaceRoot, ...relativePath.split("/"));
+  const filePath = path.resolve(requestedWorkspaceRoot, ...relativePath.split("/"));
 
-  if (!isPathInside(filePath, workspaceRoot)) {
+  if (!isPathInside(filePath, requestedWorkspaceRoot) || !isPathInside(filePath, workspaceRoot)) {
     throw new Error("Remote sync workspace resource path is outside the active workspace");
   }
 
   return {
-    workspaceRoot,
+    workspaceRoot: requestedWorkspaceRoot,
     relativePath,
     filePath
   };
@@ -1029,7 +1352,7 @@ function isMarkdownFile(filePath: string, config: NativeWorkspaceConfig): boolea
 }
 
 function fileUri(filePath: string): string {
-  return `file://${normalizePath(path.resolve(filePath))}`;
+  return `file://${encodeFileUriPath(normalizePath(path.resolve(filePath)))}`;
 }
 
 function pathFromFileUri(uri: string): string {
@@ -1037,9 +1360,31 @@ function pathFromFileUri(uri: string): string {
     throw new Error(`Unsupported URI: ${uri}`);
   }
 
-  return path.resolve(uri.slice("file://".length));
+  return path.resolve(decodeFileUriPath(uri.slice("file://".length)));
 }
 
 function normalizePath(value: string): string {
   return value.replaceAll("\\", "/");
+}
+
+function encodeFileUriPath(value: string): string {
+  return value
+    .split("/")
+    .map((segment, index) => index === 0 && /^[A-Za-z]:$/.test(segment)
+      ? segment
+      : encodeURIComponent(segment))
+    .join("/");
+}
+
+function decodeFileUriPath(value: string): string {
+  return value
+    .split("/")
+    .map((segment) => {
+      try {
+        return decodeURIComponent(segment);
+      } catch {
+        return segment;
+      }
+    })
+    .join("/");
 }

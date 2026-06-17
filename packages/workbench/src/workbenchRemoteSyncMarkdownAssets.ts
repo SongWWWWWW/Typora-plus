@@ -10,20 +10,34 @@ import type {
 } from "@typora-plus/platform";
 
 export interface WorkbenchRemoteSyncMarkdownAssetInput {
+  readonly messages?: WorkbenchRemoteSyncMarkdownAssetMessages;
   readonly workspaceUri: URIType;
   readonly resources: readonly RemoteSyncResource[];
   readonly resourceService: Pick<IRemoteSyncWorkspaceResourceService, "readResource">;
   readonly signal?: AbortSignal;
 }
 
+export interface WorkbenchRemoteSyncMarkdownAssetMessages {
+  readonly aborted: string;
+  readonly contentEncodingInvalid: string;
+  readonly contentEncodingRequired: string;
+}
+
+export const defaultWorkbenchRemoteSyncMarkdownAssetMessages: WorkbenchRemoteSyncMarkdownAssetMessages = {
+  aborted: "Remote sync Markdown asset discovery was aborted",
+  contentEncodingInvalid: "Remote sync Markdown asset discovery requires valid base64 content",
+  contentEncodingRequired: "Remote sync Markdown asset discovery requires base64 content"
+};
+
 export async function createWorkbenchRemoteSyncResourcesWithMarkdownAssets(
   input: WorkbenchRemoteSyncMarkdownAssetInput
 ): Promise<readonly RemoteSyncResource[]> {
+  const messages = input.messages ?? defaultWorkbenchRemoteSyncMarkdownAssetMessages;
   const resources = [...input.resources];
   const resourcesByPath = new Map(resources.map((resource) => [resource.relativePath, resource]));
 
   for (const resource of input.resources) {
-    throwIfWorkbenchRemoteSyncMarkdownAssetDiscoveryAborted(input.signal);
+    throwIfWorkbenchRemoteSyncMarkdownAssetDiscoveryAborted(input.signal, messages);
 
     if (resource.kind !== "file" || !isMarkdownLocalResourceDocumentPath(resource.relativePath)) {
       continue;
@@ -42,12 +56,12 @@ export async function createWorkbenchRemoteSyncResourcesWithMarkdownAssets(
     });
 
     const references = collectMarkdownLocalResourceReferences(
-      decodeWorkbenchRemoteSyncMarkdownContent(markdownContent),
+      decodeWorkbenchRemoteSyncMarkdownContent(markdownContent, messages),
       { sourcePath: resource.relativePath }
     );
 
     for (const reference of references) {
-      throwIfWorkbenchRemoteSyncMarkdownAssetDiscoveryAborted(input.signal);
+      throwIfWorkbenchRemoteSyncMarkdownAssetDiscoveryAborted(input.signal, messages);
 
       if (resourcesByPath.has(reference.relativePath)) {
         continue;
@@ -122,9 +136,12 @@ function readWorkbenchRemoteSyncResourceName(relativePath: string): string {
   return relativePath.split("/").at(-1) ?? relativePath;
 }
 
-function decodeWorkbenchRemoteSyncMarkdownContent(content: RemoteSyncWorkspaceResourceReadResult): string {
+function decodeWorkbenchRemoteSyncMarkdownContent(
+  content: RemoteSyncWorkspaceResourceReadResult,
+  messages: WorkbenchRemoteSyncMarkdownAssetMessages
+): string {
   if (content.encoding !== "base64") {
-    throw new Error("Remote sync Markdown asset discovery requires base64 content");
+    throw new Error(messages.contentEncodingRequired);
   }
 
   const normalized = content.value.trim();
@@ -134,7 +151,7 @@ function decodeWorkbenchRemoteSyncMarkdownContent(content: RemoteSyncWorkspaceRe
     normalized.length % 4 !== 0 ||
     !/^[A-Za-z0-9+/]*={0,2}$/.test(normalized)
   ) {
-    throw new Error("Remote sync Markdown asset discovery requires valid base64 content");
+    throw new Error(messages.contentEncodingInvalid);
   }
 
   const decoded = atob(normalized);
@@ -147,8 +164,11 @@ function decodeWorkbenchRemoteSyncMarkdownContent(content: RemoteSyncWorkspaceRe
   return new TextDecoder().decode(bytes);
 }
 
-function throwIfWorkbenchRemoteSyncMarkdownAssetDiscoveryAborted(signal: AbortSignal | undefined): void {
+function throwIfWorkbenchRemoteSyncMarkdownAssetDiscoveryAborted(
+  signal: AbortSignal | undefined,
+  messages: WorkbenchRemoteSyncMarkdownAssetMessages
+): void {
   if (signal?.aborted) {
-    throw new Error("Remote sync Markdown asset discovery was aborted");
+    throw new Error(messages.aborted);
   }
 }

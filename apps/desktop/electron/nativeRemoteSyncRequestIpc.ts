@@ -4,6 +4,7 @@ import {
   readNativeSecret,
   type NativeSecretStoreConfig
 } from "./nativeSecretStore.js";
+import { ensureNativeLarkGatewayForRequestUrl } from "./nativeLarkGatewayProcess.js";
 
 export const nativeRemoteSyncRequestIpcChannels = {
   cancel: "typora-plus:remote-sync:request:cancel",
@@ -120,6 +121,7 @@ async function requestNativeRemoteSync(
     : undefined;
 
   try {
+    await ensureNativeLarkGatewayForRequestUrl(normalizedRequest.url);
     const response = await fetch(normalizedRequest.url, {
       method: normalizedRequest.method,
       headers: normalizedRequest.headers,

@@ -7,6 +7,7 @@ import {
   ContextKeyService,
   ExtensionService,
   AiService,
+  BrowserTextFileService,
   FileSaveConflictError,
   ExportService,
   NativeFileService,
@@ -21,8 +22,12 @@ import {
   NativeResourceService,
   parseContextKeyExpression,
   createDefaultWorkspaceIndexSnapshotStorage,
+  createWorkspaceIndexSnapshotStorageKey,
   createDefaultRemoteSyncManifestStorage,
+  remoteSyncManifestStorageKeyLimits,
+  workspaceIndexSnapshotStorageKeyLimits,
   RemoteSyncService,
+  defaultTyporaPlusLocale,
   defaultConfiguration,
   flattenFileTree,
   keybindingFromEvent,
@@ -31,6 +36,10 @@ import {
   remoteSyncConfiguredRawMirrorAdapterName,
   remoteSyncConfiguredRawMirrorMetadataKeys,
   configurationNumberConstraints,
+  configurationStorageKeyLimits,
+  typoraPlusLocales,
+  recentStorageKeyLimits,
+  textFileStorageKeyLimits,
   ServiceCollection,
   ThemeService,
   type FileTreeEntry,
@@ -59,7 +68,29 @@ describe("configuration", () => {
 
     expect(next.editor.maxWidth).toBe(720);
     expect(next.appearance.colorScheme).toBe("system");
+    expect(next.appearance.locale).toBe(defaultTyporaPlusLocale);
     expect(next.markdown.statusBadges).toEqual(defaultConfiguration.markdown.statusBadges);
+  });
+
+  it("defines supported locales through the platform configuration boundary", () => {
+    expect(typoraPlusLocales).toEqual(["en", "zh-CN"]);
+    expect(typoraPlusLocales).toContain(defaultTyporaPlusLocale);
+    expect(defaultConfiguration.appearance.locale).toBe(defaultTyporaPlusLocale);
+
+    for (const locale of typoraPlusLocales) {
+      const service = new ConfigurationService({
+        storageKey: "configuration",
+        storage: createMemoryStorage()
+      });
+
+      service.updateValue({
+        appearance: {
+          locale
+        }
+      });
+
+      expect(service.getValue().appearance.locale).toBe(locale);
+    }
   });
 
   it("keeps default numeric values aligned with configured steps", () => {
@@ -115,6 +146,7 @@ describe("configuration", () => {
     service.updateValue({
       appearance: {
         colorScheme: "dark",
+        locale: "zh-CN",
         themeId: "notes.focus"
       },
       editor: {
@@ -167,6 +199,7 @@ describe("configuration", () => {
     });
 
     expect(restored.getValue().appearance.colorScheme).toBe("dark");
+    expect(restored.getValue().appearance.locale).toBe("zh-CN");
     expect(restored.getValue().appearance.themeId).toBe("notes.focus");
     expect(restored.getValue().editor.focusMode).toBe(true);
     expect(restored.getValue().editor.autoSave).toBe(true);
@@ -201,6 +234,94 @@ describe("configuration", () => {
         aliases: ["released"]
       }
     ]);
+  });
+
+  it("persists remote sync folder bindings including drive-root scopes", () => {
+    const storage = createMemoryStorage();
+    const service = new ConfigurationService({
+      storageKey: "configuration",
+      storage
+    });
+
+    service.updateValue({
+      remoteSync: {
+        folderBindings: [
+          {
+            id: "folder.projects",
+            localUri: "file:///C:/Notes/projects",
+            localRelativePath: "projects",
+            localName: "projects",
+            providerId: "notes.raw",
+            remoteScopeId: "",
+            remoteName: "Drive root",
+            remoteUrl: "https://example.feishu.cn/drive/root",
+            lastSyncedAt: 1234
+          }
+        ]
+      }
+    });
+
+    const restored = new ConfigurationService({
+      storageKey: "configuration",
+      storage
+    });
+
+    expect(restored.getValue().remoteSync.folderBindings).toEqual([
+      {
+        id: "folder.projects",
+        localUri: "file:///C:/Notes/projects",
+        localRelativePath: "projects",
+        localName: "projects",
+        providerId: "notes.raw",
+        remoteScopeId: "",
+        remoteName: "Drive root",
+        remoteUrl: "https://example.feishu.cn/drive/root",
+        lastSyncedAt: 1234
+      }
+    ]);
+  });
+
+  it("bounds configuration storage keys before reading or writing storage", () => {
+    const values = new Map<string, string>();
+    const readKeys: string[] = [];
+    const writeKeys: string[] = [];
+    const storage = {
+      read(key: string) {
+        readKeys.push(key);
+        return values.get(key);
+      },
+      write(key: string, value: string) {
+        writeKeys.push(key);
+        values.set(key, value);
+      }
+    };
+    const maxStorageKey = `c${"a".repeat(configurationStorageKeyLimits.storageKeyLength - 1)}`;
+    const service = new ConfigurationService({
+      storageKey: ` ${maxStorageKey} `,
+      storage
+    });
+
+    service.updateValue({
+      appearance: {
+        density: "compact"
+      }
+    });
+
+    expect(readKeys).toEqual([maxStorageKey]);
+    expect(writeKeys).toEqual([maxStorageKey]);
+    expect(values.has(maxStorageKey)).toBe(true);
+    expect(() => new ConfigurationService({ storageKey: "", storage }))
+      .toThrow("Configuration storage key must not be empty");
+    expect(() => new ConfigurationService({ storageKey: "bad/key", storage }))
+      .toThrow("Configuration storage key is invalid: bad/key");
+    expect(() => new ConfigurationService({
+      storageKey: `c${"a".repeat(configurationStorageKeyLimits.storageKeyLength)}`,
+      storage
+    })).toThrow(
+      `Configuration storage key must be at most ${configurationStorageKeyLimits.storageKeyLength} characters`
+    );
+    expect(readKeys).toEqual([maxStorageKey]);
+    expect(writeKeys).toEqual([maxStorageKey]);
   });
 
   it("sanitizes Markdown status badge configuration", () => {
@@ -422,7 +543,8 @@ describe("configuration", () => {
     const storage = createMemoryStorage();
     storage.write("configuration", JSON.stringify({
       appearance: {
-        colorScheme: "blue"
+        colorScheme: "blue",
+        locale: "pirate"
       },
       editor: {
         autoSaveDelayMs: -250,
@@ -467,6 +589,7 @@ describe("configuration", () => {
     });
 
     expect(service.getValue().appearance.colorScheme).toBe("system");
+    expect(service.getValue().appearance.locale).toBe(defaultTyporaPlusLocale);
     expect(service.getValue().editor.autoSaveDelayMs).toBe(800);
     expect(service.getValue().editor.fontSize).toBe(17);
     expect(service.getValue().editor.rendererPreviewCacheEntries).toBe(
@@ -935,6 +1058,38 @@ describe("menus", () => {
     contextKeyService.setValue("unrelated", true);
 
     expect(changedMenus).toEqual(["titlebar.primary", "activitybar.primary"]);
+  });
+
+  it("deduplicates menu changes for multiple items affected by one context key", () => {
+    const contextKeyService = new ContextKeyService();
+    const service = new MenuService(contextKeyService);
+    const changedMenus: string[] = [];
+    service.registerMenuItem({
+      id: "titlebar.ai.summary",
+      menu: "titlebar.primary",
+      command: "ai.summarizeActiveNote",
+      when: ContextKeyExpr.equals("ai.providerAvailable", true)
+    });
+    service.registerMenuItem({
+      id: "titlebar.ai.rewrite",
+      menu: "titlebar.primary",
+      command: "ai.rewriteActiveNote",
+      when: ContextKeyExpr.and(
+        ContextKeyExpr.equals("ai.providerAvailable", true),
+        ContextKeyExpr.equals("activeResource.scheme", "file")
+      )
+    });
+    service.registerMenuItem({
+      id: "activitybar.search",
+      menu: "activitybar.primary",
+      command: "workbench.sidebar.search",
+      when: ContextKeyExpr.equals("search.available", true)
+    });
+    service.onDidChangeMenu((menu) => changedMenus.push(menu));
+
+    contextKeyService.setValue("ai.providerAvailable", true);
+
+    expect(changedMenus).toEqual(["titlebar.primary"]);
   });
 });
 
@@ -2700,6 +2855,7 @@ describe("file tree", () => {
       async refreshWorkspace() {
         return workspaceFiles;
       },
+      ...createUnusedWorkspaceEntryMethods(),
       async readFile() {
         throw new Error("Not used");
       },
@@ -2738,6 +2894,7 @@ describe("file tree", () => {
       async refreshWorkspace() {
         return undefined;
       },
+      ...createUnusedWorkspaceEntryMethods(),
       async readFile() {
         throw new Error("Not used");
       },
@@ -2761,9 +2918,310 @@ describe("file tree", () => {
     expect(opened?.root.name).toBe("Notes");
     expect(observed?.files.map((entry) => entry.name)).toEqual(["a.md"]);
   });
+
+  it("creates native workspace directories and publishes the updated file tree", async () => {
+    const folder = {
+      uri: URI.file("C:/Notes/Projects"),
+      name: "Projects",
+      relativePath: "Projects",
+      kind: "directory" as const,
+      children: []
+    };
+    const workspaceFiles = createWorkspaceFileTree([folder]);
+    let requestedParent: string | undefined;
+    let requestedName: string | undefined;
+    const host: NativeFileSystemHost = {
+      isAvailable: true,
+      async openWorkspace() {
+        return undefined;
+      },
+      async openRecentWorkspace() {
+        return undefined;
+      },
+      async refreshWorkspace() {
+        return undefined;
+      },
+      async createDirectory(request) {
+        requestedParent = request.parentUri.toString();
+        requestedName = request.name;
+        return workspaceFiles;
+      },
+      async createFile() {
+        throw new Error("Not used");
+      },
+      async renameEntry() {
+        throw new Error("Not used");
+      },
+      async deleteEntry() {
+        throw new Error("Not used");
+      },
+      async readFile() {
+        throw new Error("Not used");
+      },
+      async writeFile() {
+        throw new Error("Not used");
+      },
+      async saveFileAs() {
+        return undefined;
+      }
+    };
+    const service = new NativeFileService(host);
+    let observed: WorkspaceFileTree | undefined;
+
+    service.onDidChangeWorkspaceFiles((workspace) => {
+      observed = workspace;
+    });
+
+    const workspace = await service.createDirectory({
+      parentUri: URI.file("C:/Notes"),
+      name: "Projects"
+    });
+
+    expect(requestedParent).toBe("file://C:/Notes");
+    expect(requestedName).toBe("Projects");
+    expect(workspace.root.children?.[0]?.name).toBe("Projects");
+    expect(observed?.root.children?.[0]?.name).toBe("Projects");
+    expect(service.getWorkspaceFiles()?.root.children?.[0]?.name).toBe("Projects");
+  });
+
+  it("creates native workspace files and publishes the updated file tree", async () => {
+    const entry = createFileEntry("C:/Notes/Projects/plan.md", "plan.md", "Projects/plan.md");
+    const workspaceFiles = createWorkspaceFileTree([entry]);
+    let requestedParent: string | undefined;
+    let requestedName: string | undefined;
+    const host: NativeFileSystemHost = {
+      isAvailable: true,
+      async openWorkspace() {
+        return undefined;
+      },
+      async openRecentWorkspace() {
+        return undefined;
+      },
+      async refreshWorkspace() {
+        return undefined;
+      },
+      async createDirectory() {
+        throw new Error("Not used");
+      },
+      async createFile(request) {
+        requestedParent = request.parentUri.toString();
+        requestedName = request.name;
+        return { entry, workspace: workspaceFiles };
+      },
+      async renameEntry() {
+        throw new Error("Not used");
+      },
+      async deleteEntry() {
+        throw new Error("Not used");
+      },
+      async readFile() {
+        throw new Error("Not used");
+      },
+      async writeFile() {
+        throw new Error("Not used");
+      },
+      async saveFileAs() {
+        return undefined;
+      }
+    };
+    const service = new NativeFileService(host);
+    let observed: WorkspaceFileTree | undefined;
+
+    service.onDidChangeWorkspaceFiles((workspace) => {
+      observed = workspace;
+    });
+
+    const result = await service.createFile({
+      parentUri: URI.file("C:/Notes/Projects"),
+      name: "plan"
+    });
+
+    expect(requestedParent).toBe("file://C:/Notes/Projects");
+    expect(requestedName).toBe("plan");
+    expect(result.entry.relativePath).toBe("Projects/plan.md");
+    expect(observed?.files.map((file) => file.relativePath)).toEqual(["Projects/plan.md"]);
+    expect(service.getWorkspaceFiles()?.files.map((file) => file.relativePath)).toEqual(["Projects/plan.md"]);
+  });
+
+  it("renames native workspace entries and publishes the updated file tree", async () => {
+    const entry = createFileEntry("C:/Notes/renamed.md", "renamed.md", "renamed.md");
+    const workspaceFiles = createWorkspaceFileTree([entry]);
+    let requestedUri: string | undefined;
+    let requestedName: string | undefined;
+    const host: NativeFileSystemHost = {
+      isAvailable: true,
+      async openWorkspace() {
+        return undefined;
+      },
+      async openRecentWorkspace() {
+        return undefined;
+      },
+      async refreshWorkspace() {
+        return undefined;
+      },
+      async createDirectory() {
+        throw new Error("Not used");
+      },
+      async createFile() {
+        throw new Error("Not used");
+      },
+      async renameEntry(request) {
+        requestedUri = request.uri.toString();
+        requestedName = request.name;
+        return { entry, workspace: workspaceFiles };
+      },
+      async deleteEntry() {
+        throw new Error("Not used");
+      },
+      async readFile() {
+        throw new Error("Not used");
+      },
+      async writeFile() {
+        throw new Error("Not used");
+      },
+      async saveFileAs() {
+        return undefined;
+      }
+    };
+    const service = new NativeFileService(host);
+    let observed: WorkspaceFileTree | undefined;
+
+    service.onDidChangeWorkspaceFiles((workspace) => {
+      observed = workspace;
+    });
+
+    const result = await service.renameEntry({
+      uri: URI.file("C:/Notes/a.md"),
+      name: "renamed"
+    });
+
+    expect(requestedUri).toBe("file://C:/Notes/a.md");
+    expect(requestedName).toBe("renamed");
+    expect(result.entry.relativePath).toBe("renamed.md");
+    expect(observed?.files.map((file) => file.relativePath)).toEqual(["renamed.md"]);
+    expect(service.getWorkspaceFiles()?.files.map((file) => file.relativePath)).toEqual(["renamed.md"]);
+  });
+
+  it("deletes native workspace entries and publishes the updated file tree", async () => {
+    const workspaceFiles = createWorkspaceFileTree([]);
+    let requestedUri: string | undefined;
+    const host: NativeFileSystemHost = {
+      isAvailable: true,
+      async openWorkspace() {
+        return undefined;
+      },
+      async openRecentWorkspace() {
+        return undefined;
+      },
+      async refreshWorkspace() {
+        return undefined;
+      },
+      async createDirectory() {
+        throw new Error("Not used");
+      },
+      async createFile() {
+        throw new Error("Not used");
+      },
+      async renameEntry() {
+        throw new Error("Not used");
+      },
+      async deleteEntry(uri) {
+        requestedUri = uri.toString();
+        return workspaceFiles;
+      },
+      async readFile() {
+        throw new Error("Not used");
+      },
+      async writeFile() {
+        throw new Error("Not used");
+      },
+      async saveFileAs() {
+        return undefined;
+      }
+    };
+    const service = new NativeFileService(host);
+    let observed: WorkspaceFileTree | undefined;
+
+    service.onDidChangeWorkspaceFiles((workspace) => {
+      observed = workspace;
+    });
+
+    const result = await service.deleteEntry(URI.file("C:/Notes/a.md"));
+
+    expect(requestedUri).toBe("file://C:/Notes/a.md");
+    expect(result.files).toEqual([]);
+    expect(observed?.files).toEqual([]);
+    expect(service.getWorkspaceFiles()?.files).toEqual([]);
+  });
 });
 
 describe("workspace text files", () => {
+  it("bounds text file draft storage keys before browser draft reads or writes", () => {
+    const globalWithWindow = globalThis as { window?: unknown };
+    const previousWindow = globalWithWindow.window;
+    const maxStorageKey = `d${"a".repeat(textFileStorageKeyLimits.storageKeyLength - 1)}`;
+    const values = new Map<string, string>([
+      [maxStorageKey, JSON.stringify({ value: "# Stored", dirty: true })]
+    ]);
+    const readKeys: string[] = [];
+    const writes: [string, string][] = [];
+
+    globalWithWindow.window = {
+      localStorage: {
+        getItem(key: string) {
+          readKeys.push(key);
+          return values.get(key) ?? null;
+        },
+        setItem(key: string, value: string) {
+          writes.push([key, value]);
+          values.set(key, value);
+        },
+        removeItem(key: string) {
+          values.delete(key);
+        }
+      }
+    };
+
+    try {
+      const service = new BrowserTextFileService({
+        storageKey: ` ${maxStorageKey} `,
+        defaultName: "Untitled.md",
+        defaultContent: "# Untitled"
+      });
+
+      expect(service.getActiveModel().value).toBe("# Stored");
+      service.updateContent("# Updated");
+
+      expect(readKeys).toEqual([maxStorageKey]);
+      expect(writes).toEqual([[maxStorageKey, JSON.stringify({ value: "# Updated", dirty: true })]]);
+      expect(() => new BrowserTextFileService({
+        storageKey: "",
+        defaultName: "Untitled.md",
+        defaultContent: "# Untitled"
+      })).toThrow("Text file storage key must not be empty");
+      expect(() => new WorkspaceTextFileService(new NativeFileService(createMemoryHost()), {
+        storageKey: "bad/key",
+        defaultName: "Untitled.md",
+        defaultContent: "# Untitled"
+      })).toThrow("Text file storage key is invalid: bad/key");
+      expect(() => new BrowserTextFileService({
+        storageKey: `d${"a".repeat(textFileStorageKeyLimits.storageKeyLength)}`,
+        defaultName: "Untitled.md",
+        defaultContent: "# Untitled"
+      })).toThrow(
+        `Text file storage key must be at most ${textFileStorageKeyLimits.storageKeyLength} characters`
+      );
+      expect(readKeys).toEqual([maxStorageKey]);
+      expect(writes).toEqual([[maxStorageKey, JSON.stringify({ value: "# Updated", dirty: true })]]);
+    } finally {
+      if (previousWindow === undefined) {
+        delete globalWithWindow.window;
+      } else {
+        globalWithWindow.window = previousWindow;
+      }
+    }
+  });
+
   it("opens and saves native files through the file service", async () => {
     const host = createMemoryHost();
     const fileService = new NativeFileService(host);
@@ -2796,6 +3254,7 @@ describe("workspace text files", () => {
       async refreshWorkspace() {
         return undefined;
       },
+      ...createUnusedWorkspaceEntryMethods(),
       async readFile(uri) {
         return {
           uri: URI.parse(uri),
@@ -2846,6 +3305,7 @@ describe("workspace text files", () => {
       async refreshWorkspace() {
         return undefined;
       },
+      ...createUnusedWorkspaceEntryMethods(),
       async readFile() {
         return {
           uri,
@@ -2885,6 +3345,7 @@ describe("workspace index", () => {
   it("uses a native index snapshot bridge when available", () => {
     const previousTyporaPlus = (globalThis as { typoraPlus?: unknown }).typoraPlus;
     const values = new Map<string, string>();
+    const writes: [string, string][] = [];
     (globalThis as {
       typoraPlus?: {
         readonly indexSnapshots: {
@@ -2897,17 +3358,34 @@ describe("workspace index", () => {
       indexSnapshots: {
         isAvailable: true,
         read: (key) => values.get(key),
-        write: (key, value) => values.set(key, value)
+        write: (key, value) => {
+          writes.push([key, value]);
+          values.set(key, value);
+        }
       }
     };
 
     try {
       const storage = createDefaultWorkspaceIndexSnapshotStorage();
+      const validKey = "typora-plus.workspaceIndex.snapshot";
 
-      storage?.write("typora-plus.workspaceIndex.snapshot", "snapshot");
+      expect(storage).toBeDefined();
+      storage!.write(` ${validKey} `, "snapshot");
 
-      expect(storage?.read("typora-plus.workspaceIndex.snapshot")).toBe("snapshot");
-      expect(values.get("typora-plus.workspaceIndex.snapshot")).toBe("snapshot");
+      expect(storage!.read(validKey)).toBe("snapshot");
+      expect(values.get(validKey)).toBe("snapshot");
+      expect(writes).toEqual([[validKey, "snapshot"]]);
+      expect(() => storage!.write("bad/key", "snapshot"))
+        .toThrow("Workspace index snapshot storage key is invalid: bad/key");
+      expect(() => storage!.read("bad/key"))
+        .toThrow("Workspace index snapshot storage key is invalid: bad/key");
+      expect(() => storage!.write(
+        `i${"a".repeat(workspaceIndexSnapshotStorageKeyLimits.storageKeyLength)}`,
+        "snapshot"
+      )).toThrow(
+        `Workspace index snapshot storage key must be at most ${workspaceIndexSnapshotStorageKeyLimits.storageKeyLength} characters`
+      );
+      expect(writes).toEqual([[validKey, "snapshot"]]);
     } finally {
       (globalThis as { typoraPlus?: unknown }).typoraPlus = previousTyporaPlus;
     }
@@ -2916,6 +3394,7 @@ describe("workspace index", () => {
   it("uses a native remote sync manifest bridge when available", () => {
     const previousTyporaPlus = (globalThis as { typoraPlus?: unknown }).typoraPlus;
     const values = new Map<string, string>();
+    const writes: [string, string][] = [];
     (globalThis as {
       typoraPlus?: {
         readonly remoteSyncManifests: {
@@ -2928,17 +3407,34 @@ describe("workspace index", () => {
       remoteSyncManifests: {
         isAvailable: true,
         read: (key) => values.get(key),
-        write: (key, value) => values.set(key, value)
+        write: (key, value) => {
+          writes.push([key, value]);
+          values.set(key, value);
+        }
       }
     };
 
     try {
       const storage = createDefaultRemoteSyncManifestStorage();
+      const validKey = "typora-plus.remoteSync.manifest";
 
-      storage?.write("typora-plus.remoteSync.manifest", "manifest");
+      expect(storage).toBeDefined();
+      storage!.write(` ${validKey} `, "manifest");
 
-      expect(storage?.read("typora-plus.remoteSync.manifest")).toBe("manifest");
-      expect(values.get("typora-plus.remoteSync.manifest")).toBe("manifest");
+      expect(storage!.read(validKey)).toBe("manifest");
+      expect(values.get(validKey)).toBe("manifest");
+      expect(writes).toEqual([[validKey, "manifest"]]);
+      expect(() => storage!.write("bad/key", "manifest"))
+        .toThrow("Remote sync manifest storage key is invalid: bad/key");
+      expect(() => storage!.read("bad/key"))
+        .toThrow("Remote sync manifest storage key is invalid: bad/key");
+      expect(() => storage!.write(
+        `m${"a".repeat(remoteSyncManifestStorageKeyLimits.storageKeyLength)}`,
+        "manifest"
+      )).toThrow(
+        `Remote sync manifest storage key must be at most ${remoteSyncManifestStorageKeyLimits.storageKeyLength} characters`
+      );
+      expect(writes).toEqual([[validKey, "manifest"]]);
     } finally {
       (globalThis as { typoraPlus?: unknown }).typoraPlus = previousTyporaPlus;
     }
@@ -3170,6 +3666,59 @@ describe("workspace index", () => {
     expect(otherProvider.query("alpha", { maxPreviewLength: 80, maxResults: 10 })).toEqual([]);
   });
 
+  it("normalizes persisted index snapshot storage keys before storage access", () => {
+    const maxBaseKey = `i${"a".repeat(workspaceIndexSnapshotStorageKeyLimits.baseKeyLength - 1)}`;
+    const scope = URI.file("C:/Notes").toString();
+    const scopedKey = createWorkspaceIndexSnapshotStorageKey(maxBaseKey, scope);
+    const reads: string[] = [];
+    const writes: [string, string][] = [];
+    const values = new Map<string, string>();
+    const storage = {
+      read(key: string) {
+        reads.push(key);
+        return values.get(key);
+      },
+      write(key: string, value: string) {
+        writes.push([key, value]);
+        values.set(key, value);
+      }
+    };
+
+    const provider = new PersistedWorkspaceIndexProvider({
+      storage,
+      storageKey: ` ${maxBaseKey} `,
+      maxSnapshotBytes: 10000
+    });
+    provider.setSnapshotScope(` ${scope} `);
+    provider.clear();
+
+    expect(scopedKey.startsWith(`${maxBaseKey}.`)).toBe(true);
+    expect(scopedKey.length).toBeLessThanOrEqual(workspaceIndexSnapshotStorageKeyLimits.storageKeyLength);
+    expect(reads).toEqual([maxBaseKey, scopedKey]);
+    expect(writes.map(([key]) => key)).toEqual([scopedKey]);
+
+    const forwardedReads = reads.length;
+    const forwardedWrites = writes.length;
+    const overlongBaseKey = `i${"a".repeat(workspaceIndexSnapshotStorageKeyLimits.baseKeyLength)}`;
+
+    expect(() => new PersistedWorkspaceIndexProvider({
+      storage,
+      storageKey: "bad/key"
+    })).toThrow("Workspace index snapshot storage key is invalid: bad/key");
+    expect(() => new PersistedWorkspaceIndexProvider({
+      storage,
+      storageKey: overlongBaseKey
+    })).toThrow(
+      `Workspace index snapshot storage key must be at most ${workspaceIndexSnapshotStorageKeyLimits.baseKeyLength} characters`
+    );
+    expect(() => createWorkspaceIndexSnapshotStorageKey(" ", undefined))
+      .toThrow("Workspace index snapshot storage key must not be empty");
+    expect(() => createWorkspaceIndexSnapshotStorageKey("bad/key", scope))
+      .toThrow("Workspace index snapshot storage key is invalid: bad/key");
+    expect(reads).toHaveLength(forwardedReads);
+    expect(writes).toHaveLength(forwardedWrites);
+  });
+
   it("does not let a canceled workspace scan write stale documents", async () => {
     let resolveStaleRead: ((value: { readonly uri: URI; readonly name: string; readonly value: string }) => void) | undefined;
     const staleRead = new Promise<{ readonly uri: URI; readonly name: string; readonly value: string }>((resolve) => {
@@ -3186,6 +3735,7 @@ describe("workspace index", () => {
       async refreshWorkspace() {
         return undefined;
       },
+      ...createUnusedWorkspaceEntryMethods(),
       async readFile(uri) {
         if (uri.endsWith("stale.md")) {
           return staleRead;
@@ -3507,6 +4057,52 @@ describe("resources", () => {
 });
 
 describe("recents", () => {
+  it("bounds recent storage keys before reading or writing storage", () => {
+    const maxStorageKey = `r${"a".repeat(recentStorageKeyLimits.storageKeyLength - 1)}`;
+    const values = new Map<string, string>();
+    const readKeys: string[] = [];
+    const writeKeys: string[] = [];
+    const storage = {
+      read(key: string) {
+        readKeys.push(key);
+        return values.get(key);
+      },
+      write(key: string, value: string) {
+        writeKeys.push(key);
+        values.set(key, value);
+      }
+    };
+    const service = new RecentService({
+      storageKey: ` ${maxStorageKey} `,
+      maxEntries: 2,
+      now: createCounterClock(),
+      storage
+    });
+
+    service.addRecentFile(URI.file("C:/Notes/a.md"), "a.md");
+
+    expect(readKeys).toEqual([maxStorageKey]);
+    expect(writeKeys).toEqual([maxStorageKey]);
+    expect(values.has(maxStorageKey)).toBe(true);
+    expect(() => new RecentService({
+      storageKey: "",
+      maxEntries: 2,
+      storage
+    })).toThrow("Recent storage key must not be empty");
+    expect(() => new RecentService({
+      storageKey: "bad/key",
+      maxEntries: 2,
+      storage
+    })).toThrow("Recent storage key is invalid: bad/key");
+    expect(() => new RecentService({
+      storageKey: `r${"a".repeat(recentStorageKeyLimits.storageKeyLength)}`,
+      maxEntries: 2,
+      storage
+    })).toThrow(`Recent storage key must be at most ${recentStorageKeyLimits.storageKeyLength} characters`);
+    expect(readKeys).toEqual([maxStorageKey]);
+    expect(writeKeys).toEqual([maxStorageKey]);
+  });
+
   it("deduplicates and persists recent resources", () => {
     const storage = createMemoryStorage();
     const service = new RecentService({
@@ -3533,7 +4129,7 @@ describe("recents", () => {
 });
 
 function createMemoryHost(entries: readonly (readonly [string, string])[] = [["file://C:/Notes/a.md", "# A"]]) {
-  const files = new Map<string, string>(entries);
+  const files = new Map<string, string>(entries.map(([uri, value]) => [URI.parse(uri).toString(), value]));
   const host: NativeFileSystemHost & { readonly files: Map<string, string> } = {
     files,
     isAvailable: true,
@@ -3546,6 +4142,7 @@ function createMemoryHost(entries: readonly (readonly [string, string])[] = [["f
     async refreshWorkspace() {
       return undefined;
     },
+    ...createUnusedWorkspaceEntryMethods(),
     async readFile(uri) {
       const value = files.get(uri);
 
@@ -3579,6 +4176,23 @@ function createMemoryHost(entries: readonly (readonly [string, string])[] = [["f
   };
 
   return host;
+}
+
+function createUnusedWorkspaceEntryMethods(): Pick<NativeFileSystemHost, "createDirectory" | "createFile" | "deleteEntry" | "renameEntry"> {
+  return {
+    async createDirectory() {
+      throw new Error("Not used");
+    },
+    async createFile() {
+      throw new Error("Not used");
+    },
+    async renameEntry() {
+      throw new Error("Not used");
+    },
+    async deleteEntry() {
+      throw new Error("Not used");
+    }
+  };
 }
 
 function createWorkspaceFileTree(files: readonly FileTreeEntry[] = [

@@ -8,6 +8,7 @@ import type {
 import { describe, expect, it, vi } from "vitest";
 import {
   workbenchAiInstructions,
+  workbenchAiOutputFormats,
   workbenchAiRequestActions
 } from "./workbenchAiRequestModel";
 import {
@@ -16,7 +17,8 @@ import {
   applyWorkbenchAiResponseToActiveNote,
   replaceWorkbenchActiveNoteWithAiResponse,
   runWorkbenchActiveNoteAiAction,
-  runWorkbenchSummarizeActiveNoteAiAction
+  runWorkbenchSummarizeActiveNoteAiAction,
+  type WorkbenchAiActionMessages
 } from "./workbenchAiActions";
 
 describe("workbench AI actions", () => {
@@ -153,6 +155,93 @@ describe("workbench AI actions", () => {
     expect(services.indexService.query).not.toHaveBeenCalled();
   });
 
+  it("passes injected active-note request instructions to the AI service", async () => {
+    const response: AiTextResponse = {
+      providerId: "a.provider",
+      value: "Localized rewrite"
+    };
+    const requestText = vi.fn(async (_providerId: string, _request: AiTextRequest) => response);
+    const services = {
+      aiService: {
+        getProviders: vi.fn(() => [
+          { id: "a.provider", title: "Assistant" }
+        ]),
+        requestText
+      },
+      indexService: {
+        getStatus: vi.fn(() => indexStatus("idle")),
+        query: vi.fn(() => [])
+      },
+      textFileService: {
+        getActiveModel: vi.fn(() => model()),
+        updateContent: vi.fn()
+      }
+    };
+
+    await expect(runWorkbenchActiveNoteAiAction(
+      services,
+      workbenchAiRequestActions.continueActiveNote,
+      {
+        requestMessages: {
+          instructions: {
+            ...workbenchAiInstructions,
+            continueActiveNote: "Continue with injected locale copy."
+          }
+        }
+      }
+    )).resolves.toBe(response);
+
+    expect(requestText).toHaveBeenCalledWith("a.provider", expect.objectContaining({
+      instruction: "Continue with injected locale copy.",
+      metadata: expect.objectContaining({
+        action: "continueActiveNote",
+        source: "active-note"
+      })
+    }));
+  });
+
+  it("requests structured output when extracting active-note tasks", async () => {
+    const response: AiTextResponse = {
+      providerId: "a.provider",
+      value: JSON.stringify({ groups: [] })
+    };
+    const requestText = vi.fn(async (_providerId: string, _request: AiTextRequest) => response);
+    const services = {
+      aiService: {
+        getProviders: vi.fn(() => [
+          { id: "a.provider", title: "Assistant" }
+        ]),
+        requestText
+      },
+      indexService: {
+        getStatus: vi.fn(() => indexStatus("idle")),
+        query: vi.fn(() => [])
+      },
+      textFileService: {
+        getActiveModel: vi.fn(() => model()),
+        updateContent: vi.fn()
+      }
+    };
+
+    await expect(runWorkbenchActiveNoteAiAction(
+      services,
+      workbenchAiRequestActions.extractTasksActiveNote
+    )).resolves.toBe(response);
+
+    expect(requestText).toHaveBeenCalledWith("a.provider", {
+      instruction: workbenchAiInstructions.extractTasksActiveNote,
+      input: "# Note\n\nShip AI action runner.",
+      metadata: {
+        action: "extractTasksActiveNote",
+        source: "active-note",
+        sourceName: "note.md",
+        sourceScheme: "file",
+        languageId: "markdown"
+      },
+      outputFormat: workbenchAiOutputFormats.extractTasksActiveNote
+    });
+  });
+
   it("fails before reading the active note when no AI provider is available", async () => {
     const requestText = vi.fn();
     const getActiveModel = vi.fn(() => model());
@@ -176,6 +265,31 @@ describe("workbench AI actions", () => {
     expect(getActiveModel).not.toHaveBeenCalled();
     expect(requestText).not.toHaveBeenCalled();
     expect(services.indexService.query).not.toHaveBeenCalled();
+  });
+
+  it("uses injected no-provider messages before reading the active note", async () => {
+    const requestText = vi.fn();
+    const getActiveModel = vi.fn(() => model());
+    const services = {
+      aiService: {
+        getProviders: vi.fn(() => []),
+        requestText
+      },
+      indexService: {
+        getStatus: vi.fn(() => indexStatus("ready")),
+        query: vi.fn(() => [])
+      },
+      textFileService: {
+        getActiveModel,
+        updateContent: vi.fn()
+      }
+    };
+
+    await expect(runWorkbenchSummarizeActiveNoteAiAction(services, {
+      actionMessages: zhAiActionMessages
+    })).rejects.toThrow("没有可用于总结当前笔记的 AI 服务商");
+    expect(getActiveModel).not.toHaveBeenCalled();
+    expect(requestText).not.toHaveBeenCalled();
   });
 
   it("appends an AI response to the active note through the text model", () => {
@@ -269,6 +383,16 @@ function model(overrides: Partial<TextFileModel> = {}): TextFileModel {
     ...overrides
   };
 }
+
+const zhAiActionMessages: WorkbenchAiActionMessages = {
+  noProviderAvailable: (actionTitle) => `没有可用于${actionTitle}的 AI 服务商`,
+  titles: {
+    continueActiveNote: "续写当前笔记",
+    extractTasksActiveNote: "从当前笔记提取任务",
+    rewriteActiveNote: "重写当前笔记",
+    summarizeActiveNote: "总结当前笔记"
+  }
+};
 
 function indexStatus(state: WorkspaceIndexStatus["state"]): WorkspaceIndexStatus {
   return {

@@ -2,6 +2,7 @@ import type { FileTreeEntry } from "@typora-plus/platform";
 
 export interface WorkbenchFileTreeModelOptions {
   readonly activeUri: string;
+  readonly collapsedDirectoryUris?: ReadonlySet<string>;
   readonly dirty: boolean;
   readonly initialDepth?: number;
 }
@@ -13,6 +14,7 @@ export interface WorkbenchFileTreeRow {
   readonly depth: number;
   readonly active: boolean;
   readonly dirty: boolean;
+  readonly expanded: boolean | undefined;
   readonly fileEntry: WorkbenchFileTreeFileEntry | undefined;
 }
 
@@ -61,10 +63,11 @@ function visitWorkbenchFileTreeEntries(
       depth,
       active,
       dirty: active && fileEntry !== undefined && options.dirty,
+      expanded: entry.kind === "directory" ? !options.collapsedDirectoryUris?.has(entry.uri.toString()) : undefined,
       fileEntry
     });
 
-    if (entry.kind === "directory") {
+    if (entry.kind === "directory" && !options.collapsedDirectoryUris?.has(entry.uri.toString())) {
       visitWorkbenchFileTreeEntries(entry.children ?? [], depth + 1, options, rows);
     }
   }

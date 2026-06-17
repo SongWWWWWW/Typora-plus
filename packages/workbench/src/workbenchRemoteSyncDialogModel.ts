@@ -1,13 +1,18 @@
 import type {
+  RemoteSyncDirection,
   RemoteSyncOperation,
+  RemoteSyncOperationKind,
+  RemoteSyncOperationTarget,
   RemoteSyncPlan,
-  RemoteSyncProgress
+  RemoteSyncProgress,
+  RemoteSyncSummary
 } from "@typora-plus/platform";
 import type { WorkbenchRemoteSyncExecutionResult } from "./workbenchRemoteSyncActions";
 import {
-  getWorkbenchRemoteSyncPlanExecutionBlockReason,
+  getWorkbenchRemoteSyncPlanExecutionBlockReasonCode,
   isWorkbenchRemoteSyncBaselineRefreshPlan
 } from "./workbenchRemoteSyncActions";
+import type { WorkbenchRemoteSyncPlanExecutionBlockReason } from "./workbenchRemoteSyncActions";
 
 export interface WorkbenchRemoteSyncDialogOperationPreview {
   readonly emptyMessage: string;
@@ -34,17 +39,39 @@ export interface WorkbenchRemoteSyncDialogConflictResolutionState {
   readonly useRemoteLabel: string;
 }
 
+export interface WorkbenchRemoteSyncDialogMessages {
+  readonly directions: Readonly<Record<RemoteSyncDirection, string>>;
+  readonly executed: string;
+  readonly executedStatus: (summary: string) => string;
+  readonly execute: string;
+  readonly executing: string;
+  readonly executionInProgress: string;
+  readonly executionInProgressWithProgress: (progress: string) => string;
+  readonly operationDetail: (target: string, message?: string) => string;
+  readonly operationKinds: Readonly<Record<RemoteSyncOperationKind, string>>;
+  readonly operationTargets: Readonly<Record<RemoteSyncOperationTarget, string>>;
+  readonly progressCompleted: (count: number) => string;
+  readonly progressOperation: (operation: string, relativePath: string) => string;
+  readonly progressParts: (parts: readonly string[]) => string;
+  readonly refreshBaseline: string;
+  readonly summary: (summary: RemoteSyncSummary) => string;
+  readonly executionBlockReasons: Readonly<Record<WorkbenchRemoteSyncPlanExecutionBlockReason, string>>;
+  readonly useLocal: string;
+  readonly useRemote: string;
+}
+
 export function createWorkbenchRemoteSyncDialogConflictResolutionState(
   plan: RemoteSyncPlan,
   options: {
     readonly executing: boolean;
     readonly execution: WorkbenchRemoteSyncExecutionResult | undefined;
+    readonly messages: WorkbenchRemoteSyncDialogMessages;
   }
 ): WorkbenchRemoteSyncDialogConflictResolutionState {
   return {
     canResolve: plan.summary.conflicts > 0 && !options.executing && !options.execution,
-    useLocalLabel: "Use Local",
-    useRemoteLabel: "Use Remote"
+    useLocalLabel: options.messages.useLocal,
+    useRemoteLabel: options.messages.useRemote
   };
 }
 
@@ -53,6 +80,7 @@ export function createWorkbenchRemoteSyncDialogExecutionState(
   options: {
     readonly executing: boolean;
     readonly execution: WorkbenchRemoteSyncExecutionResult | undefined;
+    readonly messages: WorkbenchRemoteSyncDialogMessages;
     readonly progress?: RemoteSyncProgress | undefined;
   }
 ): WorkbenchRemoteSyncDialogExecutionState {
@@ -60,8 +88,10 @@ export function createWorkbenchRemoteSyncDialogExecutionState(
     return {
       canCancel: false,
       canExecute: false,
-      executeLabel: "Executed",
-      statusMessage: `Executed: ${formatWorkbenchRemoteSyncSummary(options.execution.result.summary)}`
+      executeLabel: options.messages.executed,
+      statusMessage: options.messages.executedStatus(
+        formatWorkbenchRemoteSyncSummary(options.execution.result.summary, options.messages)
+      )
     };
   }
 
@@ -69,39 +99,54 @@ export function createWorkbenchRemoteSyncDialogExecutionState(
     return {
       canCancel: true,
       canExecute: false,
-      executeLabel: "Executing",
+      executeLabel: options.messages.executing,
       statusMessage: options.progress
-        ? `Execution in progress: ${formatWorkbenchRemoteSyncProgress(options.progress)}`
-        : "Execution in progress"
+        ? options.messages.executionInProgressWithProgress(
+          formatWorkbenchRemoteSyncProgress(options.progress, options.messages)
+        )
+        : options.messages.executionInProgress
     };
   }
 
-  const blockReason = getWorkbenchRemoteSyncPlanExecutionBlockReason(plan);
+  const blockReason = getWorkbenchRemoteSyncPlanExecutionBlockReasonCode(plan);
 
   if (blockReason) {
     return {
       canCancel: false,
       canExecute: false,
-      executeLabel: "Execute",
-      statusMessage: blockReason
+      executeLabel: options.messages.execute,
+      statusMessage: options.messages.executionBlockReasons[blockReason]
     };
   }
 
   return {
     canCancel: false,
     canExecute: true,
-    executeLabel: isWorkbenchRemoteSyncBaselineRefreshPlan(plan) ? "Refresh Baseline" : "Execute"
+    executeLabel: isWorkbenchRemoteSyncBaselineRefreshPlan(plan)
+      ? options.messages.refreshBaseline
+      : options.messages.execute
   };
 }
 
-export function formatWorkbenchRemoteSyncSummary(summary: RemoteSyncPlan["summary"]): string {
-  return [
-    `${summary.creates} create`,
-    `${summary.updates} update`,
-    `${summary.deletes} delete`,
-    `${summary.skips} skip`,
-    `${summary.conflicts} conflict`
-  ].join(", ");
+export function formatWorkbenchRemoteSyncDirection(
+  direction: RemoteSyncDirection,
+  messages: WorkbenchRemoteSyncDialogMessages
+): string {
+  return messages.directions[direction];
+}
+
+export function formatWorkbenchRemoteSyncOperationKind(
+  kind: RemoteSyncOperationKind,
+  messages: WorkbenchRemoteSyncDialogMessages
+): string {
+  return messages.operationKinds[kind];
+}
+
+export function formatWorkbenchRemoteSyncSummary(
+  summary: RemoteSyncPlan["summary"],
+  messages: WorkbenchRemoteSyncDialogMessages
+): string {
+  return messages.summary(summary);
 }
 
 export function createWorkbenchRemoteSyncDialogOperationPreview(
@@ -170,19 +215,28 @@ export function createWorkbenchRemoteSyncDialogProgressPreview(
   };
 }
 
-export function formatWorkbenchRemoteSyncOperationDetail(operation: RemoteSyncOperation): string {
-  return operation.message ? `${operation.target}: ${operation.message}` : operation.target;
+export function formatWorkbenchRemoteSyncOperationDetail(
+  operation: RemoteSyncOperation,
+  messages: WorkbenchRemoteSyncDialogMessages
+): string {
+  return messages.operationDetail(messages.operationTargets[operation.target], operation.message);
 }
 
-export function formatWorkbenchRemoteSyncProgress(progress: RemoteSyncProgress): string {
+export function formatWorkbenchRemoteSyncProgress(
+  progress: RemoteSyncProgress,
+  messages: WorkbenchRemoteSyncDialogMessages
+): string {
   const count = progress.total !== undefined
     ? `${progress.completed ?? 0}/${progress.total}`
     : progress.completed !== undefined
-      ? `${progress.completed} completed`
+      ? messages.progressCompleted(progress.completed)
       : undefined;
   const operation = progress.operation
-    ? `${progress.operation.kind} ${progress.operation.relativePath}`
+    ? messages.progressOperation(
+      messages.operationKinds[progress.operation.kind],
+      progress.operation.relativePath
+    )
     : undefined;
 
-  return [count, progress.message, operation].filter(Boolean).join(": ");
+  return messages.progressParts([count, progress.message, operation].filter((part): part is string => !!part));
 }

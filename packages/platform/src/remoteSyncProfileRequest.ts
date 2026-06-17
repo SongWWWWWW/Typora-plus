@@ -55,15 +55,17 @@ const remoteSyncProfileRequestLimits = {
 
 export function createRemoteSyncProfileRequestTransport(
   profile: RemoteSyncProviderConfiguration,
-  transport: RemoteSyncNativeRequestTransport | undefined = createNativeRemoteSyncRequestTransport()
+  transport?: RemoteSyncNativeRequestTransport
 ): RemoteSyncProfileRequestTransport | undefined {
-  if (!transport) {
+  const resolvedTransport = arguments.length < 2 ? createNativeRemoteSyncRequestTransport() : transport;
+
+  if (!resolvedTransport) {
     return undefined;
   }
 
   const normalizedProfile = normalizeRemoteSyncProviderProfile(profile);
 
-  return async (request) => transport(createRemoteSyncNativeRequestFromProfile(normalizedProfile, request));
+  return async (request) => resolvedTransport(createRemoteSyncNativeRequestFromProfile(normalizedProfile, request));
 }
 
 function createRemoteSyncNativeRequestFromProfile(

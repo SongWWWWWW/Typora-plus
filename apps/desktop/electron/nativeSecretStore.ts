@@ -1,6 +1,12 @@
 import fs from "node:fs";
 import path from "node:path";
 import { app, safeStorage } from "electron";
+import {
+  isSafeNativeSecretRef,
+  normalizeNativeSecretRef
+} from "./nativeSecretRefs.js";
+
+export { normalizeNativeSecretRef } from "./nativeSecretRefs.js";
 
 export interface NativeSecretStoreConfig {
   readonly secretsStorageFile: string;
@@ -49,23 +55,16 @@ export function deleteNativeSecret(
 export function readNativeSecret(
   config: NativeSecretStoreConfig,
   label: string,
-  secretRef: string
+  secretRef: unknown
 ): string | undefined {
-  const encryptedValue = readSecretStore(config)[secretRef];
+  const normalizedSecretRef = normalizeNativeSecretRef(label, secretRef);
+  const encryptedValue = readSecretStore(config)[normalizedSecretRef];
 
   if (!encryptedValue) {
     return undefined;
   }
 
   return decryptSecret(label, encryptedValue);
-}
-
-export function normalizeNativeSecretRef(label: string, value: unknown): string {
-  if (typeof value !== "string" || !isValidSecretRef(value)) {
-    throw new Error(`${label} secret reference is invalid`);
-  }
-
-  return value;
 }
 
 function normalizeNativeSecretValue(
@@ -93,7 +92,7 @@ function readSecretStore(config: NativeSecretStoreConfig): Record<string, string
     }
 
     return Object.fromEntries(Object.entries(parsed.values).filter((entry): entry is [string, string] =>
-      isValidSecretRef(entry[0]) && typeof entry[1] === "string" && entry[1].length > 0
+      isSafeNativeSecretRef(entry[0]) && typeof entry[1] === "string" && entry[1].length > 0
     ));
   } catch {
     return {};
@@ -120,10 +119,6 @@ function decryptSecret(label: string, value: string): string | undefined {
   }
 
   return safeStorage.decryptString(Buffer.from(value, "base64"));
-}
-
-function isValidSecretRef(value: string): boolean {
-  return value.length <= 256 && /^[A-Za-z0-9][A-Za-z0-9_.:-]*$/.test(value);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

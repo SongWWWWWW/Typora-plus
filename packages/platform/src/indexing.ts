@@ -151,6 +151,11 @@ export const defaultWorkspaceIndexSnapshotProviderOptions = {
   maxSnapshotBytes: 5 * configurationBytesPerMegabyte
 } as const;
 
+export const workspaceIndexSnapshotStorageKeyLimits = {
+  baseKeyLength: 240,
+  storageKeyLength: 260
+} as const;
+
 export class InMemoryWorkspaceIndexProvider implements WorkspaceIndexProvider {
   private documents: WorkspaceIndexedDocument[];
   private snapshotScope: string | undefined;
@@ -300,7 +305,9 @@ export class PersistedWorkspaceIndexProvider extends InMemoryWorkspaceIndexProvi
   constructor(options: PersistedWorkspaceIndexProviderOptions) {
     super();
     this.storage = options.storage;
-    this.baseStorageKey = options.storageKey ?? defaultWorkspaceIndexSnapshotProviderOptions.storageKey;
+    this.baseStorageKey = normalizeWorkspaceIndexSnapshotStorageBaseKey(
+      options.storageKey ?? defaultWorkspaceIndexSnapshotProviderOptions.storageKey
+    );
     this.storageKey = this.baseStorageKey;
     this.maxSnapshotBytes = options.maxSnapshotBytes ?? defaultWorkspaceIndexSnapshotProviderOptions.maxSnapshotBytes;
     this.restorePersistedSnapshot();
@@ -989,10 +996,10 @@ export function createBrowserWorkspaceIndexSnapshotStorage(): WorkspaceIndexSnap
 
   return {
     read(key) {
-      return window.localStorage.getItem(key) ?? undefined;
+      return window.localStorage.getItem(normalizeWorkspaceIndexSnapshotStorageKey(key)) ?? undefined;
     },
     write(key, value) {
-      window.localStorage.setItem(key, value);
+      window.localStorage.setItem(normalizeWorkspaceIndexSnapshotStorageKey(key), value);
     }
   };
 }
@@ -1010,24 +1017,67 @@ function createNativeWorkspaceIndexSnapshotStorage(): WorkspaceIndexSnapshotStor
   }
 
   return {
-    read: (key) => bridge.read(key),
-    write: (key, value) => bridge.write(key, value)
+    read: (key) => bridge.read(normalizeWorkspaceIndexSnapshotStorageKey(key)),
+    write: (key, value) => bridge.write(normalizeWorkspaceIndexSnapshotStorageKey(key), value)
   };
 }
 
 export function createWorkspaceIndexSnapshotStorageKey(baseKey: string, scope: string | undefined): string {
+  const normalizedBaseKey = normalizeWorkspaceIndexSnapshotStorageBaseKey(baseKey);
   const normalizedScope = normalizeWorkspaceIndexSnapshotScope(scope);
 
   if (!normalizedScope) {
-    return baseKey;
+    return normalizedBaseKey;
   }
 
-  return `${baseKey}.${hashWorkspaceIndexSnapshotScope(normalizedScope)}`;
+  return normalizeWorkspaceIndexSnapshotStorageKey(
+    `${normalizedBaseKey}.${hashWorkspaceIndexSnapshotScope(normalizedScope)}`
+  );
 }
 
 function normalizeWorkspaceIndexSnapshotScope(scope: string | undefined): string | undefined {
   const value = scope?.trim();
   return value ? value : undefined;
+}
+
+function normalizeWorkspaceIndexSnapshotStorageBaseKey(value: unknown): string {
+  return validateWorkspaceIndexSnapshotStorageKey(readWorkspaceIndexSnapshotStorageKey(
+    value,
+    workspaceIndexSnapshotStorageKeyLimits.baseKeyLength
+  ));
+}
+
+function normalizeWorkspaceIndexSnapshotStorageKey(value: unknown): string {
+  return validateWorkspaceIndexSnapshotStorageKey(readWorkspaceIndexSnapshotStorageKey(
+    value,
+    workspaceIndexSnapshotStorageKeyLimits.storageKeyLength
+  ));
+}
+
+function readWorkspaceIndexSnapshotStorageKey(value: unknown, maxLength: number): string {
+  if (typeof value !== "string") {
+    throw new Error("Workspace index snapshot storage key must be a string");
+  }
+
+  const normalized = value.trim();
+
+  if (!normalized) {
+    throw new Error("Workspace index snapshot storage key must not be empty");
+  }
+
+  if (normalized.length > maxLength) {
+    throw new Error(`Workspace index snapshot storage key must be at most ${maxLength} characters`);
+  }
+
+  return normalized;
+}
+
+function validateWorkspaceIndexSnapshotStorageKey(normalized: string): string {
+  if (!/^[A-Za-z0-9][A-Za-z0-9.-]*$/.test(normalized)) {
+    throw new Error(`Workspace index snapshot storage key is invalid: ${normalized}`);
+  }
+
+  return normalized;
 }
 
 function hashWorkspaceIndexSnapshotScope(scope: string): string {

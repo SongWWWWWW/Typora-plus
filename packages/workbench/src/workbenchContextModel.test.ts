@@ -11,6 +11,10 @@ import {
   createWorkbenchStateContextValues,
   workbenchContextKeys
 } from "./workbenchContextModel";
+import {
+  selectWorkbenchDefaultAiProviderId,
+  selectWorkbenchDefaultRemoteSyncProviderId
+} from "./workbenchProviderSelection";
 
 describe("workbench context model", () => {
   it("creates initial capability context values", () => {
@@ -125,6 +129,25 @@ describe("workbench context model", () => {
     });
     expect(services.aiService.getProviders).toHaveBeenCalledOnce();
     expect(services.remoteSyncService.getProviders).toHaveBeenCalledOnce();
+  });
+
+  it("keeps provider availability aligned with default provider selection", () => {
+    const services = createProviderAvailabilityServicesFromProviders({
+      aiProviders: [
+        { id: "zeta.provider", title: "Zeta Provider" },
+        { id: "alpha.provider", title: "Alpha Provider" }
+      ],
+      remoteSyncProviders: []
+    });
+
+    const availability = createWorkbenchProviderAvailabilityContext(services);
+
+    expect(availability).toEqual({
+      aiProviderAvailable: selectWorkbenchDefaultAiProviderId(services) !== undefined,
+      remoteSyncProviderAvailable: selectWorkbenchDefaultRemoteSyncProviderId(services) !== undefined
+    });
+    expect(availability.aiProviderAvailable).toBe(true);
+    expect(availability.remoteSyncProviderAvailable).toBe(false);
   });
 
   it("applies context values through the context key service boundary", () => {
@@ -250,18 +273,28 @@ function createProviderAvailabilityServices(options: {
   readonly aiProviderCount: number;
   readonly remoteSyncProviderCount: number;
 }) {
+  return createProviderAvailabilityServicesFromProviders({
+    aiProviders: new Array(options.aiProviderCount).fill({
+      id: "ai.provider",
+      title: "AI Provider"
+    }),
+    remoteSyncProviders: new Array(options.remoteSyncProviderCount).fill({
+      id: "sync.provider",
+      title: "Sync Provider"
+    })
+  });
+}
+
+function createProviderAvailabilityServicesFromProviders(options: {
+  readonly aiProviders: readonly { readonly id: string; readonly title: string }[];
+  readonly remoteSyncProviders: readonly { readonly id: string; readonly title: string }[];
+}) {
   return {
     aiService: {
-      getProviders: vi.fn(() => new Array(options.aiProviderCount).fill({
-        id: "ai.provider",
-        title: "AI Provider"
-      }))
+      getProviders: vi.fn(() => options.aiProviders)
     },
     remoteSyncService: {
-      getProviders: vi.fn(() => new Array(options.remoteSyncProviderCount).fill({
-        id: "sync.provider",
-        title: "Sync Provider"
-      }))
+      getProviders: vi.fn(() => options.remoteSyncProviders)
     }
   };
 }

@@ -3,7 +3,8 @@ import {
   remoteSyncConfiguredRawMirrorAdapterName,
   remoteSyncConfiguredRawMirrorListLimits,
   remoteSyncConfiguredRawMirrorMetadataKeys,
-  remoteSyncConfiguredRawMirrorRetryLimits
+  remoteSyncConfiguredRawMirrorRetryLimits,
+  typoraPlusLocales
 } from "@typora-plus/platform";
 import {
   bytesToMegabytes,
@@ -12,6 +13,7 @@ import {
   canAddSettingsRemoteSyncProvider,
   clampSettingNumber,
   createSettingsAiProviderDraft,
+  createSettingsLarkRawMirrorProviderDraft,
   createSettingsRawMirrorMetadataDraft,
   createSettingsRemoteSyncProviderDraft,
   createSettingsThemeOptions,
@@ -25,6 +27,7 @@ import {
   getSettingsSectionDefinition,
   getSettingsSectionTitle,
   isSettingsEntryVisible,
+  isSettingsLarkRawMirrorProviderDraft,
   isSettingsSectionVisible,
   megabytesToBytes,
   normalizeAssetFolderInput,
@@ -40,11 +43,13 @@ import {
   settingsAiTextVerbosityOptions,
   settingsColorSchemeOptions,
   settingsDensityOptions,
+  settingsLocaleOptions,
   settingsEntries,
   settingsEntryIds,
   settingsSectionIds,
   settingsSections,
   settingsNumberConstraints,
+  settingsValidationIssueCodes,
   upsertSettingsAiProvider,
   upsertSettingsRemoteSyncProvider,
   validateSettingsAiProviderDraft,
@@ -69,7 +74,8 @@ describe("settings model", () => {
       appearance: {
         theme: "appearance.theme",
         customTheme: "appearance.customTheme",
-        density: "appearance.density"
+        density: "appearance.density",
+        language: "appearance.language"
       },
       editor: {
         autoSave: "editor.autoSave",
@@ -147,6 +153,11 @@ describe("settings model", () => {
       { value: "comfortable", label: "Comfortable" },
       { value: "compact", label: "Compact" }
     ]);
+    expect(settingsLocaleOptions).toEqual([
+      { value: "en", label: "English" },
+      { value: "zh-CN", label: "Chinese" }
+    ]);
+    expect(settingsLocaleOptions.map((option) => option.value)).toEqual([...typoraPlusLocales]);
     expect(settingsAiReasoningEffortOptions).toEqual([
       { value: "", label: "Default" },
       { value: "none", label: "None" },
@@ -245,6 +256,8 @@ describe("settings model", () => {
     ]);
     expect(createSettingsSearchResult("font").visibleEntries).toEqual(["editor.fontSize"]);
     expect(createSettingsSearchResult("custom theme").visibleEntries).toEqual(["appearance.customTheme"]);
+    expect(createSettingsSearchResult("language").visibleEntries).toEqual(["appearance.language"]);
+    expect(createSettingsSearchResult("translation").visibleEntries).toEqual(["appearance.language"]);
     expect(createSettingsSearchResult("save delay").visibleEntries).toEqual(["editor.autoSaveDelay"]);
     expect(createSettingsSearchResult("renderer cache").visibleEntries).toEqual(["editor.rendererPreviewCacheEntries"]);
     expect(createSettingsSearchResult("api key").visibleEntries).toEqual(["ai.providers"]);
@@ -380,14 +393,14 @@ describe("settings model", () => {
       endpointUrl: "http://api.example.test/v1/responses"
     }, [], undefined)).toEqual({
       canSave: false,
-      issues: ["Complete provider id, title, HTTPS or loopback endpoint, model, secret reference, and valid request settings."]
+      issues: [settingsValidationIssueCodes.aiProviderInvalid]
     });
     expect(validateSettingsAiProviderDraft({
       ...createSettingsAiProviderDraft(provider),
       maxOutputTokens: "many"
     }, [], undefined)).toEqual({
       canSave: false,
-      issues: ["Complete provider id, title, HTTPS or loopback endpoint, model, secret reference, and valid request settings."]
+      issues: [settingsValidationIssueCodes.aiProviderInvalid]
     });
   });
 
@@ -433,7 +446,7 @@ describe("settings model", () => {
     }, [existing]);
 
     expect(duplicateValidation.canSave).toBe(false);
-    expect(duplicateValidation.issues).toEqual(["Provider id is already used."]);
+    expect(duplicateValidation.issues).toEqual([settingsValidationIssueCodes.providerIdDuplicate]);
     expect(removeSettingsAiProvider([existing], existing.id)).toEqual([]);
   });
 
@@ -506,14 +519,14 @@ describe("settings model", () => {
       baseUrl: "http://sync.example.test/root"
     }, [], undefined)).toEqual({
       canSave: false,
-      issues: ["Complete provider id, title, HTTPS or loopback base URL, and valid profile bindings."]
+      issues: [settingsValidationIssueCodes.remoteSyncProviderInvalid]
     });
     expect(validateSettingsRemoteSyncProviderDraft({
       ...createSettingsRemoteSyncProviderDraft(provider),
       secretsText: "access token=typora-plus.remote-sync.notes.access"
     }, [], undefined)).toEqual({
       canSave: false,
-      issues: ["Complete provider id, title, HTTPS or loopback base URL, and valid profile bindings."]
+      issues: [settingsValidationIssueCodes.remoteSyncProviderInvalid]
     });
   });
 
@@ -596,7 +609,7 @@ describe("settings model", () => {
     }, [], undefined);
 
     expect(missingPathValidation.canSave).toBe(false);
-    expect(missingPathValidation.issues).toContain("Complete raw mirror metadata paths and header binding.");
+    expect(missingPathValidation.issues).toContain(settingsValidationIssueCodes.rawMirrorMetadataInvalid);
 
     const invalidPathValidation = validateSettingsRemoteSyncProviderDraft({
       ...createSettingsRemoteSyncProviderDraft(provider),
@@ -606,7 +619,7 @@ describe("settings model", () => {
     }, [], undefined);
 
     expect(invalidPathValidation.canSave).toBe(false);
-    expect(invalidPathValidation.issues).toContain("Complete raw mirror metadata paths and header binding.");
+    expect(invalidPathValidation.issues).toContain(settingsValidationIssueCodes.rawMirrorMetadataInvalid);
 
     const incompleteHeaderValidation = validateSettingsRemoteSyncProviderDraft({
       ...createSettingsRemoteSyncProviderDraft(provider),
@@ -617,7 +630,7 @@ describe("settings model", () => {
     }, [], undefined);
 
     expect(incompleteHeaderValidation.canSave).toBe(false);
-    expect(incompleteHeaderValidation.issues).toContain("Complete raw mirror metadata paths and header binding.");
+    expect(incompleteHeaderValidation.issues).toContain(settingsValidationIssueCodes.rawMirrorMetadataInvalid);
 
     const unboundHeaderValidation = validateSettingsRemoteSyncProviderDraft({
       ...createSettingsRemoteSyncProviderDraft(provider),
@@ -628,7 +641,7 @@ describe("settings model", () => {
     }, [], undefined);
 
     expect(unboundHeaderValidation.canSave).toBe(false);
-    expect(unboundHeaderValidation.issues).toContain("Complete raw mirror metadata paths and header binding.");
+    expect(unboundHeaderValidation.issues).toContain(settingsValidationIssueCodes.rawMirrorMetadataInvalid);
 
     const invalidRetryStatusValidation = validateSettingsRemoteSyncProviderDraft({
       ...createSettingsRemoteSyncProviderDraft(provider),
@@ -638,7 +651,7 @@ describe("settings model", () => {
     }, [], undefined);
 
     expect(invalidRetryStatusValidation.canSave).toBe(false);
-    expect(invalidRetryStatusValidation.issues).toContain("Complete raw mirror retry metadata.");
+    expect(invalidRetryStatusValidation.issues).toContain(settingsValidationIssueCodes.rawMirrorRetryInvalid);
 
     const incompleteRetryValidation = validateSettingsRemoteSyncProviderDraft({
       ...createSettingsRemoteSyncProviderDraft(provider),
@@ -648,7 +661,7 @@ describe("settings model", () => {
     }, [], undefined);
 
     expect(incompleteRetryValidation.canSave).toBe(false);
-    expect(incompleteRetryValidation.issues).toContain("Complete raw mirror retry metadata.");
+    expect(incompleteRetryValidation.issues).toContain(settingsValidationIssueCodes.rawMirrorRetryInvalid);
 
     const highRetryValidation = validateSettingsRemoteSyncProviderDraft({
       ...createSettingsRemoteSyncProviderDraft(provider),
@@ -660,7 +673,7 @@ describe("settings model", () => {
     }, [], undefined);
 
     expect(highRetryValidation.canSave).toBe(false);
-    expect(highRetryValidation.issues).toContain("Complete raw mirror retry metadata.");
+    expect(highRetryValidation.issues).toContain(settingsValidationIssueCodes.rawMirrorRetryInvalid);
 
     const invalidPageSizeValidation = validateSettingsRemoteSyncProviderDraft({
       ...createSettingsRemoteSyncProviderDraft(provider),
@@ -671,7 +684,7 @@ describe("settings model", () => {
     }, [], undefined);
 
     expect(invalidPageSizeValidation.canSave).toBe(false);
-    expect(invalidPageSizeValidation.issues).toContain("Complete raw mirror list metadata.");
+    expect(invalidPageSizeValidation.issues).toContain(settingsValidationIssueCodes.rawMirrorListInvalid);
 
     const invalidDeleteMissingValidation = validateSettingsRemoteSyncProviderDraft({
       ...createSettingsRemoteSyncProviderDraft(provider),
@@ -681,7 +694,7 @@ describe("settings model", () => {
     }, [], undefined);
 
     expect(invalidDeleteMissingValidation.canSave).toBe(false);
-    expect(invalidDeleteMissingValidation.issues).toContain("Complete raw mirror delete metadata.");
+    expect(invalidDeleteMissingValidation.issues).toContain(settingsValidationIssueCodes.rawMirrorDeleteInvalid);
   });
 
   it("maps raw mirror metadata through a structured Settings draft", () => {
@@ -754,6 +767,31 @@ describe("settings model", () => {
       "custom.flag=keep"
     ].join("\n"));
     expect(validateSettingsRemoteSyncProviderDraft(updated, [], undefined)).toMatchObject({
+      canSave: true,
+      issues: []
+    });
+  });
+
+  it("creates guided Lark raw mirror provider drafts", () => {
+    const draft = createSettingsLarkRawMirrorProviderDraft(["lark.raw-mirror"]);
+    const rawMirrorDraft = createSettingsRawMirrorMetadataDraft(draft);
+
+    expect(draft).toMatchObject({
+      id: "lark.raw-mirror.2",
+      title: "Lark Raw Mirror 2",
+      baseUrl: "http://127.0.0.1:41573/",
+      remoteScopeId: "",
+      secretsText: ""
+    });
+    expect(rawMirrorDraft).toMatchObject({
+      enabled: true,
+      listPath: "mirror/list",
+      uploadPath: "mirror/upload",
+      downloadPath: "mirror/download",
+      deletePath: "mirror/delete"
+    });
+    expect(isSettingsLarkRawMirrorProviderDraft(draft)).toBe(true);
+    expect(validateSettingsRemoteSyncProviderDraft(draft, [], undefined)).toMatchObject({
       canSave: true,
       issues: []
     });
@@ -854,7 +892,7 @@ describe("settings model", () => {
     }, [existing]);
 
     expect(duplicateValidation.canSave).toBe(false);
-    expect(duplicateValidation.issues).toEqual(["Provider id is already used."]);
+    expect(duplicateValidation.issues).toEqual([settingsValidationIssueCodes.providerIdDuplicate]);
     expect(removeSettingsRemoteSyncProvider([existing], existing.id)).toEqual([]);
   });
 
